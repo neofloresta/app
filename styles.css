@@ -54,7 +54,7 @@ label.rot, .rot { display: block; font-weight: 600; font-size: 14.5px; margin: 0
 .obr { color: var(--erro); margin-left: 3px; }
 .campo { margin-bottom: 24px; }
 .campo.falta .rot { color: var(--erro); }
-.campo.falta .entrada, .campo.falta .opcoes, .campo.falta .tile { box-shadow: 0 0 0 2px var(--erro); border-radius: 12px; }
+.campo.falta .entrada, .campo.falta .opcoes, .campo.falta .tile, .campo.falta .chips { box-shadow: 0 0 0 2px var(--erro); border-radius: 12px; }
 .entrada { width: 100%; border: 1px solid var(--linha); border-radius: var(--raio); padding: 13px 14px; background: var(--sup); font-size: 17px; min-height: 52px; }
 .entrada:focus { outline: none; border-color: var(--azul-claro); box-shadow: 0 0 0 3px rgba(18, 166, 200, .18); }
 textarea.entrada { min-height: 96px; resize: vertical; }
@@ -84,6 +84,7 @@ textarea.entrada { min-height: 96px; resize: vertical; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { border: 1px solid var(--linha); background: var(--sup); border-radius: 26px; padding: 10px 16px 10px 12px; font-size: 15px; min-height: 46px; display: inline-flex; align-items: center; gap: 8px; }
 .chip::before { content: ""; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid #B5C4C8; flex: none; }
+.chip.exclusivo { border-style: dashed; }
 .chip.sel { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 600; }
 .chip.sel::before { border-color: #fff; background: #fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-6.5" stroke="%2300546E" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>') center/13px no-repeat; }
 

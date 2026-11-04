@@ -27,7 +27,7 @@ const Api = (() => {
   // ---------- Modo demonstração ----------
   const Demo = {
     async base() {
-      const VERSAO_DEMO = 3;
+      const VERSAO_DEMO = 4;
       let b = await Store.get('demo:base');
       if (!b || b.versao !== VERSAO_DEMO) {
         const form = await (await fetch('forms/divinopolis-inventario.json')).json();

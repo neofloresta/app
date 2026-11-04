@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 1,
+ "versao": 2,
  "campos": [
   {
    "armazenar": "text",
@@ -144,10 +144,20 @@
    "expr": "round(3.1416 * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4) * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4), 1)"
   },
   {
-   "armazenar": "bool",
+   "armazenar": "text",
    "nome": "Conflitos no raio de 2 m",
    "rotulo": "Conflitos no raio de 2 m",
-   "tipo": "bool"
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Presente",
+     "t": "Presente"
+    },
+    {
+     "v": "Ausente",
+     "t": "Ausente"
+    }
+   ]
   },
   {
    "armazenar": "bool",
@@ -187,9 +197,26 @@
   },
   {
    "armazenar": "bool",
+   "nome": "Fiação ausente",
+   "rotulo": "Ausente",
+   "tipo": "bool",
+   "exclusivo": true
+  },
+  {
+   "armazenar": "text",
    "nome": "Marquise ou toldo",
    "rotulo": "Presença de marquise ou toldo",
-   "tipo": "bool"
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Presente",
+     "t": "Presente"
+    },
+    {
+     "v": "Ausente",
+     "t": "Ausente"
+    }
+   ]
   },
   {
    "armazenar": "bool",
@@ -202,6 +229,13 @@
    "nome": "Interfere veículos",
    "rotulo": "Veículos",
    "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Tráfego sem interferência",
+   "rotulo": "Ausente",
+   "tipo": "bool",
+   "exclusivo": true
   },
   {
    "armazenar": "bool",
@@ -229,6 +263,13 @@
   },
   {
    "armazenar": "bool",
+   "nome": "Podas ausente",
+   "rotulo": "Ausente",
+   "tipo": "bool",
+   "exclusivo": true
+  },
+  {
+   "armazenar": "bool",
    "nome": "Lesões no tronco",
    "rotulo": "Lesões no tronco",
    "tipo": "bool"
@@ -238,6 +279,13 @@
    "nome": "Codominância de troncos",
    "rotulo": "Codominância de troncos",
    "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Danos ausente",
+   "rotulo": "Ausente",
+   "tipo": "bool",
+   "exclusivo": true
   },
   {
    "armazenar": "text",
@@ -270,6 +318,13 @@
    "nome": "Afloramento da raiz na calçada",
    "rotulo": "Afloramento da raiz na calçada",
    "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Raízes ausente",
+   "rotulo": "Ausente",
+   "tipo": "bool",
+   "exclusivo": true
   },
   {
    "armazenar": "text",
@@ -330,6 +385,13 @@
    "nome": "Praga aparente",
    "rotulo": "Praga aparente",
    "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Fitossanidade ausente",
+   "rotulo": "Ausente",
+   "tipo": "bool",
+   "exclusivo": true
   },
   {
    "armazenar": "text",
@@ -430,6 +492,13 @@
    "tipo": "bool"
   },
   {
+   "armazenar": "bool",
+   "nome": "Manejo nenhum",
+   "rotulo": "Nenhum",
+   "tipo": "bool",
+   "exclusivo": true
+  },
+  {
    "armazenar": "text",
    "nome": "Outras mitigacoes",
    "rotulo": "Outras mitigações",
@@ -514,8 +583,7 @@
    "nome": "Meio",
    "campos": [
     {
-     "campo": "Conflitos no raio de 2 m",
-     "grupo": "Conflitos"
+     "campo": "Conflitos no raio de 2 m"
     },
     {
      "campo": "Fiação baixa isolada",
@@ -542,8 +610,11 @@
      "grupo": "Fiação aérea"
     },
     {
-     "campo": "Marquise ou toldo",
-     "grupo": "Marquise ou toldo"
+     "campo": "Fiação ausente",
+     "grupo": "Fiação aérea"
+    },
+    {
+     "campo": "Marquise ou toldo"
     },
     {
      "campo": "Interfere pedestres",
@@ -551,6 +622,10 @@
     },
     {
      "campo": "Interfere veículos",
+     "grupo": "Interferência no tráfego"
+    },
+    {
+     "campo": "Tráfego sem interferência",
      "grupo": "Interferência no tráfego"
     }
    ]
@@ -575,11 +650,19 @@
      "grupo": "Podas"
     },
     {
+     "campo": "Podas ausente",
+     "grupo": "Podas"
+    },
+    {
      "campo": "Lesões no tronco",
      "grupo": "Danos"
     },
     {
      "campo": "Codominância de troncos",
+     "grupo": "Danos"
+    },
+    {
+     "campo": "Danos ausente",
      "grupo": "Danos"
     },
     {
@@ -591,6 +674,10 @@
     },
     {
      "campo": "Afloramento da raiz na calçada",
+     "grupo": "Raízes"
+    },
+    {
+     "campo": "Raízes ausente",
      "grupo": "Raízes"
     }
    ]
@@ -623,6 +710,10 @@
     },
     {
      "campo": "Praga aparente",
+     "grupo": "Fitossanidade"
+    },
+    {
+     "campo": "Fitossanidade ausente",
      "grupo": "Fitossanidade"
     },
     {
@@ -673,6 +764,10 @@
      "grupo": "Manejo e mitigações"
     },
     {
+     "campo": "Manejo nenhum",
+     "grupo": "Manejo e mitigações"
+    },
+    {
      "campo": "Outras mitigacoes"
     }
    ]
@@ -691,6 +786,15 @@
     }
    ]
   }
+ ],
+ "gruposObrig": [
+  "Fiação aérea",
+  "Interferência no tráfego",
+  "Podas",
+  "Danos",
+  "Raízes",
+  "Fitossanidade",
+  "Manejo e mitigações"
  ],
  "especies": [
   {
@@ -931,24 +1035,55 @@
    "campo": "Categoria",
    "por": {
     "1": {
+     "Foto 1": "obrig",
+     "Situacao": "obrig",
      "Especie": "obrig",
      "DAP (cm)": "obrig",
      "Altura total (m)": "obrig",
-     "Foto 1": "obrig",
-     "Situacao": "obrig"
+     "Raio de copa 1 (m)": "obrig",
+     "Raio de copa 2 (m)": "obrig",
+     "Raio de copa 3 (m)": "obrig",
+     "Raio de copa 4 (m)": "obrig",
+     "Qualidade da copa": "obrig",
+     "Ocos e cavidades": "obrig",
+     "Consequencias": "obrig",
+     "Risco": "obrig",
+     "Conflitos no raio de 2 m": "obrig",
+     "Marquise ou toldo": "obrig"
     },
     "2": {
-     "Especie": "obrig",
-     "Altura total (m)": "obrig",
      "Foto 1": "obrig",
-     "Situacao": "obrig"
-    },
-    "3": {
+     "Situacao": "obrig",
      "Especie": "obrig",
      "DAP (cm)": "obrig",
      "Altura total (m)": "obrig",
+     "Raio de copa 1 (m)": "obrig",
+     "Raio de copa 2 (m)": "obrig",
+     "Raio de copa 3 (m)": "obrig",
+     "Raio de copa 4 (m)": "obrig",
+     "Qualidade da copa": "obrig",
+     "Ocos e cavidades": "obrig",
+     "Consequencias": "obrig",
+     "Risco": "obrig",
+     "Conflitos no raio de 2 m": "obrig",
+     "Marquise ou toldo": "obrig"
+    },
+    "3": {
      "Foto 1": "obrig",
-     "Situacao": "obrig"
+     "Situacao": "obrig",
+     "Especie": "obrig",
+     "DAP (cm)": "obrig",
+     "Altura total (m)": "obrig",
+     "Raio de copa 1 (m)": "obrig",
+     "Raio de copa 2 (m)": "obrig",
+     "Raio de copa 3 (m)": "obrig",
+     "Raio de copa 4 (m)": "obrig",
+     "Qualidade da copa": "obrig",
+     "Ocos e cavidades": "obrig",
+     "Consequencias": "obrig",
+     "Risco": "obrig",
+     "Conflitos no raio de 2 m": "obrig",
+     "Marquise ou toldo": "obrig"
     },
     "4": {
      "Situacao": "oculto",
@@ -964,11 +1099,14 @@
      "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
      "Poda de raiz": "oculto",
+     "Podas ausente": "oculto",
      "Lesões no tronco": "oculto",
      "Codominância de troncos": "oculto",
+     "Danos ausente": "oculto",
      "Ocos e cavidades": "oculto",
      "Afloramento da raiz no canteiro": "oculto",
      "Afloramento da raiz na calçada": "oculto",
+     "Raízes ausente": "oculto",
      "Qualidade da copa": "oculto",
      "Fungo": "oculto",
      "Cupim": "oculto",
@@ -976,6 +1114,7 @@
      "Erva-de-passarinho": "oculto",
      "Doença aparente": "oculto",
      "Praga aparente": "oculto",
+     "Fitossanidade ausente": "oculto",
      "Consequencias": "oculto",
      "Risco": "oculto",
      "Manejo remoção do indivíduo": "oculto",
@@ -987,8 +1126,11 @@
      "Manejo limpeza de epífitas e parasitas": "oculto",
      "Manejo suporte complementar": "oculto",
      "Manejo avaliação nível 2 ou 3": "oculto",
+     "Manejo nenhum": "oculto",
      "Outras mitigacoes": "oculto",
-     "Foto 1": "obrig"
+     "Foto 1": "obrig",
+     "Conflitos no raio de 2 m": "obrig",
+     "Marquise ou toldo": "obrig"
     },
     "5": {
      "Situacao": "oculto",
@@ -1004,11 +1146,14 @@
      "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
      "Poda de raiz": "oculto",
+     "Podas ausente": "oculto",
      "Lesões no tronco": "oculto",
      "Codominância de troncos": "oculto",
+     "Danos ausente": "oculto",
      "Ocos e cavidades": "oculto",
      "Afloramento da raiz no canteiro": "oculto",
      "Afloramento da raiz na calçada": "oculto",
+     "Raízes ausente": "oculto",
      "Qualidade da copa": "oculto",
      "Fungo": "oculto",
      "Cupim": "oculto",
@@ -1016,6 +1161,7 @@
      "Erva-de-passarinho": "oculto",
      "Doença aparente": "oculto",
      "Praga aparente": "oculto",
+     "Fitossanidade ausente": "oculto",
      "Consequencias": "oculto",
      "Risco": "oculto",
      "Manejo remoção do indivíduo": "oculto",
@@ -1027,8 +1173,11 @@
      "Manejo limpeza de epífitas e parasitas": "oculto",
      "Manejo suporte complementar": "oculto",
      "Manejo avaliação nível 2 ou 3": "oculto",
+     "Manejo nenhum": "oculto",
      "Outras mitigacoes": "oculto",
-     "Foto 1": "obrig"
+     "Foto 1": "obrig",
+     "Conflitos no raio de 2 m": "obrig",
+     "Marquise ou toldo": "obrig"
     }
    }
   },
@@ -1048,7 +1197,8 @@
      "Broca": "oculto",
      "Erva-de-passarinho": "oculto",
      "Doença aparente": "oculto",
-     "Praga aparente": "oculto"
+     "Praga aparente": "oculto",
+     "Fitossanidade ausente": "oculto"
     }
    }
   }

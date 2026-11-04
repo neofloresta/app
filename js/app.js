@@ -1,6 +1,6 @@
 // App de coleta Neofloresta
 (() => {
-  const VERSAO = '1.8.0';
+  const VERSAO = '1.9.0';
   const S = { sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
 
@@ -345,7 +345,22 @@
     }
     return E;
   }
-  function faltando(r) { const E = estadoCampos(S.form, r.valores); return S.form.campos.filter((c) => E[c.nome].obrig && !E[c.nome].oculto && vazio(c, valorDe(r, c))); }
+  // Grupos de marcar obrigatórios: ao menos uma opção marcada (inclui "Ausente"). form.gruposObrig = ['Fiação aérea', ...]
+  function camposDoGrupo(form, g) { const out = []; for (const a of form.abas) for (const x of a.campos) if (x.grupo === g) out.push(x.campo); return out; }
+  function gruposFaltando(form, vals, E) {
+    const out = [];
+    for (const g of form.gruposObrig || []) {
+      const cs = camposDoGrupo(form, g).filter((n) => E[n] && !E[n].oculto);
+      if (cs.length && !cs.some((n) => vals[n] === true)) out.push(g);
+    }
+    return out;
+  }
+  function faltando(r) {
+    const E = estadoCampos(S.form, r.valores);
+    const f = S.form.campos.filter((c) => E[c.nome].obrig && !E[c.nome].oculto && vazio(c, valorDe(r, c)));
+    for (const g of gruposFaltando(S.form, r.valores, E)) f.push({ nome: 'grupo:' + g, rotulo: g, grupo: g });
+    return f;
+  }
 
   let salvarTimer = null;
   function salvarRascunho() {
@@ -392,7 +407,8 @@
     const calcEls = new Map();
     function estadoAba(a) {
       const cs = a.campos.map((x) => form.campos.find((c) => c.nome === x.campo)).filter((c) => c && c.tipo !== 'hidden' && !c.calculado && c.tipo !== 'bool' && !E[c.nome].oculto);
-      if (S.tentou && cs.some((c) => E[c.nome].obrig && vazio(c, valorDe(r, c)))) return 'falta';
+      const gFalta = gruposFaltando(form, r.valores, E).filter((g) => a.campos.some((x) => x.grupo === g));
+      if (S.tentou && (gFalta.length || cs.some((c) => E[c.nome].obrig && vazio(c, valorDe(r, c))))) return 'falta';
       const n = cs.filter((c) => !vazio(c, valorDe(r, c))).length;
       if (!cs.length) return a.campos.some((x) => r.valores[x.campo] === true) ? 'cheio' : '';
       return n === cs.length ? 'cheio' : n ? 'meio' : '';
@@ -439,8 +455,25 @@
         if (grupo !== grupoAtual) { grupoAtual = grupo; chips = nums = fotos = null; if (grupo) blocos.push(h('div', { class: 'grupo-tit' }, grupo)); }
         if (c.tipo === 'bool' && !c.calculado) {
           nums = fotos = null;
-          if (!chips) { chips = h('div', { class: 'chips' }); blocos.push(h('div', { class: 'campo' }, grupo ? null : h('div', { class: 'rot' }, 'Marque o que se aplica'), chips)); }
-          const b = h('button', { class: 'chip' + (r.valores[c.nome] ? ' sel' : ''), onclick: () => { const v = !r.valores[c.nome]; b.classList.toggle('sel', v); mudar(c, v); } }, c.rotulo);
+          if (!chips) {
+            const gObrig = grupo && (form.gruposObrig || []).includes(grupo);
+            const faltaG = S.tentou && gObrig && gruposFaltando(form, r.valores, E).includes(grupo);
+            chips = h('div', { class: 'chips' });
+            blocos.push(h('div', { class: 'campo' + (faltaG ? ' falta' : ''), 'data-grupo': grupo || '' }, grupo ? (gObrig ? h('div', { class: 'rot' }, 'Marque pelo menos uma opção', h('span', { class: 'obr' }, '*')) : null) : h('div', { class: 'rot' }, 'Marque o que se aplica'), chips));
+          }
+          const meuGrupo = grupo;
+          const b = h('button', { class: 'chip' + (c.exclusivo ? ' exclusivo' : '') + (r.valores[c.nome] ? ' sel' : ''), 'data-campo': c.nome, onclick: () => {
+            const v = !r.valores[c.nome];
+            if (v && meuGrupo) {
+              // "Ausente" desmarca as outras opções do grupo, e qualquer outra desmarca "Ausente"
+              for (const n of camposDoGrupo(form, meuGrupo)) {
+                const k = form.campos.find((x) => x.nome === n);
+                if (n !== c.nome && k && k.tipo === 'bool' && (c.exclusivo || k.exclusivo) && r.valores[n]) { r.valores[n] = false; const el = conteudo.querySelector(`.chip[data-campo="${CSS.escape(n)}"]`); if (el) el.classList.remove('sel'); }
+              }
+            }
+            b.classList.toggle('sel', v); mudar(c, v);
+            if (S.tentou && meuGrupo) { const box = conteudo.querySelector(`[data-grupo="${CSS.escape(meuGrupo)}"]`); if (box) box.classList.toggle('falta', gruposFaltando(form, r.valores, E).includes(meuGrupo)); }
+          } }, c.rotulo);
           chips.append(b); continue;
         }
         if (c.tipo === 'number' && !c.calculado) {
@@ -613,7 +646,7 @@
       const f = faltando(r);
       if (f.length) {
         pintarAbas();
-        const idx = abas.findIndex((a) => a.campos.some((x) => f.some((c) => c.nome === x.campo)));
+        const idx = abas.findIndex((a) => a.campos.some((x) => f.some((c) => c.nome === x.campo || (c.grupo && c.grupo === x.grupo))));
         await modal('Faltam campos obrigatórios', h('ul', null, f.map((c) => h('li', null, c.rotulo))), [{ texto: 'Preencher', valor: 1 }]);
         if (idx >= 0) irAba(idx); else render();
         return;
@@ -815,13 +848,13 @@
       } catch (e) { msg.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
     }
     async function exemplo() {
-      try { for (const arq of ['divinopolis-inventario', 'seade-risco']) { const f = await (await fetch(`forms/${arq}.json`)).json(); await Api.b.formularioSalvar(f, null); } toast('Formulários instalados.'); telaAdmin('formularios'); } catch (e) { toast(e.message, 5000); }
+      try { for (const arq of ['divinopolis-inventario', 'seade-risco']) { const f = await (await fetch(`forms/${arq}.json`)).json(); await Api.b.formularioSalvar(f, null); } toast('Formulários instalados.'); if (S.form) S.form = await carregarForm(S.form.id); telaAdmin('formularios'); } catch (e) { toast(e.message, 5000); }
     }
     async function editar(id) { const form = await Api.b.formulario(id); S.revisao = { form: JSON.parse(JSON.stringify(form)), qml: null, novo: false }; ir('#admin/revisao'); }
     corpo.replaceChildren(
       h('div', { class: 'cartao' }, h('h3', null, 'Formulários'),
         forms.length ? h('table', { class: 'tab' }, forms.map((f) => h('tr', null, h('td', null, h('b', null, f.nome), h('br'), h('small', null, `${f.id} · ${f.campos} campos`)), h('td', null, h('button', { class: 'btn sec peq', onclick: () => editar(f.id) }, 'Revisar'))))) : h('p', null, 'Nenhum formulário ainda.'),
-        !forms.some((f) => f.id === 'divinopolis-inventario') ? h('button', { class: 'btn sec', style: 'margin-top:10px', onclick: exemplo }, 'Instalar formulários prontos (inventário Divinópolis e risco)') : null),
+        h('button', { class: 'btn sec', style: 'margin-top:10px', onclick: exemplo }, forms.some((f) => f.id === 'divinopolis-inventario') ? 'Atualizar formulários prontos (inventário Divinópolis e risco)' : 'Instalar formulários prontos (inventário Divinópolis e risco)')),
       h('div', { class: 'cartao' }, h('h3', null, 'Importar do QGIS'),
         h('p', { class: 'dica' }, 'No QGIS: Propriedades da camada > Estilo > Salvar estilo (.qml) com todas as categorias. Envie também o .gpkg da camada para trazer os tipos de campo e a lista de espécies.'),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome do formulário'), nome),
