@@ -1,0 +1,1303 @@
+{
+ "id": "seade-risco",
+ "nome": "Avaliação de risco (SEADE)",
+ "camada": "seade_arv_ok_26-05",
+ "versao": 1,
+ "campos": [
+  {
+   "nome": "Data da avaliacao",
+   "rotulo": "Data da avaliação",
+   "tipo": "datetime",
+   "agora": true,
+   "armazenar": "datetime"
+  },
+  {
+   "nome": "Coletor",
+   "rotulo": "Código da árvore",
+   "tipo": "text",
+   "armazenar": "text"
+  },
+  {
+   "nome": "Categoria",
+   "rotulo": "Categoria",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "DAP (=ou>3cm)"
+    },
+    {
+     "v": "2",
+     "t": "Arbusto (=ou>3cm)"
+    },
+    {
+     "v": "3",
+     "t": "Palmeira (=ou>3cm)"
+    },
+    {
+     "v": "5",
+     "t": "OBS - Comunicação pelo mapa"
+    }
+   ],
+   "armazenar": "text",
+   "obrigatorio": true
+  },
+  {
+   "nome": "Foto 1",
+   "rotulo": "Foto 1",
+   "tipo": "photo",
+   "armazenar": "text"
+  },
+  {
+   "nome": "Especie",
+   "rotulo": "Espécie",
+   "tipo": "species",
+   "armazenar": "text",
+   "obrigatorio": true
+  },
+  {
+   "nome": "CAP (cm)",
+   "rotulo": "CAP (cm)",
+   "tipo": "multinumber",
+   "armazenar": "text",
+   "obrigatorio": true
+  },
+  {
+   "nome": "H total (m)",
+   "rotulo": "H total (m)",
+   "tipo": "number",
+   "armazenar": "real"
+  },
+  {
+   "nome": "H da bifurcacao (m)",
+   "rotulo": "H da bifurcação (m)",
+   "tipo": "number",
+   "armazenar": "real"
+  },
+  {
+   "nome": "Area de copa - R1 (m)",
+   "rotulo": "Área de copa - R1 (m)",
+   "tipo": "number",
+   "armazenar": "real"
+  },
+  {
+   "nome": "Area de copa - R2 (m)",
+   "rotulo": "Área de copa - R2 (m)",
+   "tipo": "number",
+   "armazenar": "real"
+  },
+  {
+   "nome": "Area de copa - R3 (m)",
+   "rotulo": "Área de copa - R3 (m)",
+   "tipo": "number",
+   "armazenar": "real"
+  },
+  {
+   "nome": "Area de copa - R4 (m)",
+   "rotulo": "Área de copa - R4 (m)",
+   "tipo": "number",
+   "armazenar": "real"
+  },
+  {
+   "nome": "Area livre (m2)",
+   "rotulo": "Área livre (m²)",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "< 1 m²"
+    },
+    {
+     "v": "2",
+     "t": "1-2 m²"
+    },
+    {
+     "v": "3",
+     "t": "2-3 m²"
+    },
+    {
+     "v": "4",
+     "t": "> 3m²"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Analise do individuo",
+   "rotulo": "Análise do indivíduo",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "Sadio"
+    },
+    {
+     "v": "2",
+     "t": "com patologia"
+    },
+    {
+     "v": "3",
+     "t": "terminal"
+    },
+    {
+     "v": "4",
+     "t": "morto"
+    }
+   ],
+   "armazenar": "text",
+   "obrigatorio": true
+  },
+  {
+   "nome": "Desequilibrio da copa",
+   "rotulo": "Desequilíbrio da copa",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Galhos epicormicos",
+   "rotulo": "Galhos epicórmicos",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Galhos ou ramos mortos",
+   "rotulo": "Galhos ou ramos mortos",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "0-25%"
+    },
+    {
+     "v": "2",
+     "t": "25-50%"
+    },
+    {
+     "v": "3",
+     "t": "50-75%"
+    },
+    {
+     "v": "4",
+     "t": "acima de 75%"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Danos por podas",
+   "rotulo": "Danos por podas",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Poda drastica",
+   "rotulo": "Poda drástica",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "cupim na copa",
+   "rotulo": "cupim na copa",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "broca na copa",
+   "rotulo": "broca na copa",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "fungo na copa",
+   "rotulo": "fungo na copa",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "erva-de-passarinho",
+   "rotulo": "erva-de-passarinho",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Inclinacao",
+   "rotulo": "Inclinação",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "sem interferência na circulação"
+    },
+    {
+     "v": "2",
+     "t": "interferindo a calçada"
+    },
+    {
+     "v": "3",
+     "t": "interferindo a via"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Casca",
+   "rotulo": "Casca",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "normal"
+    },
+    {
+     "v": "2",
+     "t": "casca morta"
+    },
+    {
+     "v": "3",
+     "t": "diferenciação de casca"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Codominancia de troncos",
+   "rotulo": "Codominância de troncos",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Rachadura",
+   "rotulo": "Rachadura",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Ocos e cavidades",
+   "rotulo": "Ocos e cavidades",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "ausente"
+    },
+    {
+     "v": "2",
+     "t": "< que 1/3"
+    },
+    {
+     "v": "3",
+     "t": "> que 1/3"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "fungo no tronco",
+   "rotulo": "fungo no tronco",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "broca no tronco",
+   "rotulo": "broca no tronco",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "cupim no tronco",
+   "rotulo": "cupim no tronco",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Colo soterrado",
+   "rotulo": "Colo soterrado",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "fungo nas raizes",
+   "rotulo": "fungo nas raízes",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Poda de raiz",
+   "rotulo": "Poda de raiz",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Afloramento da raiz no canteiro",
+   "rotulo": "Afloramento da raiz no canteiro",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Afloramento de raiz na calcada",
+   "rotulo": "Afloramento de raiz na calçada",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Afloramento de raiz na via",
+   "rotulo": "Afloramento de raiz na via",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Principal alvo",
+   "rotulo": "Principal alvo",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "Pessoas"
+    },
+    {
+     "v": "2",
+     "t": "Carros estacionados"
+    },
+    {
+     "v": "3",
+     "t": "circulantes da via"
+    },
+    {
+     "v": "4",
+     "t": "Edificação"
+    },
+    {
+     "v": "5",
+     "t": "Outros"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Fator de protecao",
+   "rotulo": "Fator de proteção",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Zona do alvo",
+   "rotulo": "Zona do alvo",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "Projeção da copa"
+    },
+    {
+     "v": "2",
+     "t": "1x da altura"
+    },
+    {
+     "v": "3",
+     "t": "1,5x da altura"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Taxa de ocupacao",
+   "rotulo": "Taxa de ocupação",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "Raro (muito incomuns na zona alvo)"
+    },
+    {
+     "v": "2",
+     "t": "Ocasional (presente com pouca frequência)"
+    },
+    {
+     "v": "3",
+     "t": "Frequente (presente em grande parte do dia ou semana)"
+    },
+    {
+     "v": "4",
+     "t": "Constante (sempre presente na zona alvo)"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Remocao do alvo",
+   "rotulo": "Remoção do alvo",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Restricao da area de risco",
+   "rotulo": "Restrição da área de risco",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Principal defeito da arvore",
+   "rotulo": "Principal defeito da árvore",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "Raízes e colo"
+    },
+    {
+     "v": "2",
+     "t": "Tronco"
+    },
+    {
+     "v": "3",
+     "t": "Copa e galhos"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Carga sobre o defeito",
+   "rotulo": "Carga sobre o defeito",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "Pequena"
+    },
+    {
+     "v": "2",
+     "t": "Média"
+    },
+    {
+     "v": "3",
+     "t": "Significativa"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Condicoes de preocupacao",
+   "rotulo": "Condições de preocupação",
+   "tipo": "textarea",
+   "armazenar": "text"
+  },
+  {
+   "nome": "Probabilidade de falha",
+   "rotulo": "Probabilidade de falha",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "4",
+     "t": "Improvável (em 1 ano, não há risco em condições normais e não deve cair em extremos de clima)"
+    },
+    {
+     "v": "3",
+     "t": "Possível (pode falhar com clima normal, mas não em 1 ano)"
+    },
+    {
+     "v": "2",
+     "t": "Provável (pode falhar em condições normais dentro de 1 ano)"
+    },
+    {
+     "v": "1",
+     "t": "Iminente (falha já iniciou ou vai iniciar em breve, em até 1 ano, mesmo sem climas extremos)"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Probabilidade de impacto",
+   "rotulo": "Probabilidade de impacto",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "Muito baixo (chance remota de atingir o alvo)"
+    },
+    {
+     "v": "2",
+     "t": "Baixo (não é provável que atinja o alvo)"
+    },
+    {
+     "v": "3",
+     "t": "Médio (50% de chance de atingir o alvo)"
+    },
+    {
+     "v": "4",
+     "t": "Alto (vai atingir o alvo - geralmente quando o alvo é fixo)"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Falha+Impacto",
+   "rotulo": "Falha+Impacto",
+   "tipo": "hidden",
+   "expr": " \"Probabilidade de falha\"  || '+' ||  \"Probabilidade de impacto\" ",
+   "calculado": true,
+   "armazenar": "text"
+  },
+  {
+   "nome": "Matriz de Probabilidade",
+   "rotulo": "Matriz de Probabilidade",
+   "tipo": "text",
+   "expr": "CASE\r\nWHEN  \"Falha+Impacto\"  = '1+1' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '1+2' THEN 'Pouco provavel'\r\nWHEN  \"Falha+Impacto\"  = '1+3' THEN 'Provavel'\r\nWHEN  \"Falha+Impacto\"  = '1+4' THEN 'Muito provavel'\r\nWHEN  \"Falha+Impacto\"  = '2+1' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '2+2' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '2+3' THEN 'Pouco provavel'\r\nWHEN  \"Falha+Impacto\"  = '2+4' THEN 'Provavel'\r\nWHEN  \"Falha+Impacto\"  = '3+1' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '3+2' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '3+3' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '3+4' THEN 'Pouco provavel'\r\nWHEN  \"Falha+Impacto\"  = '4+1' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '4+2' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '4+3' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '4+4' THEN 'Improvavel'\r\nEND",
+   "calculado": true,
+   "armazenar": "text"
+  },
+  {
+   "nome": "Consequencias",
+   "rotulo": "Consequências",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "Insignificante (danos materiais de baixo valor)"
+    },
+    {
+     "v": "2",
+     "t": "Menor (danos a propriedade mais difíceis de substituir ou pequena obstrução de via)"
+    },
+    {
+     "v": "3",
+     "t": "Significativa (lesão pessoal, danos materiais de alto valor ou interrupção moderada de trânsito)"
+    },
+    {
+     "v": "4",
+     "t": "Severa (lesão pessoal grave, hospitalização ou morte, danos materiais de alto valor e interrupção de tráfego importante)"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Matriz de Prob + Conseq",
+   "rotulo": "Matriz de Prob + Conseq",
+   "tipo": "hidden",
+   "expr": " \"Matriz de Probabilidade\"  || '+' ||  \"Consequencias\" ",
+   "calculado": true,
+   "armazenar": "text"
+  },
+  {
+   "nome": "Categoria de Risco",
+   "rotulo": "Categoria de Risco",
+   "tipo": "text",
+   "expr": "CASE\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+2' THEN 'Medio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+3' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+4' THEN 'Severo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+2' THEN 'Medio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+3' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+4' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+2' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+3' THEN 'Medio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+4' THEN 'Medio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+2' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+3' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+4' THEN 'Baixo'\r\nEND",
+   "calculado": true,
+   "armazenar": "text"
+  },
+  {
+   "nome": "Aumento de canteiro",
+   "rotulo": "Aumento de canteiro",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Poda",
+   "rotulo": "Poda",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Remocao da arvore",
+   "rotulo": "Remoção da árvore",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Limpeza de epifitas e parasitas",
+   "rotulo": "Limpeza de epífitas e parasitas",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Tutoramento",
+   "rotulo": "Tutoramento",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Suporte Complementar",
+   "rotulo": "Suporte Complementar",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Avaliacao Nivel 3",
+   "rotulo": "Avaliação Nível 3",
+   "tipo": "bool",
+   "armazenar": "bool"
+  },
+  {
+   "nome": "Outras mitigacoes",
+   "rotulo": "Outras mitigações",
+   "tipo": "textarea",
+   "armazenar": "text"
+  },
+  {
+   "nome": "Observacoes",
+   "rotulo": "Observações",
+   "tipo": "textarea",
+   "armazenar": "text"
+  },
+  {
+   "nome": "Foto 2",
+   "rotulo": "Foto 2",
+   "tipo": "photo",
+   "armazenar": "text"
+  },
+  {
+   "nome": "Foto 3",
+   "rotulo": "Foto 3",
+   "tipo": "photo",
+   "armazenar": "text"
+  },
+  {
+   "nome": "Foto 4",
+   "rotulo": "Foto 4",
+   "tipo": "photo",
+   "armazenar": "text"
+  },
+  {
+   "nome": "Foto 5",
+   "rotulo": "Foto 5",
+   "tipo": "photo",
+   "armazenar": "text"
+  },
+  {
+   "nome": "Prazo de Manejo",
+   "rotulo": "Prazo de Manejo",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "imediato (30 dias)"
+    },
+    {
+     "v": "2",
+     "t": "médio (30 a 90 dias)"
+    },
+    {
+     "v": "3",
+     "t": "baixo (a partir de 90 dias)"
+    },
+    {
+     "v": "4",
+     "t": "indeterminado"
+    }
+   ],
+   "armazenar": "text"
+  },
+  {
+   "nome": "Plaqueta_nova",
+   "rotulo": "Plaqueta nova",
+   "tipo": "text",
+   "incremento": true,
+   "armazenar": "text"
+  }
+ ],
+ "abas": [
+  {
+   "nome": "ID e local",
+   "campos": [
+    {
+     "campo": "Categoria"
+    },
+    {
+     "campo": "Data da avaliacao"
+    },
+    {
+     "campo": "Coletor"
+    },
+    {
+     "campo": "Plaqueta_nova"
+    },
+    {
+     "campo": "Foto 1"
+    }
+   ]
+  },
+  {
+   "nome": "Amostra",
+   "campos": [
+    {
+     "campo": "Analise do individuo"
+    },
+    {
+     "campo": "Especie"
+    },
+    {
+     "campo": "CAP (cm)"
+    },
+    {
+     "campo": "H total (m)"
+    },
+    {
+     "campo": "H da bifurcacao (m)"
+    },
+    {
+     "campo": "Area de copa - R1 (m)"
+    },
+    {
+     "campo": "Area de copa - R2 (m)"
+    },
+    {
+     "campo": "Area de copa - R3 (m)"
+    },
+    {
+     "campo": "Area de copa - R4 (m)"
+    },
+    {
+     "campo": "Area livre (m2)"
+    }
+   ]
+  },
+  {
+   "nome": "Copa",
+   "campos": [
+    {
+     "campo": "Desequilibrio da copa"
+    },
+    {
+     "campo": "Galhos epicormicos"
+    },
+    {
+     "campo": "Galhos ou ramos mortos"
+    },
+    {
+     "campo": "Danos por podas"
+    },
+    {
+     "campo": "Poda drastica"
+    },
+    {
+     "campo": "broca na copa"
+    },
+    {
+     "campo": "fungo na copa"
+    },
+    {
+     "campo": "cupim na copa"
+    },
+    {
+     "campo": "erva-de-passarinho"
+    }
+   ]
+  },
+  {
+   "nome": "Tronco",
+   "campos": [
+    {
+     "campo": "Inclinacao"
+    },
+    {
+     "campo": "Casca"
+    },
+    {
+     "campo": "Codominancia de troncos"
+    },
+    {
+     "campo": "Rachadura"
+    },
+    {
+     "campo": "Ocos e cavidades"
+    },
+    {
+     "campo": "broca no tronco"
+    },
+    {
+     "campo": "cupim no tronco"
+    },
+    {
+     "campo": "fungo no tronco"
+    }
+   ]
+  },
+  {
+   "nome": "Raízes",
+   "campos": [
+    {
+     "campo": "Colo soterrado"
+    },
+    {
+     "campo": "fungo nas raizes"
+    },
+    {
+     "campo": "Afloramento da raiz no canteiro"
+    },
+    {
+     "campo": "Afloramento de raiz na calcada"
+    },
+    {
+     "campo": "Afloramento de raiz na via"
+    },
+    {
+     "campo": "Poda de raiz"
+    }
+   ]
+  },
+  {
+   "nome": "Alvo",
+   "campos": [
+    {
+     "campo": "Principal alvo"
+    },
+    {
+     "campo": "Fator de protecao"
+    },
+    {
+     "campo": "Zona do alvo"
+    },
+    {
+     "campo": "Taxa de ocupacao"
+    },
+    {
+     "campo": "Remocao do alvo"
+    },
+    {
+     "campo": "Restricao da area de risco"
+    }
+   ]
+  },
+  {
+   "nome": "Defeito, falha e impacto",
+   "campos": [
+    {
+     "campo": "Principal defeito da arvore"
+    },
+    {
+     "campo": "Carga sobre o defeito"
+    },
+    {
+     "campo": "Condicoes de preocupacao"
+    },
+    {
+     "campo": "Probabilidade de falha"
+    },
+    {
+     "campo": "Probabilidade de impacto"
+    },
+    {
+     "campo": "Falha+Impacto"
+    },
+    {
+     "campo": "Matriz de Probabilidade"
+    },
+    {
+     "campo": "Consequencias"
+    },
+    {
+     "campo": "Matriz de Prob + Conseq"
+    },
+    {
+     "campo": "Categoria de Risco"
+    }
+   ]
+  },
+  {
+   "nome": "Recomendações",
+   "campos": [
+    {
+     "campo": "Poda"
+    },
+    {
+     "campo": "Aumento de canteiro"
+    },
+    {
+     "campo": "Limpeza de epifitas e parasitas"
+    },
+    {
+     "campo": "Tutoramento"
+    },
+    {
+     "campo": "Remocao da arvore"
+    },
+    {
+     "campo": "Suporte Complementar"
+    },
+    {
+     "campo": "Avaliacao Nivel 3"
+    },
+    {
+     "campo": "Outras mitigacoes"
+    },
+    {
+     "campo": "Prazo de Manejo"
+    },
+    {
+     "campo": "Observacoes"
+    }
+   ]
+  },
+  {
+   "nome": "Fotos",
+   "campos": [
+    {
+     "campo": "Foto 2"
+    },
+    {
+     "campo": "Foto 3"
+    },
+    {
+     "campo": "Foto 4"
+    },
+    {
+     "campo": "Foto 5"
+    }
+   ]
+  }
+ ],
+ "especies": [
+  {
+   "cientifico": "Acrocomia aculeata",
+   "popular": ""
+  },
+  {
+   "cientifico": "Alchornea sidifolia",
+   "popular": ""
+  },
+  {
+   "cientifico": "Allophylus edulis",
+   "popular": ""
+  },
+  {
+   "cientifico": "Archontophoenix cunninghamiana",
+   "popular": ""
+  },
+  {
+   "cientifico": "Artocarpus heterophyllus",
+   "popular": ""
+  },
+  {
+   "cientifico": "Bauhinia variegata",
+   "popular": ""
+  },
+  {
+   "cientifico": "Bougainvillea spectabilis",
+   "popular": ""
+  },
+  {
+   "cientifico": "Brunfelsia uniflora",
+   "popular": ""
+  },
+  {
+   "cientifico": "Casearia sylvestris",
+   "popular": ""
+  },
+  {
+   "cientifico": "Cenostigma pluviosum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Citharexylum myrianthum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Citrus reticulata",
+   "popular": ""
+  },
+  {
+   "cientifico": "Citrus sinensis",
+   "popular": ""
+  },
+  {
+   "cientifico": "Coffea arabica",
+   "popular": ""
+  },
+  {
+   "cientifico": "Cordia ecalyculata",
+   "popular": ""
+  },
+  {
+   "cientifico": "Dypsis lutescens",
+   "popular": ""
+  },
+  {
+   "cientifico": "Eriobotrya japonica",
+   "popular": ""
+  },
+  {
+   "cientifico": "Erythrina verna",
+   "popular": ""
+  },
+  {
+   "cientifico": "Eucalyptus sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Eugenia uniflora",
+   "popular": ""
+  },
+  {
+   "cientifico": "Ficus benjamina",
+   "popular": ""
+  },
+  {
+   "cientifico": "Handroanthus chrysotrichus",
+   "popular": ""
+  },
+  {
+   "cientifico": "Handroanthus heptaphyllus",
+   "popular": ""
+  },
+  {
+   "cientifico": "Handroanthus impetiginosus",
+   "popular": ""
+  },
+  {
+   "cientifico": "Handroanthus serratifolius",
+   "popular": ""
+  },
+  {
+   "cientifico": "Heptapleurum actinophyllum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Hibiscus rosa-sinensis",
+   "popular": ""
+  },
+  {
+   "cientifico": "Jacaranda mimosifolia",
+   "popular": ""
+  },
+  {
+   "cientifico": "Jacaratia spinosa",
+   "popular": ""
+  },
+  {
+   "cientifico": "Lafoensia pacari",
+   "popular": ""
+  },
+  {
+   "cientifico": "Lagerstroemia indica",
+   "popular": ""
+  },
+  {
+   "cientifico": "Leucochloron incuriale",
+   "popular": ""
+  },
+  {
+   "cientifico": "Ligustrum lucidum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Machaerium villosum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Mangifera indica",
+   "popular": ""
+  },
+  {
+   "cientifico": "Matayba elaeagnoides",
+   "popular": ""
+  },
+  {
+   "cientifico": "Myrsine coriacea",
+   "popular": ""
+  },
+  {
+   "cientifico": "Nectandra barbellata",
+   "popular": ""
+  },
+  {
+   "cientifico": "Nectandra megapotamica",
+   "popular": ""
+  },
+  {
+   "cientifico": "Ocotea cf. aciphylla",
+   "popular": ""
+  },
+  {
+   "cientifico": "Ocotea puberula",
+   "popular": ""
+  },
+  {
+   "cientifico": "Ocotea pulchella",
+   "popular": ""
+  },
+  {
+   "cientifico": "Persea americana",
+   "popular": ""
+  },
+  {
+   "cientifico": "Piptadenia gonoacantha",
+   "popular": ""
+  },
+  {
+   "cientifico": "Plerandra elegantissima",
+   "popular": ""
+  },
+  {
+   "cientifico": "Pleroma granulosum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Pleroma mutabile",
+   "popular": ""
+  },
+  {
+   "cientifico": "Plinia peruviana",
+   "popular": ""
+  },
+  {
+   "cientifico": "Plumeria rubra",
+   "popular": ""
+  },
+  {
+   "cientifico": "Prunus myrtifolia",
+   "popular": ""
+  },
+  {
+   "cientifico": "Psidium guajava",
+   "popular": ""
+  },
+  {
+   "cientifico": "Psidium guineense",
+   "popular": ""
+  },
+  {
+   "cientifico": "Sapium glandulosum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Schinus terebinthifolia",
+   "popular": ""
+  },
+  {
+   "cientifico": "Schizolobium parahyba",
+   "popular": ""
+  },
+  {
+   "cientifico": "Tabebuia roseoalba",
+   "popular": ""
+  },
+  {
+   "cientifico": "Tipuana tipu",
+   "popular": ""
+  },
+  {
+   "cientifico": "Trichilia havanensis",
+   "popular": ""
+  }
+ ],
+ "avisos": [],
+ "notas": "Matriz corrigida: Falha Provável + Impacto Baixo (2+2) = Improvável (padrão ISA). Item fantasma \"Alvo - retirada ou restricao\" removido.",
+ "regras": [
+  {
+   "campo": "Categoria",
+   "por": {
+    "1": {
+     "Foto 1": "obrig",
+     "H total (m)": "obrig"
+    },
+    "2": {
+     "Foto 1": "obrig",
+     "H total (m)": "obrig"
+    },
+    "3": {
+     "Foto 1": "obrig",
+     "H total (m)": "obrig",
+     "H da bifurcacao (m)": "oculto",
+     "Codominancia de troncos": "oculto",
+     "Galhos epicormicos": "oculto"
+    },
+    "5": {
+     "Analise do individuo": "oculto",
+     "Especie": "oculto",
+     "CAP (cm)": "oculto",
+     "H total (m)": "oculto",
+     "H da bifurcacao (m)": "oculto",
+     "Area de copa - R1 (m)": "oculto",
+     "Area de copa - R2 (m)": "oculto",
+     "Area de copa - R3 (m)": "oculto",
+     "Area de copa - R4 (m)": "oculto",
+     "Area livre (m2)": "oculto",
+     "Desequilibrio da copa": "oculto",
+     "Galhos epicormicos": "oculto",
+     "Galhos ou ramos mortos": "oculto",
+     "Danos por podas": "oculto",
+     "Poda drastica": "oculto",
+     "broca na copa": "oculto",
+     "fungo na copa": "oculto",
+     "cupim na copa": "oculto",
+     "erva-de-passarinho": "oculto",
+     "Inclinacao": "oculto",
+     "Casca": "oculto",
+     "Codominancia de troncos": "oculto",
+     "Rachadura": "oculto",
+     "Ocos e cavidades": "oculto",
+     "broca no tronco": "oculto",
+     "cupim no tronco": "oculto",
+     "fungo no tronco": "oculto",
+     "Colo soterrado": "oculto",
+     "fungo nas raizes": "oculto",
+     "Afloramento da raiz no canteiro": "oculto",
+     "Afloramento de raiz na calcada": "oculto",
+     "Afloramento de raiz na via": "oculto",
+     "Poda de raiz": "oculto",
+     "Principal alvo": "oculto",
+     "Fator de protecao": "oculto",
+     "Zona do alvo": "oculto",
+     "Taxa de ocupacao": "oculto",
+     "Remocao do alvo": "oculto",
+     "Restricao da area de risco": "oculto",
+     "Principal defeito da arvore": "oculto",
+     "Carga sobre o defeito": "oculto",
+     "Condicoes de preocupacao": "oculto",
+     "Probabilidade de falha": "oculto",
+     "Probabilidade de impacto": "oculto",
+     "Matriz de Probabilidade": "oculto",
+     "Consequencias": "oculto",
+     "Categoria de Risco": "oculto",
+     "Poda": "oculto",
+     "Aumento de canteiro": "oculto",
+     "Limpeza de epifitas e parasitas": "oculto",
+     "Tutoramento": "oculto",
+     "Remocao da arvore": "oculto",
+     "Suporte Complementar": "oculto",
+     "Avaliacao Nivel 3": "oculto",
+     "Outras mitigacoes": "oculto",
+     "Prazo de Manejo": "oculto",
+     "Observacoes": "obrig",
+     "Foto 1": "obrig"
+    }
+   }
+  },
+  {
+   "campo": "Analise do individuo",
+   "por": {
+    "4": {
+     "Especie": "opcional",
+     "Desequilibrio da copa": "oculto",
+     "Galhos epicormicos": "oculto",
+     "Galhos ou ramos mortos": "oculto",
+     "Danos por podas": "oculto",
+     "Poda drastica": "oculto",
+     "broca na copa": "oculto",
+     "fungo na copa": "oculto",
+     "cupim na copa": "oculto",
+     "erva-de-passarinho": "oculto",
+     "Inclinacao": "oculto",
+     "Casca": "oculto",
+     "Codominancia de troncos": "oculto",
+     "Rachadura": "oculto",
+     "Ocos e cavidades": "oculto",
+     "broca no tronco": "oculto",
+     "cupim no tronco": "oculto",
+     "fungo no tronco": "oculto",
+     "Colo soterrado": "oculto",
+     "fungo nas raizes": "oculto",
+     "Afloramento da raiz no canteiro": "oculto",
+     "Afloramento de raiz na calcada": "oculto",
+     "Afloramento de raiz na via": "oculto",
+     "Poda de raiz": "oculto",
+     "H da bifurcacao (m)": "oculto",
+     "Area de copa - R1 (m)": "oculto",
+     "Area de copa - R2 (m)": "oculto",
+     "Area de copa - R3 (m)": "oculto",
+     "Area de copa - R4 (m)": "oculto"
+    }
+   }
+  }
+ ]
+}
