@@ -1,6 +1,6 @@
 // App de coleta Neofloresta
 (() => {
-  const VERSAO = '1.7.0';
+  const VERSAO = '1.7.1';
   const S = { sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
 
@@ -109,7 +109,7 @@
   // ---------- Login ----------
   function telaLogin() {
     const u = h('input', { class: 'entrada', autocomplete: 'username', autocapitalize: 'none', placeholder: 'Usuário' });
-    const s = h('input', { class: 'entrada', type: 'password', inputmode: 'numeric', autocomplete: 'current-password', placeholder: 'Senha' });
+    const s = h('input', { class: 'entrada', type: 'password', autocomplete: 'current-password', placeholder: 'Senha' });
     const erro = h('div', { class: 'aviso oculto' });
     const btn = h('button', { class: 'btn cheio', onclick: entrar }, 'Entrar');
     async function entrar() {
@@ -767,7 +767,7 @@
       const novo = !u; u = u || { login: '', nome: '', senha: '', perfil: 'campo', projeto: S.projeto ? S.projeto.id : '', equipe: '' };
       const lo = h('input', { class: 'entrada', value: u.login, disabled: !novo, autocapitalize: 'none', placeholder: 'ex.: divi-equipe1' });
       const no = h('input', { class: 'entrada', value: u.nome, placeholder: 'ex.: João e Maria' });
-      const se = h('input', { class: 'entrada', value: u.senha || '', inputmode: 'numeric', placeholder: 'senha numérica' });
+      const se = h('input', { class: 'entrada', value: u.senha || '', placeholder: 'senha' });
       const eq = h('input', { class: 'entrada', value: u.equipe || '', placeholder: 'ex.: Equipe 1' });
       const cod = h('input', { class: 'entrada', value: u.codigo || '', autocapitalize: 'characters', placeholder: 'ex.: E1' });
       const pe = h('select', { class: 'entrada' }, h('option', { value: 'campo', selected: u.perfil === 'campo' }, 'Campo'), h('option', { value: 'admin', selected: u.perfil === 'admin' }, 'Coordenação (vê tudo, exporta)'));
