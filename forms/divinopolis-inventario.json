@@ -1,0 +1,1056 @@
+{
+ "id": "divinopolis-inventario",
+ "nome": "Inventário de arborização viária (Divinópolis)",
+ "camada": "divinopolis_arvores",
+ "versao": 1,
+ "campos": [
+  {
+   "armazenar": "text",
+   "nome": "Codigo",
+   "rotulo": "Código da árvore",
+   "tipo": "text",
+   "auto": "codigo"
+  },
+  {
+   "armazenar": "datetime",
+   "nome": "Data e hora",
+   "rotulo": "Data e hora da avaliação",
+   "tipo": "datetime",
+   "agora": true
+  },
+  {
+   "armazenar": "text",
+   "nome": "Coletor",
+   "rotulo": "Coletor",
+   "tipo": "text",
+   "auto": "coletor"
+  },
+  {
+   "armazenar": "text",
+   "nome": "Local do registro",
+   "rotulo": "Local do registro",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Via pública (calçada)",
+     "t": "Via pública (calçada)"
+    },
+    {
+     "v": "Canteiro central",
+     "t": "Canteiro central"
+    }
+   ],
+   "obrigatorio": true
+  },
+  {
+   "armazenar": "text",
+   "nome": "Categoria",
+   "rotulo": "Categoria",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "Árvore (altura igual ou superior a 2 m)"
+    },
+    {
+     "v": "2",
+     "t": "Arbusto (altura igual ou superior a 2 m)"
+    },
+    {
+     "v": "3",
+     "t": "Palmeira (altura igual ou superior a 2 m)"
+    },
+    {
+     "v": "4",
+     "t": "Local de novo plantio"
+    },
+    {
+     "v": "5",
+     "t": "Calçada sem árvores"
+    }
+   ],
+   "obrigatorio": true
+  },
+  {
+   "armazenar": "text",
+   "nome": "Foto 1",
+   "rotulo": "Foto 1",
+   "tipo": "photo"
+  },
+  {
+   "armazenar": "text",
+   "nome": "Situacao",
+   "rotulo": "Situação",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Viva",
+     "t": "Viva"
+    },
+    {
+     "v": "Morta",
+     "t": "Morta"
+    }
+   ]
+  },
+  {
+   "armazenar": "text",
+   "nome": "Especie",
+   "rotulo": "Espécie",
+   "tipo": "species"
+  },
+  {
+   "armazenar": "text",
+   "nome": "DAP (cm)",
+   "rotulo": "DAP (cm)",
+   "tipo": "multinumber"
+  },
+  {
+   "armazenar": "real",
+   "nome": "Altura total (m)",
+   "rotulo": "Altura total (m)",
+   "tipo": "number"
+  },
+  {
+   "armazenar": "real",
+   "nome": "Raio de copa 1 (m)",
+   "rotulo": "Raio de copa 1 (m)",
+   "tipo": "number"
+  },
+  {
+   "armazenar": "real",
+   "nome": "Raio de copa 2 (m)",
+   "rotulo": "Raio de copa 2 (m)",
+   "tipo": "number"
+  },
+  {
+   "armazenar": "real",
+   "nome": "Raio de copa 3 (m)",
+   "rotulo": "Raio de copa 3 (m)",
+   "tipo": "number"
+  },
+  {
+   "armazenar": "real",
+   "nome": "Raio de copa 4 (m)",
+   "rotulo": "Raio de copa 4 (m)",
+   "tipo": "number"
+  },
+  {
+   "armazenar": "real",
+   "nome": "Area de copa (m2)",
+   "rotulo": "Área de copa (m²)",
+   "tipo": "text",
+   "calculado": true,
+   "expr": "round(3.1416 * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4) * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4), 1)"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Conflitos no raio de 2 m",
+   "rotulo": "Conflitos no raio de 2 m",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Fiação baixa isolada",
+   "rotulo": "Baixa isolada",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Fiação baixa nua",
+   "rotulo": "Baixa nua",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Fiação média compacta",
+   "rotulo": "Média compacta",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Fiação média nua",
+   "rotulo": "Média nua",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Fiação derivação",
+   "rotulo": "Derivação",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Fiação serviços gerais",
+   "rotulo": "Serviços gerais",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Marquise ou toldo",
+   "rotulo": "Presença de marquise ou toldo",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Interfere pedestres",
+   "rotulo": "Pedestres",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Interfere veículos",
+   "rotulo": "Veículos",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Danos por podas",
+   "rotulo": "Danos por podas",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Galhos secos, podres ou com risco de queda",
+   "rotulo": "Galhos secos, podres ou com risco de queda",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Poda drástica",
+   "rotulo": "Poda drástica",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Poda de raiz",
+   "rotulo": "Poda de raiz",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Lesões no tronco",
+   "rotulo": "Lesões no tronco",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Codominância de troncos",
+   "rotulo": "Codominância de troncos",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "text",
+   "nome": "Ocos e cavidades",
+   "rotulo": "Ocos e cavidades no tronco",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Ausente",
+     "t": "Ausente"
+    },
+    {
+     "v": "Presente (menor que 1/3)",
+     "t": "Presente (menor que 1/3)"
+    },
+    {
+     "v": "Presente (maior que 1/3)",
+     "t": "Presente (maior que 1/3)"
+    }
+   ]
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Afloramento da raiz no canteiro",
+   "rotulo": "Afloramento da raiz no canteiro",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Afloramento da raiz na calçada",
+   "rotulo": "Afloramento da raiz na calçada",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "text",
+   "nome": "Qualidade da copa",
+   "rotulo": "Qualidade da copa",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Normal",
+     "t": "Normal"
+    },
+    {
+     "v": "Estressada",
+     "t": "Estressada"
+    },
+    {
+     "v": "Sem folhagem (sazonal)",
+     "t": "Sem folhagem (sazonal)"
+    },
+    {
+     "v": "Sem folhagem (poda)",
+     "t": "Sem folhagem (poda)"
+    }
+   ]
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Fungo",
+   "rotulo": "Fungo",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Cupim",
+   "rotulo": "Cupim",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Broca",
+   "rotulo": "Broca",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Erva-de-passarinho",
+   "rotulo": "Erva-de-passarinho",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Doença aparente",
+   "rotulo": "Doença aparente",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Praga aparente",
+   "rotulo": "Praga aparente",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "text",
+   "nome": "Consequencias",
+   "rotulo": "Consequências",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Insignificante",
+     "t": "Insignificante"
+    },
+    {
+     "v": "Menor",
+     "t": "Menor"
+    },
+    {
+     "v": "Significativa",
+     "t": "Significativa"
+    },
+    {
+     "v": "Severa",
+     "t": "Severa"
+    }
+   ]
+  },
+  {
+   "armazenar": "text",
+   "nome": "Risco",
+   "rotulo": "Risco",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Baixo",
+     "t": "Baixo"
+    },
+    {
+     "v": "Médio",
+     "t": "Médio"
+    },
+    {
+     "v": "Alto",
+     "t": "Alto"
+    }
+   ]
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Manejo remoção do indivíduo",
+   "rotulo": "Remoção do indivíduo",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Manejo remoção do alvo",
+   "rotulo": "Remoção do alvo",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Manejo poda",
+   "rotulo": "Poda",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Manejo tutoramento",
+   "rotulo": "Tutoramento",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Manejo adubação",
+   "rotulo": "Adubação",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Manejo aumento de canteiro",
+   "rotulo": "Aumento de canteiro",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Manejo limpeza de epífitas e parasitas",
+   "rotulo": "Limpeza de epífitas e parasitas",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Manejo suporte complementar",
+   "rotulo": "Suporte complementar",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Manejo avaliação nível 2 ou 3",
+   "rotulo": "Avaliação nível 2 ou 3",
+   "tipo": "bool"
+  },
+  {
+   "armazenar": "text",
+   "nome": "Outras mitigacoes",
+   "rotulo": "Outras mitigações",
+   "tipo": "textarea"
+  },
+  {
+   "armazenar": "text",
+   "nome": "Observacoes",
+   "rotulo": "Observações",
+   "tipo": "textarea"
+  },
+  {
+   "armazenar": "text",
+   "nome": "Foto 2",
+   "rotulo": "Foto 2",
+   "tipo": "photo"
+  },
+  {
+   "armazenar": "text",
+   "nome": "Foto 3",
+   "rotulo": "Foto 3",
+   "tipo": "photo"
+  }
+ ],
+ "abas": [
+  {
+   "nome": "Identificação",
+   "campos": [
+    {
+     "campo": "Codigo"
+    },
+    {
+     "campo": "Data e hora"
+    },
+    {
+     "campo": "Coletor"
+    },
+    {
+     "campo": "Local do registro"
+    },
+    {
+     "campo": "Categoria"
+    },
+    {
+     "campo": "Foto 1"
+    }
+   ]
+  },
+  {
+   "nome": "Indivíduo",
+   "campos": [
+    {
+     "campo": "Situacao"
+    },
+    {
+     "campo": "Especie"
+    },
+    {
+     "campo": "DAP (cm)"
+    },
+    {
+     "campo": "Altura total (m)"
+    },
+    {
+     "campo": "Raio de copa 1 (m)"
+    },
+    {
+     "campo": "Raio de copa 2 (m)"
+    },
+    {
+     "campo": "Raio de copa 3 (m)"
+    },
+    {
+     "campo": "Raio de copa 4 (m)"
+    },
+    {
+     "campo": "Area de copa (m2)"
+    }
+   ]
+  },
+  {
+   "nome": "Meio",
+   "campos": [
+    {
+     "campo": "Conflitos no raio de 2 m",
+     "grupo": "Conflitos"
+    },
+    {
+     "campo": "Fiação baixa isolada",
+     "grupo": "Fiação aérea"
+    },
+    {
+     "campo": "Fiação baixa nua",
+     "grupo": "Fiação aérea"
+    },
+    {
+     "campo": "Fiação média compacta",
+     "grupo": "Fiação aérea"
+    },
+    {
+     "campo": "Fiação média nua",
+     "grupo": "Fiação aérea"
+    },
+    {
+     "campo": "Fiação derivação",
+     "grupo": "Fiação aérea"
+    },
+    {
+     "campo": "Fiação serviços gerais",
+     "grupo": "Fiação aérea"
+    },
+    {
+     "campo": "Marquise ou toldo",
+     "grupo": "Marquise ou toldo"
+    },
+    {
+     "campo": "Interfere pedestres",
+     "grupo": "Interferência no tráfego"
+    },
+    {
+     "campo": "Interfere veículos",
+     "grupo": "Interferência no tráfego"
+    }
+   ]
+  },
+  {
+   "nome": "Podas e danos",
+   "campos": [
+    {
+     "campo": "Danos por podas",
+     "grupo": "Podas"
+    },
+    {
+     "campo": "Galhos secos, podres ou com risco de queda",
+     "grupo": "Podas"
+    },
+    {
+     "campo": "Poda drástica",
+     "grupo": "Podas"
+    },
+    {
+     "campo": "Poda de raiz",
+     "grupo": "Podas"
+    },
+    {
+     "campo": "Lesões no tronco",
+     "grupo": "Danos"
+    },
+    {
+     "campo": "Codominância de troncos",
+     "grupo": "Danos"
+    },
+    {
+     "campo": "Ocos e cavidades"
+    },
+    {
+     "campo": "Afloramento da raiz no canteiro",
+     "grupo": "Raízes"
+    },
+    {
+     "campo": "Afloramento da raiz na calçada",
+     "grupo": "Raízes"
+    }
+   ]
+  },
+  {
+   "nome": "Fitossanidade e risco",
+   "campos": [
+    {
+     "campo": "Qualidade da copa"
+    },
+    {
+     "campo": "Fungo",
+     "grupo": "Fitossanidade"
+    },
+    {
+     "campo": "Cupim",
+     "grupo": "Fitossanidade"
+    },
+    {
+     "campo": "Broca",
+     "grupo": "Fitossanidade"
+    },
+    {
+     "campo": "Erva-de-passarinho",
+     "grupo": "Fitossanidade"
+    },
+    {
+     "campo": "Doença aparente",
+     "grupo": "Fitossanidade"
+    },
+    {
+     "campo": "Praga aparente",
+     "grupo": "Fitossanidade"
+    },
+    {
+     "campo": "Consequencias"
+    },
+    {
+     "campo": "Risco"
+    }
+   ]
+  },
+  {
+   "nome": "Manejo",
+   "campos": [
+    {
+     "campo": "Manejo remoção do indivíduo",
+     "grupo": "Manejo e mitigações"
+    },
+    {
+     "campo": "Manejo remoção do alvo",
+     "grupo": "Manejo e mitigações"
+    },
+    {
+     "campo": "Manejo poda",
+     "grupo": "Manejo e mitigações"
+    },
+    {
+     "campo": "Manejo tutoramento",
+     "grupo": "Manejo e mitigações"
+    },
+    {
+     "campo": "Manejo adubação",
+     "grupo": "Manejo e mitigações"
+    },
+    {
+     "campo": "Manejo aumento de canteiro",
+     "grupo": "Manejo e mitigações"
+    },
+    {
+     "campo": "Manejo limpeza de epífitas e parasitas",
+     "grupo": "Manejo e mitigações"
+    },
+    {
+     "campo": "Manejo suporte complementar",
+     "grupo": "Manejo e mitigações"
+    },
+    {
+     "campo": "Manejo avaliação nível 2 ou 3",
+     "grupo": "Manejo e mitigações"
+    },
+    {
+     "campo": "Outras mitigacoes"
+    }
+   ]
+  },
+  {
+   "nome": "Fotos e observações",
+   "campos": [
+    {
+     "campo": "Observacoes"
+    },
+    {
+     "campo": "Foto 2"
+    },
+    {
+     "campo": "Foto 3"
+    }
+   ]
+  }
+ ],
+ "especies": [
+  {
+   "cientifico": "Acrocomia aculeata",
+   "popular": ""
+  },
+  {
+   "cientifico": "Alchornea sidifolia",
+   "popular": ""
+  },
+  {
+   "cientifico": "Allophylus edulis",
+   "popular": ""
+  },
+  {
+   "cientifico": "Archontophoenix cunninghamiana",
+   "popular": ""
+  },
+  {
+   "cientifico": "Artocarpus heterophyllus",
+   "popular": ""
+  },
+  {
+   "cientifico": "Bauhinia variegata",
+   "popular": ""
+  },
+  {
+   "cientifico": "Bougainvillea spectabilis",
+   "popular": ""
+  },
+  {
+   "cientifico": "Brunfelsia uniflora",
+   "popular": ""
+  },
+  {
+   "cientifico": "Casearia sylvestris",
+   "popular": ""
+  },
+  {
+   "cientifico": "Cenostigma pluviosum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Citharexylum myrianthum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Citrus reticulata",
+   "popular": ""
+  },
+  {
+   "cientifico": "Citrus sinensis",
+   "popular": ""
+  },
+  {
+   "cientifico": "Coffea arabica",
+   "popular": ""
+  },
+  {
+   "cientifico": "Cordia ecalyculata",
+   "popular": ""
+  },
+  {
+   "cientifico": "Dypsis lutescens",
+   "popular": ""
+  },
+  {
+   "cientifico": "Eriobotrya japonica",
+   "popular": ""
+  },
+  {
+   "cientifico": "Erythrina verna",
+   "popular": ""
+  },
+  {
+   "cientifico": "Eucalyptus sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Eugenia uniflora",
+   "popular": ""
+  },
+  {
+   "cientifico": "Ficus benjamina",
+   "popular": ""
+  },
+  {
+   "cientifico": "Handroanthus chrysotrichus",
+   "popular": ""
+  },
+  {
+   "cientifico": "Handroanthus heptaphyllus",
+   "popular": ""
+  },
+  {
+   "cientifico": "Handroanthus impetiginosus",
+   "popular": ""
+  },
+  {
+   "cientifico": "Handroanthus serratifolius",
+   "popular": ""
+  },
+  {
+   "cientifico": "Heptapleurum actinophyllum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Hibiscus rosa-sinensis",
+   "popular": ""
+  },
+  {
+   "cientifico": "Jacaranda mimosifolia",
+   "popular": ""
+  },
+  {
+   "cientifico": "Jacaratia spinosa",
+   "popular": ""
+  },
+  {
+   "cientifico": "Lafoensia pacari",
+   "popular": ""
+  },
+  {
+   "cientifico": "Lagerstroemia indica",
+   "popular": ""
+  },
+  {
+   "cientifico": "Leucochloron incuriale",
+   "popular": ""
+  },
+  {
+   "cientifico": "Ligustrum lucidum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Machaerium villosum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Mangifera indica",
+   "popular": ""
+  },
+  {
+   "cientifico": "Matayba elaeagnoides",
+   "popular": ""
+  },
+  {
+   "cientifico": "Myrsine coriacea",
+   "popular": ""
+  },
+  {
+   "cientifico": "Nectandra barbellata",
+   "popular": ""
+  },
+  {
+   "cientifico": "Nectandra megapotamica",
+   "popular": ""
+  },
+  {
+   "cientifico": "Ocotea cf. aciphylla",
+   "popular": ""
+  },
+  {
+   "cientifico": "Ocotea puberula",
+   "popular": ""
+  },
+  {
+   "cientifico": "Ocotea pulchella",
+   "popular": ""
+  },
+  {
+   "cientifico": "Persea americana",
+   "popular": ""
+  },
+  {
+   "cientifico": "Piptadenia gonoacantha",
+   "popular": ""
+  },
+  {
+   "cientifico": "Plerandra elegantissima",
+   "popular": ""
+  },
+  {
+   "cientifico": "Pleroma granulosum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Pleroma mutabile",
+   "popular": ""
+  },
+  {
+   "cientifico": "Plinia peruviana",
+   "popular": ""
+  },
+  {
+   "cientifico": "Plumeria rubra",
+   "popular": ""
+  },
+  {
+   "cientifico": "Prunus myrtifolia",
+   "popular": ""
+  },
+  {
+   "cientifico": "Psidium guajava",
+   "popular": ""
+  },
+  {
+   "cientifico": "Psidium guineense",
+   "popular": ""
+  },
+  {
+   "cientifico": "Sapium glandulosum",
+   "popular": ""
+  },
+  {
+   "cientifico": "Schinus terebinthifolia",
+   "popular": ""
+  },
+  {
+   "cientifico": "Schizolobium parahyba",
+   "popular": ""
+  },
+  {
+   "cientifico": "Tabebuia roseoalba",
+   "popular": ""
+  },
+  {
+   "cientifico": "Tipuana tipu",
+   "popular": ""
+  },
+  {
+   "cientifico": "Trichilia havanensis",
+   "popular": ""
+  }
+ ],
+ "regras": [
+  {
+   "campo": "Categoria",
+   "por": {
+    "1": {
+     "Especie": "obrig",
+     "DAP (cm)": "obrig",
+     "Altura total (m)": "obrig",
+     "Foto 1": "obrig",
+     "Situacao": "obrig"
+    },
+    "2": {
+     "Especie": "obrig",
+     "Altura total (m)": "obrig",
+     "Foto 1": "obrig",
+     "Situacao": "obrig"
+    },
+    "3": {
+     "Especie": "obrig",
+     "DAP (cm)": "obrig",
+     "Altura total (m)": "obrig",
+     "Foto 1": "obrig",
+     "Situacao": "obrig"
+    },
+    "4": {
+     "Situacao": "oculto",
+     "Especie": "oculto",
+     "DAP (cm)": "oculto",
+     "Altura total (m)": "oculto",
+     "Raio de copa 1 (m)": "oculto",
+     "Raio de copa 2 (m)": "oculto",
+     "Raio de copa 3 (m)": "oculto",
+     "Raio de copa 4 (m)": "oculto",
+     "Area de copa (m2)": "oculto",
+     "Danos por podas": "oculto",
+     "Galhos secos, podres ou com risco de queda": "oculto",
+     "Poda drástica": "oculto",
+     "Poda de raiz": "oculto",
+     "Lesões no tronco": "oculto",
+     "Codominância de troncos": "oculto",
+     "Ocos e cavidades": "oculto",
+     "Afloramento da raiz no canteiro": "oculto",
+     "Afloramento da raiz na calçada": "oculto",
+     "Qualidade da copa": "oculto",
+     "Fungo": "oculto",
+     "Cupim": "oculto",
+     "Broca": "oculto",
+     "Erva-de-passarinho": "oculto",
+     "Doença aparente": "oculto",
+     "Praga aparente": "oculto",
+     "Consequencias": "oculto",
+     "Risco": "oculto",
+     "Manejo remoção do indivíduo": "oculto",
+     "Manejo remoção do alvo": "oculto",
+     "Manejo poda": "oculto",
+     "Manejo tutoramento": "oculto",
+     "Manejo adubação": "oculto",
+     "Manejo aumento de canteiro": "oculto",
+     "Manejo limpeza de epífitas e parasitas": "oculto",
+     "Manejo suporte complementar": "oculto",
+     "Manejo avaliação nível 2 ou 3": "oculto",
+     "Outras mitigacoes": "oculto",
+     "Foto 1": "obrig"
+    },
+    "5": {
+     "Situacao": "oculto",
+     "Especie": "oculto",
+     "DAP (cm)": "oculto",
+     "Altura total (m)": "oculto",
+     "Raio de copa 1 (m)": "oculto",
+     "Raio de copa 2 (m)": "oculto",
+     "Raio de copa 3 (m)": "oculto",
+     "Raio de copa 4 (m)": "oculto",
+     "Area de copa (m2)": "oculto",
+     "Danos por podas": "oculto",
+     "Galhos secos, podres ou com risco de queda": "oculto",
+     "Poda drástica": "oculto",
+     "Poda de raiz": "oculto",
+     "Lesões no tronco": "oculto",
+     "Codominância de troncos": "oculto",
+     "Ocos e cavidades": "oculto",
+     "Afloramento da raiz no canteiro": "oculto",
+     "Afloramento da raiz na calçada": "oculto",
+     "Qualidade da copa": "oculto",
+     "Fungo": "oculto",
+     "Cupim": "oculto",
+     "Broca": "oculto",
+     "Erva-de-passarinho": "oculto",
+     "Doença aparente": "oculto",
+     "Praga aparente": "oculto",
+     "Consequencias": "oculto",
+     "Risco": "oculto",
+     "Manejo remoção do indivíduo": "oculto",
+     "Manejo remoção do alvo": "oculto",
+     "Manejo poda": "oculto",
+     "Manejo tutoramento": "oculto",
+     "Manejo adubação": "oculto",
+     "Manejo aumento de canteiro": "oculto",
+     "Manejo limpeza de epífitas e parasitas": "oculto",
+     "Manejo suporte complementar": "oculto",
+     "Manejo avaliação nível 2 ou 3": "oculto",
+     "Outras mitigacoes": "oculto",
+     "Foto 1": "obrig"
+    }
+   }
+  },
+  {
+   "campo": "Situacao",
+   "por": {
+    "Morta": {
+     "Especie": "opcional",
+     "Raio de copa 1 (m)": "oculto",
+     "Raio de copa 2 (m)": "oculto",
+     "Raio de copa 3 (m)": "oculto",
+     "Raio de copa 4 (m)": "oculto",
+     "Area de copa (m2)": "oculto",
+     "Qualidade da copa": "oculto",
+     "Fungo": "oculto",
+     "Cupim": "oculto",
+     "Broca": "oculto",
+     "Erva-de-passarinho": "oculto",
+     "Doença aparente": "oculto",
+     "Praga aparente": "oculto"
+    }
+   }
+  }
+ ]
+}

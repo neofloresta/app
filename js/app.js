@@ -1,6 +1,6 @@
 // App de coleta Neofloresta
 (() => {
-  const VERSAO = '1.3.0';
+  const VERSAO = '1.4.0';
   const S = { sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
 
@@ -81,6 +81,7 @@
     if (!p) { if (S.sessao.usuario.perfil === 'admin') { S.projeto = null; S.form = null; return; } throw new Error('Nenhum projeto liberado para este usuário.'); }
     S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
     S.form = await carregarForm(p.formulario);
+    sincronizarSequencia();
   }
   async function carregarForm(id, forcarCache) {
     const chave = 'form:' + id;
@@ -192,6 +193,7 @@
 
   // ---------- Início ----------
   function camposCodigo(form) {
+    const auto = form.campos.filter((c) => c.auto === 'codigo'); if (auto.length) return auto;
     return form.campos.filter((c) => c.incremento || (/codigo|coletor|plaqueta|numero|placa/i.test(norm(c.nome) + ' ' + norm(c.rotulo)) && ['text', 'number'].includes(c.tipo)));
   }
   function campoCodigo(form) { return camposCodigo(form)[0]; }
@@ -272,6 +274,30 @@
     return max ? String(max + 1) : '';
   }
 
+  // Código automático: prefixo da equipe + sequência. Nunca repete entre equipes porque cada uma tem seu prefixo.
+  function prefixoEquipe() {
+    const p = S.projeto; if (p.equipeCodigo) return p.equipeCodigo.toUpperCase();
+    const eq = String(p.equipe || S.sessao.u); const dig = eq.match(/\d+/);
+    return dig ? 'E' + dig[0] : norm(eq).replace(/[^a-z]/g, '').slice(0, 3).toUpperCase() || 'EQ';
+  }
+  function seqDe(cod, pre) { const m = String(cod || '').match(new RegExp('^' + pre + '-(\\d+)$')); return m ? parseInt(m[1], 10) : 0; }
+  async function proximoCodigo(campo) {
+    const pre = prefixoEquipe(); const chave = `seq:${S.projeto.id}:${pre}`;
+    let max = Math.max((await Store.get(chave)) || 0, (await Store.get('srv' + chave)) || 0);
+    for (const r of await Store.registros(S.projeto.id)) max = Math.max(max, seqDe(r.valores[campo], pre));
+    await Store.set(chave, max + 1);
+    return `${pre}-${String(max + 1).padStart(4, '0')}`;
+  }
+  async function sincronizarSequencia() {
+    if (Api.demo || !navigator.onLine || !S.projeto || !S.form) return;
+    const c = S.form.campos.find((x) => x.auto === 'codigo'); if (!c) return;
+    try {
+      const pre = prefixoEquipe(); let max = 0;
+      for (const l of await Api.b.listar(S.projeto.id)) max = Math.max(max, seqDe(l[c.nome], pre));
+      await Store.set(`srvseq:${S.projeto.id}:${pre}`, max);
+    } catch (e) { /* sem conexão: usa o que tem no aparelho */ }
+  }
+
   async function novoRegistro() {
     const r = {
       uuid: uuid(), projeto: S.projeto.id, equipe: S.projeto.equipe || '', usuario: S.sessao.u,
@@ -283,6 +309,8 @@
       else if (c.tipo === 'bool') r.valores[c.nome] = false;
       else if (c.expr && !c.calculado) { try { r.valores[c.nome] = Expr.evaluate(c.expr, () => null); } catch (e) { /* ignora */ } }
       if (c.incremento) r.valores[c.nome] = await proximoIncremento(c.nome);
+      if (c.auto === 'codigo') r.valores[c.nome] = await proximoCodigo(c.nome);
+      if (c.auto === 'coletor') r.valores[c.nome] = S.sessao.usuario.nome || S.sessao.u;
     }
     if (S.pos && Date.now() - S.pos.t < 20000) Object.assign(r, { lat: S.pos.lat, lon: S.pos.lon, prec: S.pos.prec });
     await Store.salvarRegistro(r);
@@ -301,13 +329,12 @@
   function estadoCampos(form, vals) {
     const E = {};
     for (const c of form.campos) E[c.nome] = { obrig: !!c.obrigatorio, oculto: false };
-    const peso = { opcional: 1, obrig: 2, oculto: 3 }; const aplicado = {};
+    // Regras aplicadas na ordem: a de baixo prevalece sobre a de cima; "oculto" sempre prevalece.
     for (const rg of form.regras || []) {
       const v = vals[rg.campo]; if (v == null || v === '') continue;
       const cfg = (rg.por || {})[String(v)]; if (!cfg) continue;
       for (const [nome, est] of Object.entries(cfg)) {
-        if (!E[nome] || nome === rg.campo) continue;
-        if ((aplicado[nome] || 0) >= peso[est]) continue; aplicado[nome] = peso[est];
+        if (!E[nome] || nome === rg.campo || E[nome].oculto) continue;
         if (est === 'oculto') { E[nome].oculto = true; E[nome].obrig = false; }
         else if (est === 'obrig') E[nome].obrig = true;
         else if (est === 'opcional') E[nome].obrig = false;
@@ -396,7 +423,7 @@
     function pintarCalc(el, c) {
       const v = r.valores[c.nome];
       el.className = 'calc' + (v == null || v === '' ? ' vazio' : '') + (/risco/i.test(c.nome) && v ? ' risco-' + v : '');
-      el.textContent = v == null || v === '' ? 'Calculado automaticamente' : Q2F.bonito(v);
+      el.textContent = v == null || v === '' ? 'Calculado automaticamente' : typeof v === 'number' ? numBR(v) : Q2F.bonito(v);
     }
 
     function render() {
@@ -409,7 +436,7 @@
         if (grupo !== grupoAtual) { grupoAtual = grupo; chips = nums = fotos = null; if (grupo) blocos.push(h('div', { class: 'grupo-tit' }, grupo)); }
         if (c.tipo === 'bool' && !c.calculado) {
           nums = fotos = null;
-          if (!chips) { chips = h('div', { class: 'chips' }); blocos.push(h('div', { class: 'campo' }, h('div', { class: 'rot' }, 'Marque o que se aplica'), chips)); }
+          if (!chips) { chips = h('div', { class: 'chips' }); blocos.push(h('div', { class: 'campo' }, grupo ? null : h('div', { class: 'rot' }, 'Marque o que se aplica'), chips)); }
           const b = h('button', { class: 'chip' + (r.valores[c.nome] ? ' sel' : ''), onclick: () => { const v = !r.valores[c.nome]; b.classList.toggle('sel', v); mudar(c, v); } }, c.rotulo);
           chips.append(b); continue;
         }
@@ -441,6 +468,7 @@
     function campoEl(c) {
       const box = h('div', { class: 'campo' + (S.tentou && E[c.nome].obrig && vazio(c, valorDe(r, c)) ? ' falta' : ''), 'data-campo': c.nome });
       const v = r.valores[c.nome];
+      if (c.auto) { box.append(rotulo(c), h('div', { class: 'calc' + (v ? '' : ' vazio') }, v || 'Automático')); return box; }
       if (c.calculado) { const el = h('div', { class: 'calc' }); calcEls.set(c.nome, el); pintarCalc(el, c); box.append(rotulo(c), el); return box; }
       switch (c.tipo) {
         case 'choice': {
@@ -471,7 +499,7 @@
           const desenhar = () => {
             lista.replaceChildren(...valores.map((val, k) => {
               const i = h('input', { class: 'entrada', inputmode: 'decimal', value: val, placeholder: '0,0', oninput: () => { valores[k] = i.value; gravar(); } });
-              return h('div', { class: 'fuste' }, h('span', null, valores.length > 1 ? `Fuste ${k + 1}` : 'Valor'), i,
+              return h('div', { class: 'fuste' }, h('span', null, `Fuste ${k + 1}`), i,
                 valores.length > 1 ? h('button', { onclick: () => { valores.splice(k, 1); gravar(); desenhar(); }, 'aria-label': 'Remover fuste' }, '×') : null);
             }));
           };
@@ -738,19 +766,21 @@
       const no = h('input', { class: 'entrada', value: u.nome, placeholder: 'ex.: João e Maria' });
       const se = h('input', { class: 'entrada', value: u.senha || '', inputmode: 'numeric', placeholder: 'senha numérica' });
       const eq = h('input', { class: 'entrada', value: u.equipe || '', placeholder: 'ex.: Equipe 1' });
+      const cod = h('input', { class: 'entrada', value: u.codigo || '', autocapitalize: 'characters', placeholder: 'ex.: E1' });
       const pe = h('select', { class: 'entrada' }, h('option', { value: 'campo', selected: u.perfil === 'campo' }, 'Campo'), h('option', { value: 'admin', selected: u.perfil === 'admin' }, 'Coordenação (vê tudo, exporta)'));
       const marcados = new Set(String(u.projeto || '').split(',').map((x) => x.trim()));
       const prj = h('div', { class: 'chips' }, projetos.map((p) => { const b = h('button', { class: 'chip' + (marcados.has(p.id) ? ' sel' : ''), onclick: () => { b.classList.toggle('sel'); if (marcados.has(p.id)) marcados.delete(p.id); else marcados.add(p.id); } }, p.nome); return b; }));
       const ok = await modal(novo ? 'Novo usuário' : 'Editar usuário', h('div', null,
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Usuário'), lo), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Senha'), se)),
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), no), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe'), eq)),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Código da equipe'), cod, h('div', { class: 'dica' }, 'Prefixo dos códigos das árvores (ex.: E1 gera E1-0001, E1-0002...). Use um diferente para cada equipe.')),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Perfil'), pe), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos liberados'), prj)),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
       const login = lo.value.trim().toLowerCase();
       if (!login || !se.value.trim()) return toast('Preencha usuário e senha.');
       if (novo && us.some((x) => x.login === login)) return toast('Esse usuário já existe.');
-      try { await Api.b.usuarioSalvar({ login, nome: no.value.trim() || login, senha: se.value.trim(), perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim() }); toast('Usuário salvo.'); telaAdmin('usuarios'); } catch (e) { toast(e.message, 5000); }
+      try { await Api.b.usuarioSalvar({ login, nome: no.value.trim() || login, senha: se.value.trim(), perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') }); toast('Usuário salvo.'); telaAdmin('usuarios'); } catch (e) { toast(e.message, 5000); }
     }
     async function remover(u) { if (u.login === S.sessao.u) return toast('Você não pode remover o próprio usuário.'); if (await confirmar('Remover', `Remover o usuário ${u.login}?`, 'Remover', 'perigo')) { await Api.b.usuarioRemover(u.login); telaAdmin('usuarios'); } }
     const nomeP = (ids) => ids === '*' ? 'Todos' : String(ids || '').split(',').map((i) => (projetos.find((p) => p.id === i.trim()) || {}).nome || i).join(', ');
@@ -782,13 +812,13 @@
       } catch (e) { msg.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
     }
     async function exemplo() {
-      try { const f = await (await fetch('forms/seade-risco.json')).json(); await Api.b.formularioSalvar(f, null); toast('Formulário SEADE instalado.'); telaAdmin('formularios'); } catch (e) { toast(e.message, 5000); }
+      try { for (const arq of ['divinopolis-inventario', 'seade-risco']) { const f = await (await fetch(`forms/${arq}.json`)).json(); await Api.b.formularioSalvar(f, null); } toast('Formulários instalados.'); telaAdmin('formularios'); } catch (e) { toast(e.message, 5000); }
     }
     async function editar(id) { const form = await Api.b.formulario(id); S.revisao = { form: JSON.parse(JSON.stringify(form)), qml: null, novo: false }; ir('#admin/revisao'); }
     corpo.replaceChildren(
       h('div', { class: 'cartao' }, h('h3', null, 'Formulários'),
         forms.length ? h('table', { class: 'tab' }, forms.map((f) => h('tr', null, h('td', null, h('b', null, f.nome), h('br'), h('small', null, `${f.id} · ${f.campos} campos`)), h('td', null, h('button', { class: 'btn sec peq', onclick: () => editar(f.id) }, 'Revisar'))))) : h('p', null, 'Nenhum formulário ainda.'),
-        !forms.some((f) => f.id === 'seade-risco') ? h('button', { class: 'btn sec', style: 'margin-top:10px', onclick: exemplo }, 'Instalar formulário de avaliação de risco (SEADE)') : null),
+        !forms.some((f) => f.id === 'divinopolis-inventario') ? h('button', { class: 'btn sec', style: 'margin-top:10px', onclick: exemplo }, 'Instalar formulários prontos (inventário Divinópolis e risco)') : null),
       h('div', { class: 'cartao' }, h('h3', null, 'Importar do QGIS'),
         h('p', { class: 'dica' }, 'No QGIS: Propriedades da camada > Estilo > Salvar estilo (.qml) com todas as categorias. Envie também o .gpkg da camada para trazer os tipos de campo e a lista de espécies.'),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome do formulário'), nome),
@@ -852,7 +882,7 @@
           h('div', { style: 'overflow-x:auto' }, h('table', { class: 'tab', style: 'min-width:' + (220 + ops.length * 130) + 'px' },
             h('tr', null, h('th', null, 'Campo'), ops.map((op) => h('th', null, curto(op.t)))), linhas)));
       });
-      regrasBox.replaceChildren(h('p', { class: 'dica' }, 'Padrão segue a coluna "Obrig." acima (* = obrigatório). Oculto some do formulário e não é exigido. Quando duas regras se cruzam, vale a mais forte: oculto, depois obrigatório, depois opcional.'), ...tabelas, livres.length ? h('div', { style: 'margin-top:12px' }, add) : null);
+      regrasBox.replaceChildren(h('p', { class: 'dica' }, 'Padrão segue a coluna "Obrig." acima (* = obrigatório). Oculto some do formulário e não é exigido. Quando duas regras se cruzam, vale a de baixo (a mais específica); oculto sempre vence.'), ...tabelas, livres.length ? h('div', { style: 'margin-top:12px' }, add) : null);
     }
     desenharRegras();
     const esp = h('textarea', { class: 'entrada', style: 'min-height:180px;font-size:14px' });

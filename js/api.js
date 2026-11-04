@@ -27,17 +27,20 @@ const Api = (() => {
   // ---------- Modo demonstração ----------
   const Demo = {
     async base() {
+      const VERSAO_DEMO = 3;
       let b = await Store.get('demo:base');
-      if (!b) {
-        const form = await (await fetch('forms/seade-risco.json')).json();
+      if (!b || b.versao !== VERSAO_DEMO) {
+        const form = await (await fetch('forms/divinopolis-inventario.json')).json();
+        const risco = await (await fetch('forms/seade-risco.json')).json();
         b = {
+          versao: VERSAO_DEMO,
           usuarios: [
-            { login: 'admin', senha: '1234', nome: 'Coordenação', perfil: 'admin', projeto: '*', equipe: 'Coordenação' },
-            { login: 'equipe1', senha: '1111', nome: 'Equipe 1', perfil: 'campo', projeto: 'demo-seade', equipe: 'Equipe 1' },
-            { login: 'equipe2', senha: '2222', nome: 'Equipe 2', perfil: 'campo', projeto: 'demo-seade', equipe: 'Equipe 2' },
+            { login: 'admin', senha: '1234', nome: 'Coordenação', perfil: 'admin', projeto: '*', equipe: 'Coordenação', codigo: 'CO' },
+            { login: 'equipe1', senha: '1111', nome: 'Equipe 1', perfil: 'campo', projeto: 'divinopolis-teste', equipe: 'Equipe 1', codigo: 'E1' },
+            { login: 'equipe2', senha: '2222', nome: 'Equipe 2', perfil: 'campo', projeto: 'divinopolis-teste', equipe: 'Equipe 2', codigo: 'E2' },
           ],
-          projetos: [{ id: 'demo-seade', nome: 'Demonstração SEADE', formulario: form.id, epsg: 'auto', prefixo: 'demo-seade' }],
-          formularios: { [form.id]: form }, estilos: {},
+          projetos: [{ id: 'divinopolis-teste', nome: 'Divinópolis (teste)', formulario: form.id, epsg: 'auto', prefixo: 'divinopolis' }],
+          formularios: { [form.id]: form, [risco.id]: risco }, estilos: {},
         };
         await Store.set('demo:base', b);
       }
@@ -48,7 +51,7 @@ const Api = (() => {
       const us = b.usuarios.find((x) => x.login === u && String(x.senha) === String(s));
       if (!us) throw new Error('Usuário ou senha incorretos.');
       const projetos = b.projetos.filter((p) => us.perfil === 'admin' || us.projeto === p.id || String(us.projeto).split(',').map((x) => x.trim()).includes(p.id))
-        .map((p) => Object.assign({}, p, { equipe: us.equipe }));
+        .map((p) => Object.assign({}, p, { equipe: us.equipe, equipeCodigo: us.codigo || '' }));
       return { usuario: { login: us.login, nome: us.nome, perfil: us.perfil }, projetos };
     },
     async formulario(id) { return (await this.base()).formularios[id]; },

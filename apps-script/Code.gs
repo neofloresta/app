@@ -9,7 +9,7 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe'];
+const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo'];
 const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id'];
 
 function configurar() {
@@ -22,7 +22,7 @@ function configurar() {
     DriveApp.getFileById(base.getId()).moveTo(pasta);
     const u = base.getSheets()[0]; u.setName('Usuarios'); u.appendRow(COLS_USUARIOS);
     const senha = String(Math.floor(100000 + Math.random() * 900000));
-    u.appendRow(['admin', "'" + senha, 'Coordenação', 'admin', '*', 'Coordenação']);
+    u.appendRow(['admin', "'" + senha, 'Coordenação', 'admin', '*', 'Coordenação', 'CO']);
     u.setFrozenRows(1);
     const p = base.insertSheet('Projetos'); p.appendRow(COLS_PROJETOS); p.setFrozenRows(1);
     PROPS.setProperty('BASE_ID', base.getId());
@@ -98,7 +98,7 @@ function autenticar(login, senha) {
 }
 function projetosDoUsuario(u) {
   return tabela('Projetos').filter((p) => u.perfil === 'admin' || u.projetos.indexOf(p.id) >= 0)
-    .map((p) => ({ id: p.id, nome: p.nome, formulario: p.formulario, epsg: p.epsg, prefixo: p.prefixo, equipe: u.equipe }));
+    .map((p) => ({ id: p.id, nome: p.nome, formulario: p.formulario, epsg: p.epsg, prefixo: p.prefixo, equipe: u.equipe, equipeCodigo: u.codigo || '' }));
 }
 function comLinks(p) {
   const o = Object.assign({}, p);
