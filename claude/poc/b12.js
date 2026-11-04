@@ -8,7 +8,7 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
   await L.subir(); await L.configurar();
   const b = await chromium.launch();
   const { p } = await L.celular(b);
-  await L.logar(p, 'div-1', '1111'); await p.waitForSelector('text=Nova árvore', { timeout: 8000 });
+  await L.logar(p, 'div-1', 'equipe1'); await p.waitForSelector('text=Nova árvore', { timeout: 8000 });
   await p.waitForTimeout(1500); // GPS
 
   // 1.1 cadastro completo com tempo
@@ -47,11 +47,23 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
 
   // 1.6 editar e histórico
   rs = await regs(p); r = rs.find((x) => x.status !== 'rascunho');
-  await p.goto(L.WEB + '#form/' + r.uuid); await p.waitForTimeout(500); await A.aba(p, 'Indivíduo'); await A.num(p, 'Altura total (m)', 8); await A.concluir(p); await A.faltas(p);
-  await p.waitForTimeout(1500);
+  await p.goto(L.WEB + '#form/' + r.uuid); await p.waitForTimeout(500);
+  const ficha = await p.locator('text=Editar registro').count();
+  await p.click('button:has-text("Editar registro")'); await p.click('.folha button:has-text("Editar registro")'); await p.waitForTimeout(300);
+  await A.aba(p, 'Indivíduo'); await A.num(p, 'Altura total (m)', 8); await A.concluir(p);
+  const conf = await p.locator('.folha >> text=Confirmar alterações').count();
+  const mudTxt = conf ? await p.locator('.lista-mud').innerText() : '';
+  if (conf) await p.click('.folha button:has-text("Confirmar alterações")');
+  await p.waitForTimeout(1500); await p.evaluate(() => window.dispatchEvent(new Event('online'))); await p.waitForTimeout(1500);
   const linha = (await L.post('listar', { projeto: 'divinopolis' })).linhas.find((l) => l.uuid === r.uuid);
-  const temHist = linha && Object.keys(linha).some((k) => /hist|alterad|versao/i.test(k));
-  ok('1.6', linha && linha['Altura total (m)'] == 8 && temHist ? true : false, `edição chegou à planilha=${linha && linha['Altura total (m)'] == 8}; histórico de alterações=${temHist ? 'sim' : 'não existe'}; exclusão só no aparelho (não apaga na planilha)`);
+  const temHist = linha && !!linha.historico;
+  ok('1.6', !!(ficha && conf && linha && linha['Altura total (m)'] == 8 && temHist && /6,5 → 8/.test(linha.historico)), `concluído abre em modo leitura=${!!ficha}; 1ª confirmação ao editar e 2ª com a lista de mudanças=${!!conf} (${mudTxt.replace(/\n/g, '; ')}); chegou à planilha=${linha && linha['Altura total (m)'] == 8}; histórico na planilha: "${linha && linha.historico}"`);
+  // 1.8 trava: registro de dia anterior não pode ser editado pela equipe
+  await p.evaluate(async (id) => { const r = await Store.registro(id); r.concluido_em = new Date(Date.now() - 2 * 864e5).toISOString(); await Store.salvarRegistro(r); }, r.uuid);
+  await p.goto(L.WEB + '#inicio'); await p.goto(L.WEB + '#form/' + r.uuid); await p.waitForTimeout(500);
+  const trava = await p.locator('.trava').innerText().catch(() => ''); const btnEd = await p.locator('button:has-text("Editar registro")').count();
+  ok('1.8', !!trava && !btnEd, `trava de dia anterior: "${trava}"`);
+  await p.goto(L.WEB + '#inicio'); await p.waitForTimeout(300);
 
   // 1.7 formulário por projeto
   const fs = await L.post('formularios_listar', {}); ok('1.7', fs.formularios.length >= 1, `projeto aponta para formulário próprio (${fs.formularios.map((x) => x.id).join(', ')}); troca de projeto carrega o formulário do projeto (abrirProjeto)`);
@@ -75,7 +87,7 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
   ok('2.1', depois.length - antes === 50 && dup === 0, `pendentes offline=${pend}; chegaram ${depois.length - antes}; duplicados=${dup}; envio levou ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 
   // 2.2 duas equipes ao mesmo tempo (formulário real)
-  const { p: p2 } = await L.celular(b); await L.logar(p2, 'div-2', '2222'); await p2.waitForSelector('text=Nova árvore'); await p2.waitForTimeout(1200);
+  const { p: p2 } = await L.celular(b); await L.logar(p2, 'div-2', 'equipe2'); await p2.waitForSelector('text=Nova árvore'); await p2.waitForTimeout(1200);
   await Promise.all([A.arvoreCompleta(p, { fotos: 1 }), A.arvoreCompleta(p2, { fotos: 1 })]);
   await Promise.all([A.arvoreCompleta(p, { fotos: 1 }), A.arvoreCompleta(p2, { fotos: 1 })]);
   await p.waitForTimeout(3000); await p.evaluate(() => window.dispatchEvent(new Event('online'))); await p2.evaluate(() => window.dispatchEvent(new Event('online'))); await p.waitForTimeout(2500);
@@ -83,12 +95,12 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
   ok('2.2', cods.length === new Set(cods).size && cods.some((c) => c.startsWith('E2')), `códigos: ${cods.join(', ')}`);
 
   // 2.3 conflito: mesmo registro editado em dois aparelhos (simulado pelo servidor)
-  const alvo = (await L.post('listar', { projeto: 'divinopolis' }, 'div-1', '1111')).linhas.find((l) => l.usuario === 'div-1' && /^E1-\d+$/.test(l.Codigo));
-  const v1 = Object.assign({}, alvo, { atualizado_em: '2026-11-05T10:00:00.000Z', Observacoes: 'versão A (mais nova)' });
-  const v2 = Object.assign({}, alvo, { atualizado_em: '2026-11-05T09:00:00.000Z', Observacoes: 'versão B (mais antiga, chegou depois)' });
-  await L.post('registro', { projeto: 'divinopolis', linha: v1 }, 'div-1', '1111'); await L.post('registro', { projeto: 'divinopolis', linha: v2 }, 'div-2', '2222');
+  const alvo = (await L.post('listar', { projeto: 'divinopolis' })).linhas.find((l) => l.usuario === 'div-1' && /^E1-\d+$/.test(l.Codigo));
+  const v1 = Object.assign({}, alvo, { atualizado_em: new Date().toISOString(), Observacoes: 'versão A (mais nova)' });
+  const v2 = Object.assign({}, alvo, { atualizado_em: new Date(Date.now() - 3600e3).toISOString(), Observacoes: 'versão B (mais antiga, chegou depois)' });
+  await L.post('registro', { projeto: 'divinopolis', linha: v1 }, 'div-1', 'equipe1'); await L.post('registro', { projeto: 'divinopolis', linha: v2 });
   const fim = (await L.post('listar', { projeto: 'divinopolis' })).linhas.find((l) => l.uuid === alvo.uuid);
-  ok('2.3', fim.Observacoes.includes('versão A'), `regra: vence a edição mais recente (atualizado_em); a versão mais antiga é descartada sem aviso ao coletor. Resultado: "${fim.Observacoes}"`);
+  ok('2.3', fim.Observacoes.includes('versão A'), `regra: vence a edição mais recente (atualizado_em); a mais antiga é ignorada. Outra equipe não altera registro alheio, e a equipe só altera no dia ou quando devolvido. Resultado: "${fim.Observacoes}"`);
 
   // 2.4 sincronização interrompida
   await ctx.setOffline(true);

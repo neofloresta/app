@@ -26,7 +26,7 @@ async function post(acao, dados, u = 'admin', s = senhaAdmin) {
 async function configurar(projeto = 'divinopolis') {
   await post('formulario_salvar', { formulario: FORM });
   await post('projeto_salvar', { projeto_dados: { id: projeto, nome: 'PMAU Divinópolis', formulario: FORM.id, epsg: '' } });
-  const us = [['div-1', '1111', 'Equipe 1', 'coletor', 'E1'], ['div-2', '2222', 'Equipe 2', 'coletor', 'E2'], ['outra', '3333', 'Outra cidade', 'coletor', 'OC']];
+  const us = [['div-1', 'equipe1', 'Equipe 1', 'coletor', 'E1'], ['div-2', 'equipe2', 'Equipe 2', 'coletor', 'E2'], ['outra', 'outra01', 'Outra cidade', 'coletor', 'OC']];
   for (const [login, senha, equipe, perfil, codigo] of us) await post('usuario_salvar', { usuario_dados: { login, senha, nome: equipe, perfil, projeto: login === 'outra' ? 'carmo' : projeto, equipe, codigo } });
   await post('projeto_salvar', { projeto_dados: { id: 'carmo', nome: 'Carmo do Rio Claro', formulario: FORM.id, epsg: '' } });
 }
@@ -84,5 +84,8 @@ async function logar(p, u, s) {
     await p.click('text=Configurar servidor'); await p.fill('.folha input', MOCK); await p.click('.folha >> text=Salvar'); await p.waitForTimeout(300);
   }
   await p.fill('input[placeholder=Usuário]', u); await p.fill('input[placeholder=Senha]', s); await p.click('text=Entrar');
+  // primeiro acesso: aceita o termo de uso
+  try { await p.waitForSelector('button:has-text("Li e aceito"), button.nova, .painel, .subabas', { timeout: 15000 }); } catch (e) { return; }
+  if (await p.locator('button:has-text("Li e aceito")').count()) { await p.click('button:has-text("Li e aceito")'); await p.waitForTimeout(600); }
 }
 module.exports = { subir, post, configurar, semear, gerar, cabecalho, stats, falhar, celular, logar, espera, FORM, MOCK, WEB, APP, senha: () => senhaAdmin };

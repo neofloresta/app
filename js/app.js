@@ -1,7 +1,8 @@
-// App de coleta Neofloresta
+// Neofloresta Inventário
 (() => {
-  const VERSAO = '1.10.0';
-  const S = { sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
+  const VERSAO = '2.0.0';
+  const TERMO_VERSAO = '2026-11';
+  const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
 
   // ---------- utilidades ----------
@@ -82,10 +83,40 @@
     window.addEventListener('online', () => { atualizarSync(); sincronizar(); });
     window.addEventListener('offline', atualizarSync);
     setInterval(() => sincronizar(true), 60000);
-    if (S.sessao) { Api.credenciais(S.sessao.u, S.sessao.s); await abrirProjeto(S.sessao.projetoAtual); Gps.iniciar(); }
+    Api.aoExpirar(() => { if (!S.expirada) { S.expirada = true; toast('Sua sessão expirou. Entre de novo para continuar enviando. Nada do aparelho foi perdido.', 6000); atualizarSync(); } });
+    if (S.sessao) {
+      Api.credenciais(credDe(S.sessao));
+      if (S.sessao.usuario.perfil === 'campo') S.sessao.usuario.perfil = 'coletor';
+      if (S.sessao.usuario.perfil !== 'cliente') await abrirProjeto(S.sessao.projetoAtual); else await abrirProjetoCliente(S.sessao.projetoAtual);
+      if (S.sessao.usuario.perfil !== 'cliente') Gps.iniciar();
+      atualizarSessao();
+    }
     rota(); sincronizar(true);
   }
 
+  const credDe = (ss) => (ss.t ? { u: ss.u, t: ss.t } : { u: ss.u, s: ss.s });
+  const perfil = () => (S.sessao ? S.sessao.usuario.perfil : '');
+  const ehCoord = () => ['admin', 'revisor'].includes(perfil());
+  // confere no servidor se o perfil e os projetos mudaram; servidor antigo: troca a senha guardada por uma sessão
+  async function atualizarSessao() {
+    if (Api.demo || !navigator.onLine || !S.sessao) return;
+    try {
+      if (!S.sessao.t && S.sessao.s) {
+        const r = await Api.b.login(S.sessao.u, S.sessao.s, aparelho());
+        if (r.token) { S.sessao.t = r.token; delete S.sessao.s; S.sessao.versaoScript = r.versaoScript; Api.credenciais(credDe(S.sessao)); }
+        Object.assign(S.sessao, { usuario: r.usuario, projetos: r.projetos }); await Store.set('sessao', S.sessao); return;
+      }
+      const r = await Api.b.sessao(); if (!r) return;
+      Object.assign(S.sessao, { usuario: r.usuario, projetos: r.projetos, versaoScript: r.versaoScript }); await Store.set('sessao', S.sessao);
+    } catch (e) { /* sem conexão ou sessão expirada: o aviso já aparece */ }
+  }
+  const aparelho = () => { const u = navigator.userAgent; const m = u.match(/Android [\d.]+;[^)]*|iPhone OS [\d_]+|Windows NT [\d.]+|Mac OS X [\d_]+/); return (m ? m[0] : u).slice(0, 100); };
+  async function abrirProjetoCliente(id) {
+    const p = S.sessao.projetos.find((x) => x.id === id) || S.sessao.projetos[0];
+    if (!p) throw new Error('Nenhum projeto liberado para este usuário.');
+    S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
+    S.form = await carregarForm(p.formulario);
+  }
   async function abrirProjeto(id) {
     const p = S.sessao.projetos.find((x) => x.id === id) || S.sessao.projetos[0];
     if (!p) { if (S.sessao.usuario.perfil === 'admin') { S.projeto = null; S.form = null; return; } throw new Error('Nenhum projeto liberado para este usuário.'); }
@@ -105,11 +136,19 @@
 
   function rota() {
     if (!S.sessao) return telaLogin();
+    if (!S.sessao.usuario.termo_aceito_em) return telaTermo(true);
     const [r, a, b] = location.hash.replace(/^#/, '').split('/');
-    if (r === 'form' && a) return telaForm(a, b);
+    const pf = perfil();
+    if (r === 'sobre') return telaSobre();
+    if (r === 'admin' && pf === 'admin') return telaAdmin(a);
+    if (!S.projeto) { if (pf === 'admin') return telaAdmin('projetos'); return telaLogin(); }
+    if (r === 'painel' && pf !== 'coletor') return telaPainel();
+    if (r === 'relatorio' && pf !== 'coletor') return telaRelatorio();
     if (r === 'mapa') return telaMapa();
-    if (r === 'admin' && S.sessao.usuario.perfil === 'admin') return telaAdmin(a);
-    if (!S.projeto) { if (S.sessao.usuario.perfil === 'admin') return telaAdmin('projetos'); return telaLogin(); }
+    if (r === 'validacao' && ehCoord()) return telaValidacao();
+    if (r === 'ficha' && a && pf !== 'coletor') return telaFichaServidor(decodeURIComponent(a));
+    if (pf === 'cliente') return telaPainel();
+    if (r === 'form' && a) return telaForm(a, b);
     return telaInicio();
   }
   const ir = (h_) => { if (location.hash === h_) rota(); else location.hash = h_; };
@@ -124,26 +163,29 @@
       erro.classList.add('oculto'); btn.disabled = true; btn.textContent = 'Entrando...';
       try {
         const usuario = u.value.trim().toLowerCase(), senha = s.value.trim();
-        const r = await Api.b.login(usuario, senha);
+        const r = await Api.b.login(usuario, senha, aparelho());
+        if (r.usuario.perfil === 'campo') r.usuario.perfil = 'coletor';
         if (!r.projetos.length && r.usuario.perfil !== 'admin') throw new Error('Este usuário não tem projeto liberado.');
-        S.sessao = { u: usuario, s: senha, usuario: r.usuario, projetos: r.projetos, projetoAtual: r.projetos.length ? r.projetos[0].id : null, servidor: Api.servidor || '' };
-        Api.credenciais(usuario, senha);
+        S.sessao = { u: usuario, t: r.token || '', usuario: r.usuario, projetos: r.projetos, projetoAtual: r.projetos.length ? r.projetos[0].id : null, servidor: Api.servidor || '', versaoScript: r.versaoScript || '' };
+        if (!r.token) S.sessao.s = senha; // servidor antigo ou demonstração: sem sessão, guarda a senha como antes
+        Api.credenciais(credDe(S.sessao)); S.expirada = false;
         await Store.set('sessao', S.sessao);
-        await abrirProjeto(S.sessao.projetoAtual);
-        Gps.iniciar();
-        ir('#inicio');
+        if (r.usuario.perfil === 'cliente') await abrirProjetoCliente(S.sessao.projetoAtual); else { await abrirProjeto(S.sessao.projetoAtual); Gps.iniciar(); }
+        ir(r.usuario.perfil === 'cliente' ? '#painel' : '#inicio'); rota();
       } catch (e) {
         erro.textContent = navigator.onLine ? e.message : 'Sem internet. O primeiro acesso precisa de conexão.'; erro.classList.remove('oculto');
         btn.disabled = false; btn.textContent = 'Entrar';
       }
     }
     s.addEventListener('keydown', (e) => e.key === 'Enter' && entrar());
+    if (S.ultimoUsuario) u.value = S.ultimoUsuario;
     $app.replaceChildren(h('div', { class: 'tela-login' }, h('div', { class: 'login' },
       h('div', { class: 'marca' }, h('img', { src: 'icons/logo-basica.png', alt: 'Neofloresta Serviços Ecossistêmicos' }), h('span', null, 'Inventário de arborização urbana')),
-      Api.demo ? h('div', { class: 'info' }, 'Modo demonstração: os dados ficam só neste aparelho. Usuários de teste: ', h('b', null, 'admin / 1234'), ', ', h('b', null, 'equipe1 / 1111'), ' e ', h('b', null, 'equipe2 / 2222'), '.') : null,
+      S.expirada ? h('div', { class: 'aviso' }, 'Sua sessão expirou. Entre de novo: os registros guardados no aparelho continuam salvos e serão enviados.') : null,
+      Api.demo ? h('div', { class: 'info' }, 'Modo demonstração: os dados ficam só neste aparelho. Usuários de teste (senha 1234): ', h('b', null, 'admin'), ', ', h('b', null, 'revisor'), ' e ', h('b', null, 'prefeitura'), '. Equipes de campo: ', h('b', null, 'equipe1 / 1111'), ' e ', h('b', null, 'equipe2 / 2222'), '.') : null,
       h('div', { class: 'campo' }, u), h('div', { class: 'campo' }, s), erro, btn,
       h('button', { class: 'btn linha cheio', style: 'margin-top:12px', onclick: configurarServidor }, 'Configurar servidor'),
-      h('p', { class: 'dica', style: 'text-align:center;margin-top:18px' }, 'Versão ' + VERSAO)), h('div', { class: 'padronagem', 'aria-hidden': 'true' })));
+      h('p', { class: 'dica', style: 'text-align:center;margin-top:18px' }, 'Versão ' + VERSAO, ' · ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); verTermo(); } }, 'Termo de uso e privacidade'))), h('div', { class: 'padronagem', 'aria-hidden': 'true' })));
   }
 
   async function configurarServidor() {
@@ -159,7 +201,8 @@
   async function sair(semPerguntar) {
     const pend = (await Store.todosRegistros()).filter((r) => r.status === 'pendente').length;
     if (!semPerguntar && pend && !(await confirmar('Sair', `Há ${pend} registro(s) ainda não enviados. Eles continuam guardados neste aparelho e serão enviados no próximo acesso.`, 'Sair mesmo assim'))) return;
-    S.sessao = null; await Store.del('sessao'); location.hash = ''; telaLogin();
+    try { await Api.b.sair(); } catch (e) { /* sem conexão: a sessão expira sozinha */ }
+    S.ultimoUsuario = S.sessao && S.sessao.u; S.sessao = null; S.projeto = null; S.linhas = {}; await Store.del('sessao'); location.hash = ''; telaLogin();
   }
 
   // ---------- Sincronização ----------
@@ -169,12 +212,14 @@
     const el = $sync(); if (!el) return;
     const n = (await pendentes()).length;
     el.className = 'sync' + (!navigator.onLine ? ' off' : n ? ' pend' : '');
+    if (S.expirada) { el.className = 'sync pend'; el.textContent = 'Entrar de novo'; return; }
     el.textContent = S.sincronizando ? 'Enviando...' : !navigator.onLine ? (n ? `Sem rede · ${n}` : 'Sem rede') : n ? `${n} a enviar` : (Api.demo ? 'Demonstração' : 'Em dia');
   }
   async function sincronizar(silencioso) {
-    if (S.sincronizando || !S.sessao) return;
+    if (S.expirada && !silencioso) return reentrar();
+    if (S.sincronizando || !S.sessao || S.expirada || perfil() === 'cliente') return;
     if (!navigator.onLine) { if (!silencioso) toast('Sem internet. Os dados ficam guardados e serão enviados depois.'); return atualizarSync(); }
-    const lista = await pendentes(); if (!lista.length) { if (!silencioso) toast('Tudo enviado.'); return atualizarSync(); }
+    const lista = await pendentes(); if (!lista.length) { if (!silencioso) toast('Tudo enviado.'); await atualizarSituacao(); return atualizarSync(); }
     S.sincronizando = true; atualizarSync();
     let ok = 0, falhas = 0, ultimoErro = '';
     for (const r of lista) {
@@ -188,17 +233,38 @@
           f.enviado = true; f.url = res.url || ''; f.idDrive = res.id || '';
           await Store.salvarRegistro(r);
         }
-        await Api.b.registro(r.projeto, Api.achatar(r, form));
+        const res = await Api.b.registro(r.projeto, Api.achatar(r, form));
         const atual = await Store.registro(r.uuid);
-        if (atual && atual.atualizado_em === r.atualizado_em) { atual.status = 'enviado'; atual.fotos = r.fotos; delete atual.erroSync; await Store.salvarRegistro(atual); }
+        if (atual && atual.atualizado_em === r.atualizado_em) { atual.status = 'enviado'; atual.fotos = r.fotos; delete atual.erroSync; if (res && res.validacao) atual.validacao = res.validacao; await Store.salvarRegistro(atual); }
         ok++;
       } catch (e) {
+        if (e.sessao) { ultimoErro = e.message; break; }
         falhas++; ultimoErro = e.message; r.erroSync = e.message; await Store.salvarRegistro(r);
       }
     }
     S.sincronizando = false; await atualizarSync();
+    if (S.expirada) return;
     if (!silencioso || falhas) toast(falhas ? `Enviados ${ok}. Falharam ${falhas}: ${ultimoErro}` : `${ok} registro(s) enviados.`, falhas ? 5000 : 2600);
+    await atualizarSituacao();
     if (location.hash === '' || location.hash === '#inicio') listarRegistros();
+  }
+  // traz do servidor como a coordenação avaliou os registros deste aparelho (validado, devolvido e motivo)
+  async function atualizarSituacao() {
+    if (!S.projeto || !navigator.onLine || S.expirada || !['coletor', 'revisor', 'admin'].includes(perfil())) return;
+    try {
+      const itens = await Api.b.situacaoMeus(S.projeto.id); const m = new Map(itens.map((x) => [x.uuid, x]));
+      let mudou = false;
+      for (const r of await Store.registros(S.projeto.id)) {
+        const it = m.get(r.uuid); const v = it ? it.validacao : (r.validacao && r.validacao !== 'Corrigido' ? 'Pendente' : r.validacao);
+        const o = it ? it.obs || '' : r.validacao_obs || '';
+        if ((r.validacao || '') !== (v || '') || (r.validacao_obs || '') !== o) { r.validacao = v; r.validacao_obs = o; await Store.salvarRegistro(r); mudou = true; }
+      }
+      if (mudou && (location.hash === '' || location.hash === '#inicio')) listarRegistros();
+    } catch (e) { /* servidor antigo ou sem conexão */ }
+  }
+  async function reentrar() {
+    if (!(await confirmar('Entrar de novo', 'Sua sessão expirou. Entre com usuário e senha para continuar enviando. Os registros guardados no aparelho continuam salvos.', 'Entrar'))) return;
+    S.ultimoUsuario = S.sessao && S.sessao.u; S.sessao = null; await Store.del('sessao'); location.hash = ''; telaLogin();
   }
 
   // ---------- Início ----------
@@ -217,7 +283,9 @@
     $app.replaceChildren(
       topo(S.projeto.nome, S.projeto.equipe || S.sessao.usuario.nome, menu, h('div', { class: 'topo-dir' }, h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')), sync)),
       h('main', null,
+        S.expirada ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo'), ' Os registros continuam guardados aqui.') : null,
         h('button', { class: 'btn nova canto', onclick: novoRegistro }, ico('mais'), 'Nova árvore'),
+        h('div', { id: 'devolvidos' }),
         h('div', { class: 'resumo', id: 'stats' }),
         h('div', { class: 'busca-box' }, ico('busca'), busca),
         h('div', { id: 'lista', class: 'lista' })));
@@ -243,17 +311,22 @@
       h('span', { class: nPend ? 'pend' : '' }, h('b', null, nPend), ' a enviar'));
     const cc = campoCodigo(S.form), ce = campoEspecie(S.form);
     const f = norm(filtro);
-    const lista = todos.filter((r) => !f || norm(camposCodigo(S.form).map((k) => r.valores[k.nome]).join(' ') + ' ' + (ce && r.valores[ce.nome])).includes(f));
+    const dev = todos.filter((r) => r.validacao === 'Devolvido');
+    const box = document.getElementById('devolvidos');
+    if (box) box.replaceChildren(dev.length ? h('button', { class: 'faixa-dev', onclick: () => { const b = document.querySelector('.busca'); if (b) { b.value = 'devolvido'; listarRegistros('devolvido'); } } }, h('b', null, `${dev.length} registro${dev.length > 1 ? 's' : ''} devolvido${dev.length > 1 ? 's' : ''} pela coordenação`), h('span', null, 'Toque para ver e corrigir')) : '');
+    const lista = f === 'devolvido' ? dev : todos.filter((r) => !f || norm(camposCodigo(S.form).map((k) => r.valores[k.nome]).join(' ') + ' ' + (ce && r.valores[ce.nome])).includes(f));
     if (!lista.length) return el.replaceChildren(h('div', { class: 'vazio-lista' }, filtro ? 'Nada encontrado.' : 'Nenhuma árvore cadastrada ainda neste aparelho.'));
     const itens = [];
     for (const r of lista.slice(0, 300)) {
       const img = await miniatura(r);
-      const rotSt = { rascunho: 'Rascunho', pendente: r.erroSync ? 'Erro' : 'A enviar', enviado: 'Enviado' }[r.status];
+      const rotSt = r.status === 'enviado' && r.validacao && r.validacao !== 'Pendente' ? r.validacao : { rascunho: 'Rascunho', pendente: r.erroSync ? 'Erro' : 'A enviar', enviado: 'Enviado' }[r.status];
+      const clsSt = r.status === 'enviado' && r.validacao && r.validacao !== 'Pendente' ? 'v-' + norm(r.validacao) : (r.erroSync && r.status === 'pendente' ? 'erro' : r.status);
       itens.push(h('button', { class: 'reg', onclick: () => ir('#form/' + r.uuid) },
         img ? h('img', { src: img, alt: '' }) : h('div', { class: 'sem' }),
         h('div', { class: 'tx' }, h('b', null, codigoDe(S.form, r.valores) || 'Sem código'),
-          h('i', null, (ce && r.valores[ce.nome]) || 'Espécie não informada'), h('small', null, `${dataBR(r.atualizado_em)} · ${r.equipe || ''}`)),
-        h('span', { class: 'st ' + (r.erroSync && r.status === 'pendente' ? 'erro' : r.status) }, rotSt)));
+          h('i', null, (ce && r.valores[ce.nome]) || 'Espécie não informada'), h('small', null, `${dataBR(r.atualizado_em)} · ${r.equipe || ''}`),
+          r.validacao === 'Devolvido' && r.validacao_obs ? h('small', { class: 'motivo' }, 'Motivo: ' + r.validacao_obs) : null),
+        h('span', { class: 'st ' + clsSt }, rotSt)));
     }
     el.replaceChildren(...itens);
   }
@@ -262,19 +335,35 @@
     const it = (txt, fn) => h('button', { class: 'menu-it', onclick: () => { veu.remove(); fn(); } }, txt);
     const veu = h('div', { class: 'veu', onclick: (e) => e.target === veu && veu.remove() }, h('div', { class: 'folha' },
       h('img', { class: 'folha-marca', src: 'icons/logo-horizontal.png', alt: 'Neofloresta' }),
-      h('h3', null, S.sessao.usuario.nome),
+      h('h3', null, S.sessao.usuario.nome, h('small', { class: 'perfil-tag' }, ROT_PERFIL[perfil()] || '')),
       S.sessao.projetos.length > 1 ? it('Trocar projeto', trocarProjeto) : null,
       it('Mapa das árvores', () => ir('#mapa')),
-      it('Enviar agora', () => sincronizar()),
-      S.sessao.usuario.perfil === 'admin' ? it('Coordenação (exportar, equipes, formulários)', () => ir('#admin/exportar')) : null,
-      S.sessao.usuario.perfil === 'admin' ? it('Servidor', configurarServidor) : null,
+      perfil() !== 'cliente' ? it('Enviar agora', () => sincronizar()) : null,
+      perfil() !== 'coletor' ? it('Painel do projeto', () => ir('#painel')) : null,
+      ehCoord() ? it('Validação dos registros', () => ir('#validacao')) : null,
+      perfil() === 'admin' ? it('Coordenação (exportar, equipes, formulários, segurança)', () => ir('#admin/exportar')) : null,
+      perfil() === 'admin' ? it('Servidor', configurarServidor) : null,
+      !Api.demo || true ? it('Trocar minha senha', trocarSenha) : null,
+      it('Sobre, termo de uso e privacidade', () => ir('#sobre')),
       it('Sair', () => sair()),
       h('p', { class: 'dica', style: 'margin-top:12px' }, `Versão ${VERSAO} · ${Api.demo ? 'demonstração' : 'conectado ao Google'}`)));
     document.body.append(veu);
   }
+  const ROT_PERFIL = { admin: 'Coordenação', revisor: 'Revisão técnica', coletor: 'Equipe de campo', cliente: 'Cliente (consulta)' };
+  async function trocarSenha() {
+    const a = h('input', { class: 'entrada', type: 'password', autocomplete: 'current-password' });
+    const n1 = h('input', { class: 'entrada', type: 'password', autocomplete: 'new-password' });
+    const n2 = h('input', { class: 'entrada', type: 'password', autocomplete: 'new-password' });
+    const ok = await modal('Trocar minha senha', h('div', null, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Senha atual'), a), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nova senha (mínimo 6 caracteres)'), n1), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Repita a nova senha'), n2)),
+      [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Trocar senha', valor: true }]);
+    if (!ok) return;
+    if (n1.value !== n2.value) return toast('As duas senhas novas não conferem.');
+    if (n1.value.trim().length < 6) return toast('A nova senha precisa ter pelo menos 6 caracteres.');
+    try { await Api.b.trocarSenha(a.value, n1.value.trim()); if (S.sessao.s) { S.sessao.s = n1.value.trim(); Api.credenciais(credDe(S.sessao)); await Store.set('sessao', S.sessao); } toast('Senha alterada.'); } catch (e) { toast(e.message, 5000); }
+  }
   async function trocarProjeto() {
     const r = await modal('Projeto', h('div', null, S.sessao.projetos.map((p) => h('button', { class: 'menu-it', onclick: () => { document.querySelector('.veu').remove(); escolher(p.id); } }, p.nome + (p.id === S.projeto.id ? ' ✓' : '')))), []);
-    async function escolher(id) { try { await abrirProjeto(id); ir('#inicio'); } catch (e) { toast(e.message); } }
+    async function escolher(id) { try { if (perfil() === 'cliente') { await abrirProjetoCliente(id); ir('#painel'); rota(); } else { await abrirProjeto(id); ir('#inicio'); } } catch (e) { toast(e.message); } }
     return r;
   }
 
@@ -381,7 +470,7 @@
   let salvarTimer = null;
   function salvarRascunho() {
     clearTimeout(salvarTimer);
-    salvarTimer = setTimeout(async () => { const r = S.reg; if (!r) return; r.atualizado_em = agoraISO(); if (r.status === 'enviado') r.status = 'pendente'; await Store.salvarRegistro(r); atualizarSync(); }, 350);
+    salvarTimer = setTimeout(async () => { const r = S.reg; if (!r) return; if (r.status === 'rascunho') r.atualizado_em = agoraISO(); await Store.salvarRegistro(r); atualizarSync(); }, 350);
   }
 
   // ---------- Formulário ----------
@@ -389,9 +478,11 @@
     const r = await Store.registro(id);
     if (!r) { toast('Registro não encontrado.'); return ir('#inicio'); }
     if (r.projeto !== S.projeto.id) await abrirProjeto(r.projeto);
+    if (r.status !== 'rascunho' && r.__base) S.editando.add(r.uuid); // edição interrompida (app fechado no meio)
+    if (r.status !== 'rascunho' && !S.editando.has(r.uuid)) return telaFichaLocal(r);
     if (!S.reg || S.reg.uuid !== r.uuid) { S.aba = 0; S.tentou = false; }
     S.reg = r; r.valores = r.valores || {}; r.fotos = r.fotos || {};
-    if (r.status !== 'rascunho' && !r.__base) r.__base = JSON.stringify(r.valores);
+    if (r.status !== 'rascunho' && !r.__base) { r.__base = JSON.stringify(r.valores); r.__baseFotos = JSON.stringify(r.fotos); await Store.salvarRegistro(r); }
     if (abaParam != null) S.aba = +abaParam || 0;
     const form = S.form; const abas = form.abas;
     S.aba = Math.min(Math.max(0, S.aba), abas.length - 1);
@@ -646,8 +737,8 @@
         { texto: 'Usar GPS agora', classe: 'sec', valor: 'gps' }, { texto: 'Pronto', valor: 'ok' }]);
       setTimeout(() => {
         const centro = r.lat != null ? [r.lat, r.lon] : S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9];
-        mapa = L.map(div).setView(centro, r.lat != null || S.pos ? 19 : 4);
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, maxNativeZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapa);
+        mapa = L.map(div, { maxZoom: 21 }).setView(centro, r.lat != null || S.pos ? 19 : 4);
+        camadasFundo(mapa, false);
         if (r.lat != null) { marca = L.marker(centro, { draggable: true }).addTo(mapa); marca.on('dragend', () => { const ll = marca.getLatLng(); Object.assign(r, { lat: ll.lat, lon: ll.lng, posManual: true, gpsAuto: false }); salvarRascunho(); pintar(); pintarGps(); }); }
         if (S.pos) L.circle([S.pos.lat, S.pos.lon], { radius: S.pos.prec, color: '#0B6E8C', weight: 1 }).addTo(mapa);
       }, 60);
@@ -669,30 +760,59 @@
         return;
       }
       if (r.lat == null && !(await confirmar('Sem localização', 'Esta árvore ainda não tem posição de GPS. Salvar assim mesmo?', 'Salvar sem GPS'))) return;
+      if (r.__base) {
+        const mud = diferencas();
+        if (!mud.length) { clearTimeout(salvarTimer); delete r.__base; delete r.__baseFotos; await Store.salvarRegistro(r); S.editando.delete(r.uuid); Gps.ouvintes.delete(ouvinte); S.reg = null; toast('Nenhuma alteração.'); return ir('#form/' + r.uuid); }
+        const ok = await modal('Confirmar alterações', h('div', null, h('p', null, 'Estas mudanças vão para o histórico do registro, com seu usuário, data e hora:'), h('ul', { class: 'lista-mud' }, mud.map((m) => h('li', null, m)))),
+          [{ texto: 'Voltar e revisar', classe: 'sec', valor: false }, { texto: 'Confirmar alterações', valor: true }]);
+        if (!ok) return;
+      }
       clearTimeout(salvarTimer);
       // campos ocultos pela classe não levam valor antigo para a planilha
       for (const c of form.campos) if (E[c.nome].oculto) { if (c.tipo === 'photo') delete r.fotos[c.nome]; else r.valores[c.nome] = c.tipo === 'bool' ? false : null; }
       recalcular(r);
       anotarHistorico();
       if (!r.concluido_em) r.concluido_em = agoraISO();
+      if (r.validacao === 'Devolvido') r.validacao = 'Corrigido';
+      S.editando.delete(r.uuid);
       r.status = 'pendente'; r.gpsAuto = false; r.atualizado_em = agoraISO(); delete r.erroSync;
       await Store.salvarRegistro(r);
       Gps.ouvintes.delete(ouvinte); S.reg = null;
       toast('Árvore salva.'); ir('#inicio'); sincronizar(true);
     }
     // registro já concluído que foi alterado: guarda quem mudou o quê e quando
-    function anotarHistorico() {
-      if (!r.__base) return;
+    function diferencas() {
+      if (!r.__base) return [];
       const antes = JSON.parse(r.__base); const mud = [];
-      const fmt = (v) => v == null || v === '' ? 'vazio' : v === true ? 'sim' : v === false ? 'não' : typeof v === 'number' ? numBR(v) : String(v);
-      for (const c of form.campos) if (!c.calculado && c.tipo !== 'photo' && fmt(antes[c.nome]) !== fmt(r.valores[c.nome])) mud.push(`${c.rotulo}: ${fmt(antes[c.nome])} → ${fmt(r.valores[c.nome])}`);
+      const fmt = (c, v) => v == null || v === '' ? 'vazio' : v === true ? 'sim' : v === false ? 'não' : typeof v === 'number' ? numBR(v) : c.tipo === 'choice' ? rotuloOpcao(c, v) : String(v);
+      for (const c of form.campos) if (!c.calculado && c.tipo !== 'photo' && fmt(c, antes[c.nome]) !== fmt(c, r.valores[c.nome])) mud.push(`${c.rotulo}: ${fmt(c, antes[c.nome])} → ${fmt(c, r.valores[c.nome])}`);
+      const fa = JSON.parse(r.__baseFotos || '{}');
+      for (const c of form.campos) if (c.tipo === 'photo' && ((fa[c.nome] || {}).chave || '') !== ((r.fotos[c.nome] || {}).chave || '')) mud.push(`${c.rotulo}: foto ${r.fotos[c.nome] ? (fa[c.nome] ? 'trocada' : 'incluída') : 'removida'}`);
+      return mud;
+    }
+    // registro já concluído que foi alterado: guarda quem mudou o quê e quando
+    function anotarHistorico() {
+      const mud = diferencas();
       if (mud.length) (r.historico = r.historico || []).push({ em: agoraISO(), por: S.sessao.u, mud });
-      delete r.__base;
+      delete r.__base; delete r.__baseFotos;
     }
     async function sairForm() {
-      clearTimeout(salvarTimer); Gps.ouvintes.delete(ouvinte); if (r.status !== 'rascunho') anotarHistorico();
+      clearTimeout(salvarTimer);
+      if (r.__base) {
+        const mud = diferencas();
+        if (mud.length) {
+          const v = await modal('Alterações não confirmadas', h('div', null, h('p', null, 'Você mudou este registro já concluído:'), h('ul', { class: 'lista-mud' }, mud.map((m) => h('li', null, m)))),
+            [{ texto: 'Descartar alterações', classe: 'perigo', valor: 'descartar' }, { texto: 'Continuar editando', classe: 'sec', valor: null }, { texto: 'Salvar', valor: 'salvar' }]);
+          if (v === 'salvar') return concluir();
+          if (v !== 'descartar') return;
+          r.valores = JSON.parse(r.__base); r.fotos = JSON.parse(r.__baseFotos || '{}');
+        }
+        delete r.__base; delete r.__baseFotos; await Store.salvarRegistro(r); S.editando.delete(r.uuid);
+        Gps.ouvintes.delete(ouvinte); S.reg = null; return ir('#form/' + r.uuid);
+      }
+      Gps.ouvintes.delete(ouvinte);
       if (r.status === 'rascunho' && !r.mexido && !Object.keys(r.fotos).length) { await Store.apagarRegistro(r.uuid); }
-      else { r.atualizado_em = agoraISO(); if (r.status === 'enviado') r.status = 'pendente'; await Store.salvarRegistro(r); if (r.status === 'rascunho') toast('Guardado como rascunho.'); }
+      else { r.atualizado_em = agoraISO(); await Store.salvarRegistro(r); if (r.status === 'rascunho') toast('Guardado como rascunho.'); }
       S.reg = null; ir('#inicio');
     }
 
@@ -721,17 +841,18 @@
     const selCor = h('select', { class: 'entrada' }, h('option', { value: 'equipe' }, 'Cor por equipe'), cRisco ? h('option', { value: 'risco' }, 'Cor por risco') : null);
     const conta = h('small', { class: 'mapa-conta' });
     const barra = h('div', { class: 'mapa-filtros' }, busca, h('div', { class: 'mapa-sel' }, selEq, selRisco, selCor), conta);
-    $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: centrar }, 'Minha posição')), barra, div));
-    const mapa = L.map(div, { preferCanvas: true }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, maxNativeZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapa);
+    $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: centrar }, 'Minha posição')), barra, div));
+    const mapa = L.map(div, { preferCanvas: true, maxZoom: 21 }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
+    if (S.fundo == null) S.fundo = (await Store.get('fundo')) || 'ruas';
+    camadasFundo(mapa, false);
     const render = L.canvas({ padding: 0.3 });
     const cores = ['#00546E', '#CD834C', '#6A1B9A', '#2E7D32', '#C62828', '#12A6C8'];
-    const corRisco = { Baixo: '#2E9E4F', 'Médio': '#E3A322', Alto: '#C8423A' };
+    const corRisco = { Baixo: COR_RISCO.Baixo, 'Médio': COR_RISCO['Médio'], Alto: COR_RISCO.Alto };
     const equipes = []; const corEq = (e) => { if (!equipes.includes(e)) equipes.push(e); return cores[equipes.indexOf(e) % cores.length]; };
     // pontos: os do aparelho primeiro (podem ter edição ainda não enviada), depois os do servidor
     const pts = []; const vistos = new Set();
     const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
-    for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', foto: '', local: true });
+    if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', foto: '', local: true });
     const camada = L.layerGroup().addTo(mapa);
     function desenhar(ajustar) {
       camada.clearLayers(); mapa.closePopup();
@@ -753,7 +874,7 @@
         o.cat ? h('div', null, rotOp(cCat, o.cat)) : null, o.risco ? h('div', null, 'Risco ' + String(rotOp(cRisco, o.risco)).toLowerCase()) : null,
         h('small', null, o.equipe || ''),
         o.foto ? h('a', { href: o.foto, target: '_blank', rel: 'noopener' }, 'Ver foto') : null,
-        o.local ? h('button', { class: 'btn peq', onclick: () => ir('#form/' + o.uid) }, 'Abrir') : null);
+        o.local ? h('button', { class: 'btn peq', onclick: () => ir('#form/' + o.uid) }, 'Abrir') : ehCoord() ? h('button', { class: 'btn peq', onclick: () => { S.navVal = []; ir('#ficha/' + encodeURIComponent(o.uid)); } }, 'Ver ficha') : null);
       L.popup().setLatLng(ll || [o.lat, o.lon]).setContent(pop).openOn(mapa);
     }
     let leg = null;
@@ -766,11 +887,23 @@
     }
     let tBusca = null;
     busca.addEventListener('input', () => { clearTimeout(tBusca); tBusca = setTimeout(() => desenhar(!!busca.value.trim()), 250); });
+    busca.setAttribute('enterkeyhint', 'search'); busca.placeholder = 'Código, espécie ou endereço';
+    let marcaEnd = null;
+    busca.addEventListener('keydown', async (e) => {
+      if (e.key !== 'Enter') return; const q = busca.value.trim(); if (!q) return;
+      if (pts.some((o) => o.chave.includes(norm(q)))) return desenhar(true);
+      if (!navigator.onLine) return toast('Sem internet para buscar endereço.');
+      try {
+        const r = await buscarEndereco(q); if (!r) return toast('Endereço não encontrado.');
+        busca.value = ''; desenhar(false); mapa.setView([r.lat, r.lon], 18);
+        if (marcaEnd) marcaEnd.remove(); marcaEnd = L.marker([r.lat, r.lon]).addTo(mapa).bindPopup(r.nome).openPopup();
+      } catch (er) { toast('Não foi possível buscar o endereço.'); }
+    });
     [selEq, selRisco, selCor].filter(Boolean).forEach((x) => x.addEventListener('change', () => desenhar(x !== selCor)));
     const preencherEquipes = () => { const atual = selEq.value; selEq.replaceChildren(h('option', { value: '' }, 'Todas as equipes'), ...equipes.filter((e) => e !== '-').map((e) => h('option', { value: e, selected: e === atual }, e))); };
     preencherEquipes(); desenhar(true);
     if (!Api.demo && navigator.onLine) {
-      conta.textContent = 'Carregando pontos das equipes...';
+      conta.textContent = 'Carregando pontos...';
       try {
         const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link'].map((x) => x || '');
         const m = await Api.b.mapa(S.projeto.id, campos);
@@ -794,13 +927,16 @@
     const voltar = S.projeto ? h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')) : h('button', { class: 'ic', onclick: abrirMenuAdmin, 'aria-label': 'Menu' }, ico('menu'));
     $app.replaceChildren(...[topo('Coordenação', Api.demo ? 'Modo demonstração' : 'Conectado ao Google', voltar, null),
       !S.projeto ? h('main', { style: 'padding-bottom:0' }, h('div', { class: 'info' }, 'Primeiros passos: 1) em Formulários, instale ou importe um formulário; 2) em Projetos, crie o projeto; 3) em Equipes e usuários, crie os acessos de campo.')) : null,
-      h('main', { style: 'padding-bottom:0' }, h('div', { class: 'subabas' }, it('exportar', 'Exportar'), it('projetos', 'Projetos'), it('usuarios', 'Equipes e usuários'), it('formularios', 'Formulários'))), corpo].filter(Boolean));
+      h('main', { style: 'padding-bottom:0' }, h('div', { class: 'subabas' }, it('exportar', 'Exportar'), it('importar', 'Importar'), it('projetos', 'Projetos'), it('usuarios', 'Usuários'), it('formularios', 'Formulários'), it('seguranca', 'Segurança')),
+        S.projeto ? h('div', { class: 'linha-btn', style: 'margin:8px 0 0' }, h('button', { class: 'btn sec peq', onclick: () => ir('#painel') }, 'Painel'), h('button', { class: 'btn sec peq', onclick: () => ir('#validacao') }, 'Validação'), h('button', { class: 'btn sec peq', onclick: () => ir('#mapa') }, 'Mapa')) : null), corpo].filter(Boolean));
     corpo.style.paddingTop = '0';
     try {
       if (sub === 'exportar') await adminExportar(corpo);
       else if (sub === 'projetos') await adminProjetos(corpo);
       else if (sub === 'usuarios') await adminUsuarios(corpo);
       else if (sub === 'formularios') await adminFormularios(corpo);
+      else if (sub === 'importar') await adminImportar(corpo);
+      else if (sub === 'seguranca') await adminSeguranca(corpo);
       else if (sub === 'revisao') adminRevisao(corpo);
     } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, 'Erro: ' + e.message)); }
   }
@@ -814,49 +950,6 @@
     if (!S.projeto && r.projetos.length) await abrirProjeto(r.projetos[0].id);
   }
 
-  async function adminExportar(corpo) {
-    const projetos = await Api.b.projetosListar();
-    const sel = h('select', { class: 'entrada' }, projetos.map((p) => h('option', { value: p.id, selected: S.projeto && p.id === S.projeto.id }, p.nome)));
-    const status = h('div');
-    const links = h('div');
-    const mostrarLinks = () => { const p = projetos.find((x) => x.id === sel.value); links.replaceChildren(p && (p.planilha_url || p.pasta_url) ? h('div', { class: 'info' }, p.planilha_url ? h('div', null, h('a', { href: p.planilha_url, target: '_blank' }, 'Abrir planilha do projeto')) : null, p.pasta_url ? h('div', null, h('a', { href: p.pasta_url, target: '_blank' }, 'Abrir pasta do projeto no Drive (fotos em DCIM)')) : null) : ''); };
-    sel.addEventListener('change', mostrarLinks); mostrarLinks();
-    async function exportar(tipo) {
-      status.replaceChildren(h('div', { class: 'info' }, 'Gerando arquivo...'));
-      try {
-        const p = projetos.find((x) => x.id === sel.value);
-        const form = await Api.b.formulario(p.formulario);
-        const linhas = await Api.b.listarTudo(p.id, (n, t) => status.replaceChildren(h('div', { class: 'info' }, `Baixando registros: ${n.toLocaleString('pt-BR')}${t ? ' de ' + t.toLocaleString('pt-BR') : ''}...`)));
-        if (!linhas.length) throw new Error('Nenhum registro enviado neste projeto ainda.');
-        // numeração única do projeto, sem distinção de equipe, pela ordem de coleta
-        [...linhas].sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)) || String(a.uuid).localeCompare(String(b.uuid))).forEach((l, i) => { l.numero_unico = i + 1; });
-        const cc = campoCodigo(form), ce = campoEspecie(form);
-        const dia = new Date().toISOString().slice(0, 10);
-        if (tipo === 'gpkg') {
-          const estilo = await Api.b.estilo(form.id).catch(() => null);
-          const r = await Gpkg.gerar({ form, linhas, epsg: p.epsg, nomeCamada: Q2F.slug(p.id).replace(/-/g, '_'), estiloQml: estilo });
-          baixar(`${p.id}_${dia}.gpkg`, r.bytes, 'application/geopackage+sqlite3');
-          status.replaceChildren(h('div', { class: 'info' }, `GeoPackage gerado: ${r.total} árvores em SIRGAS 2000 / UTM (EPSG:${r.srs})${r.semPonto ? `, ${r.semPonto} sem coordenada` : ''}${estilo ? ', com o estilo do QGIS embutido' : ''}. Para ver as fotos no QGIS, baixe a pasta DCIM do projeto no Drive e coloque ao lado do arquivo .gpkg.`));
-        } else if (tipo === 'kml') {
-          const x = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          const chave = (n) => n && /^(numero_unico|equipe|criado_em|precisao_gps_m)$|codigo|especie|categoria|situa|dap|altura|risco|foto 1 link/i.test(norm(n));
-          const cols = [...new Set(linhas.flatMap((l) => Object.keys(l)))].filter(chave);
-          const pms = linhas.filter((l) => l.latitude !== '' && l.latitude != null).map((l) => `<Placemark><name>${x(cc ? l[cc.nome] : l.numero_unico)}</name>${ce && l[ce.nome] ? `<description>${x(l[ce.nome])}</description>` : ''}<ExtendedData>${cols.map((c) => `<Data name="${x(c)}"><value>${x(l[c])}</value></Data>`).join('')}</ExtendedData><Point><coordinates>${+l.longitude},${+l.latitude},0</coordinates></Point></Placemark>`);
-          baixar(`${p.id}_${dia}.kml`, `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(p.nome)}</name>${pms.join('\n')}</Document></kml>`, 'application/vnd.google-earth.kml+xml');
-          status.replaceChildren(h('div', { class: 'info' }, `KML gerado com ${pms.length} pontos e os campos principais (abre no Google Earth e no Google Maps). A tabela completa está no GeoPackage e na planilha.`));
-        } else {
-          const cols = [...new Set(linhas.flatMap((l) => Object.keys(l)))];
-          const esc = (v) => { const s = v == null ? '' : String(v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-          const csv = '﻿' + [cols.join(';'), ...linhas.map((l) => cols.map((c) => esc(l[c])).join(';'))].join('\r\n');
-          baixar(`${p.id}_${dia}.csv`, csv, 'text/csv'); status.replaceChildren(h('div', { class: 'info' }, `Planilha gerada com ${linhas.length} linhas.`));
-        }
-      } catch (e) { status.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
-    }
-    corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Exportar dados'), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), sel), links,
-      h('div', { class: 'linha-btn' }, h('button', { class: 'btn', onclick: () => exportar('gpkg') }, 'GeoPackage (.gpkg)'), h('button', { class: 'btn sec', onclick: () => exportar('csv') }, 'Planilha (.csv)'), h('button', { class: 'btn sec', onclick: () => exportar('kml') }, 'Google Earth (.kml)')),
-      h('p', { class: 'dica' }, Api.demo ? 'No modo demonstração a exportação usa os registros deste aparelho.' : 'A exportação usa tudo o que as equipes já enviaram para a planilha do projeto.'), status));
-  }
-
   async function adminProjetos(corpo) {
     const [projetos, forms] = await Promise.all([Api.b.projetosListar(), Api.b.formulariosListar()]);
     const fusos = [['auto', 'Automático (pelo GPS)'], ...[18, 19, 20, 21, 22, 23, 24, 25].map((z) => [String(31960 + z), `SIRGAS 2000 / UTM ${z}S (EPSG:${31960 + z})`])];
@@ -867,19 +960,27 @@
       const fo = h('select', { class: 'entrada' }, forms.map((f) => h('option', { value: f.id, selected: f.id === p.formulario }, f.nome)));
       const ep = h('select', { class: 'entrada' }, fusos.map(([v, t]) => h('option', { value: v, selected: String(p.epsg) === v }, t)));
       const pre = h('input', { class: 'entrada', value: p.prefixo || '', placeholder: 'prefixo do nome das fotos' });
+      const contr = h('input', { class: 'entrada', value: p.contratante || '', placeholder: 'ex.: Prefeitura Municipal de Divinópolis' });
+      const ncon = h('input', { class: 'entrada', value: p.contrato || '', placeholder: 'ex.: 580/2026' });
+      const mun = h('input', { class: 'entrada', value: p.municipio || '', placeholder: 'ex.: Divinópolis/MG' });
+      const meta = h('input', { class: 'entrada', inputmode: 'numeric', value: p.meta || '', placeholder: 'ex.: 10000' });
+      const cve = h('select', { class: 'entrada' }, h('option', { value: 'validados', selected: p.cliente_ve !== 'todos' }, 'Só registros validados'), h('option', { value: 'todos', selected: p.cliente_ve === 'todos' }, 'Todos, inclusive aguardando validação'));
       const ok = await modal(novo ? 'Novo projeto' : 'Editar projeto', h('div', null,
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Identificador (sem espaços)'), id), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), nome),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Formulário'), fo), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Sistema de coordenadas da exportação'), ep),
-        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Prefixo das fotos'), pre, h('div', { class: 'dica' }, 'As fotos ficam como DCIM/prefixo_AAAAMMDDhhmmssmmm.jpg, igual ao QField.'))),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Prefixo das fotos'), pre, h('div', { class: 'dica' }, 'As fotos ficam como DCIM/prefixo_AAAAMMDDhhmmssmmm.jpg, igual ao QField.')),
+        h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Contratante'), contr), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nº do contrato'), ncon)),
+        h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Município'), mun), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Meta de registros'), meta)),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'O cliente vê no portal'), cve)),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
       const pid = Q2F.slug(id.value || nome.value); if (!pid || !nome.value.trim()) return toast('Preencha identificador e nome.');
       if (novo && projetos.some((x) => x.id === pid)) return toast('Já existe projeto com esse identificador.');
-      try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid) })); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
+      try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value })); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
     }
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Projetos'),
       h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Projeto'), h('th', null, 'Formulário'), h('th', null, '')),
-        projetos.map((p) => h('tr', null, h('td', null, h('b', null, p.nome), h('br'), h('small', null, p.id)), h('td', null, (forms.find((f) => f.id === p.formulario) || {}).nome || p.formulario),
+        projetos.map((p) => h('tr', null, h('td', null, h('b', null, p.nome), h('br'), h('small', null, [p.id, p.municipio, p.meta ? 'meta ' + fmtN(+p.meta) : ''].filter(Boolean).join(' · '))), h('td', null, (forms.find((f) => f.id === p.formulario) || {}).nome || p.formulario),
           h('td', null, h('button', { class: 'btn sec peq', onclick: () => editar(p) }, 'Editar'))))),
       h('button', { class: 'btn', style: 'margin-top:12px', onclick: () => editar(null) }, '+ Novo projeto'),
       h('p', { class: 'dica' }, Api.demo ? '' : 'Cada projeto novo ganha uma pasta no Drive com a planilha e a subpasta DCIM das fotos.')));
@@ -887,36 +988,50 @@
 
   async function adminUsuarios(corpo) {
     const [us, projetos] = await Promise.all([Api.b.usuariosListar(), Api.b.projetosListar()]);
+    const PERFIS = [['coletor', 'Equipe de campo (coleta)'], ['revisor', 'Revisão técnica (valida registros)'], ['cliente', 'Cliente (consulta painel, mapa e relatório)'], ['admin', 'Coordenação (acesso total)']];
     async function editar(u) {
-      const novo = !u; u = u || { login: '', nome: '', senha: '', perfil: 'campo', projeto: S.projeto ? S.projeto.id : '', equipe: '' };
-      const lo = h('input', { class: 'entrada', value: u.login, disabled: !novo, autocapitalize: 'none', placeholder: 'ex.: divi-equipe1' });
-      const no = h('input', { class: 'entrada', value: u.nome, placeholder: 'ex.: João e Maria' });
-      const se = h('input', { class: 'entrada', value: u.senha || '', placeholder: 'senha' });
+      const novo = !u; u = u || { login: '', nome: '', perfil: 'coletor', projeto: S.projeto ? S.projeto.id : '', equipe: '', ativo: 'sim' };
+      const lo = h('input', { class: 'entrada', value: u.login, disabled: !novo, autocapitalize: 'none', placeholder: 'ex.: div-1' });
+      const no = h('input', { class: 'entrada', value: u.nome || '', placeholder: 'ex.: Equipe 1' });
+      const se = h('input', { class: 'entrada', type: 'text', autocomplete: 'new-password', placeholder: novo ? 'mínimo 6 caracteres' : 'deixe em branco para manter' });
       const eq = h('input', { class: 'entrada', value: u.equipe || '', placeholder: 'ex.: Equipe 1' });
       const cod = h('input', { class: 'entrada', value: u.codigo || '', autocapitalize: 'characters', placeholder: 'ex.: E1' });
-      const pe = h('select', { class: 'entrada' }, h('option', { value: 'campo', selected: u.perfil === 'campo' }, 'Campo'), h('option', { value: 'admin', selected: u.perfil === 'admin' }, 'Coordenação (vê tudo, exporta)'));
+      const em = h('input', { class: 'entrada', type: 'email', value: u.email || '', placeholder: 'opcional' });
+      const pe = h('select', { class: 'entrada' }, PERFIS.map(([v, t]) => h('option', { value: v, selected: (u.perfil === 'campo' ? 'coletor' : u.perfil) === v }, t)));
+      const at = h('input', { type: 'checkbox', checked: String(u.ativo || 'sim').toLowerCase() !== 'nao' });
       const marcados = new Set(String(u.projeto || '').split(',').map((x) => x.trim()));
       const prj = h('div', { class: 'chips' }, projetos.map((p) => { const b = h('button', { class: 'chip' + (marcados.has(p.id) ? ' sel' : ''), onclick: () => { b.classList.toggle('sel'); if (marcados.has(p.id)) marcados.delete(p.id); else marcados.add(p.id); } }, p.nome); return b; }));
       const ok = await modal(novo ? 'Novo usuário' : 'Editar usuário', h('div', null,
-        h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Usuário'), lo), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Senha'), se)),
+        h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Usuário'), lo), h('div', { class: 'campo' }, h('label', { class: 'rot' }, novo ? 'Senha' : 'Nova senha'), se)),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Perfil'), pe),
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), no), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe'), eq)),
-        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Código da equipe'), cod, h('div', { class: 'dica' }, 'Prefixo dos códigos das árvores (ex.: E1 gera E1-0001, E1-0002...). Use um diferente para cada equipe.')),
-        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Perfil'), pe), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos liberados'), prj)),
+        h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Código da equipe'), cod), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Email'), em)),
+        h('div', { class: 'dica' }, 'O código da equipe vira o prefixo dos códigos das árvores (E1 gera E1-0001, E1-0002...). Use um diferente para cada equipe.'),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos liberados'), prj), h('label', null, at, ' Usuário ativo')),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
       const login = lo.value.trim().toLowerCase();
-      if (!login || !se.value.trim()) return toast('Preencha usuário e senha.');
+      if (!login) return toast('Preencha o usuário.');
+      if (novo && se.value.trim().length < 6 && !Api.demo) return toast('A senha precisa ter pelo menos 6 caracteres.');
+      if (novo && !se.value.trim()) return toast('Defina a senha.');
       if (novo && us.some((x) => x.login === login)) return toast('Esse usuário já existe.');
-      try { await Api.b.usuarioSalvar({ login, nome: no.value.trim() || login, senha: se.value.trim(), perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') }); toast('Usuário salvo.'); telaAdmin('usuarios'); } catch (e) { toast(e.message, 5000); }
+      const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao' };
+      if (se.value.trim()) dados.senha = se.value.trim();
+      if (pe.value === 'coletor' && !dados.codigo) return toast('Defina o código da equipe (ex.: E1).');
+      if (pe.value === 'coletor' && us.some((x) => x.login !== login && x.codigo === dados.codigo && String(x.projeto).split(',').some((p) => dados.projeto.split(',').includes(p)))) return toast('Outra equipe deste projeto já usa o código ' + dados.codigo + '.');
+      try { await Api.b.usuarioSalvar(dados); toast('Usuário salvo.'); telaAdmin('usuarios'); } catch (e) { toast(e.message, 5000); }
     }
-    async function remover(u) { if (u.login === S.sessao.u) return toast('Você não pode remover o próprio usuário.'); if (await confirmar('Remover', `Remover o usuário ${u.login}?`, 'Remover', 'perigo')) { await Api.b.usuarioRemover(u.login); telaAdmin('usuarios'); } }
+    async function remover(u) { if (u.login === S.sessao.u) return toast('Você não pode remover o próprio usuário.'); if (await confirmar('Remover', `Remover o usuário ${u.login}? Os registros feitos por ele continuam na planilha.`, 'Remover', 'perigo')) { try { await Api.b.usuarioRemover(u.login); telaAdmin('usuarios'); } catch (e) { toast(e.message, 5000); } } }
+    async function desbloquear(u) { try { await Api.b.usuarioDesbloquear(u.login); toast('Usuário desbloqueado.'); telaAdmin('usuarios'); } catch (e) { toast(e.message, 5000); } }
     const nomeP = (ids) => ids === '*' ? 'Todos' : String(ids || '').split(',').map((i) => (projetos.find((p) => p.id === i.trim()) || {}).nome || i).join(', ');
-    corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Equipes e usuários'),
-      h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Usuário'), h('th', null, 'Equipe / projeto'), h('th', null, '')),
-        us.map((u) => h('tr', null, h('td', null, h('b', null, u.login), h('br'), h('small', null, u.perfil === 'admin' ? 'Coordenação' : 'Campo')), h('td', null, u.equipe || '', h('br'), h('small', null, nomeP(u.projeto))),
-          h('td', { style: 'white-space:nowrap' }, h('button', { class: 'btn sec peq', onclick: () => editar(u) }, 'Editar'), ' ', h('button', { class: 'btn perigo peq', onclick: () => remover(u) }, '×'))))),
+    const rotP = (p) => (PERFIS.find((x) => x[0] === (p === 'campo' ? 'coletor' : p)) || [p, p])[1].replace(/\s*\(.*\)/, '');
+    corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Usuários'),
+      h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Usuário'), h('th', null, 'Perfil e projetos'), h('th', null, '')),
+        us.map((u) => h('tr', { class: String(u.ativo).toLowerCase() === 'nao' ? 'inativo' : '' }, h('td', null, h('b', null, u.login), h('br'), h('small', null, u.nome || ''), u.bloqueado ? h('span', { class: 'tag-alerta' }, 'bloqueado') : null, String(u.ativo).toLowerCase() === 'nao' ? h('span', { class: 'tag-cinza' }, 'inativo') : null),
+          h('td', null, rotP(u.perfil), u.codigo ? ` · ${u.codigo}` : '', h('br'), h('small', null, nomeP(u.projeto)), u.senha_antiga ? h('div', null, h('small', { class: 'dica' }, 'senha ainda no formato antigo: é convertida no próximo acesso')) : null),
+          h('td', { style: 'white-space:nowrap' }, u.bloqueado ? h('button', { class: 'btn peq', onclick: () => desbloquear(u) }, 'Desbloquear') : null, ' ', h('button', { class: 'btn sec peq', onclick: () => editar(u) }, 'Editar'), ' ', h('button', { class: 'btn perigo peq', onclick: () => remover(u), 'aria-label': 'Remover' }, '×'))))),
       h('button', { class: 'btn', style: 'margin-top:12px', onclick: () => editar(null) }, '+ Novo usuário'),
-      h('p', { class: 'dica' }, 'Cada equipe de campo usa um usuário. Os registros saem com o nome da equipe.')));
+      h('p', { class: 'dica' }, 'Equipe de campo coleta; revisão técnica valida ou devolve registros; cliente só consulta painel, mapa e relatório dos dados validados; coordenação faz tudo. Senhas ficam guardadas de forma criptografada e o usuário é bloqueado por 15 minutos após 5 senhas erradas.')));
   }
 
   async function adminFormularios(corpo) {
@@ -939,12 +1054,12 @@
       } catch (e) { msg.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
     }
     async function exemplo() {
-      try { for (const arq of ['divinopolis-inventario', 'seade-risco']) { const f = await (await fetch(`forms/${arq}.json`)).json(); await Api.b.formularioSalvar(f, null); } toast('Formulários instalados.'); if (S.form) S.form = await carregarForm(S.form.id); telaAdmin('formularios'); } catch (e) { toast(e.message, 5000); }
+      try { for (const arq of ['divinopolis-inventario', 'seade-risco']) { const f = await (await fetch(`forms/${arq}.json`)).json(); const q = await fetch(`forms/${arq}.qml`).then((r) => (r.ok ? r.text() : null)).catch(() => null); await Api.b.formularioSalvar(f, q); } toast('Formulários instalados.'); if (S.form) S.form = await carregarForm(S.form.id); telaAdmin('formularios'); } catch (e) { toast(e.message, 5000); }
     }
     async function editar(id) { const form = await Api.b.formulario(id); S.revisao = { form: JSON.parse(JSON.stringify(form)), qml: null, novo: false }; ir('#admin/revisao'); }
     corpo.replaceChildren(
       h('div', { class: 'cartao' }, h('h3', null, 'Formulários'),
-        forms.length ? h('table', { class: 'tab' }, forms.map((f) => h('tr', null, h('td', null, h('b', null, f.nome), h('br'), h('small', null, `${f.id} · ${f.campos} campos`)), h('td', null, h('button', { class: 'btn sec peq', onclick: () => editar(f.id) }, 'Revisar'))))) : h('p', null, 'Nenhum formulário ainda.'),
+        forms.length ? h('table', { class: 'tab' }, forms.map((f) => h('tr', null, h('td', null, h('b', null, f.nome), h('br'), h('small', null, `${f.id} · ${f.campos} campos${f.versao ? ' · versão ' + f.versao : ''}`)), h('td', null, h('button', { class: 'btn sec peq', onclick: () => editar(f.id) }, 'Revisar'))))) : h('p', null, 'Nenhum formulário ainda.'),
         h('button', { class: 'btn sec', style: 'margin-top:10px', onclick: exemplo }, forms.some((f) => f.id === 'divinopolis-inventario') ? 'Atualizar formulários prontos (inventário Divinópolis e risco)' : 'Instalar formulários prontos (inventário Divinópolis e risco)')),
       h('div', { class: 'cartao' }, h('h3', null, 'Importar do QGIS'),
         h('p', { class: 'dica' }, 'No QGIS: Propriedades da camada > Estilo > Salvar estilo (.qml) com todas as categorias. Envie também o .gpkg da camada para trazer os tipos de campo e a lista de espécies.'),
@@ -1029,6 +1144,551 @@
       h('div', { class: 'cartao' }, h('h3', null, 'Regras por classe'), regrasBox),
       h('div', { class: 'cartao' }, h('h3', null, 'Lista de espécies'), h('p', { class: 'dica' }, 'Uma por linha. Nome popular opcional depois de ponto e vírgula. Ex.: Tipuana tipu ; tipuana'), esp),
       h('div', { class: 'linha-btn', style: 'margin-bottom:30px' }, h('button', { class: 'btn sec', onclick: () => { S.revisao = null; ir('#admin/formularios'); } }, 'Cancelar'), h('button', { class: 'btn', onclick: salvar }, 'Salvar formulário')));
+  }
+
+  // ---------- Ficha (leitura) e trava de registros concluídos ----------
+  function rotuloOpcao(c, v) { if (v == null || v === '') return ''; const o = (c.opcoes || []).find((x) => String(x.v) === String(v)); return o ? o.t : String(v); }
+  const diaLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  function podeEditar(r) {
+    if (perfil() === 'cliente') return { ok: false, motivo: 'Perfil de consulta.' };
+    if (ehCoord()) return { ok: true };
+    if (r.validacao === 'Validado') return { ok: false, motivo: 'Registro validado pela coordenação. Para corrigir, fale com a coordenação.' };
+    if (r.validacao === 'Devolvido') return { ok: true };
+    if (diaLocal(r.concluido_em || r.criado_em) === diaLocal(agoraISO())) return { ok: true };
+    return { ok: false, motivo: 'Registro concluído em dia anterior. Só a coordenação pode alterar.' };
+  }
+  function valorTexto(c, v) {
+    if (v == null || v === '' || v === false || v === 0 && c.tipo === 'bool') return '';
+    if (c.tipo === 'bool') return v === true || v === 1 || v === '1' ? 'Sim' : '';
+    if (c.tipo === 'choice') return rotuloOpcao(c, v);
+    if (c.tipo === 'datetime' || c.tipo === 'date') { const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleString('pt-BR', c.tipo === 'date' ? { dateStyle: 'short' } : { dateStyle: 'short', timeStyle: 'short' }); }
+    if (typeof v === 'number') return numBR(Math.round(v * 100) / 100);
+    if (c.tipo === 'multinumber') return String(v).split(';').join(' + ');
+    return String(v);
+  }
+  // Conteúdo da ficha, por etapa. get(c) devolve o valor; fotos = [{ rotulo, src, link }]
+  function fichaConteudo(form, valores, fotos) {
+    const E = estadoCampos(form, valores);
+    const secoes = [];
+    for (const a of form.abas) {
+      const linhas = []; const marc = [];
+      for (const x of a.campos) {
+        const c = form.campos.find((k) => k.nome === x.campo); if (!c || c.tipo === 'hidden' || c.tipo === 'photo' || E[c.nome].oculto) continue;
+        const t = valorTexto(c, valores[c.nome]); if (!t) continue;
+        if (c.tipo === 'bool') marc.push((x.grupo ? x.grupo + ': ' : '') + c.rotulo);
+        else linhas.push(h('div', { class: 'fl' }, h('span', null, c.rotulo), c.tipo === 'species' ? h('i', null, t) : h('b', null, t)));
+      }
+      if (marc.length) linhas.push(h('div', { class: 'fl col' }, h('span', null, 'Marcados'), h('div', { class: 'chips' }, marc.map((m) => h('span', { class: 'chip sel mini' }, m)))));
+      if (linhas.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, a.nome), linhas));
+    }
+    if (fotos && fotos.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Fotos'), h('div', { class: 'ficha-fotos' }, fotos.map((f) => h('a', { href: f.link || f.src, target: '_blank', rel: 'noopener', class: 'ficha-foto' }, f.src ? h('img', { src: f.src, alt: f.rotulo, loading: 'lazy', onerror: (e) => e.target.remove() }) : null, h('span', null, f.rotulo))))));
+    return secoes;
+  }
+  const ROT_VAL = { Pendente: 'Aguardando validação', Validado: 'Validado', Devolvido: 'Devolvido para correção', Corrigido: 'Corrigido, aguardando nova validação', Descartado: 'Descartado' };
+  async function telaFichaLocal(r) {
+    const form = S.form; const pe = podeEditar(r);
+    const fotos = [];
+    for (const c of form.campos.filter((k) => k.tipo === 'photo')) { const f = r.fotos[c.nome]; if (!f) continue; const b = f.chave ? await Store.foto(f.chave) : null; fotos.push({ rotulo: c.rotulo, src: b ? URL.createObjectURL(b) : null, link: f.url || '' }); }
+    const st = r.status === 'pendente' ? (r.erroSync ? 'Erro no envio: ' + r.erroSync : 'Aguardando envio') : (ROT_VAL[r.validacao || 'Pendente'] || 'Enviado');
+    const editar = async () => {
+      const ok = await modal('Alterar registro concluído', h('div', null, h('p', null, 'Este registro já foi concluído' + (r.status === 'enviado' ? ' e enviado' : '') + '. Se você alterar, a mudança fica guardada no histórico com seu usuário, data e hora.'),
+        r.validacao === 'Devolvido' && r.validacao_obs ? h('div', { class: 'aviso' }, 'Motivo da devolução: ' + r.validacao_obs) : null), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Editar registro', valor: true }]);
+      if (!ok) return; S.editando.add(r.uuid); S.aba = 0; S.tentou = false; S.reg = null; telaForm(r.uuid);
+    };
+    $app.replaceChildren(topo(codigoDe(form, r.valores) || 'Registro', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), null),
+      h('main', null,
+        h('div', { class: 'cartao status-ficha st-' + norm(r.status === 'pendente' ? 'pendente' : r.validacao || 'enviado') }, h('b', null, st),
+          r.validacao === 'Devolvido' && r.validacao_obs ? h('p', null, 'Motivo: ' + r.validacao_obs) : null,
+          h('small', null, `Concluído em ${dataBR(r.concluido_em || r.criado_em)} · ${r.equipe || ''}${r.prec ? ' · GPS ±' + Math.round(r.prec) + ' m' : ''}`),
+          !pe.ok ? h('p', { class: 'trava' }, pe.motivo) : null),
+        fichaConteudo(form, r.valores, fotos),
+        (r.historico || []).length ? h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Histórico de alterações'), r.historico.map((x) => h('div', { class: 'hist' }, h('small', null, `${dataBR(x.em)} · ${x.por}`), h('ul', null, x.mud.map((m) => h('li', null, m)))))) : null,
+        h('div', { class: 'linha-btn', style: 'margin:8px 0 30px' }, h('button', { class: 'btn sec', onclick: () => ir('#inicio') }, 'Voltar'), pe.ok ? h('button', { class: 'btn', onclick: editar }, 'Editar registro') : null)));
+  }
+
+  // ---------- Termo de uso e privacidade ----------
+  function textoTermo() {
+    return h('div', { class: 'termo' },
+      h('p', null, 'Este aplicativo é da Neofloresta Serviços Ecossistêmicos Ltda. e serve para registrar o inventário da arborização urbana nos projetos contratados.'),
+      h('h4', null, 'Dados pessoais tratados'),
+      h('p', null, 'Usuário, nome e equipe de quem usa o app, data, hora e posição do aparelho no momento de cada registro, e o modelo do aparelho. Não coletamos contatos, arquivos pessoais nem a localização fora do registro das árvores.'),
+      h('h4', null, 'Para que usamos'),
+      h('p', null, 'Identificar quem fez cada registro, garantir a qualidade e a rastreabilidade do inventário (histórico de alterações e registro de auditoria) e cumprir o contrato com o cliente. A base legal é a execução de contrato e o legítimo interesse (Lei 13.709/2018, art. 7º, incisos V e IX).'),
+      h('h4', null, 'Onde ficam e por quanto tempo'),
+      h('p', null, 'Em planilhas e pastas do Google Drive da Neofloresta, com acesso restrito à coordenação, e no próprio aparelho até o envio. Guardamos durante o contrato e pelo prazo exigido para prestação de contas. O cliente recebe os dados do inventário, sem os dados internos das equipes.'),
+      h('h4', null, 'Segurança'),
+      h('p', null, 'Conexão criptografada (HTTPS), senha guardada de forma criptografada, bloqueio após senhas erradas, sessão com prazo de validade e cópia de segurança diária.'),
+      h('h4', null, 'Seus direitos'),
+      h('p', null, 'Você pode pedir acesso, correção ou exclusão dos seus dados pessoais à coordenação do projeto ou pelo email de contato da Neofloresta.'),
+      h('h4', null, 'Uso correto'),
+      h('p', null, 'O usuário e a senha são pessoais. Não compartilhe. Registre apenas informações verdadeiras observadas em campo.'),
+      h('p', { class: 'dica' }, 'Versão do termo: ' + TERMO_VERSAO));
+  }
+  function verTermo() { modal('Termo de uso e privacidade', textoTermo(), [{ texto: 'Fechar', valor: true }]); }
+  function telaTermo() {
+    const btn = h('button', { class: 'btn cheio', onclick: async () => {
+      btn.disabled = true;
+      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch((e) => { if (!/desconhecida/i.test(e.message)) throw e; }); S.sessao.usuario.termo_aceito_em = agoraISO(); await Store.set('sessao', S.sessao); rota(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
+    } }, 'Li e aceito');
+    $app.replaceChildren(topo('Termo de uso e privacidade', 'Leia antes de começar', null, null), h('main', null, h('div', { class: 'cartao' }, textoTermo()), h('div', { style: 'margin-bottom:30px' }, btn, h('button', { class: 'btn linha cheio', style: 'margin-top:10px', onclick: () => sair(true) }, 'Não aceito, sair'))));
+  }
+  function telaSobre() {
+    $app.replaceChildren(topo('Sobre', 'Neofloresta Inventário', h('button', { class: 'ic', onclick: () => history.back(), 'aria-label': 'Voltar' }, ico('voltar')), null),
+      h('main', null,
+        h('div', { class: 'cartao sobre' }, h('img', { src: 'icons/logo-horizontal.png', alt: 'Neofloresta', style: 'max-width:240px' }),
+          h('p', null, h('b', null, 'Neofloresta Inventário'), ' · versão ', VERSAO, S.sessao && S.sessao.versaoScript ? ' · servidor ' + S.sessao.versaoScript : ''),
+          h('p', null, 'Coleta de campo, validação, painel e entrega dos dados do inventário da arborização urbana. Funciona sem internet: os registros ficam no aparelho e são enviados quando houver conexão.'),
+          h('p', { class: 'dica' }, 'Neofloresta Serviços Ecossistêmicos Ltda. · Dois Vizinhos/PR')),
+        h('div', { class: 'cartao' }, h('h3', null, 'Termo de uso e privacidade'), textoTermo(), S.sessao && S.sessao.usuario.termo_aceito_em ? h('p', { class: 'dica' }, 'Aceito em ' + dataBR(S.sessao.usuario.termo_aceito_em)) : null)));
+  }
+
+  // ---------- Painel, relatório e validação ----------
+  const COR_RISCO = { Baixo: '#3CB300', 'Médio': '#D9C21E', Alto: '#E10000', Severo: '#7606DE', Extremo: '#7606DE' };
+  const COR_VAL = { Validado: '#2E7D32', Pendente: '#8A969C', Corrigido: '#12A6C8', Devolvido: '#CD834C', Descartado: '#B0BEC5' };
+  const CORES = ['#00546E', '#CD834C', '#12A6C8', '#5B8C5A', '#8E6C8A', '#C9A227'];
+  const fmtN = (n) => (n == null ? '' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 1 }));
+  const fmtP = (x) => (x == null || !isFinite(x) ? '' : (x * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%');
+  function barras(itens, opts = {}) {
+    const max = Math.max(1, ...itens.map((i) => i.n)); const tot = opts.total || itens.reduce((a, i) => a + i.n, 0);
+    return h('div', { class: 'barras' }, itens.map((i, k) => h('div', { class: 'barra' },
+      h('span', { class: 'b-rot', title: i.rot }, i.it ? h('i', null, i.rot) : i.rot),
+      h('span', { class: 'b-tri' }, h('span', { class: 'b-enc', style: `width:${(100 * i.n / max).toFixed(1)}%;background:${i.cor || opts.cor || CORES[0]}` })),
+      h('span', { class: 'b-val' }, fmtN(i.n), opts.pct !== false && tot ? h('small', null, ' ' + fmtP(i.n / tot)) : null))));
+  }
+  function serieDias(porDia, equipes) {
+    const dias = Object.keys(porDia).sort(); if (!dias.length) return h('p', { class: 'dica' }, 'Sem registros ainda.');
+    const W = 640, H = 200, ml = 34, mb = 22, mt = 8; const bw = (W - ml - 8) / dias.length;
+    const tot = dias.map((d) => equipes.reduce((a, e) => a + (porDia[d][e] || 0), 0)); const max = Math.max(1, ...tot);
+    const passo = Math.pow(10, Math.floor(Math.log10(max))); const topo_ = Math.ceil(max / passo) * passo;
+    const y = (v) => H - mb - (v / topo_) * (H - mb - mt);
+    const ns = 'http://www.w3.org/2000/svg'; const el = (t, a, txt) => { const e = document.createElementNS(ns, t); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; return e; };
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img', 'aria-label': 'Registros por dia' });
+    [0, topo_ / 2, topo_].forEach((v) => { svg.append(el('line', { x1: ml, x2: W - 4, y1: y(v), y2: y(v), stroke: '#E3E8EA' })); svg.append(el('text', { x: ml - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#5B6B72' }, fmtN(v))); });
+    dias.forEach((d, i) => {
+      let acc = 0; const x = ml + i * bw + bw * 0.15, w = Math.max(1, bw * 0.7);
+      equipes.forEach((e, k) => { const v = porDia[d][e] || 0; if (!v) return; const r = el('rect', { x, width: w, y: y(acc + v), height: y(acc) - y(acc + v), fill: CORES[k % CORES.length], rx: 1.5 }); r.append(el('title', {}, `${d.slice(8, 10)}/${d.slice(5, 7)} · ${e}: ${v}`)); svg.append(r); acc += v; });
+      const k = Math.max(1, Math.ceil(dias.length / 10)); if (i % k === 0) svg.append(el('text', { x: x + w / 2, y: H - 6, 'text-anchor': 'middle', 'font-size': 10, fill: '#5B6B72' }, `${d.slice(8, 10)}/${d.slice(5, 7)}`));
+    });
+    return h('div', null, svg, h('div', { class: 'leg' }, equipes.map((e, k) => h('span', null, h('i', { style: `background:${CORES[k % CORES.length]}` }), e))));
+  }
+  const kpi = (rot, val, sub, cls) => h('div', { class: 'kpi ' + (cls || '') }, h('small', null, rot), h('b', null, val), sub ? h('span', null, sub) : null);
+
+  async function dadosPainel(forcar) {
+    const chave = S.projeto.id;
+    if (!forcar && S.painel && S.painel.id === chave && Date.now() - S.painel.t < 120000) return S.painel.d;
+    const d = await Api.b.painel(chave); S.painel = { id: chave, t: Date.now(), d }; return d;
+  }
+  function analisarPainel(d, form) {
+    const cRisco = form.campos.find((c) => c.tipo === 'choice' && /^risco$/i.test(norm(c.nome)));
+    const cCat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
+    const cSit = form.campos.find((c) => c.tipo === 'choice' && /situacao/i.test(norm(c.nome)));
+    const risco = cRisco ? cRisco.opcoes.map((o) => ({ rot: o.t, n: (d.escolhas[cRisco.nome] || {})[o.v] || 0, cor: COR_RISCO[o.v] })) : [];
+    const cat = cCat ? cCat.opcoes.map((o, k) => ({ rot: o.t.replace(/\s*\(.*\)/, ''), n: (d.escolhas[cCat.nome] || {})[o.v] || 0, cor: CORES[k % CORES.length] })) : [];
+    const ind = cCat ? ['1', '2', '3'].reduce((a, v) => a + ((d.escolhas[cCat.nome] || {})[v] || 0), 0) : d.total;
+    const sit = cSit ? cSit.opcoes.map((o) => ({ rot: o.t, n: (d.escolhas[cSit.nome] || {})[o.v] || 0 })) : [];
+    const manejo = form.campos.filter((c) => c.tipo === 'bool' && /^manejo/i.test(c.nome)).map((c) => ({ rot: c.rotulo, n: d.marcados[c.nome] || 0 })).sort((a, b) => b.n - a.n);
+    const ocorr = form.campos.filter((c) => c.tipo === 'bool' && !/^manejo|ausente|nenhum|sem interfer/i.test(c.nome)).map((c) => ({ rot: c.rotulo + (form.abas.some((a) => a.campos.some((x) => x.campo === c.nome && x.grupo)) ? '' : ''), n: d.marcados[c.nome] || 0 })).filter((x) => x.n).sort((a, b) => b.n - a.n).slice(0, 12);
+    const val = ['Validado', 'Corrigido', 'Pendente', 'Devolvido'].map((k) => ({ rot: ROT_VAL[k] || k, n: d.validacao[k] || 0, cor: COR_VAL[k] }));
+    const esp = (d.especies || []).map(([e, n]) => ({ rot: e, n, it: true }));
+    const nEsp = d.especies.reduce((a, [, n]) => a + n, 0);
+    const generos = {}; (d.especies || []).forEach(([e, n]) => { const g = String(e).split(/\s+/)[0]; if (g) generos[g] = (generos[g] || 0) + n; });
+    const topEsp = esp[0] ? esp[0].n / Math.max(1, nEsp) : 0; const gen = Object.entries(generos).sort((a, b) => b[1] - a[1])[0];
+    const topGen = gen ? gen[1] / Math.max(1, nEsp) : 0;
+    const altoN = cRisco ? ((d.escolhas[cRisco.nome] || {}).Alto || 0) + ((d.escolhas[cRisco.nome] || {}).Severo || 0) : 0;
+    return { risco, cat, ind, sit, manejo, ocorr, val, esp, nEsp, topEsp, gen, topGen, altoN };
+  }
+  async function telaPainel(forcar) {
+    const corpo = h('main', { class: 'painel' }, h('div', { class: 'info' }, 'Carregando indicadores...'));
+    const voltar = perfil() === 'cliente' ? h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')) : h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar'));
+    $app.replaceChildren(topo('Painel', S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')))), corpo);
+    let d; try { d = await dadosPainel(forcar); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, 'Não foi possível carregar o painel: ' + e.message)); return; }
+    const A = analisarPainel(d, S.form); const p = d.projeto || S.projeto;
+    const meta = +(p.meta || 0); const validados = d.validacao.Validado || 0;
+    const equipes = Object.keys(d.equipes).sort();
+    const dias = Object.keys(d.porDia).sort(); const ult7 = dias.slice(-7); const media7 = ult7.length ? ult7.reduce((a, x) => a + Object.values(d.porDia[x]).reduce((s, v) => s + v, 0), 0) / ult7.length : 0;
+    const faltam = meta ? Math.max(0, meta - d.total) : 0; const previsao = meta && media7 ? Math.ceil(faltam / media7) : null;
+    const alertas = [];
+    if (A.topEsp > 0.1 && A.esp[0]) alertas.push(`A espécie mais comum (${A.esp[0].rot}) tem ${fmtP(A.topEsp)} dos indivíduos. A referência de diversidade recomenda no máximo 10% por espécie.`);
+    if (A.topGen > 0.2 && A.gen) alertas.push(`O gênero ${A.gen[0]} tem ${fmtP(A.topGen)} dos indivíduos. A referência recomenda no máximo 20% por gênero.`);
+    if (d.semCoordenada) alertas.push(`${fmtN(d.semCoordenada)} registro(s) sem coordenada.`);
+    if (d.gps && d.gps.ate5m < 0.8) alertas.push(`Só ${fmtP(d.gps.ate5m)} dos pontos têm GPS com erro de até 5 m.`);
+    corpo.replaceChildren(
+      h('div', { class: 'painel-cab' }, h('div', null, p.contratante ? h('div', null, p.contratante) : null, p.municipio ? h('small', null, p.municipio + (p.contrato ? ' · Contrato ' + p.contrato : '')) : null),
+        h('small', null, (perfil() === 'cliente' ? 'Dados validados pela Neofloresta. ' : '') + 'Atualizado às ' + new Date(d.gerado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), ' ', h('button', { class: 'btn sec peq', onclick: () => telaPainel(true) }, 'Atualizar'))),
+      h('div', { class: 'kpis' },
+        kpi('Registros', fmtN(d.total), meta ? `${fmtP(d.total / meta)} da meta de ${fmtN(meta)}` : `${fmtN(A.ind)} indivíduos`),
+        perfil() !== 'cliente' ? kpi('Validados', fmtN(validados), d.total ? fmtP(validados / d.total) + ' do total' : '') : kpi('Indivíduos', fmtN(A.ind), 'árvores, arbustos e palmeiras'),
+        kpi('Espécies', fmtN(d.nEspecies), A.esp[0] ? 'mais comum: ' + A.esp[0].rot : ''),
+        A.risco.length ? kpi('Risco alto', fmtN(A.altoN), A.ind ? fmtP(A.altoN / A.ind) + ' dos indivíduos' : '', A.altoN ? 'alerta' : '') : null,
+        kpi('Ritmo', fmtN(Math.round(media7)), 'registros por dia (últimos 7 dias de campo)' + (previsao != null ? ` · faltam cerca de ${fmtN(previsao)} dias` : '')),
+        d.gps ? kpi('Precisão do GPS', fmtN(d.gps.mediana) + ' m', fmtP(d.gps.ate5m) + ' com erro até 5 m') : null),
+      alertas.length && perfil() !== 'cliente' ? h('div', { class: 'cartao alertas' }, h('h3', null, 'Pontos de atenção'), h('ul', null, alertas.map((a) => h('li', null, a)))) : null,
+      h('div', { class: 'grade-cartoes' },
+        h('div', { class: 'cartao larga' }, h('h3', null, 'Registros por dia de campo'), serieDias(d.porDia, equipes)),
+        perfil() !== 'cliente' ? h('div', { class: 'cartao' }, h('h3', null, 'Situação da validação'), barras(A.val, { total: d.total })) : null,
+        A.cat.length ? h('div', { class: 'cartao' }, h('h3', null, 'Categoria'), barras(A.cat)) : null,
+        A.risco.length ? h('div', { class: 'cartao' }, h('h3', null, 'Classe de risco'), barras(A.risco)) : null,
+        h('div', { class: 'cartao' }, h('h3', null, 'Espécies mais comuns'), barras(A.esp.slice(0, 12), { total: A.nEsp })),
+        d.classesDap.length ? h('div', { class: 'cartao' }, h('h3', null, 'Classes de DAP'), barras(d.classesDap.map((c) => ({ rot: c.ate ? `${c.de} a ${c.ate} cm` : `${c.de} cm ou mais`, n: c.n })))) : null,
+        A.manejo.length ? h('div', { class: 'cartao' }, h('h3', null, 'Manejo recomendado'), barras(A.manejo.filter((x) => x.n), { total: A.ind, cor: CORES[1] })) : null,
+        A.ocorr.length ? h('div', { class: 'cartao' }, h('h3', null, 'Ocorrências observadas'), barras(A.ocorr, { total: A.ind, cor: CORES[2] })) : null,
+        perfil() !== 'cliente' ? h('div', { class: 'cartao' }, h('h3', null, 'Por equipe'), barras(equipes.map((e, k) => ({ rot: e, n: d.equipes[e], cor: CORES[k % CORES.length] })))) : null),
+      h('div', { class: 'linha-btn', style: 'margin:6px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#relatorio') }, 'Relatório para imprimir ou PDF'), h('button', { class: 'btn sec', onclick: () => ir('#mapa') }, 'Ver no mapa'),
+        perfil() === 'cliente' ? h('button', { class: 'btn sec', onclick: () => exportarCliente() }, 'Baixar dados') : null));
+  }
+  async function telaRelatorio() {
+    const corpo = h('main', { class: 'relatorio' }, h('div', { class: 'info' }, 'Montando o relatório...'));
+    $app.replaceChildren(h('div', { class: 'nao-imprime' }, topo('Relatório', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#painel'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: () => window.print() }, 'Imprimir ou PDF'))), corpo);
+    let d; try { d = await dadosPainel(); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); return; }
+    const A = analisarPainel(d, S.form); const p = d.projeto || S.projeto; const agora = new Date();
+    const tab = (cab, linhas) => h('table', { class: 'tab-rel' }, h('tr', null, cab.map((c) => h('th', null, c))), linhas.map((l) => h('tr', null, l.map((c) => h('td', null, c)))));
+    const pct = (n, t) => (t ? fmtP(n / t) : '');
+    const equipes = Object.keys(d.equipes).sort(); const dias = Object.keys(d.porDia).sort();
+    Api.b.auditar && Api.b.auditar('relatorio', S.projeto.id, '');
+    corpo.replaceChildren(
+      h('header', { class: 'rel-cab' }, h('img', { src: 'icons/logo-horizontal.png', alt: 'Neofloresta' }), h('div', null, h('h1', null, 'Relatório de andamento do inventário'), h('p', null, p.nome), h('small', null, [p.contratante, p.municipio, p.contrato ? 'Contrato ' + p.contrato : ''].filter(Boolean).join(' · ')))),
+      h('p', { class: 'rel-data' }, 'Emitido em ' + agora.toLocaleDateString('pt-BR') + ' às ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + (perfil() === 'cliente' ? '. Considera apenas registros validados.' : '. Considera todos os registros enviados, exceto os descartados.')),
+      h('h2', null, '1. Resumo'),
+      tab(['Indicador', 'Valor'], [
+        ['Registros', fmtN(d.total)], ['Indivíduos (árvores, arbustos e palmeiras)', fmtN(A.ind)], p.meta ? ['Meta do contrato', `${fmtN(p.meta)} (${fmtP(d.total / p.meta)} concluído)`] : null,
+        ['Espécies distintas', fmtN(d.nEspecies)], perfil() !== 'cliente' ? ['Validados', `${fmtN(d.validacao.Validado || 0)} (${pct(d.validacao.Validado || 0, d.total)})`] : null,
+        A.risco.length ? ['Indivíduos com risco alto', `${fmtN(A.altoN)} (${pct(A.altoN, A.ind)})`] : null,
+        ['Dias de campo', fmtN(dias.length)], d.gps ? ['Precisão mediana do GPS', fmtN(d.gps.mediana) + ' m'] : null].filter(Boolean)),
+      A.cat.length ? [h('h2', null, '2. Registros por categoria'), tab(['Categoria', 'Quantidade', '%'], A.cat.map((c) => [c.rot, fmtN(c.n), pct(c.n, d.total)]))] : null,
+      h('h2', null, '3. Composição de espécies'),
+      h('p', null, `Foram registradas ${fmtN(d.nEspecies)} espécies. ` + (A.esp[0] ? `A mais comum é ${A.esp[0].rot}, com ${fmtP(A.topEsp)} dos indivíduos identificados` + (A.topEsp > 0.1 ? ', acima do limite de referência de 10% por espécie.' : ', dentro do limite de referência de 10% por espécie.') : '')),
+      tab(['Espécie', 'Indivíduos', '%'], A.esp.slice(0, 30).map((e) => [h('i', null, e.rot), fmtN(e.n), pct(e.n, A.nEsp)])),
+      d.classesDap.length ? [h('h2', null, '4. Classes de diâmetro (DAP)'), tab(['Classe', 'Indivíduos', '%'], d.classesDap.map((c) => [c.ate ? `${c.de} a ${c.ate} cm` : `${c.de} cm ou mais`, fmtN(c.n), pct(c.n, d.classesDap.reduce((a, x) => a + x.n, 0))]))] : null,
+      A.risco.length ? [h('h2', null, '5. Classe de risco'), tab(['Classe', 'Indivíduos', '%'], A.risco.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
+      A.manejo.length ? [h('h2', null, '6. Manejo recomendado'), tab(['Manejo', 'Indivíduos', '%'], A.manejo.filter((x) => x.n).map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
+      A.ocorr.length ? [h('h2', null, '7. Ocorrências observadas'), tab(['Ocorrência', 'Indivíduos', '%'], A.ocorr.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
+      h('h2', null, '8. Produção de campo'),
+      tab(['Data', ...equipes, 'Total'], dias.map((x) => { const v = equipes.map((e) => d.porDia[x][e] || 0); return [`${x.slice(8, 10)}/${x.slice(5, 7)}/${x.slice(0, 4)}`, ...v.map(fmtN), fmtN(v.reduce((a, b) => a + b, 0))]; })),
+      h('footer', { class: 'rel-rodape' }, 'Neofloresta Serviços Ecossistêmicos Ltda. · Gerado pelo Neofloresta Inventário ' + VERSAO));
+  }
+
+  // ---------- Validação (coordenação e revisão técnica) ----------
+  // grava a decisão no servidor e atualiza a lista guardada; devolve true se gravou
+  async function decidirRegistros(estado, uuids) {
+    let obs = '';
+    if (estado !== 'Validado') {
+      const t = h('textarea', { class: 'entrada', placeholder: estado === 'Devolvido' ? 'Ex.: conferir a espécie e refazer a foto 1' : 'Ex.: registro duplicado' });
+      const ok = await modal(estado === 'Devolvido' ? 'Devolver para a equipe' : 'Descartar', h('div', null, h('p', null, `${uuids.length} registro(s). Escreva o motivo${estado === 'Devolvido' ? ', que a equipe vê no aparelho' : ''}:`), t), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: estado === 'Devolvido' ? 'Devolver' : 'Descartar', classe: estado === 'Descartado' ? 'perigo' : '', valor: true }]);
+      if (!ok) return false; obs = t.value.trim(); if (!obs) { toast('Informe o motivo.'); return false; }
+    } else if (uuids.length > 1 && !(await confirmar('Validar registros', `Validar ${uuids.length} registro(s)? Depois de validados, a equipe não consegue mais alterar.`, 'Validar'))) return false;
+    try {
+      for (let i = 0; i < uuids.length; i += 500) await Api.b.validar(S.projeto.id, uuids.slice(i, i + 500).map((u) => ({ uuid: u, estado, obs })));
+      const c = S.linhas[S.projeto.id]; const agora = agoraISO(); const set = new Set(uuids);
+      if (c) for (const l of c.linhas) if (set.has(l.uuid)) Object.assign(l, { validacao: estado, validacao_obs: obs, validado_por: S.sessao.u, validado_em: agora });
+      S.painel = null; toast(`${uuids.length} registro(s): ${estado.toLowerCase()}.`); return true;
+    } catch (e) { toast(e.message, 5000); return false; }
+  }
+  function alertasDe(l, form, dups) {
+    const a = []; const cc = campoCodigo(form), ce = campoEspecie(form);
+    const cat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
+    const ind = !cat || ['1', '2', '3'].includes(String(l[cat.nome]));
+    if (l.latitude === '' || l.latitude == null) a.push('Sem coordenada'); else if (+l.precisao_gps_m > 10) a.push(`GPS ±${Math.round(l.precisao_gps_m)} m`);
+    const f1 = form.campos.find((c) => c.tipo === 'photo'); if (f1 && !l[f1.nome]) a.push('Sem foto');
+    if (ind && ce) { const e = String(l[ce.nome] || '').trim(); if (!e) a.push('Sem espécie'); else if ((form.especies || []).length && !form.especies.some((x) => norm(x.cientifico) === norm(e))) a.push('Espécie fora da lista'); }
+    for (const c of form.campos) {
+      if (c.tipo !== 'number' && c.tipo !== 'multinumber') continue; const v = Indicadores.valorNum(l[c.nome], c.tipo === 'multinumber'); if (v == null) continue;
+      if (/altura/i.test(c.nome) && v > 35) a.push('Altura alta: ' + numBR(v) + ' m');
+      if (/dap/i.test(c.nome) && v > 200) a.push('DAP alto: ' + numBR(Math.round(v)) + ' cm');
+      if (/raio/i.test(c.nome) && v > 20) { if (!a.some((x) => /^Raio/.test(x))) a.push('Raio de copa alto'); }
+      if (c.min != null && v < c.min) a.push(c.rotulo + ' abaixo de ' + numBR(c.min));
+    }
+    if (cc && l[cc.nome] && dups.has(String(l[cc.nome]))) a.push('Código repetido');
+    return a;
+  }
+  async function linhasProjeto(forcar, progresso) {
+    const id = S.projeto.id; const c = S.linhas[id];
+    if (!forcar && c && Date.now() - c.t < 300000) return c.linhas;
+    const linhas = await Api.b.listarTudo(id, progresso);
+    S.linhas[id] = { t: Date.now(), linhas }; return linhas;
+  }
+  async function telaValidacao(forcar) {
+    const form = S.form; const cc = campoCodigo(form), ce = campoEspecie(form);
+    const cat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
+    const corpo = h('main', { class: 'validacao' }, h('div', { class: 'info' }, 'Carregando registros...'));
+    $app.replaceChildren(topo('Validação', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: () => telaValidacao(true) }, 'Atualizar')), corpo);
+    let linhas; try { linhas = await linhasProjeto(forcar, (n, t) => { const i = corpo.querySelector('.info'); if (i) i.textContent = `Carregando registros: ${fmtN(n)}${t ? ' de ' + fmtN(t) : ''}...`; }); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); return; }
+    const cont = {}; linhas.forEach((l) => { const k = cc ? String(l[cc.nome] || '') : ''; if (k) cont[k] = (cont[k] || 0) + 1; });
+    const dups = new Set(Object.keys(cont).filter((k) => cont[k] > 1));
+    linhas.forEach((l) => { l.__alertas = alertasDe(l, form, dups); l.validacao = l.validacao || 'Pendente'; });
+    const F = S.filtroVal = S.filtroVal || { sit: 'revisar', eq: '', alerta: '', q: '', limite: 100 };
+    const sel = new Set();
+    const selSit = h('select', { class: 'entrada' }, [['revisar', 'A revisar (aguardando e corrigidos)'], ['Pendente', 'Aguardando validação'], ['Corrigido', 'Corrigidos'], ['Devolvido', 'Devolvidos'], ['Validado', 'Validados'], ['Descartado', 'Descartados'], ['', 'Todos']].map(([v, t]) => h('option', { value: v, selected: F.sit === v }, t)));
+    const eqs = [...new Set(linhas.map((l) => l.equipe || ''))].filter(Boolean).sort();
+    const selEq = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todas as equipes'), eqs.map((e) => h('option', { value: e, selected: F.eq === e }, e)));
+    const selAl = h('select', { class: 'entrada' }, [['', 'Com e sem alerta'], ['com', 'Só com alerta'], ['sem', 'Só sem alerta']].map(([v, t]) => h('option', { value: v, selected: F.alerta === v }, t)));
+    const busca = h('input', { class: 'entrada', placeholder: 'Código ou espécie', value: F.q });
+    const resumo = h('div', { class: 'val-resumo' }); const lista = h('div', { class: 'val-lista' }); const acoes = h('div', { class: 'val-acoes' });
+    const filtradas = () => linhas.filter((l) => (F.sit === 'revisar' ? ['Pendente', 'Corrigido'].includes(l.validacao) : !F.sit || l.validacao === F.sit) && (!F.eq || l.equipe === F.eq)
+      && (!F.alerta || (F.alerta === 'com' ? l.__alertas.length : !l.__alertas.length)) && (!F.q || norm((cc ? l[cc.nome] : '') + ' ' + (ce ? l[ce.nome] : '')).includes(norm(F.q))))
+      .sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)));
+    function desenhar() {
+      const vis = filtradas(); S.navVal = vis.map((l) => l.uuid);
+      const c = {}; linhas.forEach((l) => (c[l.validacao] = (c[l.validacao] || 0) + 1));
+      resumo.replaceChildren(...['Pendente', 'Corrigido', 'Devolvido', 'Validado', 'Descartado'].map((k) => h('span', { class: 'val-chip', style: `border-color:${COR_VAL[k]}` }, h('b', null, fmtN(c[k] || 0)), ' ', ROT_VAL[k].replace(', aguardando nova validação', ''))));
+      lista.replaceChildren(...vis.slice(0, F.limite).map((l) => {
+        const cb = h('input', { type: 'checkbox', checked: sel.has(l.uuid), onchange: () => { if (cb.checked) sel.add(l.uuid); else sel.delete(l.uuid); pintarAcoes(); }, 'aria-label': 'Selecionar' });
+        return h('div', { class: 'val-item' }, cb, h('button', { class: 'val-txt', onclick: () => ir('#ficha/' + encodeURIComponent(l.uuid)) },
+          h('b', null, (cc && l[cc.nome]) || 'Sem código'), h('i', null, (ce && l[ce.nome]) || (cat ? rotuloOpcao(cat, l[cat.nome]).replace(/\s*\(.*\)/, '') : '')),
+          h('small', null, `${dataBR(l.criado_em)} · ${l.equipe || ''}`), l.__alertas.length ? h('span', { class: 'al' }, l.__alertas.join(' · ')) : null),
+          h('span', { class: 'st v-' + norm(l.validacao) }, l.validacao));
+      }), vis.length > F.limite ? h('button', { class: 'btn sec cheio', onclick: () => { F.limite += 200; desenhar(); } }, `Mostrar mais (${fmtN(vis.length - F.limite)} restantes)`) : null,
+      !vis.length ? h('div', { class: 'vazio-lista' }, 'Nenhum registro neste filtro.') : null);
+      pintarAcoes();
+    }
+    async function aplicar(estado, uuids) {
+      if (!uuids.length) return toast('Selecione pelo menos um registro.');
+      if (await decidirRegistros(estado, uuids)) { uuids.forEach((u) => sel.delete(u)); desenhar(); }
+    }
+    function pintarAcoes() {
+      const vis = filtradas(); const semAlerta = vis.filter((l) => !l.__alertas.length && l.validacao !== 'Validado').map((l) => l.uuid);
+      acoes.replaceChildren(h('label', { class: 'tudo' }, h('input', { type: 'checkbox', checked: vis.length && vis.slice(0, F.limite).every((l) => sel.has(l.uuid)), onchange: (e) => { vis.slice(0, F.limite).forEach((l) => (e.target.checked ? sel.add(l.uuid) : sel.delete(l.uuid))); desenhar(); } }), ' Marcar os visíveis'),
+        h('button', { class: 'btn peq', disabled: !sel.size, onclick: () => aplicar('Validado', [...sel]) }, `Validar (${sel.size})`),
+        h('button', { class: 'btn sec peq', disabled: !sel.size, onclick: () => aplicar('Devolvido', [...sel]) }, 'Devolver'),
+        h('button', { class: 'btn perigo peq', disabled: !sel.size, onclick: () => aplicar('Descartado', [...sel]) }, 'Descartar'),
+        semAlerta.length ? h('button', { class: 'btn sec peq', onclick: () => aplicar('Validado', semAlerta) }, `Validar todos sem alerta (${fmtN(semAlerta.length)})`) : null);
+    }
+    const mudou = () => { F.sit = selSit.value; F.eq = selEq.value; F.alerta = selAl.value; F.q = busca.value; F.limite = 100; sel.clear(); desenhar(); };
+    [selSit, selEq, selAl].forEach((x) => x.addEventListener('change', mudou)); let tb; busca.addEventListener('input', () => { clearTimeout(tb); tb = setTimeout(mudou, 250); });
+    corpo.replaceChildren(resumo, h('div', { class: 'val-filtros' }, selSit, selEq, selAl, busca), acoes, lista);
+    desenhar();
+  }
+  const idDrive = (u) => { const m = String(u || '').match(/\/d\/([\w-]{20,})/) || String(u || '').match(/id=([\w-]{20,})/); return m ? m[1] : null; };
+  async function telaFichaServidor(uuidR) {
+    const form = S.form;
+    let linhas; try { linhas = await linhasProjeto(false); } catch (e) { return toast(e.message); }
+    const l = linhas.find((x) => x.uuid === uuidR); if (!l) { toast('Registro não encontrado.'); return ir(ehCoord() ? '#validacao' : '#painel'); }
+    const valores = {}; for (const c of form.campos) { let v = l[c.nome]; if (c.tipo === 'bool') v = v === 1 || v === '1' || v === true; valores[c.nome] = v; }
+    const fotos = form.campos.filter((c) => c.tipo === 'photo' && l[c.nome]).map((c) => { const link = l[c.nome + ' link']; const id = idDrive(link); return { rotulo: c.rotulo, src: id ? `https://drive.google.com/thumbnail?id=${id}&sz=w800` : null, link: link || '' }; });
+    const nav = S.navVal || []; const i = nav.indexOf(uuidR);
+    const irPara = (k) => { if (k >= 0 && k < nav.length) ir('#ficha/' + encodeURIComponent(nav[k])); };
+    const cc = campoCodigo(form);
+    const decidir = async (estado) => { if (!(await decidirRegistros(estado, [uuidR]))) return; if (i >= 0 && i + 1 < nav.length) irPara(i + 1); else ir('#validacao'); };
+    const mapaDiv = h('div', { class: 'mapa-mini', style: 'height:220px' });
+    $app.replaceChildren(topo((cc && l[cc.nome]) || 'Registro', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(ehCoord() ? '#validacao' : '#mapa'), 'aria-label': 'Voltar' }, ico('voltar')), nav.length && ehCoord() ? h('span', { class: 'nav-n' }, `${i + 1} de ${nav.length}`) : null),
+      h('main', null,
+        h('div', { class: 'cartao status-ficha st-' + norm(l.validacao || 'pendente') }, h('b', null, ROT_VAL[l.validacao || 'Pendente'] || l.validacao),
+          l.validacao_obs ? h('p', null, 'Motivo: ' + l.validacao_obs) : null,
+          h('small', null, `${dataBR(l.criado_em)} · ${l.equipe || ''}${l.usuario ? ' (' + l.usuario + ')' : ''}${l.precisao_gps_m ? ' · GPS ±' + Math.round(l.precisao_gps_m) + ' m' : ''}${l.validado_por ? ' · avaliado por ' + l.validado_por + ' em ' + dataBR(l.validado_em) : ''}`),
+          l.__alertas && l.__alertas.length ? h('p', { class: 'al' }, 'Alertas: ' + l.__alertas.join(' · ')) : null),
+        l.latitude !== '' && l.latitude != null ? h('div', { class: 'cartao' }, mapaDiv, h('a', { href: `https://www.google.com/maps/search/?api=1&query=${l.latitude},${l.longitude}`, target: '_blank', rel: 'noopener' }, 'Abrir no Google Maps')) : null,
+        fichaConteudo(form, valores, fotos),
+        l.historico ? h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Histórico de alterações'), String(l.historico).split(' | ').map((x) => h('p', { class: 'hist' }, x))) : null,
+        ehCoord() ? h('div', { class: 'linha-btn val-dec' },
+          h('button', { class: 'btn sec', disabled: i <= 0, onclick: () => irPara(i - 1) }, 'Anterior'),
+          h('button', { class: 'btn perigo', onclick: () => decidir('Descartado') }, 'Descartar'),
+          h('button', { class: 'btn sec', onclick: () => decidir('Devolvido') }, 'Devolver'),
+          h('button', { class: 'btn', onclick: () => decidir('Validado') }, 'Validar'),
+          h('button', { class: 'btn sec', disabled: i < 0 || i >= nav.length - 1, onclick: () => irPara(i + 1) }, 'Próximo')) : null));
+    if (l.latitude !== '' && l.latitude != null) setTimeout(() => { const m = L.map(mapaDiv, { zoomControl: false, attributionControl: false }).setView([+l.latitude, +l.longitude], 19); camadasFundo(m, true); L.circleMarker([+l.latitude, +l.longitude], { radius: 8, color: '#fff', weight: 2, fillColor: '#E10000', fillOpacity: 1 }).addTo(m); }, 50);
+  }
+
+  // ---------- Exportação (coordenação e cliente) ----------
+  const FORMATOS = [['gpkg', 'GeoPackage (QGIS)'], ['xlsx', 'Excel (.xlsx)'], ['shp', 'Shapefile (.zip)'], ['csv', 'CSV'], ['kml', 'Google Earth (.kml)']];
+  async function exportarDados(p, formato, filtro, status) {
+    const msg = (t, cls = 'info') => status.replaceChildren(h('div', { class: cls }, t));
+    msg('Preparando...');
+    try {
+      const form = await Api.b.formulario(p.formulario);
+      let linhas = await Api.b.listarTudo(p.id, (n, t) => msg(`Baixando registros: ${fmtN(n)}${t ? ' de ' + fmtN(t) : ''}...`));
+      linhas = linhas.filter((l) => l.validacao !== 'Descartado' && (filtro !== 'validados' || l.validacao === 'Validado'));
+      if (!linhas.length) throw new Error(filtro === 'validados' ? 'Nenhum registro validado ainda.' : 'Nenhum registro enviado neste projeto ainda.');
+      // numeração única do projeto, sem distinção de equipe, pela ordem de coleta
+      [...linhas].sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)) || String(a.uuid).localeCompare(String(b.uuid))).forEach((l, i) => { l.numero_unico = i + 1; });
+      const cc = campoCodigo(form), ce = campoEspecie(form);
+      const dia = new Date().toISOString().slice(0, 10); const base = `${p.id}_${dia}${filtro === 'validados' ? '_validados' : ''}`;
+      const ordem = ['numero_unico', ...form.campos.flatMap((c) => (c.tipo === 'photo' ? [c.nome, c.nome + ' link'] : [c.nome])), 'latitude', 'longitude', 'precisao_gps_m', 'equipe', 'usuario', 'criado_em', 'concluido_em', 'atualizado_em', 'validacao', 'validacao_obs', 'validado_por', 'validado_em', 'historico', 'uuid'];
+      const todas = [...new Set(linhas.flatMap((l) => Object.keys(l)))].filter((c) => !c.startsWith('__'));
+      const cols = [...ordem.filter((c) => todas.includes(c)), ...todas.filter((c) => !ordem.includes(c) && !['projeto', 'servidor_em'].includes(c))];
+      // planilhas com rótulos legíveis e opções por extenso
+      const rot = (c) => { const k = form.campos.find((x) => x.nome === c); return k && k.rotulo !== c ? `${k.rotulo}` : c; };
+      const legivel = (l) => { const o = {}; for (const c of cols) { const k = form.campos.find((x) => x.nome === c); let v = l[c]; if (k && k.tipo === 'choice') v = rotuloOpcao(k, v); else if (k && k.tipo === 'bool') v = v === 1 || v === '1' || v === true ? 'Sim' : 'Não'; else if ((k && (k.tipo === 'datetime' || k.tipo === 'date')) || /_em$/.test(c)) { const d = v ? new Date(v) : null; if (d && !isNaN(d)) v = d.toLocaleString('pt-BR', k && k.tipo === 'date' ? { dateStyle: 'short' } : { dateStyle: 'short', timeStyle: 'short' }); } o[c] = v; } return o; };
+      const epsgNum = () => { if (/^\d+$/.test(String(p.epsg))) return +p.epsg; const lons = linhas.map((l) => +l.longitude).filter((x) => isFinite(x) && x); return UTM.epsgDoFuso(UTM.fuso(lons.length ? lons.reduce((a, b) => a + b, 0) / lons.length : -45)); };
+      if (formato === 'gpkg') {
+        const estilo = await Api.b.estilo(form.id).catch(() => null);
+        const r = await Gpkg.gerar({ form, linhas, epsg: p.epsg, nomeCamada: Q2F.slug(p.id).replace(/-/g, '_'), estiloQml: estilo });
+        baixar(base + '.gpkg', r.bytes, 'application/geopackage+sqlite3');
+        msg(`GeoPackage gerado: ${fmtN(r.total)} registros em SIRGAS 2000 / UTM (EPSG:${r.srs})${r.semPonto ? `, ${r.semPonto} sem coordenada` : ''}${estilo ? ', com a simbologia do QGIS embutida' : ''}. Fotos: baixe a pasta DCIM do projeto no Drive e coloque ao lado do arquivo.`);
+      } else if (formato === 'xlsx') {
+        const leg = linhas.map(legivel);
+        const dic = form.campos.map((c) => ({ Campo: c.nome, 'Nome no app': c.rotulo, Tipo: { choice: 'Lista de opções', bool: 'Sim ou não', number: 'Número', multinumber: 'Números por fuste', species: 'Espécie', photo: 'Foto', text: 'Texto', textarea: 'Texto longo', datetime: 'Data e hora', date: 'Data' }[c.tipo] || c.tipo, Opções: (c.opcoes || []).map((o) => `${o.v} = ${o.t}`).join('; ') }));
+        const b = await Arquivos.xlsx([{ nome: 'Registros', cols, linhas: leg.map((l) => Object.fromEntries(cols.map((c) => [c, l[c]]))) }, { nome: 'Dicionário de campos', cols: ['Campo', 'Nome no app', 'Tipo', 'Opções'], linhas: dic }]);
+        void rot; baixar(base + '.xlsx', b);
+        msg(`Excel gerado com ${fmtN(linhas.length)} registros e a aba "Dicionário de campos".`);
+      } else if (formato === 'shp') {
+        const epsg = epsgNum(); const z = UTM.fusoDoEpsg(epsg);
+        const pontos = linhas.map((l) => (l.latitude === '' || l.latitude == null ? null : (() => { const u = UTM.paraUTM(+l.latitude, +l.longitude, z); return { x: u.x, y: u.y }; })()));
+        const b = await Arquivos.shapefile({ nome: base, cols, linhas, pontos, prj: UTM.wkt(z) });
+        baixar(base + '_shapefile.zip', b);
+        msg(`Shapefile gerado com ${fmtN(linhas.length)} pontos em SIRGAS 2000 / UTM ${z}S (EPSG:${epsg}). Os nomes de campo do shapefile têm até 10 letras; o arquivo _campos.csv traz o nome completo de cada um.`);
+      } else if (formato === 'kml') {
+        const x = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const chave = (n) => n && /^(numero_unico|equipe|criado_em|precisao_gps_m|validacao)$|codigo|especie|categoria|situa|dap|altura|risco|foto 1 link/i.test(norm(n));
+        const ck = cols.filter(chave);
+        const pms = linhas.filter((l) => l.latitude !== '' && l.latitude != null).map((l) => { const g = legivel(l); return `<Placemark><name>${x(cc ? l[cc.nome] : l.numero_unico)}</name>${ce && l[ce.nome] ? `<description>${x(l[ce.nome])}</description>` : ''}<ExtendedData>${ck.map((c) => `<Data name="${x(rot(c))}"><value>${x(g[c])}</value></Data>`).join('')}</ExtendedData><Point><coordinates>${+l.longitude},${+l.latitude},0</coordinates></Point></Placemark>`; });
+        baixar(base + '.kml', `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(p.nome)}</name>${pms.join('\n')}</Document></kml>`, 'application/vnd.google-earth.kml+xml');
+        msg(`KML gerado com ${fmtN(pms.length)} pontos e os campos principais (abre no Google Earth e no Google Maps).`);
+      } else {
+        const esc = (v) => { const s = v == null ? '' : String(v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+        const csv = '﻿' + [cols.join(';'), ...linhas.map((l) => cols.map((c) => esc(l[c])).join(';'))].join('\r\n');
+        baixar(base + '.csv', csv, 'text/csv'); msg(`CSV gerado com ${fmtN(linhas.length)} linhas (separador ponto e vírgula).`);
+      }
+      Api.b.auditar('exportar', p.id, `${formato} ${filtro} ${linhas.length}`);
+    } catch (e) { msg(e.message, 'aviso'); }
+  }
+  async function adminExportar(corpo) {
+    const projetos = await Api.b.projetosListar();
+    const sel = h('select', { class: 'entrada' }, projetos.map((p) => h('option', { value: p.id, selected: S.projeto && p.id === S.projeto.id }, p.nome)));
+    const filtro = h('select', { class: 'entrada' }, h('option', { value: 'ativos' }, 'Todos os registros, menos os descartados'), h('option', { value: 'validados' }, 'Só os validados (entrega ao cliente)'));
+    const status = h('div'); const links = h('div');
+    const mostrarLinks = () => { const p = projetos.find((x) => x.id === sel.value); links.replaceChildren(p && (p.planilha_url || p.pasta_url) ? h('div', { class: 'info' }, p.planilha_url ? h('div', null, h('a', { href: p.planilha_url, target: '_blank', rel: 'noopener' }, 'Abrir planilha do projeto')) : null, p.pasta_url ? h('div', null, h('a', { href: p.pasta_url, target: '_blank', rel: 'noopener' }, 'Abrir pasta do projeto no Drive (fotos em DCIM)')) : null) : ''); };
+    sel.addEventListener('change', mostrarLinks); mostrarLinks();
+    corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Exportar dados'),
+      h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), sel), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Registros'), filtro)), links,
+      h('div', { class: 'linha-btn quebra' }, FORMATOS.map(([f, t], i) => h('button', { class: 'btn' + (i ? ' sec' : ''), onclick: () => exportarDados(projetos.find((x) => x.id === sel.value), f, filtro.value, status) }, t))),
+      h('p', { class: 'dica' }, 'Todos os formatos trazem a coluna numero_unico (numeração única do projeto, sem distinção de equipe) e a situação da validação. O Excel traz as opções por extenso e um dicionário de campos.'), status));
+  }
+  async function exportarCliente() {
+    const st = h('div');
+    await modal('Baixar dados validados', h('div', null, h('p', null, 'Escolha o formato. O arquivo traz os registros validados do projeto.'), h('div', { class: 'linha-btn quebra' }, FORMATOS.map(([f, t]) => h('button', { class: 'btn sec', onclick: () => exportarDados(S.projeto, f, 'validados', st) }, t))), st), [{ texto: 'Fechar', classe: 'sec', valor: null }]);
+  }
+
+  // ---------- Importação de inventário existente ----------
+  async function adminImportar(corpo) {
+    const projetos = await Api.b.projetosListar();
+    const sel = h('select', { class: 'entrada' }, projetos.map((p) => h('option', { value: p.id, selected: S.projeto && p.id === S.projeto.id }, p.nome)));
+    const arq = h('input', { type: 'file', accept: '.csv,.txt,.gpkg' });
+    const eq = h('input', { class: 'entrada', value: 'Inventário anterior', placeholder: 'ex.: Inventário 2019' });
+    const extra = h('input', { type: 'checkbox', checked: true });
+    const area = h('div');
+    async function ler() {
+      area.replaceChildren(h('div', { class: 'info' }, 'Lendo o arquivo...'));
+      try {
+        const f = arq.files[0]; if (!f) throw new Error('Escolha um arquivo .csv ou .gpkg.');
+        const p = projetos.find((x) => x.id === sel.value); const form = await Api.b.formulario(p.formulario);
+        let dados;
+        if (/\.gpkg$/i.test(f.name)) { dados = await Gpkg.lerFeicoes(await f.arrayBuffer()); if (!dados.convertivel) throw new Error(`O GeoPackage está no sistema EPSG:${dados.srs}, que o app ainda não converte. Use SIRGAS 2000 (geográfico ou UTM Sul).`); }
+        else dados = Arquivos.lerCsv(Arquivos.lerTexto(await f.arrayBuffer()));
+        if (!dados.linhas.length) throw new Error('O arquivo não tem linhas.');
+        const plano = planejarImportacao(dados, form, p);
+        mostrarPlano(plano, p, form);
+      } catch (e) { area.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
+    }
+    function mostrarPlano(plano, p, form) {
+      const ok = plano.linhas.filter((l) => l.latitude !== '');
+      const btn = h('button', { class: 'btn', onclick: () => enviar(plano, p) }, `Importar ${fmtN(plano.linhas.length)} registros`);
+      area.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Conferência antes de importar'),
+        h('p', null, `${fmtN(plano.linhas.length)} linhas, ${fmtN(ok.length)} com coordenada.`),
+        h('p', null, h('b', null, 'Colunas reconhecidas: '), plano.mapeadas.length ? plano.mapeadas.map(([o, d]) => (norm(o) === norm(d) ? d : `${o} → ${d}`)).join(', ') : 'nenhuma'),
+        plano.soltas.length ? h('p', null, h('b', null, 'Colunas sem correspondência no formulário: '), plano.soltas.join(', '), h('br'), h('label', null, extra, ' Manter essas colunas na planilha')) : null,
+        plano.avisos.length ? h('div', { class: 'aviso' }, h('ul', null, plano.avisos.map((a) => h('li', null, a)))) : null,
+        h('div', { style: 'overflow-x:auto' }, h('table', { class: 'tab' }, h('tr', null, plano.amostraCols.map((c) => h('th', null, c))), plano.linhas.slice(0, 5).map((l) => h('tr', null, plano.amostraCols.map((c) => h('td', null, String(l[c] ?? ''))))))),
+        btn, h('div', { id: 'imp-st' })));
+      void form;
+    }
+    async function enviar(plano, p) {
+      const st = area.querySelector('#imp-st');
+      if (!(await confirmar('Importar', `Importar ${fmtN(plano.linhas.length)} registros para ${p.nome}? Eles entram como "aguardando validação".`, 'Importar'))) return;
+      let ins = 0, ign = 0;
+      try {
+        const linhas = plano.linhas.map((l) => { const o = Object.assign({}, l); if (!extra.checked) plano.soltas.forEach((c) => delete o[c]); o.equipe = eq.value.trim() || 'Inventário anterior'; return o; });
+        for (let i = 0; i < linhas.length; i += 1000) {
+          st.replaceChildren(h('div', { class: 'info' }, `Enviando ${fmtN(Math.min(i + 1000, linhas.length))} de ${fmtN(linhas.length)}...`));
+          const r = await Api.b.importar(p.id, linhas.slice(i, i + 1000)); ins += r.inseridos; ign += r.ignorados;
+        }
+        S.linhas = {}; S.painel = null;
+        st.replaceChildren(h('div', { class: 'info' }, `Importação concluída: ${fmtN(ins)} registros inseridos${ign ? `, ${fmtN(ign)} já existiam e foram ignorados` : ''}.`));
+      } catch (e) { st.replaceChildren(h('div', { class: 'aviso' }, `Parou com erro depois de ${fmtN(ins)} inseridos: ${e.message}. Pode enviar de novo: os já importados são ignorados.`)); }
+    }
+    corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Importar inventário existente'),
+      h('p', { class: 'dica' }, 'Aceita CSV (separado por ponto e vírgula, vírgula ou tabulação) ou GeoPackage de pontos. As colunas com o mesmo nome dos campos do formulário são reconhecidas sozinhas; opções escritas por extenso (ex.: "Árvore") são convertidas. No CSV, use colunas latitude e longitude em graus decimais.'),
+      h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), sel), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome da origem (vai na coluna equipe)'), eq)),
+      h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Arquivo'), arq), h('button', { class: 'btn', onclick: ler }, 'Ler e conferir')), area);
+  }
+  function planejarImportacao(dados, form, p) {
+    const chaveCampo = new Map(); form.campos.forEach((c) => { chaveCampo.set(norm(c.nome).replace(/[^a-z0-9]/g, ''), c); chaveCampo.set(norm(c.rotulo).replace(/[^a-z0-9]/g, ''), c); });
+    const avisos = []; const mapeadas = []; const soltas = []; const destino = {};
+    const ehLat = (c) => /^(lat|latitude|y_?lat|coord_?y_?geo)$/.test(norm(c).replace(/\s+/g, '')); const ehLon = (c) => /^(lon|long|longitude|lng|x_?lon)$/.test(norm(c).replace(/\s+/g, ''));
+    const ehX = (c) => /^(x|este|utm_?e|easting|coord_?x|e)$/.test(norm(c).replace(/\s+/g, '')); const ehY = (c) => /^(y|norte|utm_?n|northing|coord_?y|n)$/.test(norm(c).replace(/\s+/g, ''));
+    let cLat = null, cLon = null, cX = null, cY = null;
+    for (const c of dados.cols) {
+      if (ehLat(c)) { cLat = c; continue; } if (ehLon(c)) { cLon = c; continue; } if (ehX(c)) { cX = c; continue; } if (ehY(c)) { cY = c; continue; }
+      if (/^(uuid|fid|ogc_fid|id)$/i.test(c)) continue;
+      const k = chaveCampo.get(norm(c).replace(/[^a-z0-9]/g, ''));
+      if (k) { destino[c] = k; mapeadas.push([c, k.nome]); } else soltas.push(c);
+    }
+    const zona = UTM.zonaDoEpsg(p.epsg);
+    if (!dados.linhas[0].__lat && !cLat && cX && cY && !zona) avisos.push('O arquivo tem coordenadas X e Y em metros, mas o projeto está com sistema "automático". Defina o fuso UTM do projeto em Projetos para converter.');
+    if (!dados.linhas[0].__lat && !cLat && !(cX && cY)) avisos.push('Não achei colunas de coordenada (latitude e longitude). Os registros entram sem ponto no mapa.');
+    const conv = (k, v) => {
+      if (v === '' || v == null) return '';
+      if (k.tipo === 'choice') { const o = k.opcoes.find((x) => String(x.v) === String(v) || norm(x.t) === norm(v) || norm(x.t.replace(/\s*\(.*\)/, '')) === norm(v)); return o ? o.v : String(v); }
+      if (k.tipo === 'bool') return /^(1|s|sim|x|true|verdadeiro|yes)$/i.test(String(v).trim()) ? 1 : 0;
+      if (k.tipo === 'number' || k.armazenar === 'real') { const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/\./g, (m, i, s) => (s.indexOf(',') > -1 ? '' : m)).replace(',', '.')); return isFinite(n) ? n : String(v); }
+      return String(v);
+    };
+    let semOpcao = 0;
+    const linhas = dados.linhas.map((l) => {
+      const o = {};
+      for (const [c, k] of Object.entries(destino)) { o[k.nome] = conv(k, l[c]); if (k.tipo === 'choice' && o[k.nome] !== '' && !k.opcoes.some((x) => String(x.v) === String(o[k.nome]))) semOpcao++; }
+      for (const c of soltas) o[c] = l[c];
+      let lat = l.__lat, lon = l.__lon;
+      if (lat == null && cLat && cLon) { lat = parseFloat(String(l[cLat]).replace(',', '.')); lon = parseFloat(String(l[cLon]).replace(',', '.')); }
+      if (lat == null && cX && cY && zona) { const g = UTM.paraGeo(parseFloat(String(l[cX]).replace(',', '.')), parseFloat(String(l[cY]).replace(',', '.')), zona); lat = g.lat; lon = g.lon; }
+      o.latitude = isFinite(lat) && Math.abs(lat) <= 90 ? Math.round(lat * 1e7) / 1e7 : ''; o.longitude = isFinite(lon) && Math.abs(lon) <= 180 ? Math.round(lon * 1e7) / 1e7 : '';
+      o.uuid = 'imp-' + Arquivos.crc32(new TextEncoder().encode(JSON.stringify(l))).toString(16) + '-' + (l.fid || l.id || Math.random().toString(36).slice(2, 8));
+      return o;
+    });
+    if (semOpcao) avisos.push(`${fmtN(semOpcao)} valor(es) de lista não batem com as opções do formulário e foram mantidos como estão. Confira na validação.`);
+    const cc = campoCodigo(form), ce = campoEspecie(form);
+    const amostraCols = [cc && cc.nome, ce && ce.nome, 'latitude', 'longitude', ...mapeadas.map((m) => m[1])].filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 7);
+    return { linhas, mapeadas, soltas, avisos, amostraCols };
+  }
+
+  // ---------- Segurança: cópia de segurança e auditoria ----------
+  async function adminSeguranca(corpo) {
+    const st = await Api.b.backupStatus().catch((e) => ({ erro: e.message }));
+    const emails = h('input', { class: 'entrada', value: st.emails || '', placeholder: 'email1@..., email2@...' });
+    const ativo = h('input', { type: 'checkbox', checked: !!st.ativo });
+    const msg = h('div');
+    const salvar = async () => { try { const r = await Api.b.backupConfig(emails.value, ativo.checked); msg.replaceChildren(h('div', { class: 'info' }, r.ativo ? `Cópia diária ligada (todo dia às 2h). Emails: ${r.emails || 'nenhum'}.` : 'Cópia diária desligada.')); } catch (e) { msg.replaceChildren(h('div', { class: 'aviso' }, e.message)); } };
+    const agora = async () => { msg.replaceChildren(h('div', { class: 'info' }, 'Copiando as planilhas...')); try { const r = await Api.b.backupAgora(); msg.replaceChildren(h('div', { class: r.erros && r.erros.length ? 'aviso' : 'info' }, `Cópia feita: ${r.resumo}. `, r.pasta ? h('a', { href: r.pasta, target: '_blank', rel: 'noopener' }, 'Abrir pasta') : null)); } catch (e) { msg.replaceChildren(h('div', { class: 'aviso' }, e.message)); } };
+    const filtro = h('input', { class: 'entrada', placeholder: 'Filtrar por usuário ou ação' });
+    const tabela = h('div', { style: 'overflow-x:auto' });
+    const ROT_AC = { login: 'Entrou', login_falhou: 'Senha errada', usuario_bloqueado: 'Usuário bloqueado', usuario_desbloquear: 'Desbloqueou usuário', usuario_salvar: 'Salvou usuário', usuario_remover: 'Removeu usuário', projeto_salvar: 'Salvou projeto', formulario_salvar: 'Salvou formulário', validar: 'Validação', importar: 'Importação', exportar: 'Exportação', relatorio: 'Relatório', backup_agora: 'Cópia de segurança', backup_config: 'Configurou cópia', trocar_senha: 'Trocou a senha', aceitar_termo: 'Aceitou o termo' };
+    let itens = [];
+    const pintar = () => { const q = norm(filtro.value); tabela.replaceChildren(h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Quando'), h('th', null, 'Usuário'), h('th', null, 'Ação'), h('th', null, 'Detalhe')),
+      itens.filter((i) => !q || norm(i.login + ' ' + i.acao + ' ' + (ROT_AC[i.acao] || '') + ' ' + i.alvo + ' ' + i.detalhe).includes(q)).slice(0, 300).map((i) => h('tr', null, h('td', null, dataBR(i.em)), h('td', null, i.login), h('td', null, ROT_AC[i.acao] || i.acao), h('td', null, [i.alvo, i.detalhe].filter(Boolean).join(' · ')))))); };
+    filtro.addEventListener('input', pintar);
+    corpo.replaceChildren(
+      h('div', { class: 'cartao' }, h('h3', null, 'Cópia de segurança'),
+        st.demo ? h('p', { class: 'dica' }, 'Disponível com o servidor Google.') : [
+          h('p', { class: 'dica' }, 'Copia todo dia a base de usuários e a planilha de cada projeto para a pasta Backup do Drive, guarda as últimas 30 cópias e manda email com as planilhas em Excel.'),
+          st.ultimo ? h('p', null, `Última cópia: ${dataBR(st.ultimo.em)} (${st.ultimo.resumo}). `, st.ultimo.pasta ? h('a', { href: st.ultimo.pasta, target: '_blank', rel: 'noopener' }, 'Abrir') : null) : h('p', null, 'Nenhuma cópia feita ainda.'),
+          h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Enviar para os emails'), emails), h('label', null, ativo, ' Fazer cópia automática todo dia'),
+          h('div', { class: 'linha-btn' }, h('button', { class: 'btn', onclick: salvar }, 'Salvar'), h('button', { class: 'btn sec', onclick: agora }, 'Fazer cópia agora')), msg]),
+      h('div', { class: 'cartao' }, h('h3', null, 'Registro de auditoria'), h('p', { class: 'dica' }, 'Entradas no sistema, senhas erradas, bloqueios, mudanças em usuários, projetos e formulários, validações, importações e exportações. As alterações em cada árvore ficam na coluna historico do próprio registro.'), filtro, tabela));
+    try { itens = await Api.b.auditoria(500); pintar(); } catch (e) { tabela.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
+  }
+
+  // ---------- Fundo do mapa: ruas ou satélite ----------
+  function camadasFundo(mapa, satelite) {
+    const ruas = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap' });
+    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 19, attribution: 'Imagem © Esri, Maxar, Earthstar Geographics' });
+    const rot = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 19 });
+    const hib = L.layerGroup([sat, rot]);
+    const escolha = satelite ? 'sat' : (S.fundo || 'ruas');
+    (escolha === 'sat' ? hib : ruas).addTo(mapa);
+    if (!satelite) { L.control.layers({ 'Ruas': ruas, 'Satélite': hib }, null, { position: 'topright' }).addTo(mapa); mapa.on('baselayerchange', (e) => { S.fundo = e.layer === hib ? 'sat' : 'ruas'; Store.set('fundo', S.fundo); }); }
+  }
+  async function buscarEndereco(txt) {
+    const cid = S.projeto.municipio || '';
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(txt + (cid && !norm(txt).includes(norm(cid.split('/')[0])) ? ', ' + cid : ''))}`, { headers: { 'Accept-Language': 'pt-BR' } });
+    const j = await r.json(); return j[0] ? { lat: +j[0].lat, lon: +j[0].lon, nome: j[0].display_name } : null;
   }
 
   // ---------- Fotos ----------

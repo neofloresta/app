@@ -103,5 +103,34 @@ const Gpkg = (() => {
     return { table, cols, valores, estilo };
   }
 
-  return { gerar, ler };
+  // Lê as feições de pontos de um GeoPackage (para importar inventário existente)
+  async function lerFeicoes(buffer) {
+    const SQL = await sql();
+    const db = new SQL.Database(new Uint8Array(buffer));
+    try {
+      const gc = db.exec("SELECT table_name, column_name, srs_id FROM gpkg_geometry_columns");
+      if (!gc.length) throw new Error('Nenhuma camada de feições no GeoPackage.');
+      const [table, gcol, srs] = gc[0].values[0];
+      const r = db.exec(`SELECT * FROM ${q(table)}`);
+      if (!r.length) return { table, srs, cols: [], linhas: [] };
+      const cols = r[0].columns; const gi = cols.indexOf(gcol);
+      const zona = UTM.zonaDoEpsg(srs); const geo = [4326, 4674, 4618, 4989].includes(+srs);
+      const linhas = r[0].values.map((v) => {
+        const o = {}; cols.forEach((c, i) => { if (i !== gi && c !== 'fid') o[c] = v[i] == null ? '' : v[i]; });
+        const pt = ponto(v[gi]);
+        if (pt) { if (zona) { const g2 = UTM.paraGeo(pt.x, pt.y, zona); o.__lat = g2.lat; o.__lon = g2.lon; } else if (geo) { o.__lat = pt.y; o.__lon = pt.x; } }
+        return o;
+      });
+      return { table, srs, cols: cols.filter((c, i) => i !== gi && c !== 'fid'), linhas, convertivel: !!(zona || geo) };
+    } finally { db.close(); }
+  }
+  function ponto(b) {
+    if (!b || b.length < 8 || b[0] !== 0x47 || b[1] !== 0x50) return null;
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength); const flags = b[3];
+    const env = [0, 32, 48, 48, 64][(flags >> 1) & 7] || 0; let o = 8 + env;
+    const le = b[o] === 1; const tipo = dv.getUint32(o + 1, le) % 1000; if (tipo !== 1) return null;
+    return { x: dv.getFloat64(o + 5, le), y: dv.getFloat64(o + 13, le) };
+  }
+
+  return { gerar, ler, lerFeicoes };
 })();

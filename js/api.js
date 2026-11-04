@@ -1,11 +1,11 @@
-// Comunicação com a ponte Google (Apps Script) ou modo demonstração (tudo no aparelho).
+// Comunicação com o servidor Google (Apps Script) ou modo demonstração (tudo no aparelho).
 const Api = (() => {
-  let url = null; let cred = null;
+  let url = null; let cred = null; let aoExpirar = null;
 
   function achatar(r, form) {
     const l = {
       uuid: r.uuid, projeto: r.projeto, equipe: r.equipe, usuario: r.usuario,
-      criado_em: r.criado_em, atualizado_em: r.atualizado_em,
+      criado_em: r.criado_em, atualizado_em: r.atualizado_em, concluido_em: r.concluido_em || '',
       latitude: r.lat ?? '', longitude: r.lon ?? '', precisao_gps_m: r.prec ?? '',
       historico: (r.historico || []).map((x) => `${String(x.em).slice(0, 16).replace('T', ' ')} ${x.por}: ${x.mud.join('; ')}`).join(' | '),
     };
@@ -17,19 +17,22 @@ const Api = (() => {
   }
 
   function paraMapa(linhas, campos) { return { cab: campos, linhas: linhas.map((l) => campos.map((c) => l[c] ?? '')) }; }
-  async function chamar(acao, dados) {
-    const corpo = JSON.stringify(Object.assign({ acao, u: cred && cred.u, s: cred && cred.s }, dados || {}));
-    const resp = await fetch(url, { method: 'POST', body: corpo, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow' });
+  async function chamar(acao, dados, semCred) {
+    const id = semCred ? {} : cred && cred.t ? { t: cred.t } : { u: cred && cred.u, s: cred && cred.s };
+    const corpo = JSON.stringify(Object.assign({ acao }, id, dados || {}));
+    let resp;
+    try { resp = await fetch(url, { method: 'POST', body: corpo, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow' }); } catch (e) { throw new Error('Sem conexão com o servidor. Confira a internet.'); }
     if (!resp.ok) throw new Error('Servidor respondeu ' + resp.status);
     const j = await resp.json();
-    if (!j.ok) throw new Error(j.erro || 'Erro no servidor');
+    if (!j.ok) { const e = new Error(j.erro || 'Erro no servidor'); e.sessao = !!j.sessao; if (e.sessao && aoExpirar) aoExpirar(e); throw e; }
     return j;
   }
 
   // ---------- Modo demonstração ----------
+  const DEMO_PERFIL = { campo: 'coletor' };
   const Demo = {
     async base() {
-      const VERSAO_DEMO = 4;
+      const VERSAO_DEMO = 5;
       let b = await Store.get('demo:base');
       if (!b || b.versao !== VERSAO_DEMO) {
         const form = await (await fetch('forms/divinopolis-inventario.json')).json();
@@ -38,11 +41,13 @@ const Api = (() => {
           versao: VERSAO_DEMO,
           usuarios: [
             { login: 'admin', senha: '1234', nome: 'Coordenação', perfil: 'admin', projeto: '*', equipe: 'Coordenação', codigo: 'CO' },
-            { login: 'equipe1', senha: '1111', nome: 'Equipe 1', perfil: 'campo', projeto: 'divinopolis-teste', equipe: 'Equipe 1', codigo: 'E1' },
-            { login: 'equipe2', senha: '2222', nome: 'Equipe 2', perfil: 'campo', projeto: 'divinopolis-teste', equipe: 'Equipe 2', codigo: 'E2' },
+            { login: 'revisor', senha: '1234', nome: 'Revisão técnica', perfil: 'revisor', projeto: 'divinopolis-teste', equipe: 'Coordenação', codigo: 'RV' },
+            { login: 'equipe1', senha: '1111', nome: 'Equipe 1', perfil: 'coletor', projeto: 'divinopolis-teste', equipe: 'Equipe 1', codigo: 'E1' },
+            { login: 'equipe2', senha: '2222', nome: 'Equipe 2', perfil: 'coletor', projeto: 'divinopolis-teste', equipe: 'Equipe 2', codigo: 'E2' },
+            { login: 'prefeitura', senha: '1234', nome: 'Prefeitura (cliente)', perfil: 'cliente', projeto: 'divinopolis-teste', equipe: '', codigo: '' },
           ],
-          projetos: [{ id: 'divinopolis-teste', nome: 'Divinópolis (teste)', formulario: form.id, epsg: 'auto', prefixo: 'divinopolis' }],
-          formularios: { [form.id]: form, [risco.id]: risco }, estilos: {},
+          projetos: [{ id: 'divinopolis-teste', nome: 'Divinópolis (demonstração)', formulario: form.id, epsg: 'auto', prefixo: 'divinopolis', contratante: 'Prefeitura (exemplo)', contrato: '', municipio: 'Divinópolis/MG', meta: 10000, cliente_ve: 'todos' }],
+          formularios: { [form.id]: form, [risco.id]: risco }, estilos: {}, validacao: {},
         };
         await Store.set('demo:base', b);
       }
@@ -52,32 +57,55 @@ const Api = (() => {
       const b = await this.base();
       const us = b.usuarios.find((x) => x.login === u && String(x.senha) === String(s));
       if (!us) throw new Error('Usuário ou senha incorretos.');
-      const projetos = b.projetos.filter((p) => us.perfil === 'admin' || us.projeto === p.id || String(us.projeto).split(',').map((x) => x.trim()).includes(p.id))
+      const perfil = DEMO_PERFIL[us.perfil] || us.perfil;
+      const projetos = b.projetos.filter((p) => perfil === 'admin' || String(us.projeto).split(',').map((x) => x.trim()).includes(p.id))
         .map((p) => Object.assign({}, p, { equipe: us.equipe, equipeCodigo: us.codigo || '' }));
-      return { usuario: { login: us.login, nome: us.nome, perfil: us.perfil }, projetos };
+      return { token: '', usuario: { login: us.login, nome: us.nome, perfil, equipe: us.equipe, termo_aceito_em: us.termo_aceito_em || '' }, projetos };
     },
+    async sessao() { return null; },
+    async sair() {},
+    async aceitarTermo() { const b = await this.base(); const us = b.usuarios.find((x) => x.login === (cred && cred.u)); if (us) { us.termo_aceito_em = new Date().toISOString(); await Store.set('demo:base', b); } },
+    async trocarSenha(atual, nova) { const b = await this.base(); const us = b.usuarios.find((x) => x.login === (cred && cred.u)); if (!us || String(us.senha) !== String(atual)) throw new Error('Senha atual incorreta.'); if (String(nova).length < 4) throw new Error('Senha muito curta.'); us.senha = nova; await Store.set('demo:base', b); },
     async formulario(id) { return (await this.base()).formularios[id]; },
-    async estilo(id) { return (await this.base()).estilos[id] || null; },
+    async estilo(id) { const b = await this.base(); if (b.estilos[id]) return b.estilos[id]; try { const r = await fetch(`forms/${id}.qml`); return r.ok ? await r.text() : null; } catch (e) { return null; } },
     async foto() { return { id: '', url: '' }; },
     async registro() { return { ok: true }; },
     async listar(projeto) {
       const b = await this.base(); const p = b.projetos.find((x) => x.id === projeto); const form = b.formularios[p.formulario];
-      return (await Store.registros(projeto)).filter((r) => r.status !== 'rascunho').map((r) => achatar(r, form));
+      return (await Store.registros(projeto)).filter((r) => r.status !== 'rascunho').map((r) => Object.assign(achatar(r, form), b.validacao[r.uuid] || { validacao: 'Pendente' }));
     },
     async mapa(projeto, campos) { return paraMapa(await this.listar(projeto), campos); },
     async listarTudo(projeto) { return this.listar(projeto); },
+    async painel(projeto) { const b = await this.base(); const p = b.projetos.find((x) => x.id === projeto); return Indicadores.calcular(b.formularios[p.formulario], await this.listar(projeto), p); },
+    async situacaoMeus() { const b = await this.base(); return Object.entries(b.validacao).filter(([, v]) => v.validacao !== 'Pendente').map(([uuid, v]) => ({ uuid, validacao: v.validacao, obs: v.validacao_obs, em: v.validado_em })); },
+    async validar(projeto, itens) {
+      const b = await this.base();
+      for (const it of itens) { if (it.estado === 'Devolvido' && !String(it.obs || '').trim()) throw new Error('Informe o motivo da devolução.'); b.validacao[it.uuid] = { validacao: it.estado, validacao_obs: it.obs || '', validado_por: cred && cred.u, validado_em: new Date().toISOString() }; }
+      await Store.set('demo:base', b); return { alterados: itens.length };
+    },
+    async importar() { throw new Error('A importação precisa do servidor Google. No modo demonstração os dados ficam só neste aparelho.'); },
+    async auditar() {},
+    async auditoria() { return []; },
+    async backupStatus() { return { ativo: false, emails: '', ultimo: null, pasta: '', demo: true }; },
+    async backupConfig() { throw new Error('A cópia de segurança precisa do servidor Google.'); },
+    async backupAgora() { throw new Error('A cópia de segurança precisa do servidor Google.'); },
+    async usuarioDesbloquear() {},
     async projetosListar() { return (await this.base()).projetos; },
-    async projetoSalvar(p) { const b = await this.base(); const i = b.projetos.findIndex((x) => x.id === p.id); if (i >= 0) b.projetos[i] = p; else b.projetos.push(p); await Store.set('demo:base', b); },
-    async usuariosListar() { return (await this.base()).usuarios; },
-    async usuarioSalvar(u) { const b = await this.base(); const i = b.usuarios.findIndex((x) => x.login === u.login); if (i >= 0) b.usuarios[i] = u; else b.usuarios.push(u); await Store.set('demo:base', b); },
+    async projetoSalvar(p) { const b = await this.base(); const i = b.projetos.findIndex((x) => x.id === p.id); if (i >= 0) b.projetos[i] = Object.assign(b.projetos[i], p); else b.projetos.push(p); await Store.set('demo:base', b); },
+    async usuariosListar() { return (await this.base()).usuarios.map((u) => Object.assign({}, u, { perfil: DEMO_PERFIL[u.perfil] || u.perfil, senha: undefined })); },
+    async usuarioSalvar(u) { const b = await this.base(); const i = b.usuarios.findIndex((x) => x.login === u.login); if (i >= 0) { if (!u.senha) delete u.senha; b.usuarios[i] = Object.assign(b.usuarios[i], u); } else b.usuarios.push(u); await Store.set('demo:base', b); },
     async usuarioRemover(login) { const b = await this.base(); b.usuarios = b.usuarios.filter((x) => x.login !== login); await Store.set('demo:base', b); },
-    async formulariosListar() { const b = await this.base(); return Object.values(b.formularios).map((f) => ({ id: f.id, nome: f.nome, campos: f.campos.length })); },
+    async formulariosListar() { const b = await this.base(); return Object.values(b.formularios).map((f) => ({ id: f.id, nome: f.nome, campos: f.campos.length, versao: f.versao || '' })); },
     async formularioSalvar(form, qml) { const b = await this.base(); b.formularios[form.id] = form; if (qml) b.estilos[form.id] = qml; await Store.set('demo:base', b); },
   };
 
   // ---------- Servidor Google ----------
   const Remoto = {
-    async login(u, s) { const j = await chamar('login', { u, s }); return { usuario: j.usuario, projetos: j.projetos }; },
+    async login(u, s, aparelho) { const j = await chamar('login', { u, s, aparelho }, true); return { token: j.token || '', versaoScript: j.versaoScript || '1', usuario: j.usuario, projetos: j.projetos }; },
+    async sessao() { const j = await chamar('sessao'); return { usuario: j.usuario, projetos: j.projetos, versaoScript: j.versaoScript }; },
+    async sair() { if (cred && cred.t) await chamar('sair').catch(() => {}); },
+    async aceitarTermo(versao) { return chamar('aceitar_termo', { versao }); },
+    async trocarSenha(atual, nova) { return chamar('trocar_senha', { atual, nova }); },
     async formulario(id) { return (await chamar('formulario', { id })).formulario; },
     async estilo(id) { return (await chamar('estilo', { id })).qml || null; },
     async foto(projeto, nome, blob) {
@@ -94,16 +122,26 @@ const Api = (() => {
         return paraMapa(await this.listar(projeto), campos);
       }
     },
-    // exportação em páginas, para não estourar a resposta do Google em projetos grandes
+    // em páginas, para não estourar a resposta do Google em projetos grandes
     async listarTudo(projeto, progresso) {
       const N = 4000; let out = [];
       for (let de = 0; ; de += N) {
         const j = await chamar('listar', { projeto, de, n: N });
         out = out.concat(j.linhas); if (progresso) progresso(out.length, j.total);
-        if (j.total == null || j.linhas.length < N || out.length >= j.total) break; // servidor antigo devolve tudo de uma vez
+        if (j.total == null || j.linhas.length < N || de + N >= j.total) break; // servidor antigo devolve tudo de uma vez
       }
       return out;
     },
+    async painel(projeto) { return chamar('painel', { projeto }); },
+    async situacaoMeus(projeto) { return (await chamar('situacao_meus', { projeto })).itens; },
+    async validar(projeto, itens) { return chamar('validar', { projeto, itens }); },
+    async importar(projeto, linhas) { return chamar('importar', { projeto, linhas }); },
+    async auditar(tipo, alvo, detalhe) { return chamar('auditar', { tipo, alvo, detalhe }).catch(() => {}); },
+    async auditoria(n) { return (await chamar('auditoria_listar', { n })).itens; },
+    async backupStatus() { return chamar('backup_status'); },
+    async backupConfig(emails, ativo) { return chamar('backup_config', { emails, ativo }); },
+    async backupAgora() { return chamar('backup_agora'); },
+    async usuarioDesbloquear(login) { return chamar('usuario_desbloquear', { login }); },
     async projetosListar() { return (await chamar('projetos_listar')).projetos; },
     async projetoSalvar(p) { return chamar('projeto_salvar', { projeto_dados: p }); },
     async usuariosListar() { return (await chamar('usuarios_listar')).usuarios; },
@@ -118,7 +156,9 @@ const Api = (() => {
     configurar(u) { url = u || null; },
     get demo() { return !url; },
     get servidor() { return url; },
-    credenciais(u, s) { cred = { u, s }; },
+    // sessão: { u, t } (token) ou, em servidor antigo, { u, s }
+    credenciais(c) { cred = c; },
+    aoExpirar(fn) { aoExpirar = fn; },
     get b() { return url ? Remoto : Demo; },
   };
 })();
