@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 3,
+ "versao": 4,
  "campos": [
   {
    "armazenar": "text",
@@ -103,7 +103,8 @@
    "armazenar": "text",
    "nome": "DAP (cm)",
    "rotulo": "DAP (cm)",
-   "tipo": "multinumber"
+   "tipo": "multinumber",
+   "ajuda": "Diâmetro do tronco a 1,30 m do chão. Use + fuste para cada tronco."
   },
   {
    "armazenar": "real",

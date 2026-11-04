@@ -26,8 +26,9 @@ async function post(acao, dados, u = 'admin', s = senhaAdmin) {
 async function configurar(projeto = 'divinopolis') {
   await post('formulario_salvar', { formulario: FORM });
   await post('projeto_salvar', { projeto_dados: { id: projeto, nome: 'PMAU Divinópolis', formulario: FORM.id, epsg: '' } });
-  const us = [['div-1', 'equipe1', 'Equipe 1', 'coletor', 'E1'], ['div-2', 'equipe2', 'Equipe 2', 'coletor', 'E2'], ['outra', 'outra01', 'Outra cidade', 'coletor', 'OC']];
+  const us = [['div-1', 'equipe01', 'Equipe 1', 'coletor', 'E1'], ['div-2', 'equipe02', 'Equipe 2', 'coletor', 'E2'], ['outra', 'outra001', 'Outra cidade', 'coletor', 'OC']];
   for (const [login, senha, equipe, perfil, codigo] of us) await post('usuario_salvar', { usuario_dados: { login, senha, nome: equipe, perfil, projeto: login === 'outra' ? 'carmo' : projeto, equipe, codigo } });
+  if (!process.env.SEM_TERMO) for (const [login, senha] of us) await post('aceitar_termo', { versao: 'teste' }, login, senha);
   await post('projeto_salvar', { projeto_dados: { id: 'carmo', nome: 'Carmo do Rio Claro', formulario: FORM.id, epsg: '' } });
 }
 // Base fictícia no formato que o app grava na planilha
@@ -82,7 +83,7 @@ async function celular(b, extra = {}) {
   return { ctx, p };
 }
 async function logar(p, u, s) {
-  await p.goto(WEB); await p.waitForTimeout(400);
+  await p.goto(WEB + '?config=1'); await p.waitForTimeout(400);
   if (await p.locator('text=Configurar servidor').count()) {
     await p.click('text=Configurar servidor'); await p.fill('.folha input', MOCK); await p.click('.folha >> text=Salvar'); await p.waitForTimeout(300);
   }

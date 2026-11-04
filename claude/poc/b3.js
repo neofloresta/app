@@ -4,13 +4,13 @@ const L = require('./lib');
 const N = +(process.argv[2] || 5000);
 (async () => {
   await L.subir(); await L.configurar(); await L.semear(N);
-  const t0 = Date.now(); const j = await L.post('listar', { projeto: 'divinopolis' }, 'div-1', 'equipe1');
+  const t0 = Date.now(); const j = await L.post('listar', { projeto: 'divinopolis' }, 'div-1', 'equipe01');
   const bytes = JSON.stringify(j).length; const tl = Date.now() - t0;
   const b = await chromium.launch(); const { p, ctx } = await L.celular(b);
   // limita a rede como um 4G razoável (aprox. 10 Mbps, 60 ms)
   const cdp = await ctx.newCDPSession(p); await cdp.send('Network.enable'); await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 60, downloadThroughput: 1.25e6, uploadThroughput: 0.5e6 });
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 }); // celular intermediário
-  const t1 = Date.now(); await L.logar(p, 'div-1', 'equipe1'); await p.waitForSelector('button.nova', { timeout: 120000 }); const tLogin = Date.now() - t1;
+  const t1 = Date.now(); await L.logar(p, 'div-1', 'equipe01'); await p.waitForSelector('button.nova', { timeout: 120000 }); const tLogin = Date.now() - t1;
   await p.waitForTimeout(500);
   const t2 = Date.now(); await p.goto(L.WEB + '#mapa');
   await p.waitForFunction((n) => (document.querySelector('.mapa-conta') || {}).textContent?.startsWith((n).toLocaleString('pt-BR') + ' de') || (document.querySelector('.mapa-conta') || {}).textContent?.includes(' de ' + (n).toLocaleString('pt-BR')), N, { timeout: 180000 });

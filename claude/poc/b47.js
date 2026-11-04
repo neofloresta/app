@@ -12,7 +12,7 @@ const N = +(process.argv[2] || 3000);
   const foto = async (p, nome) => { const f = `tela-${nome}.png`; await p.screenshot({ path: f, fullPage: false }); shots.push(f); };
 
   // --- coletor cria uma árvore
-  const { p: pc } = await L.celular(b); await L.logar(pc, 'div-1', 'equipe1'); await pc.waitForSelector('button.nova'); await pc.waitForTimeout(1200);
+  const { p: pc } = await L.celular(b); await L.logar(pc, 'div-1', 'equipe01'); await pc.waitForSelector('button.nova'); await pc.waitForTimeout(1200);
   await A.arvoreCompleta(pc, { fotos: 1 }); await pc.waitForTimeout(2500);
   const uLocal = await pc.evaluate(async () => (await Store.todosRegistros()).find((r) => r.status !== 'rascunho').uuid);
   const meu = (await L.post('listar', { projeto: 'divinopolis' })).linhas.find((l) => l.uuid === uLocal);

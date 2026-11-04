@@ -13,7 +13,7 @@
 const PROPS = PropertiesService.getScriptProperties();
 const VERSAO_SCRIPT = '2.0';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em'];
-const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve'];
+const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
 const PERFIS = ['admin', 'revisor', 'coletor', 'cliente'];
@@ -25,6 +25,12 @@ const SESSAO_DIAS = 30;
 const MAX_TENTATIVAS = 5;
 const BLOQUEIO_MIN = 15;
 const FUSO = 'America/Sao_Paulo';
+const ITERACOES = 1000;
+const SENHA_MIN = 8;
+const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar'];
+// texto que começaria uma fórmula na planilha vira texto puro
+function seguro(v) { v = v == null ? '' : String(v); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
+function hashToken(t) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'sessao|' + t, Utilities.Charset.UTF_8)); }
 
 function configurar() {
   let raiz = PROPS.getProperty('RAIZ_ID');
@@ -68,6 +74,8 @@ function doPost(e) {
       return json({ ok: true, versaoScript: VERSAO_SCRIPT, token: token, expira_em: token ? new Date(Date.now() + SESSAO_DIAS * 864e5).toISOString() : '', usuario: publico(usr), projetos: projetosDoUsuario(usr) });
     }
     const usr = d.t ? autenticarSessao(d.t) : autenticarSenha(d.u, d.s, true);
+    if (ACOES_ESCRITA.indexOf(d.acao) >= 0 && !usr.termo_aceito_em && usr.perfil !== 'admin') throw new Error('Aceite o termo de uso e privacidade no app antes de enviar dados (atualize o app e entre de novo).');
+    const formLiberado = (id) => { if (usr.perfil !== 'admin' && !projetosDoUsuario(usr).some((p) => p.formulario === id)) throw new Error('Formulário não liberado para este usuário.'); };
     const perfil = usr.perfil;
     const admin = perfil === 'admin';
     const pode = (...ps) => { if (!admin && ps.indexOf(perfil) < 0) throw new Error('Seu perfil não tem acesso a esta função.'); };
@@ -76,16 +84,16 @@ function doPost(e) {
       case 'sessao': return json({ ok: true, versaoScript: VERSAO_SCRIPT, usuario: publico(usr), projetos: projetosDoUsuario(usr) });
       case 'sair': encerrarSessao(d.t); return json({ ok: true });
       case 'aceitar_termo': atualizarUsuario(usr.login, { termo_aceito_em: new Date().toISOString() }); auditar(usr.login, 'aceitar_termo', '', d.versao || ''); return json({ ok: true });
-      case 'trocar_senha': trocarSenha(usr, d.atual, d.nova); return json({ ok: true });
-      case 'formulario': return json({ ok: true, formulario: lerFormulario(d.id) });
-      case 'estilo': return json({ ok: true, qml: lerArquivoForm(d.id + '.qml') });
+      case 'trocar_senha': trocarSenha(usr, d.atual, d.nova, d.t); return json({ ok: true });
+      case 'formulario': formLiberado(d.id); return json({ ok: true, formulario: lerFormulario(d.id) });
+      case 'estilo': formLiberado(d.id); return json({ ok: true, qml: lerArquivoForm(d.id + '.qml') });
       case 'foto': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarFoto(d.projeto, d.nome, d.mime, d.dados)));
       case 'registro': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarRegistro(d.projeto, d.linha, usr)));
       case 'listar': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, listarPagina(d.projeto, d.de, d.n, usr)));
       case 'mapa': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, colunas(d.projeto, d.campos || [], usr)));
       case 'painel': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, painel(d.projeto, usr)));
       case 'situacao_meus': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, itens: situacaoMeus(d.projeto, usr) });
-      case 'validar': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
+      case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
       case 'projetos_listar': pode(); return json({ ok: true, projetos: tabela('Projetos').map(comLinks) });
       case 'projeto_salvar': pode(); salvarProjeto(d.projeto_dados); auditar(usr.login, 'projeto_salvar', d.projeto_dados && d.projeto_dados.id, ''); return json({ ok: true });
       case 'usuarios_listar': pode(); return json({ ok: true, usuarios: tabela('Usuarios').map(paraAdmin) });
@@ -95,7 +103,7 @@ function doPost(e) {
       case 'formularios_listar': pode(); return json({ ok: true, formularios: listarFormularios() });
       case 'formulario_salvar': pode(); salvarFormulario(d.formulario, d.qml); auditar(usr.login, 'formulario_salvar', d.formulario && d.formulario.id, 'versão ' + (d.formulario && d.formulario.versao || '')); return json({ ok: true });
       case 'importar': pode(); exigeProjeto(d.projeto); { const r = importar(d.projeto, d.linhas || [], usr); auditar(usr.login, 'importar', d.projeto, r.inseridos + ' inseridos, ' + r.ignorados + ' já existiam'); return json(Object.assign({ ok: true }, r)); }
-      case 'auditar': auditar(usr.login, String(d.tipo || 'evento').slice(0, 40), String(d.alvo || '').slice(0, 100), String(d.detalhe || '').slice(0, 300)); return json({ ok: true });
+      case 'auditar': if (['exportar', 'relatorio'].indexOf(d.tipo) < 0) throw new Error('Evento inválido.'); auditar(usr.login, d.tipo, String(d.alvo || '').slice(0, 100), String(d.detalhe || '').slice(0, 200)); return json({ ok: true });
       case 'auditoria_listar': pode(); return json({ ok: true, itens: auditoriaRecente(+d.n || 300) });
       case 'backup_status': pode(); return json(Object.assign({ ok: true }, backupStatus()));
       case 'backup_config': pode(); backupConfig(d.emails, d.ativo); auditar(usr.login, 'backup_config', '', (d.ativo ? 'ativo' : 'desligado') + ' ' + (d.emails || '')); return json(Object.assign({ ok: true }, backupStatus()));
@@ -153,7 +161,7 @@ function removerLinha(nome, chave, valor) {
 // ---------- Senhas, sessões e perfis ----------
 function hashSenha(sal, senha) {
   let h = sal + '|' + senha;
-  for (let i = 0; i < 300; i++) h = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, h + sal, Utilities.Charset.UTF_8));
+  for (let i = 0; i < ITERACOES; i++) h = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, h + sal, Utilities.Charset.UTF_8));
   return h;
 }
 function novoSal() { return Utilities.getUuid().replace(/-/g, ''); }
@@ -175,8 +183,7 @@ function autenticarSenha(login, senha, legado) {
     garantirColunas('Usuarios', COLS_USUARIOS);
     const u = buscarUsuario(login);
     const erro = 'Usuário ou senha incorretos.';
-    if (!u) { auditar(String(login).slice(0, 40), 'login_falhou', '', 'usuário inexistente'); throw new Error(erro); }
-    if (String(u.ativo).toLowerCase() === 'nao' || String(u.ativo).toLowerCase() === 'não') throw new Error('Usuário desativado. Fale com a coordenação.');
+    if (!u) throw new Error(erro);
     if (u.bloqueado_ate && new Date(u.bloqueado_ate) > new Date()) throw new Error(`Usuário bloqueado por ${MAX_TENTATIVAS} senhas erradas. Tente de novo depois das ${Utilities.formatDate(new Date(u.bloqueado_ate), FUSO, 'HH:mm')} ou peça desbloqueio à coordenação.`);
     const s = String(senha).trim();
     const ok = u.senha_hash ? hashSenha(u.sal, s) === u.senha_hash : (u.senha !== '' && u.senha === s);
@@ -186,6 +193,7 @@ function autenticarSenha(login, senha, legado) {
       else { atualizarUsuario(u.login, { tentativas: String(t) }); auditar(u.login, 'login_falhou', '', 'tentativa ' + t); }
       throw new Error(erro);
     }
+    if (String(u.ativo).toLowerCase() === 'nao' || String(u.ativo).toLowerCase() === 'não') throw new Error('Usuário desativado. Fale com a coordenação.');
     const mud = {};
     if (+u.tentativas) mud.tentativas = '0';
     if (u.bloqueado_ate) mud.bloqueado_ate = '';
@@ -199,17 +207,20 @@ function criarSessao(login, aparelho) {
   const token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
   const sh = garantirAba('Sessoes', COLS_SESSOES);
   const agora = new Date();
-  sh.appendRow([token, login, agora.toISOString(), new Date(agora.getTime() + SESSAO_DIAS * 864e5).toISOString(), String(aparelho || '').slice(0, 120)]);
+  if (sh.getLastRow() > 300) { const v = sh.getDataRange().getValues(); for (let i = v.length - 1; i >= 1; i--) if (!(new Date(texto(v[i][3])) > agora)) sh.deleteRow(i + 1); }
+  sh.appendRow([hashToken(token), login, agora.toISOString(), new Date(agora.getTime() + SESSAO_DIAS * 864e5).toISOString(), seguro(String(aparelho || '').slice(0, 120))]);
   return token;
 }
 function autenticarSessao(token) {
   const cache = CacheService.getScriptCache();
   let login = cache.get('s:' + token);
+  if (login) { const rev = cache.get('revogado:' + login.toLowerCase()); const em = cache.get('s:' + token + ':em'); if (rev && (!em || em < rev)) { cache.remove('s:' + token); login = null; } }
   if (!login) {
     const sh = garantirAba('Sessoes', COLS_SESSOES);
     const v = sh.getDataRange().getValues();
     let achou = -1;
-    for (let i = 1; i < v.length; i++) if (String(v[i][0]) === token) { achou = i; break; }
+    const ht = hashToken(token);
+    for (let i = 1; i < v.length; i++) if (String(v[i][0]) === ht) { achou = i; break; }
     const e = new Error('Sua sessão expirou. Entre de novo com usuário e senha. Os registros guardados no aparelho continuam salvos.'); e.sessao = true;
     if (achou < 0) throw e;
     const expira = new Date(texto(v[achou][3]));
@@ -217,7 +228,7 @@ function autenticarSessao(token) {
     // renova quando faltar menos da metade do prazo
     if (expira.getTime() - Date.now() < SESSAO_DIAS * 864e5 / 2) sh.getRange(achou + 1, 4).setValue(new Date(Date.now() + SESSAO_DIAS * 864e5).toISOString());
     login = texto(v[achou][1]);
-    cache.put('s:' + token, login, 600);
+    cache.put('s:' + token, login, 600); cache.put('s:' + token + ':em', new Date().toISOString(), 600);
   }
   const u = buscarUsuario(login);
   if (!u || String(u.ativo).toLowerCase() === 'nao' || String(u.ativo).toLowerCase() === 'não') { cache.remove('s:' + token); const e = new Error('Usuário desativado ou removido.'); e.sessao = true; throw e; }
@@ -225,24 +236,27 @@ function autenticarSessao(token) {
 }
 function encerrarSessao(token) {
   if (!token) return; CacheService.getScriptCache().remove('s:' + token);
-  const sh = garantirAba('Sessoes', COLS_SESSOES); const v = sh.getDataRange().getValues();
-  for (let i = v.length - 1; i >= 1; i--) if (String(v[i][0]) === token) sh.deleteRow(i + 1);
+  const sh = garantirAba('Sessoes', COLS_SESSOES); const v = sh.getDataRange().getValues(); const ht = hashToken(token);
+  for (let i = v.length - 1; i >= 1; i--) if (String(v[i][0]) === ht) sh.deleteRow(i + 1);
 }
-function encerrarSessoesDe(login) {
-  const sh = garantirAba('Sessoes', COLS_SESSOES); const v = sh.getDataRange().getValues(); const c = CacheService.getScriptCache();
-  for (let i = v.length - 1; i >= 1; i--) if (texto(v[i][1]).toLowerCase() === String(login).toLowerCase()) { c.remove('s:' + v[i][0]); sh.deleteRow(i + 1); }
+function encerrarSessoesDe(login, exceto) {
+  const sh = garantirAba('Sessoes', COLS_SESSOES); const v = sh.getDataRange().getValues(); const ex = exceto ? hashToken(exceto) : null;
+  for (let i = v.length - 1; i >= 1; i--) if (texto(v[i][1]).toLowerCase() === String(login).toLowerCase() && String(v[i][0]) !== ex) sh.deleteRow(i + 1);
+  const c = CacheService.getScriptCache(); c.put('revogado:' + String(login).toLowerCase(), new Date().toISOString(), 21600);
+  if (exceto) c.put('s:' + exceto + ':em', new Date(Date.now() + 1000).toISOString(), 600);
 }
 function validarSenhaNova(nova) {
   nova = String(nova || '').trim();
-  if (nova.length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.');
+  if (nova.length < SENHA_MIN) throw new Error('A senha precisa ter pelo menos ' + SENHA_MIN + ' caracteres.');
   return nova;
 }
-function trocarSenha(usr, atual, nova) {
+function trocarSenha(usr, atual, nova, tokenAtual) {
   const u = buscarUsuario(usr.login);
   const ok = u.senha_hash ? hashSenha(u.sal, String(atual || '').trim()) === u.senha_hash : u.senha === String(atual || '').trim();
   if (!ok) throw new Error('Senha atual incorreta.');
   const sal = novoSal(); atualizarUsuario(u.login, { sal: sal, senha_hash: hashSenha(sal, validarSenhaNova(nova)), senha: '' });
-  auditar(u.login, 'trocar_senha', '', '');
+  encerrarSessoesDe(u.login, tokenAtual);
+  auditar(u.login, 'trocar_senha', '', 'outras sessões encerradas');
 }
 function salvarUsuario(dados) {
   if (!dados || !dados.login) throw new Error('Informe o usuário.');
@@ -267,7 +281,7 @@ function paraAdmin(u) {
 }
 function projetosDoUsuario(u) {
   return tabela('Projetos').filter((p) => u.perfil === 'admin' || u.projetos.indexOf(p.id) >= 0)
-    .map((p) => ({ id: p.id, nome: p.nome, formulario: p.formulario, epsg: p.epsg, prefixo: p.prefixo, contratante: p.contratante || '', contrato: p.contrato || '', municipio: p.municipio || '', meta: +p.meta || 0, equipe: u.equipe, equipeCodigo: u.codigo || '' }));
+    .map((p) => ({ id: p.id, nome: p.nome, formulario: p.formulario, epsg: p.epsg, prefixo: p.prefixo, contratante: p.contratante || '', contrato: p.contrato || '', municipio: p.municipio || '', meta: +p.meta || 0, responsavel: p.responsavel || '', registro_profissional: p.registro_profissional || '', art: p.art || '', equipe: u.equipe, equipeCodigo: u.codigo || '' }));
 }
 function comLinks(p) {
   const o = Object.assign({}, p);
@@ -299,7 +313,7 @@ function salvarProjeto(p) {
 
 // ---------- Auditoria ----------
 function auditar(login, acao, alvo, detalhe) {
-  try { garantirAba('Auditoria', COLS_AUDITORIA).appendRow([new Date().toISOString(), login || '', acao || '', alvo || '', detalhe || '']); } catch (e) { /* auditoria nunca derruba a operação */ }
+  try { garantirAba('Auditoria', COLS_AUDITORIA).appendRow([new Date().toISOString(), seguro(String(login || '').slice(0, 60)), seguro(acao), seguro(alvo), seguro(detalhe)]); } catch (e) { /* auditoria nunca derruba a operação */ }
 }
 function auditoriaRecente(n) {
   const sh = garantirAba('Auditoria', COLS_AUDITORIA); const tot = sh.getLastRow() - 1; if (tot < 1) return [];
@@ -332,12 +346,17 @@ function listarFormularios() {
 // ---------- Fotos ----------
 function salvarFoto(projetoId, nome, mime, dados) {
   if (!/^[\w .-]{1,120}$/.test(String(nome))) throw new Error('Nome de foto inválido.');
+  if (['image/jpeg', 'image/png', 'image/webp'].indexOf(String(mime || 'image/jpeg')) < 0) throw new Error('Tipo de foto não aceito.');
+  if (String(dados || '').length > 11e6) throw new Error('Foto grande demais (máximo 8 MB).');
   const p = projeto(projetoId);
   const pasta = DriveApp.getFolderById(p.pasta_id);
   const it = pasta.getFoldersByName('DCIM'); const dcim = it.hasNext() ? it.next() : pasta.createFolder('DCIM');
-  const ex = dcim.getFilesByName(nome);
-  const arq = ex.hasNext() ? ex.next() : dcim.createFile(Utilities.newBlob(Utilities.base64Decode(dados), mime || 'image/jpeg', nome));
-  return { id: arq.getId(), url: 'https://drive.google.com/file/d/' + arq.getId() + '/view' };
+  const lock = LockService.getScriptLock(); lock.waitLock(30000); // evita duas cópias da mesma foto
+  try {
+    const ex = dcim.getFilesByName(nome);
+    const arq = ex.hasNext() ? ex.next() : dcim.createFile(Utilities.newBlob(Utilities.base64Decode(dados), mime || 'image/jpeg', nome));
+    return { id: arq.getId(), url: 'https://drive.google.com/file/d/' + arq.getId() + '/view' };
+  } finally { lock.releaseLock(); }
 }
 
 // ---------- Registros ----------
@@ -357,9 +376,11 @@ function gravarLinha(sh, r, valores) {
 function cabecalho(sh, garantir) {
   let cab = sh.getLastColumn() ? sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String) : [];
   if (!cab.length || cab[0] === '') cab = [];
-  const novas = (garantir || []).filter((k) => cab.indexOf(k) < 0);
+  const novas = (garantir || []).filter((k, i, a) => cab.indexOf(k) < 0 && a.indexOf(k) === i);
+  for (const k of novas) if (!/^[^=+\-@\t\r][^\t\r\n]{0,79}$/.test(k)) throw new Error('Nome de coluna inválido: ' + String(k).slice(0, 40));
+  if (cab.length + novas.length > 300) throw new Error('Limite de colunas da planilha atingido.');
   if (novas.length) {
-    sh.getRange(1, cab.length + 1, 1, novas.length).setValues([novas]).setFontWeight('bold');
+    sh.getRange(1, cab.length + 1, 1, novas.length).setNumberFormat('@').setValues([novas]).setFontWeight('bold');
     cab = cab.concat(novas); sh.setFrozenRows(1);
   }
   return cab;
@@ -369,6 +390,9 @@ const dia = (iso) => (iso ? Utilities.formatDate(new Date(iso), FUSO, 'yyyy-MM-d
 function salvarRegistro(projetoId, linha, usr) {
   if (!linha || !linha.uuid) throw new Error('Registro sem identificador.');
   COLS_SISTEMA.forEach((c) => delete linha[c]); // o aparelho não escreve a validação
+  Object.keys(linha).forEach((k) => { if (/ link$/.test(k) && linha[k] && !/^https:\/\/drive\.google\.com\//.test(String(linha[k]))) linha[k] = ''; });
+  if (linha.atualizado_em && new Date(linha.atualizado_em) > new Date(Date.now() + 10 * 60000)) throw new Error('Data do aparelho adiantada. Acerte a data e a hora do celular e envie de novo.');
+  if (usr.perfil === 'coletor') linha.usuario = usr.login;
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
     const sh = planilha(projetoId);
@@ -380,12 +404,14 @@ function salvarRegistro(projetoId, linha, usr) {
     if (achado) {
       const r = achado.getRow();
       const atual = linhaObj(cab, sh.getRange(r, 1, 1, cab.length).getValues()[0]);
-      if (atual.atualizado_em && linha.atualizado_em && String(atual.atualizado_em) > String(linha.atualizado_em)) return { ignorado: 'versao_antiga' };
+      if (usr.perfil === 'coletor' && atual.atualizado_em && linha.atualizado_em && String(atual.atualizado_em) > String(linha.atualizado_em)) return { ignorado: 'versao_antiga' };
       if (usr.perfil === 'coletor') {
+        linha.concluido_em = atual.concluido_em || linha.concluido_em; linha.criado_em = atual.criado_em || linha.criado_em; linha.usuario = atual.usuario || usr.login;
         if (atual.usuario && String(atual.usuario).toLowerCase() !== usr.login.toLowerCase()) throw new Error('Este registro é de outra equipe. Só a coordenação pode alterá-lo.');
         const v = String(atual.validacao || '');
         if (v === 'Validado') throw new Error('Registro já validado pela coordenação. Para alterar, peça à coordenação.');
-        const mesmoDia = dia(atual.concluido_em || atual.criado_em) === dia(linha.atualizado_em);
+        const conc = atual.concluido_em || atual.criado_em;
+        const mesmoDia = dia(conc) === dia(linha.atualizado_em) && (Date.now() - new Date(conc).getTime()) < 4 * 864e5;
         if (v !== 'Devolvido' && !mesmoDia) throw new Error('Registro travado: a equipe só altera no mesmo dia em que concluiu. Peça à coordenação.');
         if (v === 'Devolvido') linha.validacao = 'Corrigido';
       }
@@ -407,14 +433,17 @@ function validar(projetoId, itens, usr) {
     const sh = planilha(projetoId); const cab = cabecalho(sh, COLS_SISTEMA);
     const n = sh.getLastRow() - 1; if (n < 1) return { alterados: 0 };
     const uu = sh.getRange(2, cab.indexOf('uuid') + 1, n, 1).getValues().map((x) => String(x[0]));
+    const pos = {}; uu.forEach((u, i) => (pos[u] = i));
     const iv = cab.indexOf('validacao') + 1; const agora = new Date().toISOString(); let alterados = 0;
+    // as 4 colunas da validação são lidas e gravadas de uma vez (rápido mesmo com milhares de registros)
+    const bloco = sh.getRange(2, iv, n, 4).getValues();
     for (const it of itens) {
       if (estados.indexOf(it.estado) < 0) throw new Error('Situação inválida: ' + it.estado);
       if (it.estado === 'Devolvido' && !String(it.obs || '').trim()) throw new Error('Informe o motivo da devolução.');
-      const k = uu.indexOf(String(it.uuid)); if (k < 0) continue;
-      sh.getRange(k + 2, iv, 1, 4).setNumberFormat('@').setValues([[it.estado, String(it.obs || '').slice(0, 500), usr.login, agora]]);
-      alterados++;
+      const k = pos[String(it.uuid)]; if (k == null) continue;
+      bloco[k] = [it.estado, seguro(String(it.obs || '').slice(0, 500)), usr.login, agora]; alterados++;
     }
+    if (alterados) sh.getRange(2, iv, n, 4).setNumberFormat('@').setValues(bloco);
     if (alterados) auditar(usr.login, 'validar', projetoId, alterados + ' registro(s): ' + itens.map((i) => i.estado).filter((x, i, a) => a.indexOf(x) === i).join(', '));
     CacheService.getScriptCache().remove('painel:' + projetoId + ':cliente'); CacheService.getScriptCache().remove('painel:' + projetoId + ':todos');
     return { alterados: alterados };
@@ -430,13 +459,14 @@ function situacaoMeus(projetoId, usr) {
 // Página de registros (de = posição inicial, n = quantidade). Sem n devolve tudo.
 function listarPagina(projetoId, de, n, usr) {
   const sh = planilha(projetoId); const total = Math.max(0, sh.getLastRow() - 1);
-  if (total < 1) return { linhas: [], total: 0 };
+  if (total < 1) return { linhas: [], total: 0, proximo: null };
   const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
-  de = Math.max(0, +de || 0); n = n ? Math.min(+n, total - de) : total - de;
-  if (n <= 0) return { linhas: [], total: total };
-  let linhas = sh.getRange(2 + de, 1, n, cab.length).getValues().map((l) => linhaObj(cab, l));
-  if (usr && usr.perfil === 'cliente') linhas = paraCliente(projetoId, linhas);
-  return { linhas: linhas, total: total };
+  de = Math.max(0, +de || 0); n = n ? Math.min(+n, 5000, total - de) : total - de;
+  if (n <= 0) return { linhas: [], total: total, proximo: null };
+  const linhas = sh.getRange(2 + de, 1, n, cab.length).getValues().map((l) => linhaObj(cab, l));
+  const proximo = de + n < total ? de + n : null;
+  if (usr && usr.perfil === 'cliente') return { linhas: paraCliente(projetoId, linhas), total: null, proximo: proximo };
+  return { linhas: linhas, total: total, proximo: proximo };
 }
 function clienteVeTodos(projetoId) { return String(projeto(projetoId).cliente_ve || '').toLowerCase() === 'todos'; }
 function paraCliente(projetoId, linhas) {
@@ -447,10 +477,11 @@ function paraCliente(projetoId, linhas) {
 function colunas(projetoId, campos, usr) {
   const sh = planilha(projetoId); const total = sh.getLastRow() - 1;
   if (total < 1) return { cab: campos, linhas: [] };
-  const cliente = usr && usr.perfil === 'cliente';
+  const cliente = usr && usr.perfil === 'cliente'; const coletor = usr && usr.perfil === 'coletor';
   const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
-  const pedir = cliente ? campos.concat(['validacao']) : campos;
-  const cols = pedir.map((c) => { const i = cab.indexOf(c); return i < 0 || (cliente && COLS_INTERNAS.indexOf(c) >= 0) ? null : sh.getRange(2, i + 1, total, 1).getValues(); });
+  const pedir = (cliente ? campos.slice(0, 30).concat(['validacao']) : campos.slice(0, 30));
+  const proibida = (c) => (cliente && COLS_INTERNAS.indexOf(c) >= 0) || (coletor && (COLS_INTERNAS.indexOf(c) >= 0 || COLS_SISTEMA.indexOf(c) >= 0));
+  const cols = pedir.map((c, k) => { const i = cab.indexOf(c); return i < 0 || (proibida(c) && !(cliente && k === pedir.length - 1)) ? null : sh.getRange(2, i + 1, total, 1).getValues(); });
   const todos = cliente && clienteVeTodos(projetoId);
   const linhas = [];
   for (let r = 0; r < total; r++) {
@@ -487,10 +518,10 @@ function indicadores(form, linhas, p) {
   const dap = form.campos.find((c) => c.tipo === 'multinumber' && /dap/i.test(c.nome));
   const classesDap = dap ? (() => { const cl = [[0, 10], [10, 20], [20, 30], [30, 50], [50, 80], [80, 1e9]]; const vs = ativos.map((l) => valorNum(l[dap.nome], true)).filter((x) => x != null); return cl.map(([a, b]) => ({ de: a, ate: b === 1e9 ? null : b, n: vs.filter((v) => v >= a && v < b).length })); })() : [];
   const especies = esp ? Object.entries(conta(ativos, (l) => String(l[esp.nome] || '').trim())).sort((a, b) => b[1] - a[1]) : [];
-  const porDia = {}; ativos.forEach((l) => { const d = String(l.criado_em || '').slice(0, 10); if (!d) return; const e = l.equipe || '-'; porDia[d] = porDia[d] || {}; porDia[d][e] = (porDia[d][e] || 0) + 1; });
+  const porDia = {}; ativos.forEach((l) => { const d = l.criado_em ? dia(l.criado_em) : ''; if (!d) return; const e = l.equipe || '-'; porDia[d] = porDia[d] || {}; porDia[d][e] = (porDia[d][e] || 0) + 1; });
   const gps = ativos.map((l) => +l.precisao_gps_m).filter((x) => x > 0).sort((a, b) => a - b);
   return {
-    gerado_em: new Date().toISOString(), projeto: p ? { id: p.id, nome: p.nome, contratante: p.contratante || '', contrato: p.contrato || '', municipio: p.municipio || '', meta: +p.meta || 0 } : null,
+    gerado_em: new Date().toISOString(), projeto: p ? { id: p.id, nome: p.nome, contratante: p.contratante || '', contrato: p.contrato || '', municipio: p.municipio || '', meta: +p.meta || 0, responsavel: p.responsavel || '', registro_profissional: p.registro_profissional || '', art: p.art || '' } : null,
     total: ativos.length, descartados: linhas.length - ativos.length,
     validacao: conta(ativos, (l) => l.validacao || 'Pendente'), equipes: conta(ativos, (l) => l.equipe || '-'),
     escolhas: escolhas, marcados: marcados, numeros: numeros, classesDap: classesDap,
@@ -551,6 +582,7 @@ function backupDiario() {
   const copiar = (id, nome) => {
     try {
       const c = DriveApp.getFileById(id).makeCopy(nome + ' - ' + hoje, sub); feitos.push(nome);
+      if (id === PROPS.getProperty('BASE_ID')) return c; // a base de usuários fica só no Drive, sem anexo no email
       try {
         const r = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + id + '/export?format=xlsx', { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
         if (r.getResponseCode() === 200) { const b = r.getBlob().setName(nome + ' - ' + hoje + '.xlsx'); if (b.getBytes().length < 15e6) anexos.push(b); }

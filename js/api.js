@@ -128,6 +128,7 @@ const Api = (() => {
       for (let de = 0; ; de += N) {
         const j = await chamar('listar', { projeto, de, n: N });
         out = out.concat(j.linhas); if (progresso) progresso(out.length, j.total);
+        if ('proximo' in j) { if (j.proximo == null) break; de = j.proximo - N; continue; }
         if (j.total == null || j.linhas.length < N || de + N >= j.total) break; // servidor antigo devolve tudo de uma vez
       }
       return out;

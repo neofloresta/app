@@ -71,7 +71,9 @@ const Arquivos = (() => {
   async function shapefile({ nome, cols, linhas, pontos, prj }) {
     const n = linhas.length;
     const comPonto = pontos.filter(Boolean);
-    const bbox = comPonto.length ? [Math.min(...comPonto.map((p) => p.x)), Math.min(...comPonto.map((p) => p.y)), Math.max(...comPonto.map((p) => p.x)), Math.max(...comPonto.map((p) => p.y))] : [0, 0, 0, 0];
+    const bbox = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const p of comPonto) { if (p.x < bbox[0]) bbox[0] = p.x; if (p.y < bbox[1]) bbox[1] = p.y; if (p.x > bbox[2]) bbox[2] = p.x; if (p.y > bbox[3]) bbox[3] = p.y; }
+    if (!comPonto.length) bbox.fill(0);
     const tamRec = (p) => (p ? 28 : 12);
     const shpLen = 100 + pontos.reduce((a, p) => a + tamRec(p), 0);
     const shp = new DataView(new ArrayBuffer(shpLen)); const shx = new DataView(new ArrayBuffer(100 + 8 * n));
@@ -92,6 +94,8 @@ const Arquivos = (() => {
       if (num) { const dec = Math.min(8, Math.max(0, ...vs.map((v) => (String(v).split('.')[1] || '').length))); const int = Math.max(1, ...vs.map((v) => String(Math.trunc(Math.abs(v))).length)) + 1; return { c, nm, t: 'N', len: Math.min(19, int + (dec ? dec + 1 : 0)), dec }; }
       return { c, nm, t: 'C', len: Math.max(1, Math.min(254, Math.max(1, ...vs.map((v) => enc.encode(String(v)).length)))), dec: 0 };
     });
+    // o registro do DBF tem no máximo 65.535 bytes: encurta os textos longos se o formulário for muito largo
+    while (1 + campos.reduce((a, f) => a + f.len, 0) > 65000) { const f = campos.filter((x) => x.t === 'C').sort((a, b) => b.len - a.len)[0]; if (!f || f.len <= 20) break; f.len = Math.floor(f.len * 0.8); }
     const recLen = 1 + campos.reduce((a, f) => a + f.len, 0); const hdrLen = 32 + 32 * campos.length + 1;
     const dbf = new Uint8Array(hdrLen + recLen * n + 1); const dv = new DataView(dbf.buffer); const d = new Date();
     dv.setUint8(0, 3); dv.setUint8(1, d.getFullYear() - 1900); dv.setUint8(2, d.getMonth() + 1); dv.setUint8(3, d.getDate());
@@ -127,7 +131,7 @@ const Arquivos = (() => {
     for (let i = 0; i < texto.length; i++) {
       const c = texto[i];
       if (aspas) { if (c === '"') { if (texto[i + 1] === '"') { campo += '"'; i++; } else aspas = false; } else campo += c; continue; }
-      if (c === '"') aspas = true; else if (c === sep) { linha.push(campo); campo = ''; }
+      if (c === '"' && campo === '') aspas = true; else if (c === sep) { linha.push(campo); campo = ''; }
       else if (c === '\n' || c === '\r') { if (c === '\r' && texto[i + 1] === '\n') i++; linha.push(campo); campo = ''; if (linha.some((x) => x !== '')) linhas.push(linha); linha = []; }
       else campo += c;
     }

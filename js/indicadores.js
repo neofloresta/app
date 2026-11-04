@@ -20,10 +20,11 @@ const Indicadores = (() => {
     const dap = form.campos.find((c) => c.tipo === 'multinumber' && /dap/i.test(c.nome));
     const classesDap = dap ? (() => { const cl = [[0, 10], [10, 20], [20, 30], [30, 50], [50, 80], [80, 1e9]]; const vs = ativos.map((l) => valorNum(l[dap.nome], true)).filter((x) => x != null); return cl.map(([a, b]) => ({ de: a, ate: b === 1e9 ? null : b, n: vs.filter((v) => v >= a && v < b).length })); })() : [];
     const especies = esp ? Object.entries(conta(ativos, (l) => String(l[esp.nome] || '').trim())).sort((a, b) => b[1] - a[1]) : [];
-    const porDia = {}; ativos.forEach((l) => { const d = String(l.criado_em || '').slice(0, 10); if (!d) return; const e = l.equipe || '-'; porDia[d] = porDia[d] || {}; porDia[d][e] = (porDia[d][e] || 0) + 1; });
+    const diaBR = (iso) => { const x = new Date(iso); if (isNaN(x)) return String(iso || '').slice(0, 10); try { return x.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }); } catch (e) { return String(iso).slice(0, 10); } };
+    const porDia = {}; ativos.forEach((l) => { const d = l.criado_em ? diaBR(l.criado_em) : ''; if (!d) return; const e = l.equipe || '-'; porDia[d] = porDia[d] || {}; porDia[d][e] = (porDia[d][e] || 0) + 1; });
     const gps = ativos.map((l) => +l.precisao_gps_m).filter((x) => x > 0).sort((a, b) => a - b);
     return {
-      gerado_em: new Date().toISOString(), projeto: p ? { id: p.id, nome: p.nome, contratante: p.contratante || '', contrato: p.contrato || '', municipio: p.municipio || '', meta: +p.meta || 0 } : null,
+      gerado_em: new Date().toISOString(), projeto: p ? { id: p.id, nome: p.nome, contratante: p.contratante || '', contrato: p.contrato || '', municipio: p.municipio || '', meta: +p.meta || 0, responsavel: p.responsavel || '', registro_profissional: p.registro_profissional || '', art: p.art || '' } : null,
       total: ativos.length, descartados: linhas.length - ativos.length,
       validacao: conta(ativos, (l) => l.validacao || 'Pendente'), equipes: conta(ativos, (l) => l.equipe || '-'),
       escolhas, marcados, numeros, classesDap,

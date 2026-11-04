@@ -8,7 +8,7 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
   await L.subir(); await L.configurar();
   const b = await chromium.launch();
   const { p } = await L.celular(b);
-  await L.logar(p, 'div-1', 'equipe1'); await p.waitForSelector('text=Nova árvore', { timeout: 8000 });
+  await L.logar(p, 'div-1', 'equipe01'); await p.waitForSelector('text=Nova árvore', { timeout: 8000 });
   await p.waitForTimeout(1500); // GPS
 
   // 1.1 cadastro completo com tempo
@@ -87,7 +87,7 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
   ok('2.1', depois.length - antes === 50 && dup === 0, `pendentes offline=${pend}; chegaram ${depois.length - antes}; duplicados=${dup}; envio levou ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 
   // 2.2 duas equipes ao mesmo tempo (formulário real)
-  const { p: p2 } = await L.celular(b); await L.logar(p2, 'div-2', 'equipe2'); await p2.waitForSelector('text=Nova árvore'); await p2.waitForTimeout(1200);
+  const { p: p2 } = await L.celular(b); await L.logar(p2, 'div-2', 'equipe02'); await p2.waitForSelector('text=Nova árvore'); await p2.waitForTimeout(1200);
   await Promise.all([A.arvoreCompleta(p, { fotos: 1 }), A.arvoreCompleta(p2, { fotos: 1 })]);
   await Promise.all([A.arvoreCompleta(p, { fotos: 1 }), A.arvoreCompleta(p2, { fotos: 1 })]);
   await p.waitForTimeout(3000); await p.evaluate(() => window.dispatchEvent(new Event('online'))); await p2.evaluate(() => window.dispatchEvent(new Event('online'))); await p.waitForTimeout(2500);
@@ -98,9 +98,9 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
   const alvo = (await L.post('listar', { projeto: 'divinopolis' })).linhas.find((l) => l.usuario === 'div-1' && /^E1-\d+$/.test(l.Codigo));
   const v1 = Object.assign({}, alvo, { atualizado_em: new Date().toISOString(), Observacoes: 'versão A (mais nova)' });
   const v2 = Object.assign({}, alvo, { atualizado_em: new Date(Date.now() - 3600e3).toISOString(), Observacoes: 'versão B (mais antiga, chegou depois)' });
-  await L.post('registro', { projeto: 'divinopolis', linha: v1 }, 'div-1', 'equipe1'); await L.post('registro', { projeto: 'divinopolis', linha: v2 });
+  await L.post('registro', { projeto: 'divinopolis', linha: v1 }, 'div-1', 'equipe01'); await L.post('registro', { projeto: 'divinopolis', linha: v2 }, 'div-1', 'equipe01');
   const fim = (await L.post('listar', { projeto: 'divinopolis' })).linhas.find((l) => l.uuid === alvo.uuid);
-  ok('2.3', fim.Observacoes.includes('versão A'), `regra: vence a edição mais recente (atualizado_em); a mais antiga é ignorada. Outra equipe não altera registro alheio, e a equipe só altera no dia ou quando devolvido. Resultado: "${fim.Observacoes}"`);
+  ok('2.3', fim.Observacoes.includes('versão A'), `regra: entre aparelhos da equipe vence a edição mais recente (a mais antiga é ignorada e o aparelho avisa); a coordenação sempre prevalece. Outra equipe não altera registro alheio, e a equipe só altera no dia ou quando devolvido. Resultado: "${fim.Observacoes}"`);
 
   // 2.4 sincronização interrompida
   await ctx.setOffline(true);

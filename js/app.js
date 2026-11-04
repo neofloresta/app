@@ -4,6 +4,8 @@
   const TERMO_VERSAO = '2026-11';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
+  { const rc = Element.prototype.replaceChildren; Element.prototype.replaceChildren = function (...k) { return rc.apply(this, k.flat(Infinity).filter((x) => x != null && x !== false)); }; }
+  const CONTATO = (window.NEO_CONFIG && window.NEO_CONFIG.contato) || {};
 
   // ---------- utilidades ----------
   function h(tag, attrs, ...filhos) {
@@ -12,13 +14,14 @@
       if (v == null || v === false) continue;
       if (k === 'class') el.className = v;
       else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-      else if (k === 'html') el.innerHTML = v;
       else if (k in el && k !== 'list' && typeof v !== 'string') el[k] = v;
       else el.setAttribute(k, v === true ? '' : v);
     }
     for (const f of filhos.flat(Infinity)) if (f != null && f !== false) el.append(f.nodeType ? f : document.createTextNode(String(f)));
     return el;
   }
+  // só abre links de foto do Google Drive
+  const linkSeguro = (u) => (/^https:\/\/(drive|docs)\.google\.com\//.test(String(u || '')) ? String(u) : '');
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   const agoraISO = () => new Date().toISOString();
   const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -122,7 +125,7 @@
     if (!p) { if (S.sessao.usuario.perfil === 'admin') { S.projeto = null; S.form = null; return; } throw new Error('Nenhum projeto liberado para este usuário.'); }
     S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
     S.form = await carregarForm(p.formulario);
-    sincronizarSequencia();
+    await Promise.race([sincronizarSequencia(), new Promise((r) => setTimeout(r, 8000))]);
   }
   async function carregarForm(id, forcarCache) {
     const chave = 'form:' + id;
@@ -135,6 +138,8 @@
   }
 
   function rota() {
+    document.querySelectorAll('.veu').forEach((v) => v.remove());
+    if (S.reg && !location.hash.startsWith('#form/' + S.reg.uuid)) { const r = S.reg; clearTimeout(salvarTimer); Store.salvarRegistro(r); Gps.ouvintes.forEach((f) => f.__form && Gps.ouvintes.delete(f)); S.reg = null; }
     if (!S.sessao) return telaLogin();
     if (!S.sessao.usuario.termo_aceito_em) return telaTermo(true);
     const [r, a, b] = location.hash.replace(/^#/, '').split('/');
@@ -184,8 +189,8 @@
       S.expirada ? h('div', { class: 'aviso' }, 'Sua sessão expirou. Entre de novo: os registros guardados no aparelho continuam salvos e serão enviados.') : null,
       Api.demo ? h('div', { class: 'info' }, 'Modo demonstração: os dados ficam só neste aparelho. Usuários de teste (senha 1234): ', h('b', null, 'admin'), ', ', h('b', null, 'revisor'), ' e ', h('b', null, 'prefeitura'), '. Equipes de campo: ', h('b', null, 'equipe1 / 1111'), ' e ', h('b', null, 'equipe2 / 2222'), '.') : null,
       h('div', { class: 'campo' }, u), h('div', { class: 'campo' }, s), erro, btn,
-      h('button', { class: 'btn linha cheio', style: 'margin-top:12px', onclick: configurarServidor }, 'Configurar servidor'),
-      h('p', { class: 'dica', style: 'text-align:center;margin-top:18px' }, 'Versão ' + VERSAO, ' · ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); verTermo(); } }, 'Termo de uso e privacidade'))), h('div', { class: 'padronagem', 'aria-hidden': 'true' })));
+      Api.demo || /[?&]config/.test(location.search) ? h('button', { class: 'btn linha cheio', style: 'margin-top:12px', onclick: configurarServidor }, 'Configurar servidor') : null,
+      h('p', { class: 'dica', style: 'text-align:center;margin-top:18px' }, 'Versão ' + VERSAO, ' · ', h('a', { href: '#', class: 'link-termo', onclick: (e) => { e.preventDefault(); verTermo(); } }, 'Termo de uso e privacidade'))), h('div', { class: 'padronagem', 'aria-hidden': 'true' })));
   }
 
   async function configurarServidor() {
@@ -207,46 +212,62 @@
 
   // ---------- Sincronização ----------
   const $sync = () => document.querySelector('.sync');
-  async function pendentes() { return (await Store.todosRegistros()).filter((r) => r.status === 'pendente'); }
+  async function pendentes() { return (await Store.todosRegistros()).filter((r) => r.status === 'pendente' && !r.__base); }
   async function atualizarSync() {
     const el = $sync(); if (!el) return;
     const n = (await pendentes()).length;
     el.className = 'sync' + (!navigator.onLine ? ' off' : n ? ' pend' : '');
     if (S.expirada) { el.className = 'sync pend'; el.textContent = 'Entrar de novo'; return; }
-    el.textContent = S.sincronizando ? 'Enviando...' : !navigator.onLine ? (n ? `Sem rede · ${n}` : 'Sem rede') : n ? `${n} a enviar` : (Api.demo ? 'Demonstração' : 'Em dia');
+    el.textContent = S.sincronizando ? 'Enviando...' : !navigator.onLine ? (n ? `Sem rede · ${n}` : 'Sem rede') : n ? `${n} a enviar` : (Api.demo ? 'Demonstração' : 'Tudo enviado');
   }
   async function sincronizar(silencioso) {
     if (S.expirada && !silencioso) return reentrar();
     if (S.sincronizando || !S.sessao || S.expirada || perfil() === 'cliente') return;
     if (!navigator.onLine) { if (!silencioso) toast('Sem internet. Os dados ficam guardados e serão enviados depois.'); return atualizarSync(); }
-    const lista = await pendentes(); if (!lista.length) { if (!silencioso) toast('Tudo enviado.'); await atualizarSituacao(); return atualizarSync(); }
-    S.sincronizando = true; atualizarSync();
-    let ok = 0, falhas = 0, ultimoErro = '';
-    for (const r of lista) {
+    S.sincronizando = true; // marcado antes de qualquer espera: nunca roda duas vezes ao mesmo tempo
+    try { await enviarPendentes(silencioso); } finally { S.sincronizando = false; await atualizarSync(); }
+    if (S.expirada) return;
+    await atualizarSituacao();
+    if (location.hash === '' || location.hash === '#inicio') listarRegistros();
+  }
+  // recusas definitivas do servidor (não adianta tentar de novo)
+  const recusaFinal = (m) => /travado|validado pela coordena|outra equipe|perfil n[aã]o tem acesso/i.test(m || '');
+  async function enviarPendentes(silencioso) {
+    const lista = await pendentes(); if (!lista.length) { if (!silencioso) toast('Tudo enviado.'); return; }
+    atualizarSync();
+    let ok = 0, falhas = 0, ultimoErro = '', aviso = '';
+    for (const r0 of lista) {
+      const uid = r0.uuid;
       try {
+        let r = await Store.registro(uid); if (!r || r.status !== 'pendente' || r.__base) continue;
         const p = S.sessao.projetos.find((x) => x.id === r.projeto);
         const form = S.projeto && r.projeto === S.projeto.id ? S.form : await carregarForm(p ? p.formulario : '', true);
         for (const [campo, f] of Object.entries(r.fotos || {})) {
           if (!f || f.enviado) continue;
-          const blob = await Store.foto(f.chave); if (!blob) { f.enviado = true; continue; }
-          const res = await Api.b.foto(r.projeto, f.nome.replace(/^DCIM\//, ''), blob);
-          f.enviado = true; f.url = res.url || ''; f.idDrive = res.id || '';
-          await Store.salvarRegistro(r);
+          const blob = await Store.foto(f.chave);
+          let res = null; if (blob) res = await Api.b.foto(r.projeto, f.nome.replace(/^DCIM\//, ''), blob);
+          const cur = await Store.registro(uid); // grava só se a foto ainda é a mesma no registro
+          if (cur && cur.fotos && cur.fotos[campo] && cur.fotos[campo].chave === f.chave) { Object.assign(cur.fotos[campo], { enviado: true, url: (res && res.url) || '', idDrive: (res && res.id) || '' }); await Store.salvarRegistro(cur); }
         }
+        r = await Store.registro(uid); if (!r || r.status !== 'pendente' || r.__base) continue;
         const res = await Api.b.registro(r.projeto, Api.achatar(r, form));
-        const atual = await Store.registro(r.uuid);
-        if (atual && atual.atualizado_em === r.atualizado_em) { atual.status = 'enviado'; atual.fotos = r.fotos; delete atual.erroSync; if (res && res.validacao) atual.validacao = res.validacao; await Store.salvarRegistro(atual); }
+        const atual = await Store.registro(uid);
+        if (atual && atual.atualizado_em === r.atualizado_em && !atual.__base) {
+          atual.status = 'enviado'; delete atual.erroSync;
+          if (res && res.validacao) atual.validacao = res.validacao;
+          if (res && res.ignorado) { atual.conflito = 'A coordenação alterou este registro depois desta versão. A versão do aparelho não foi aplicada.'; aviso = atual.conflito; } else delete atual.conflito;
+          await Store.salvarRegistro(atual);
+        }
         ok++;
       } catch (e) {
         if (e.sessao) { ultimoErro = e.message; break; }
-        falhas++; ultimoErro = e.message; r.erroSync = e.message; await Store.salvarRegistro(r);
+        falhas++; ultimoErro = e.message;
+        const cur = await Store.registro(uid);
+        if (cur && !cur.__base) { cur.erroSync = e.message; if (recusaFinal(e.message)) cur.status = 'recusado'; await Store.salvarRegistro(cur); }
       }
     }
-    S.sincronizando = false; await atualizarSync();
     if (S.expirada) return;
-    if (!silencioso || falhas) toast(falhas ? `Enviados ${ok}. Falharam ${falhas}: ${ultimoErro}` : `${ok} registro(s) enviados.`, falhas ? 5000 : 2600);
-    await atualizarSituacao();
-    if (location.hash === '' || location.hash === '#inicio') listarRegistros();
+    if (!silencioso || falhas || aviso) toast(falhas ? `Enviados ${ok}. Falharam ${falhas}: ${ultimoErro}` : aviso || `${ok} registro(s) enviados.`, falhas || aviso ? 5000 : 2600);
   }
   // traz do servidor como a coordenação avaliou os registros deste aparelho (validado, devolvido e motivo)
   async function atualizarSituacao() {
@@ -306,8 +327,10 @@
     const hoje = new Date().toDateString();
     const st = document.getElementById('stats');
     const nPend = todos.filter((r) => r.status === 'pendente').length;
+    const nRasc = todos.filter((r) => r.status === 'rascunho').length;
     if (st) st.replaceChildren(h('span', null, h('b', null, todos.filter((r) => r.status !== 'rascunho' && new Date(r.criado_em).toDateString() === hoje).length), ' hoje'),
-      h('span', null, h('b', null, todos.filter((r) => r.status !== 'rascunho').length), ' no aparelho'),
+      h('span', null, h('b', null, todos.filter((r) => r.status !== 'rascunho').length), ' concluídas'),
+      nRasc ? h('span', null, h('b', null, nRasc), nRasc > 1 ? ' rascunhos' : ' rascunho') : null,
       h('span', { class: nPend ? 'pend' : '' }, h('b', null, nPend), ' a enviar'));
     const cc = campoCodigo(S.form), ce = campoEspecie(S.form);
     const f = norm(filtro);
@@ -319,11 +342,11 @@
     const itens = [];
     for (const r of lista.slice(0, 300)) {
       const img = await miniatura(r);
-      const rotSt = r.status === 'enviado' && r.validacao && r.validacao !== 'Pendente' ? r.validacao : { rascunho: 'Rascunho', pendente: r.erroSync ? 'Erro' : 'A enviar', enviado: 'Enviado' }[r.status];
-      const clsSt = r.status === 'enviado' && r.validacao && r.validacao !== 'Pendente' ? 'v-' + norm(r.validacao) : (r.erroSync && r.status === 'pendente' ? 'erro' : r.status);
+      const rotSt = r.status === 'enviado' && r.validacao && r.validacao !== 'Pendente' ? r.validacao : { rascunho: 'Rascunho', pendente: r.erroSync ? 'Erro' : 'A enviar', enviado: 'Enviado', recusado: 'Recusado' }[r.status];
+      const clsSt = r.status === 'enviado' && r.validacao && r.validacao !== 'Pendente' ? 'v-' + norm(r.validacao) : (r.erroSync && r.status === 'pendente') || r.status === 'recusado' ? 'erro' : r.status;
       itens.push(h('button', { class: 'reg', onclick: () => ir('#form/' + r.uuid) },
         img ? h('img', { src: img, alt: '' }) : h('div', { class: 'sem' }),
-        h('div', { class: 'tx' }, h('b', null, codigoDe(S.form, r.valores) || 'Sem código'),
+        h('div', { class: 'tx' }, h('b', null, (cc && r.valores[cc.nome]) || codigoDe(S.form, r.valores) || 'Sem código'),
           h('i', null, (ce && r.valores[ce.nome]) || 'Espécie não informada'), h('small', null, `${dataBR(r.atualizado_em)} · ${r.equipe || ''}`),
           r.validacao === 'Devolvido' && r.validacao_obs ? h('small', { class: 'motivo' }, 'Motivo: ' + r.validacao_obs) : null),
         h('span', { class: 'st ' + clsSt }, rotSt)));
@@ -346,7 +369,7 @@
       !Api.demo || true ? it('Trocar minha senha', trocarSenha) : null,
       it('Sobre, termo de uso e privacidade', () => ir('#sobre')),
       it('Sair', () => sair()),
-      h('p', { class: 'dica', style: 'margin-top:12px' }, `Versão ${VERSAO} · ${Api.demo ? 'demonstração' : 'conectado ao Google'}`)));
+      h('p', { class: 'dica', style: 'margin-top:12px' }, `Versão ${VERSAO}${Api.demo ? ' · demonstração' : ''}`)));
     document.body.append(veu);
   }
   const ROT_PERFIL = { admin: 'Coordenação', revisor: 'Revisão técnica', coletor: 'Equipe de campo', cliente: 'Cliente (consulta)' };
@@ -354,11 +377,11 @@
     const a = h('input', { class: 'entrada', type: 'password', autocomplete: 'current-password' });
     const n1 = h('input', { class: 'entrada', type: 'password', autocomplete: 'new-password' });
     const n2 = h('input', { class: 'entrada', type: 'password', autocomplete: 'new-password' });
-    const ok = await modal('Trocar minha senha', h('div', null, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Senha atual'), a), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nova senha (mínimo 6 caracteres)'), n1), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Repita a nova senha'), n2)),
+    const ok = await modal('Trocar minha senha', h('div', null, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Senha atual'), a), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nova senha (mínimo 8 caracteres)'), n1), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Repita a nova senha'), n2)),
       [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Trocar senha', valor: true }]);
     if (!ok) return;
     if (n1.value !== n2.value) return toast('As duas senhas novas não conferem.');
-    if (n1.value.trim().length < 6) return toast('A nova senha precisa ter pelo menos 6 caracteres.');
+    if (n1.value.trim().length < 8 && !Api.demo) return toast('A nova senha precisa ter pelo menos 8 caracteres.');
     try { await Api.b.trocarSenha(a.value, n1.value.trim()); if (S.sessao.s) { S.sessao.s = n1.value.trim(); Api.credenciais(credDe(S.sessao)); await Store.set('sessao', S.sessao); } toast('Senha alterada.'); } catch (e) { toast(e.message, 5000); }
   }
   async function trocarProjeto() {
@@ -478,11 +501,14 @@
     const r = await Store.registro(id);
     if (!r) { toast('Registro não encontrado.'); return ir('#inicio'); }
     if (r.projeto !== S.projeto.id) await abrirProjeto(r.projeto);
-    if (r.status !== 'rascunho' && r.__base) S.editando.add(r.uuid); // edição interrompida (app fechado no meio)
+    if (r.status !== 'rascunho' && r.__base) { // edição interrompida (app fechado no meio)
+      if (podeEditar(r).ok) S.editando.add(r.uuid);
+      else { await descartarEdicao(r); toast('A edição não terminada foi descartada: o registro está travado.', 5000); }
+    }
     if (r.status !== 'rascunho' && !S.editando.has(r.uuid)) return telaFichaLocal(r);
     if (!S.reg || S.reg.uuid !== r.uuid) { S.aba = 0; S.tentou = false; }
     S.reg = r; r.valores = r.valores || {}; r.fotos = r.fotos || {};
-    if (r.status !== 'rascunho' && !r.__base) { r.__base = JSON.stringify(r.valores); r.__baseFotos = JSON.stringify(r.fotos); await Store.salvarRegistro(r); }
+    if (r.status !== 'rascunho' && !r.__base) { r.__base = JSON.stringify(r.valores); r.__baseFotos = JSON.stringify(r.fotos); r.__basePos = JSON.stringify({ lat: r.lat, lon: r.lon, prec: r.prec, posManual: r.posManual }); await Store.salvarRegistro(r); }
     if (abaParam != null) S.aba = +abaParam || 0;
     const form = S.form; const abas = form.abas;
     S.aba = Math.min(Math.max(0, S.aba), abas.length - 1);
@@ -567,7 +593,7 @@
             const gObrig = grupo && (form.gruposObrig || []).includes(grupo);
             const faltaG = S.tentou && gObrig && gruposFaltando(form, r.valores, E).includes(grupo);
             chips = h('div', { class: 'chips' });
-            blocos.push(h('div', { class: 'campo' + (faltaG ? ' falta' : ''), 'data-grupo': grupo || '' }, grupo ? (gObrig ? h('div', { class: 'rot' }, 'Marque pelo menos uma opção', h('span', { class: 'obr' }, '*')) : null) : h('div', { class: 'rot' }, 'Marque o que se aplica'), chips));
+            blocos.push(h('div', { class: 'campo' + (faltaG ? ' falta' : ''), 'data-grupo': grupo || '' }, grupo ? (gObrig ? h('div', { class: 'dica', style: 'margin:-6px 0 10px' }, 'Marque uma ou mais (obrigatório)') : null) : h('div', { class: 'rot' }, 'Marque o que se aplica'), chips));
           }
           const meuGrupo = grupo;
           const b = h('button', { class: 'chip' + (c.exclusivo ? ' exclusivo' : '') + (r.valores[c.nome] ? ' sel' : ''), 'data-campo': c.nome, onclick: () => {
@@ -608,7 +634,7 @@
       btProx.classList.toggle('fim', k < 0);
     }
 
-    function rotulo(c) { return h('label', { class: 'rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null); }
+    function rotulo(c) { return h('label', { class: 'rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null, c.ajuda ? h('small', { class: 'ajuda' }, c.ajuda) : null); }
     function campoEl(c) {
       const box = h('div', { class: 'campo' + (S.tentou && E[c.nome].obrig && vazio(c, valorDe(r, c)) ? ' falta' : ''), 'data-campo': c.nome });
       const v = r.valores[c.nome];
@@ -710,7 +736,7 @@
           f ? h('button', { class: 'tile cheia', onclick: opcoes, style: u ? `background-image:url(${u})` : '' }, u ? null : ico('check'))
             : h('button', { class: 'tile', onclick: () => cam.click() }, ico('camera')),
           h('div', { class: 'tile-rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null),
-          ...(f ? [] : [h('button', { class: 'tile-gal', onclick: () => gal.click() }, 'galeria')]), cam, gal);
+          ...(f ? [] : [h('button', { class: 'tile-gal', onclick: () => gal.click() }, 'Escolher da galeria')]), cam, gal);
       };
       async function receber(inp) {
         const arq = inp.files && inp.files[0]; if (!arq) return;
@@ -718,9 +744,10 @@
           const blob = await reduzir(arq, 2048, 0.85);
           const chave = r.uuid + ':' + c.nome + ':' + Date.now();
           await Store.salvarFoto(chave, blob);
-          const antiga = r.fotos[c.nome]; if (antiga && !antiga.enviado) Store.apagarFoto(antiga.chave);
+          const antiga = r.fotos[c.nome]; const daBase = r.__baseFotos && (JSON.parse(r.__baseFotos)[c.nome] || {}).chave === (antiga && antiga.chave);
+          if (antiga && !antiga.enviado && !daBase) Store.apagarFoto(antiga.chave);
           const prefixo = S.projeto.prefixo || S.projeto.id;
-          r.fotos[c.nome] = { nome: `DCIM/${prefixo}_${carimbo()}.jpg`, chave, enviado: false, url: '' };
+          r.fotos[c.nome] = { nome: `DCIM/${prefixo}_${carimbo()}_${r.uuid.replace(/-/g, '').slice(0, 6)}.jpg`, chave, enviado: false, url: '' };
           mudar(c, r.valores[c.nome]); desenhar();
         } catch (e) { toast('Não foi possível ler a foto: ' + e.message); }
       }
@@ -786,6 +813,8 @@
       const antes = JSON.parse(r.__base); const mud = [];
       const fmt = (c, v) => v == null || v === '' ? 'vazio' : v === true ? 'sim' : v === false ? 'não' : typeof v === 'number' ? numBR(v) : c.tipo === 'choice' ? rotuloOpcao(c, v) : String(v);
       for (const c of form.campos) if (!c.calculado && c.tipo !== 'photo' && fmt(c, antes[c.nome]) !== fmt(c, r.valores[c.nome])) mud.push(`${c.rotulo}: ${fmt(c, antes[c.nome])} → ${fmt(c, r.valores[c.nome])}`);
+      const bp = JSON.parse(r.__basePos || 'null');
+      if (bp && (bp.lat !== r.lat || bp.lon !== r.lon)) { const d = bp.lat == null || r.lat == null ? null : distM(bp.lat, bp.lon, r.lat, r.lon); mud.push(`Posição: ${bp.lat == null ? 'sem GPS' : 'ajustada'}${d != null ? ` (${numBR(Math.round(d * 10) / 10)} m)` : ''}`); }
       const fa = JSON.parse(r.__baseFotos || '{}');
       for (const c of form.campos) if (c.tipo === 'photo' && ((fa[c.nome] || {}).chave || '') !== ((r.fotos[c.nome] || {}).chave || '')) mud.push(`${c.rotulo}: foto ${r.fotos[c.nome] ? (fa[c.nome] ? 'trocada' : 'incluída') : 'removida'}`);
       return mud;
@@ -794,7 +823,10 @@
     function anotarHistorico() {
       const mud = diferencas();
       if (mud.length) (r.historico = r.historico || []).push({ em: agoraISO(), por: S.sessao.u, mud });
-      delete r.__base; delete r.__baseFotos;
+      // fotos da versão anterior que foram trocadas e nunca subiram: agora podem sair do aparelho
+      const fa = JSON.parse(r.__baseFotos || '{}'); const atuais = new Set(Object.values(r.fotos).map((f) => f && f.chave));
+      for (const f of Object.values(fa)) if (f && f.chave && !f.enviado && !atuais.has(f.chave)) Store.apagarFoto(f.chave);
+      delete r.__base; delete r.__baseFotos; delete r.__basePos;
     }
     async function sairForm() {
       clearTimeout(salvarTimer);
@@ -805,9 +837,9 @@
             [{ texto: 'Descartar alterações', classe: 'perigo', valor: 'descartar' }, { texto: 'Continuar editando', classe: 'sec', valor: null }, { texto: 'Salvar', valor: 'salvar' }]);
           if (v === 'salvar') return concluir();
           if (v !== 'descartar') return;
-          r.valores = JSON.parse(r.__base); r.fotos = JSON.parse(r.__baseFotos || '{}');
+          await descartarEdicao(r); S.editando.delete(r.uuid); Gps.ouvintes.delete(ouvinte); S.reg = null; return ir('#form/' + r.uuid);
         }
-        delete r.__base; delete r.__baseFotos; await Store.salvarRegistro(r); S.editando.delete(r.uuid);
+        delete r.__base; delete r.__baseFotos; delete r.__basePos; await Store.salvarRegistro(r); S.editando.delete(r.uuid);
         Gps.ouvintes.delete(ouvinte); S.reg = null; return ir('#form/' + r.uuid);
       }
       Gps.ouvintes.delete(ouvinte);
@@ -860,7 +892,7 @@
       const vis = pts.filter((o) => (!q || o.chave.includes(q)) && (!eq || o.equipe === eq) && (!rk || String(o.risco) === rk));
       for (const o of vis) {
         const fill = porRisco ? corRisco[o.risco] || '#8A969C' : corEq(o.equipe || '-');
-        L.circleMarker([o.lat, o.lon], { renderer: render, radius: 6, color: '#fff', weight: 1.5, fillColor: fill, fillOpacity: 0.95 }).on('click', (e) => ficha(o, e.latlng)).addTo(camada);
+        L.circleMarker([o.lat, o.lon], { renderer: render, radius: vis.length > 2000 ? 4 : 6, color: '#fff', weight: 1.5, fillColor: fill, fillOpacity: 0.95 }).on('click', (e) => ficha(o, e.latlng)).addTo(camada);
       }
       conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos`;
       legenda();
@@ -873,7 +905,7 @@
       const pop = h('div', { class: 'ficha' }, h('b', null, o.cod || 'Sem código'), o.esp ? h('i', null, o.esp) : null,
         o.cat ? h('div', null, rotOp(cCat, o.cat)) : null, o.risco ? h('div', null, 'Risco ' + String(rotOp(cRisco, o.risco)).toLowerCase()) : null,
         h('small', null, o.equipe || ''),
-        o.foto ? h('a', { href: o.foto, target: '_blank', rel: 'noopener' }, 'Ver foto') : null,
+        linkSeguro(o.foto) ? h('a', { href: linkSeguro(o.foto), target: '_blank', rel: 'noopener' }, 'Ver foto') : null,
         o.local ? h('button', { class: 'btn peq', onclick: () => ir('#form/' + o.uid) }, 'Abrir') : ehCoord() ? h('button', { class: 'btn peq', onclick: () => { S.navVal = []; ir('#ficha/' + encodeURIComponent(o.uid)); } }, 'Ver ficha') : null);
       L.popup().setLatLng(ll || [o.lat, o.lon]).setContent(pop).openOn(mapa);
     }
@@ -925,7 +957,7 @@
     const corpo = h('main');
     const it = (id, txt) => h('button', { class: sub === id ? 'at' : '', onclick: () => ir('#admin/' + id) }, txt);
     const voltar = S.projeto ? h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')) : h('button', { class: 'ic', onclick: abrirMenuAdmin, 'aria-label': 'Menu' }, ico('menu'));
-    $app.replaceChildren(...[topo('Coordenação', Api.demo ? 'Modo demonstração' : 'Conectado ao Google', voltar, null),
+    $app.replaceChildren(...[topo('Coordenação', Api.demo ? 'Modo demonstração' : (S.projeto ? S.projeto.nome : 'Neofloresta Inventário'), voltar, null),
       !S.projeto ? h('main', { style: 'padding-bottom:0' }, h('div', { class: 'info' }, 'Primeiros passos: 1) em Formulários, instale ou importe um formulário; 2) em Projetos, crie o projeto; 3) em Equipes e usuários, crie os acessos de campo.')) : null,
       h('main', { style: 'padding-bottom:0' }, h('div', { class: 'subabas' }, it('exportar', 'Exportar'), it('importar', 'Importar'), it('projetos', 'Projetos'), it('usuarios', 'Usuários'), it('formularios', 'Formulários'), it('seguranca', 'Segurança')),
         S.projeto ? h('div', { class: 'linha-btn', style: 'margin:8px 0 0' }, h('button', { class: 'btn sec peq', onclick: () => ir('#painel') }, 'Painel'), h('button', { class: 'btn sec peq', onclick: () => ir('#validacao') }, 'Validação'), h('button', { class: 'btn sec peq', onclick: () => ir('#mapa') }, 'Mapa')) : null), corpo].filter(Boolean));
@@ -964,6 +996,9 @@
       const ncon = h('input', { class: 'entrada', value: p.contrato || '', placeholder: 'ex.: 580/2026' });
       const mun = h('input', { class: 'entrada', value: p.municipio || '', placeholder: 'ex.: Divinópolis/MG' });
       const meta = h('input', { class: 'entrada', inputmode: 'numeric', value: p.meta || '', placeholder: 'ex.: 10000' });
+      const rt = h('input', { class: 'entrada', value: p.responsavel || '', placeholder: 'ex.: Nome do engenheiro florestal' });
+      const reg = h('input', { class: 'entrada', value: p.registro_profissional || '', placeholder: 'ex.: CREA-PR 000.000/D' });
+      const art = h('input', { class: 'entrada', value: p.art || '', placeholder: 'nº da ART' });
       const cve = h('select', { class: 'entrada' }, h('option', { value: 'validados', selected: p.cliente_ve !== 'todos' }, 'Só registros validados'), h('option', { value: 'todos', selected: p.cliente_ve === 'todos' }, 'Todos, inclusive aguardando validação'));
       const ok = await modal(novo ? 'Novo projeto' : 'Editar projeto', h('div', null,
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Identificador (sem espaços)'), id), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), nome),
@@ -971,12 +1006,14 @@
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Prefixo das fotos'), pre, h('div', { class: 'dica' }, 'As fotos ficam como DCIM/prefixo_AAAAMMDDhhmmssmmm.jpg, igual ao QField.')),
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Contratante'), contr), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nº do contrato'), ncon)),
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Município'), mun), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Meta de registros'), meta)),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Responsável técnico (sai no relatório)'), rt),
+        h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Registro profissional'), reg), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'ART'), art)),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'O cliente vê no portal'), cve)),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
       const pid = Q2F.slug(id.value || nome.value); if (!pid || !nome.value.trim()) return toast('Preencha identificador e nome.');
       if (novo && projetos.some((x) => x.id === pid)) return toast('Já existe projeto com esse identificador.');
-      try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value })); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
+      try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value, responsavel: rt.value.trim(), registro_profissional: reg.value.trim(), art: art.value.trim() })); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
     }
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Projetos'),
       h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Projeto'), h('th', null, 'Formulário'), h('th', null, '')),
@@ -993,7 +1030,7 @@
       const novo = !u; u = u || { login: '', nome: '', perfil: 'coletor', projeto: S.projeto ? S.projeto.id : '', equipe: '', ativo: 'sim' };
       const lo = h('input', { class: 'entrada', value: u.login, disabled: !novo, autocapitalize: 'none', placeholder: 'ex.: div-1' });
       const no = h('input', { class: 'entrada', value: u.nome || '', placeholder: 'ex.: Equipe 1' });
-      const se = h('input', { class: 'entrada', type: 'text', autocomplete: 'new-password', placeholder: novo ? 'mínimo 6 caracteres' : 'deixe em branco para manter' });
+      const se = h('input', { class: 'entrada', type: 'text', autocomplete: 'new-password', placeholder: novo ? 'mínimo 8 caracteres' : 'deixe em branco para manter' });
       const eq = h('input', { class: 'entrada', value: u.equipe || '', placeholder: 'ex.: Equipe 1' });
       const cod = h('input', { class: 'entrada', value: u.codigo || '', autocapitalize: 'characters', placeholder: 'ex.: E1' });
       const em = h('input', { class: 'entrada', type: 'email', value: u.email || '', placeholder: 'opcional' });
@@ -1012,7 +1049,7 @@
       if (!ok) return;
       const login = lo.value.trim().toLowerCase();
       if (!login) return toast('Preencha o usuário.');
-      if (novo && se.value.trim().length < 6 && !Api.demo) return toast('A senha precisa ter pelo menos 6 caracteres.');
+      if (se.value.trim() && se.value.trim().length < 8 && !Api.demo) return toast('A senha precisa ter pelo menos 8 caracteres.');
       if (novo && !se.value.trim()) return toast('Defina a senha.');
       if (novo && us.some((x) => x.login === login)) return toast('Esse usuário já existe.');
       const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao' };
@@ -1029,9 +1066,9 @@
       h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Usuário'), h('th', null, 'Perfil e projetos'), h('th', null, '')),
         us.map((u) => h('tr', { class: String(u.ativo).toLowerCase() === 'nao' ? 'inativo' : '' }, h('td', null, h('b', null, u.login), h('br'), h('small', null, u.nome || ''), u.bloqueado ? h('span', { class: 'tag-alerta' }, 'bloqueado') : null, String(u.ativo).toLowerCase() === 'nao' ? h('span', { class: 'tag-cinza' }, 'inativo') : null),
           h('td', null, rotP(u.perfil), u.codigo ? ` · ${u.codigo}` : '', h('br'), h('small', null, nomeP(u.projeto)), u.senha_antiga ? h('div', null, h('small', { class: 'dica' }, 'senha ainda no formato antigo: é convertida no próximo acesso')) : null),
-          h('td', { style: 'white-space:nowrap' }, u.bloqueado ? h('button', { class: 'btn peq', onclick: () => desbloquear(u) }, 'Desbloquear') : null, ' ', h('button', { class: 'btn sec peq', onclick: () => editar(u) }, 'Editar'), ' ', h('button', { class: 'btn perigo peq', onclick: () => remover(u), 'aria-label': 'Remover' }, '×'))))),
+          h('td', { style: 'white-space:nowrap' }, u.bloqueado ? h('button', { class: 'btn peq', onclick: () => desbloquear(u) }, 'Desbloquear') : null, ' ', h('button', { class: 'btn sec peq', onclick: () => editar(u) }, 'Editar'), ' ', h('button', { class: 'btn perigo peq', onclick: () => remover(u) }, 'Excluir'))))),
       h('button', { class: 'btn', style: 'margin-top:12px', onclick: () => editar(null) }, '+ Novo usuário'),
-      h('p', { class: 'dica' }, 'Equipe de campo coleta; revisão técnica valida ou devolve registros; cliente só consulta painel, mapa e relatório dos dados validados; coordenação faz tudo. Senhas ficam guardadas de forma criptografada e o usuário é bloqueado por 15 minutos após 5 senhas erradas.')));
+      h('p', { class: 'dica' }, 'Equipe de campo coleta; revisão técnica valida ou devolve registros; cliente só consulta painel, mapa e relatório dos dados validados; coordenação faz tudo. Senhas ficam guardadas de forma criptografada e o usuário é bloqueado por 15 minutos após 5 senhas erradas. Senha com no mínimo 8 caracteres.')));
   }
 
   async function adminFormularios(corpo) {
@@ -1148,11 +1185,23 @@
 
   // ---------- Ficha (leitura) e trava de registros concluídos ----------
   function rotuloOpcao(c, v) { if (v == null || v === '') return ''; const o = (c.opcoes || []).find((x) => String(x.v) === String(v)); return o ? o.t : String(v); }
-  const diaLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  // dia no fuso de Brasília, igual ao servidor
+  const diaLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; try { return d.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }); } catch (e) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; } };
+  function distM(a1, o1, a2, o2) { const R = 6371000, t = Math.PI / 180; const dA = (a2 - a1) * t, dO = (o2 - o1) * t; const x = Math.sin(dA / 2) ** 2 + Math.cos(a1 * t) * Math.cos(a2 * t) * Math.sin(dO / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); }
+  // volta o registro como estava antes da edição e apaga as fotos novas que não foram confirmadas
+  async function descartarEdicao(r) {
+    if (!r.__base) return;
+    const base = JSON.parse(r.__baseFotos || '{}'); const manter = new Set(Object.values(base).map((f) => f && f.chave));
+    for (const f of Object.values(r.fotos || {})) if (f && f.chave && !manter.has(f.chave)) await Store.apagarFoto(f.chave);
+    r.valores = JSON.parse(r.__base); r.fotos = base;
+    const bp = JSON.parse(r.__basePos || 'null'); if (bp) Object.assign(r, bp);
+    delete r.__base; delete r.__baseFotos; delete r.__basePos; await Store.salvarRegistro(r);
+  }
   function podeEditar(r) {
     if (perfil() === 'cliente') return { ok: false, motivo: 'Perfil de consulta.' };
     if (ehCoord()) return { ok: true };
     if (r.validacao === 'Validado') return { ok: false, motivo: 'Registro validado pela coordenação. Para corrigir, fale com a coordenação.' };
+    if (r.status === 'recusado') return { ok: false, motivo: 'Alteração recusada pelo servidor.' };
     if (r.validacao === 'Devolvido') return { ok: true };
     if (diaLocal(r.concluido_em || r.criado_em) === diaLocal(agoraISO())) return { ok: true };
     return { ok: false, motivo: 'Registro concluído em dia anterior. Só a coordenação pode alterar.' };
@@ -1181,7 +1230,7 @@
       if (marc.length) linhas.push(h('div', { class: 'fl col' }, h('span', null, 'Marcados'), h('div', { class: 'chips' }, marc.map((m) => h('span', { class: 'chip sel mini' }, m)))));
       if (linhas.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, a.nome), linhas));
     }
-    if (fotos && fotos.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Fotos'), h('div', { class: 'ficha-fotos' }, fotos.map((f) => h('a', { href: f.link || f.src, target: '_blank', rel: 'noopener', class: 'ficha-foto' }, f.src ? h('img', { src: f.src, alt: f.rotulo, loading: 'lazy', onerror: (e) => e.target.remove() }) : null, h('span', null, f.rotulo))))));
+    if (fotos && fotos.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Fotos'), h('div', { class: 'ficha-fotos' }, fotos.map((f) => h(linkSeguro(f.link) || f.src ? 'a' : 'div', { href: linkSeguro(f.link) || f.src, target: '_blank', rel: 'noopener', class: 'ficha-foto' }, f.src ? h('img', { src: f.src, alt: f.rotulo, loading: 'lazy', onerror: (e) => e.target.remove() }) : null, h('span', null, f.rotulo))))));
     return secoes;
   }
   const ROT_VAL = { Pendente: 'Aguardando validação', Validado: 'Validado', Devolvido: 'Devolvido para correção', Corrigido: 'Corrigido, aguardando nova validação', Descartado: 'Descartado' };
@@ -1189,7 +1238,8 @@
     const form = S.form; const pe = podeEditar(r);
     const fotos = [];
     for (const c of form.campos.filter((k) => k.tipo === 'photo')) { const f = r.fotos[c.nome]; if (!f) continue; const b = f.chave ? await Store.foto(f.chave) : null; fotos.push({ rotulo: c.rotulo, src: b ? URL.createObjectURL(b) : null, link: f.url || '' }); }
-    const st = r.status === 'pendente' ? (r.erroSync ? 'Erro no envio: ' + r.erroSync : 'Aguardando envio') : (ROT_VAL[r.validacao || 'Pendente'] || 'Enviado');
+    const st = r.status === 'recusado' ? 'Recusado pelo servidor: ' + (r.erroSync || '') : r.status === 'pendente' ? (r.erroSync ? 'Erro no envio: ' + r.erroSync : 'Aguardando envio') : (ROT_VAL[r.validacao || 'Pendente'] || 'Enviado');
+    const descartarLocal = async () => { if (!(await confirmar('Remover do aparelho', 'A versão que está no servidor continua valendo. Remover a cópia deste aparelho?', 'Remover', 'perigo'))) return; for (const f of Object.values(r.fotos || {})) if (f && f.chave && !f.enviado) await Store.apagarFoto(f.chave); await Store.apagarRegistro(r.uuid); ir('#inicio'); };
     const editar = async () => {
       const ok = await modal('Alterar registro concluído', h('div', null, h('p', null, 'Este registro já foi concluído' + (r.status === 'enviado' ? ' e enviado' : '') + '. Se você alterar, a mudança fica guardada no histórico com seu usuário, data e hora.'),
         r.validacao === 'Devolvido' && r.validacao_obs ? h('div', { class: 'aviso' }, 'Motivo da devolução: ' + r.validacao_obs) : null), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Editar registro', valor: true }]);
@@ -1200,7 +1250,9 @@
         h('div', { class: 'cartao status-ficha st-' + norm(r.status === 'pendente' ? 'pendente' : r.validacao || 'enviado') }, h('b', null, st),
           r.validacao === 'Devolvido' && r.validacao_obs ? h('p', null, 'Motivo: ' + r.validacao_obs) : null,
           h('small', null, `Concluído em ${dataBR(r.concluido_em || r.criado_em)} · ${r.equipe || ''}${r.prec ? ' · GPS ±' + Math.round(r.prec) + ' m' : ''}`),
-          !pe.ok ? h('p', { class: 'trava' }, pe.motivo) : null),
+          r.conflito ? h('p', { class: 'trava' }, r.conflito) : null,
+          r.status === 'recusado' ? h('p', { class: 'trava' }, 'Esta alteração não foi aceita. Fale com a coordenação ou remova a cópia do aparelho.', h('br'), h('button', { class: 'btn perigo peq', style: 'margin-top:8px', onclick: descartarLocal }, 'Remover do aparelho')) : null,
+          !pe.ok && r.status !== 'recusado' ? h('p', { class: 'trava' }, pe.motivo) : null),
         fichaConteudo(form, r.valores, fotos),
         (r.historico || []).length ? h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Histórico de alterações'), r.historico.map((x) => h('div', { class: 'hist' }, h('small', null, `${dataBR(x.em)} · ${x.por}`), h('ul', null, x.mud.map((m) => h('li', null, m)))))) : null,
         h('div', { class: 'linha-btn', style: 'margin:8px 0 30px' }, h('button', { class: 'btn sec', onclick: () => ir('#inicio') }, 'Voltar'), pe.ok ? h('button', { class: 'btn', onclick: editar }, 'Editar registro') : null)));
@@ -1219,7 +1271,7 @@
       h('h4', null, 'Segurança'),
       h('p', null, 'Conexão criptografada (HTTPS), senha guardada de forma criptografada, bloqueio após senhas erradas, sessão com prazo de validade e cópia de segurança diária.'),
       h('h4', null, 'Seus direitos'),
-      h('p', null, 'Você pode pedir acesso, correção ou exclusão dos seus dados pessoais à coordenação do projeto ou pelo email de contato da Neofloresta.'),
+      h('p', null, 'Você pode pedir acesso, correção ou exclusão dos seus dados pessoais à coordenação do projeto' + (CONTATO.email ? ' ou pelo email ' + CONTATO.email : '') + '.' + (CONTATO.encarregado ? ' Encarregado de dados: ' + CONTATO.encarregado + '.' : '')),
       h('h4', null, 'Uso correto'),
       h('p', null, 'O usuário e a senha são pessoais. Não compartilhe. Registre apenas informações verdadeiras observadas em campo.'),
       h('p', { class: 'dica' }, 'Versão do termo: ' + TERMO_VERSAO));
@@ -1238,17 +1290,20 @@
         h('div', { class: 'cartao sobre' }, h('img', { src: 'icons/logo-horizontal.png', alt: 'Neofloresta', style: 'max-width:240px' }),
           h('p', null, h('b', null, 'Neofloresta Inventário'), ' · versão ', VERSAO, S.sessao && S.sessao.versaoScript ? ' · servidor ' + S.sessao.versaoScript : ''),
           h('p', null, 'Coleta de campo, validação, painel e entrega dos dados do inventário da arborização urbana. Funciona sem internet: os registros ficam no aparelho e são enviados quando houver conexão.'),
-          h('p', { class: 'dica' }, 'Neofloresta Serviços Ecossistêmicos Ltda. · Dois Vizinhos/PR')),
+          h('p', { class: 'dica' }, ['Neofloresta Serviços Ecossistêmicos Ltda.', CONTATO.cnpj ? 'CNPJ ' + CONTATO.cnpj : '', CONTATO.cidade || 'Dois Vizinhos/PR'].filter(Boolean).join(' · ')),
+          CONTATO.email || CONTATO.telefone ? h('p', null, 'Suporte: ', [CONTATO.email, CONTATO.telefone].filter(Boolean).join(' · ')) : null),
         h('div', { class: 'cartao' }, h('h3', null, 'Termo de uso e privacidade'), textoTermo(), S.sessao && S.sessao.usuario.termo_aceito_em ? h('p', { class: 'dica' }, 'Aceito em ' + dataBR(S.sessao.usuario.termo_aceito_em)) : null)));
   }
 
   // ---------- Painel, relatório e validação ----------
   const COR_RISCO = { Baixo: '#3CB300', 'Médio': '#D9C21E', Alto: '#E10000', Severo: '#7606DE', Extremo: '#7606DE' };
+  const ROT_CURTO = { Pendente: 'Aguardando', Validado: 'Validados', Corrigido: 'Corrigidos', Devolvido: 'Devolvidos', Descartado: 'Descartados' };
   const COR_VAL = { Validado: '#2E7D32', Pendente: '#8A969C', Corrigido: '#12A6C8', Devolvido: '#CD834C', Descartado: '#B0BEC5' };
   const CORES = ['#00546E', '#CD834C', '#12A6C8', '#5B8C5A', '#8E6C8A', '#C9A227'];
   const fmtN = (n) => (n == null ? '' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 1 }));
   const fmtP = (x) => (x == null || !isFinite(x) ? '' : (x * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%');
   function barras(itens, opts = {}) {
+    if (!itens.length || !itens.some((i) => i.n)) return h('p', { class: 'dica' }, 'Sem dados ainda.');
     const max = Math.max(1, ...itens.map((i) => i.n)); const tot = opts.total || itens.reduce((a, i) => a + i.n, 0);
     return h('div', { class: 'barras' }, itens.map((i, k) => h('div', { class: 'barra' },
       h('span', { class: 'b-rot', title: i.rot }, i.it ? h('i', null, i.rot) : i.rot),
@@ -1286,16 +1341,17 @@
     const cat = cCat ? cCat.opcoes.map((o, k) => ({ rot: o.t.replace(/\s*\(.*\)/, ''), n: (d.escolhas[cCat.nome] || {})[o.v] || 0, cor: CORES[k % CORES.length] })) : [];
     const ind = cCat ? ['1', '2', '3'].reduce((a, v) => a + ((d.escolhas[cCat.nome] || {})[v] || 0), 0) : d.total;
     const sit = cSit ? cSit.opcoes.map((o) => ({ rot: o.t, n: (d.escolhas[cSit.nome] || {})[o.v] || 0 })) : [];
-    const manejo = form.campos.filter((c) => c.tipo === 'bool' && /^manejo/i.test(c.nome)).map((c) => ({ rot: c.rotulo, n: d.marcados[c.nome] || 0 })).sort((a, b) => b.n - a.n);
+    const manejo = form.campos.filter((c) => c.tipo === 'bool' && /^manejo/i.test(c.nome) && !/nenhum/i.test(c.nome)).map((c) => ({ rot: c.rotulo, n: d.marcados[c.nome] || 0 })).sort((a, b) => b.n - a.n);
     const ocorr = form.campos.filter((c) => c.tipo === 'bool' && !/^manejo|ausente|nenhum|sem interfer/i.test(c.nome)).map((c) => ({ rot: c.rotulo + (form.abas.some((a) => a.campos.some((x) => x.campo === c.nome && x.grupo)) ? '' : ''), n: d.marcados[c.nome] || 0 })).filter((x) => x.n).sort((a, b) => b.n - a.n).slice(0, 12);
-    const val = ['Validado', 'Corrigido', 'Pendente', 'Devolvido'].map((k) => ({ rot: ROT_VAL[k] || k, n: d.validacao[k] || 0, cor: COR_VAL[k] }));
+    const val = ['Validado', 'Corrigido', 'Pendente', 'Devolvido'].map((k) => ({ rot: ROT_CURTO[k], n: d.validacao[k] || 0, cor: COR_VAL[k] }));
     const esp = (d.especies || []).map(([e, n]) => ({ rot: e, n, it: true }));
     const nEsp = d.especies.reduce((a, [, n]) => a + n, 0);
     const generos = {}; (d.especies || []).forEach(([e, n]) => { const g = String(e).split(/\s+/)[0]; if (g) generos[g] = (generos[g] || 0) + n; });
     const topEsp = esp[0] ? esp[0].n / Math.max(1, nEsp) : 0; const gen = Object.entries(generos).sort((a, b) => b[1] - a[1])[0];
     const topGen = gen ? gen[1] / Math.max(1, nEsp) : 0;
     const altoN = cRisco ? ((d.escolhas[cRisco.nome] || {}).Alto || 0) + ((d.escolhas[cRisco.nome] || {}).Severo || 0) : 0;
-    return { risco, cat, ind, sit, manejo, ocorr, val, esp, nEsp, topEsp, gen, topGen, altoN };
+    const nRisco = risco.reduce((a, x) => a + x.n, 0);
+    return { risco, cat, ind, sit, manejo, ocorr, val, esp, nEsp, topEsp, gen, topGen, altoN, nRisco };
   }
   async function telaPainel(forcar) {
     const corpo = h('main', { class: 'painel' }, h('div', { class: 'info' }, 'Carregando indicadores...'));
@@ -1312,14 +1368,15 @@
     if (A.topGen > 0.2 && A.gen) alertas.push(`O gênero ${A.gen[0]} tem ${fmtP(A.topGen)} dos indivíduos. A referência recomenda no máximo 20% por gênero.`);
     if (d.semCoordenada) alertas.push(`${fmtN(d.semCoordenada)} registro(s) sem coordenada.`);
     if (d.gps && d.gps.ate5m < 0.8) alertas.push(`Só ${fmtP(d.gps.ate5m)} dos pontos têm GPS com erro de até 5 m.`);
-    corpo.replaceChildren(
+    const vazioCliente = perfil() === 'cliente' && !d.total ? h('div', { class: 'info' }, 'Ainda não há árvores validadas. Os números aparecem aqui assim que a Neofloresta concluir a conferência dos primeiros registros.') : null;
+    corpo.replaceChildren(vazioCliente,
       h('div', { class: 'painel-cab' }, h('div', null, p.contratante ? h('div', null, p.contratante) : null, p.municipio ? h('small', null, p.municipio + (p.contrato ? ' · Contrato ' + p.contrato : '')) : null),
         h('small', null, (perfil() === 'cliente' ? 'Dados validados pela Neofloresta. ' : '') + 'Atualizado às ' + new Date(d.gerado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), ' ', h('button', { class: 'btn sec peq', onclick: () => telaPainel(true) }, 'Atualizar'))),
       h('div', { class: 'kpis' },
         kpi('Registros', fmtN(d.total), meta ? `${fmtP(d.total / meta)} da meta de ${fmtN(meta)}` : `${fmtN(A.ind)} indivíduos`),
         perfil() !== 'cliente' ? kpi('Validados', fmtN(validados), d.total ? fmtP(validados / d.total) + ' do total' : '') : kpi('Indivíduos', fmtN(A.ind), 'árvores, arbustos e palmeiras'),
         kpi('Espécies', fmtN(d.nEspecies), A.esp[0] ? 'mais comum: ' + A.esp[0].rot : ''),
-        A.risco.length ? kpi('Risco alto', fmtN(A.altoN), A.ind ? fmtP(A.altoN / A.ind) + ' dos indivíduos' : '', A.altoN ? 'alerta' : '') : null,
+        A.risco.length ? kpi('Risco alto', fmtN(A.altoN), A.nRisco ? fmtP(A.altoN / A.nRisco) + ' dos indivíduos avaliados' : '', A.altoN ? 'alerta' : '') : null,
         kpi('Ritmo', fmtN(Math.round(media7)), 'registros por dia (últimos 7 dias de campo)' + (previsao != null ? ` · faltam cerca de ${fmtN(previsao)} dias` : '')),
         d.gps ? kpi('Precisão do GPS', fmtN(d.gps.mediana) + ' m', fmtP(d.gps.ate5m) + ' com erro até 5 m') : null),
       alertas.length && perfil() !== 'cliente' ? h('div', { class: 'cartao alertas' }, h('h3', null, 'Pontos de atenção'), h('ul', null, alertas.map((a) => h('li', null, a)))) : null,
@@ -1333,15 +1390,22 @@
         A.manejo.length ? h('div', { class: 'cartao' }, h('h3', null, 'Manejo recomendado'), barras(A.manejo.filter((x) => x.n), { total: A.ind, cor: CORES[1] })) : null,
         A.ocorr.length ? h('div', { class: 'cartao' }, h('h3', null, 'Ocorrências observadas'), barras(A.ocorr, { total: A.ind, cor: CORES[2] })) : null,
         perfil() !== 'cliente' ? h('div', { class: 'cartao' }, h('h3', null, 'Por equipe'), barras(equipes.map((e, k) => ({ rot: e, n: d.equipes[e], cor: CORES[k % CORES.length] })))) : null),
-      h('div', { class: 'linha-btn', style: 'margin:6px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#relatorio') }, 'Relatório para imprimir ou PDF'), h('button', { class: 'btn sec', onclick: () => ir('#mapa') }, 'Ver no mapa'),
+      h('div', { class: 'linha-btn botoes-painel', style: 'margin:6px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#relatorio') }, 'Relatório para imprimir ou PDF'), h('button', { class: 'btn sec', onclick: () => ir('#mapa') }, 'Ver no mapa'),
         perfil() === 'cliente' ? h('button', { class: 'btn sec', onclick: () => exportarCliente() }, 'Baixar dados') : null));
+  }
+  function producaoTabela(porDia, dias, equipes, semanal) {
+    const dt = (x) => `${x.slice(8, 10)}/${x.slice(5, 7)}/${x.slice(0, 4)}`;
+    if (!semanal) return dias.map((x) => { const v = equipes.map((e) => porDia[x][e] || 0); return [dt(x), ...v.map(fmtN), fmtN(v.reduce((a, b) => a + b, 0))]; });
+    const sem = new Map();
+    for (const x of dias) { const d = new Date(x + 'T12:00:00Z'); const seg = new Date(d.getTime() - ((d.getUTCDay() + 6) % 7) * 864e5).toISOString().slice(0, 10); if (!sem.has(seg)) sem.set(seg, {}); const o = sem.get(seg); equipes.forEach((e) => (o[e] = (o[e] || 0) + (porDia[x][e] || 0))); }
+    return [...sem.entries()].map(([seg, o]) => { const v = equipes.map((e) => o[e] || 0); const fim = new Date(new Date(seg + 'T12:00:00Z').getTime() + 6 * 864e5).toISOString().slice(0, 10); return [`${dt(seg).slice(0, 5)} a ${dt(fim)}`, ...v.map(fmtN), fmtN(v.reduce((a, b) => a + b, 0))]; });
   }
   async function telaRelatorio() {
     const corpo = h('main', { class: 'relatorio' }, h('div', { class: 'info' }, 'Montando o relatório...'));
     $app.replaceChildren(h('div', { class: 'nao-imprime' }, topo('Relatório', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#painel'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: () => window.print() }, 'Imprimir ou PDF'))), corpo);
     let d; try { d = await dadosPainel(); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); return; }
     const A = analisarPainel(d, S.form); const p = d.projeto || S.projeto; const agora = new Date();
-    const tab = (cab, linhas) => h('table', { class: 'tab-rel' }, h('tr', null, cab.map((c) => h('th', null, c))), linhas.map((l) => h('tr', null, l.map((c) => h('td', null, c)))));
+    const tab = (cab, linhas) => h('table', { class: 'tab-rel' }, h('thead', null, h('tr', null, cab.map((c) => h('th', null, c)))), h('tbody', null, linhas.map((l) => h('tr', null, l.map((c) => h('td', null, c))))));
     const pct = (n, t) => (t ? fmtP(n / t) : '');
     const equipes = Object.keys(d.equipes).sort(); const dias = Object.keys(d.porDia).sort();
     Api.b.auditar && Api.b.auditar('relatorio', S.projeto.id, '');
@@ -1352,18 +1416,20 @@
       tab(['Indicador', 'Valor'], [
         ['Registros', fmtN(d.total)], ['Indivíduos (árvores, arbustos e palmeiras)', fmtN(A.ind)], p.meta ? ['Meta do contrato', `${fmtN(p.meta)} (${fmtP(d.total / p.meta)} concluído)`] : null,
         ['Espécies distintas', fmtN(d.nEspecies)], perfil() !== 'cliente' ? ['Validados', `${fmtN(d.validacao.Validado || 0)} (${pct(d.validacao.Validado || 0, d.total)})`] : null,
-        A.risco.length ? ['Indivíduos com risco alto', `${fmtN(A.altoN)} (${pct(A.altoN, A.ind)})`] : null,
+        A.risco.length ? ['Indivíduos com risco alto', `${fmtN(A.altoN)} (${pct(A.altoN, A.nRisco)} dos avaliados)`] : null,
         ['Dias de campo', fmtN(dias.length)], d.gps ? ['Precisão mediana do GPS', fmtN(d.gps.mediana) + ' m'] : null].filter(Boolean)),
       A.cat.length ? [h('h2', null, '2. Registros por categoria'), tab(['Categoria', 'Quantidade', '%'], A.cat.map((c) => [c.rot, fmtN(c.n), pct(c.n, d.total)]))] : null,
       h('h2', null, '3. Composição de espécies'),
       h('p', null, `Foram registradas ${fmtN(d.nEspecies)} espécies. ` + (A.esp[0] ? `A mais comum é ${A.esp[0].rot}, com ${fmtP(A.topEsp)} dos indivíduos identificados` + (A.topEsp > 0.1 ? ', acima do limite de referência de 10% por espécie.' : ', dentro do limite de referência de 10% por espécie.') : '')),
       tab(['Espécie', 'Indivíduos', '%'], A.esp.slice(0, 30).map((e) => [h('i', null, e.rot), fmtN(e.n), pct(e.n, A.nEsp)])),
       d.classesDap.length ? [h('h2', null, '4. Classes de diâmetro (DAP)'), tab(['Classe', 'Indivíduos', '%'], d.classesDap.map((c) => [c.ate ? `${c.de} a ${c.ate} cm` : `${c.de} cm ou mais`, fmtN(c.n), pct(c.n, d.classesDap.reduce((a, x) => a + x.n, 0))]))] : null,
-      A.risco.length ? [h('h2', null, '5. Classe de risco'), tab(['Classe', 'Indivíduos', '%'], A.risco.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
+      A.risco.length ? [h('h2', null, '5. Classe de risco'), tab(['Classe', 'Indivíduos', '%'], A.risco.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.nRisco)]))] : null,
       A.manejo.length ? [h('h2', null, '6. Manejo recomendado'), tab(['Manejo', 'Indivíduos', '%'], A.manejo.filter((x) => x.n).map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
       A.ocorr.length ? [h('h2', null, '7. Ocorrências observadas'), tab(['Ocorrência', 'Indivíduos', '%'], A.ocorr.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
       h('h2', null, '8. Produção de campo'),
-      tab(['Data', ...equipes, 'Total'], dias.map((x) => { const v = equipes.map((e) => d.porDia[x][e] || 0); return [`${x.slice(8, 10)}/${x.slice(5, 7)}/${x.slice(0, 4)}`, ...v.map(fmtN), fmtN(v.reduce((a, b) => a + b, 0))]; })),
+      h('p', null, dias.length > 14 ? 'Registros por semana (de segunda a domingo).' : 'Registros por dia de campo.'),
+      tab([dias.length > 14 ? 'Semana' : 'Data', ...equipes, 'Total'], producaoTabela(d.porDia, dias, equipes, dias.length > 14)),
+      p.responsavel ? h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, p.responsavel), p.registro_profissional ? h('div', null, p.registro_profissional) : null, p.art ? h('div', null, 'ART nº ' + p.art) : null, h('div', null, 'Responsável técnico · Neofloresta Serviços Ecossistêmicos Ltda.')) : null,
       h('footer', { class: 'rel-rodape' }, 'Neofloresta Serviços Ecossistêmicos Ltda. · Gerado pelo Neofloresta Inventário ' + VERSAO));
   }
 
@@ -1395,7 +1461,7 @@
       if (/altura/i.test(c.nome) && v > 35) a.push('Altura alta: ' + numBR(v) + ' m');
       if (/dap/i.test(c.nome) && v > 200) a.push('DAP alto: ' + numBR(Math.round(v)) + ' cm');
       if (/raio/i.test(c.nome) && v > 20) { if (!a.some((x) => /^Raio/.test(x))) a.push('Raio de copa alto'); }
-      if (c.min != null && v < c.min) a.push(c.rotulo + ' abaixo de ' + numBR(c.min));
+      if (c.min != null && v < c.min) a.push(c.limiteMsg ? c.rotulo.replace(/\s*\(.*\)/, '') + ' ' + c.limiteMsg.replace(/\s*\(.*\)/, '') : c.rotulo + ' abaixo de ' + numBR(c.min));
     }
     if (cc && l[cc.nome] && dups.has(String(l[cc.nome]))) a.push('Código repetido');
     return a;
@@ -1417,7 +1483,7 @@
     linhas.forEach((l) => { l.__alertas = alertasDe(l, form, dups); l.validacao = l.validacao || 'Pendente'; });
     const F = S.filtroVal = S.filtroVal || { sit: 'revisar', eq: '', alerta: '', q: '', limite: 100 };
     const sel = new Set();
-    const selSit = h('select', { class: 'entrada' }, [['revisar', 'A revisar (aguardando e corrigidos)'], ['Pendente', 'Aguardando validação'], ['Corrigido', 'Corrigidos'], ['Devolvido', 'Devolvidos'], ['Validado', 'Validados'], ['Descartado', 'Descartados'], ['', 'Todos']].map(([v, t]) => h('option', { value: v, selected: F.sit === v }, t)));
+    const selSit = h('select', { class: 'entrada' }, [['revisar', 'A revisar'], ['Pendente', 'Aguardando validação'], ['Corrigido', 'Corrigidos'], ['Devolvido', 'Devolvidos'], ['Validado', 'Validados'], ['Descartado', 'Descartados'], ['', 'Todos']].map(([v, t]) => h('option', { value: v, selected: F.sit === v }, t)));
     const eqs = [...new Set(linhas.map((l) => l.equipe || ''))].filter(Boolean).sort();
     const selEq = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todas as equipes'), eqs.map((e) => h('option', { value: e, selected: F.eq === e }, e)));
     const selAl = h('select', { class: 'entrada' }, [['', 'Com e sem alerta'], ['com', 'Só com alerta'], ['sem', 'Só sem alerta']].map(([v, t]) => h('option', { value: v, selected: F.alerta === v }, t)));
@@ -1429,13 +1495,13 @@
     function desenhar() {
       const vis = filtradas(); S.navVal = vis.map((l) => l.uuid);
       const c = {}; linhas.forEach((l) => (c[l.validacao] = (c[l.validacao] || 0) + 1));
-      resumo.replaceChildren(...['Pendente', 'Corrigido', 'Devolvido', 'Validado', 'Descartado'].map((k) => h('span', { class: 'val-chip', style: `border-color:${COR_VAL[k]}` }, h('b', null, fmtN(c[k] || 0)), ' ', ROT_VAL[k].replace(', aguardando nova validação', ''))));
+      resumo.replaceChildren(...['Pendente', 'Corrigido', 'Devolvido', 'Validado', 'Descartado'].map((k) => h('span', { class: 'val-chip', style: `border-color:${COR_VAL[k]}` }, h('b', null, fmtN(c[k] || 0)), ' ', ROT_CURTO[k])));
       lista.replaceChildren(...vis.slice(0, F.limite).map((l) => {
         const cb = h('input', { type: 'checkbox', checked: sel.has(l.uuid), onchange: () => { if (cb.checked) sel.add(l.uuid); else sel.delete(l.uuid); pintarAcoes(); }, 'aria-label': 'Selecionar' });
         return h('div', { class: 'val-item' }, cb, h('button', { class: 'val-txt', onclick: () => ir('#ficha/' + encodeURIComponent(l.uuid)) },
           h('b', null, (cc && l[cc.nome]) || 'Sem código'), h('i', null, (ce && l[ce.nome]) || (cat ? rotuloOpcao(cat, l[cat.nome]).replace(/\s*\(.*\)/, '') : '')),
           h('small', null, `${dataBR(l.criado_em)} · ${l.equipe || ''}`), l.__alertas.length ? h('span', { class: 'al' }, l.__alertas.join(' · ')) : null),
-          h('span', { class: 'st v-' + norm(l.validacao) }, l.validacao));
+          h('span', { class: 'st v-' + norm(l.validacao) }, l.validacao === 'Pendente' ? 'Aguardando' : l.validacao));
       }), vis.length > F.limite ? h('button', { class: 'btn sec cheio', onclick: () => { F.limite += 200; desenhar(); } }, `Mostrar mais (${fmtN(vis.length - F.limite)} restantes)`) : null,
       !vis.length ? h('div', { class: 'vazio-lista' }, 'Nenhum registro neste filtro.') : null);
       pintarAcoes();
@@ -1463,13 +1529,13 @@
     let linhas; try { linhas = await linhasProjeto(false); } catch (e) { return toast(e.message); }
     const l = linhas.find((x) => x.uuid === uuidR); if (!l) { toast('Registro não encontrado.'); return ir(ehCoord() ? '#validacao' : '#painel'); }
     const valores = {}; for (const c of form.campos) { let v = l[c.nome]; if (c.tipo === 'bool') v = v === 1 || v === '1' || v === true; valores[c.nome] = v; }
-    const fotos = form.campos.filter((c) => c.tipo === 'photo' && l[c.nome]).map((c) => { const link = l[c.nome + ' link']; const id = idDrive(link); return { rotulo: c.rotulo, src: id ? `https://drive.google.com/thumbnail?id=${id}&sz=w800` : null, link: link || '' }; });
+    const fotos = form.campos.filter((c) => c.tipo === 'photo' && l[c.nome]).map((c) => { const link = linkSeguro(l[c.nome + ' link']); const id = idDrive(link); return { rotulo: c.rotulo + (link ? '' : ' (ainda não enviada ao Drive)'), src: id ? `https://drive.google.com/thumbnail?id=${id}&sz=w800` : null, link: link || '' }; });
     const nav = S.navVal || []; const i = nav.indexOf(uuidR);
     const irPara = (k) => { if (k >= 0 && k < nav.length) ir('#ficha/' + encodeURIComponent(nav[k])); };
     const cc = campoCodigo(form);
     const decidir = async (estado) => { if (!(await decidirRegistros(estado, [uuidR]))) return; if (i >= 0 && i + 1 < nav.length) irPara(i + 1); else ir('#validacao'); };
     const mapaDiv = h('div', { class: 'mapa-mini', style: 'height:220px' });
-    $app.replaceChildren(topo((cc && l[cc.nome]) || 'Registro', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(ehCoord() ? '#validacao' : '#mapa'), 'aria-label': 'Voltar' }, ico('voltar')), nav.length && ehCoord() ? h('span', { class: 'nav-n' }, `${i + 1} de ${nav.length}`) : null),
+    $app.replaceChildren(topo((cc && l[cc.nome]) || 'Registro', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(ehCoord() ? '#validacao' : '#mapa'), 'aria-label': 'Voltar' }, ico('voltar')), nav.length && ehCoord() ? h('span', { class: 'nav-n' }, `${fmtN(i + 1)} de ${fmtN(nav.length)}`) : null),
       h('main', null,
         h('div', { class: 'cartao status-ficha st-' + norm(l.validacao || 'pendente') }, h('b', null, ROT_VAL[l.validacao || 'Pendente'] || l.validacao),
           l.validacao_obs ? h('p', null, 'Motivo: ' + l.validacao_obs) : null,
@@ -1484,7 +1550,7 @@
           h('button', { class: 'btn sec', onclick: () => decidir('Devolvido') }, 'Devolver'),
           h('button', { class: 'btn', onclick: () => decidir('Validado') }, 'Validar'),
           h('button', { class: 'btn sec', disabled: i < 0 || i >= nav.length - 1, onclick: () => irPara(i + 1) }, 'Próximo')) : null));
-    if (l.latitude !== '' && l.latitude != null) setTimeout(() => { const m = L.map(mapaDiv, { zoomControl: false, attributionControl: false }).setView([+l.latitude, +l.longitude], 19); camadasFundo(m, true); L.circleMarker([+l.latitude, +l.longitude], { radius: 8, color: '#fff', weight: 2, fillColor: '#E10000', fillOpacity: 1 }).addTo(m); }, 50);
+    if (l.latitude !== '' && l.latitude != null) setTimeout(() => { const m = L.map(mapaDiv, { zoomControl: false }).setView([+l.latitude, +l.longitude], 19); camadasFundo(m, true); L.circleMarker([+l.latitude, +l.longitude], { radius: 8, color: '#fff', weight: 2, fillColor: '#E10000', fillOpacity: 1 }).addTo(m); }, 50);
   }
 
   // ---------- Exportação (coordenação e cliente) ----------
@@ -1533,9 +1599,10 @@
         baixar(base + '.kml', `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(p.nome)}</name>${pms.join('\n')}</Document></kml>`, 'application/vnd.google-earth.kml+xml');
         msg(`KML gerado com ${fmtN(pms.length)} pontos e os campos principais (abre no Google Earth e no Google Maps).`);
       } else {
-        const esc = (v) => { const s = v == null ? '' : String(v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-        const csv = '﻿' + [cols.join(';'), ...linhas.map((l) => cols.map((c) => esc(l[c])).join(';'))].join('\r\n');
-        baixar(base + '.csv', csv, 'text/csv'); msg(`CSV gerado com ${fmtN(linhas.length)} linhas (separador ponto e vírgula).`);
+        const esc = (v) => { let s = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(s) && typeof v !== 'number') s = "'" + s; return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+        const valCsv = (v) => (typeof v === 'number' ? String(v).replace('.', ',') : v);
+        const csv = '﻿' + [cols.join(';'), ...linhas.map((l) => cols.map((c) => esc(valCsv(l[c]))).join(';'))].join('\r\n');
+        baixar(base + '.csv', csv, 'text/csv'); msg(`CSV gerado com ${fmtN(linhas.length)} linhas (separador ponto e vírgula, decimal com vírgula, pronto para o Excel em português).`);
       }
       Api.b.auditar('exportar', p.id, `${formato} ${filtro} ${linhas.length}`);
     } catch (e) { msg(e.message, 'aviso'); }
@@ -1609,6 +1676,16 @@
       h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), sel), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome da origem (vai na coluna equipe)'), eq)),
       h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Arquivo'), arq), h('button', { class: 'btn', onclick: ler }, 'Ler e conferir')), area);
   }
+  // número escrito em português ou inglês: 1.234,5 / 1,234.5 / 12,5 / 1.234 (milhar)
+  function numeroBR(v) {
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    let t = String(v == null ? '' : v).trim().replace(/\s/g, ''); if (!t) return null;
+    const ip = t.lastIndexOf('.'), iv = t.lastIndexOf(',');
+    if (ip > -1 && iv > -1) t = ip > iv ? t.replace(/,/g, '') : t.replace(/\./g, '').replace(',', '.');
+    else if (iv > -1) t = (t.match(/,/g).length > 1 ? t.replace(/,/g, '') : t.replace(',', '.'));
+    else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+    const n = Number(t); return isFinite(n) ? n : null;
+  }
   function planejarImportacao(dados, form, p) {
     const chaveCampo = new Map(); form.campos.forEach((c) => { chaveCampo.set(norm(c.nome).replace(/[^a-z0-9]/g, ''), c); chaveCampo.set(norm(c.rotulo).replace(/[^a-z0-9]/g, ''), c); });
     const avisos = []; const mapeadas = []; const soltas = []; const destino = {};
@@ -1628,19 +1705,19 @@
       if (v === '' || v == null) return '';
       if (k.tipo === 'choice') { const o = k.opcoes.find((x) => String(x.v) === String(v) || norm(x.t) === norm(v) || norm(x.t.replace(/\s*\(.*\)/, '')) === norm(v)); return o ? o.v : String(v); }
       if (k.tipo === 'bool') return /^(1|s|sim|x|true|verdadeiro|yes)$/i.test(String(v).trim()) ? 1 : 0;
-      if (k.tipo === 'number' || k.armazenar === 'real') { const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/\./g, (m, i, s) => (s.indexOf(',') > -1 ? '' : m)).replace(',', '.')); return isFinite(n) ? n : String(v); }
+      if (k.tipo === 'number' || k.armazenar === 'real') { const n = numeroBR(v); return n == null ? String(v) : n; }
       return String(v);
     };
     let semOpcao = 0;
-    const linhas = dados.linhas.map((l) => {
+    const linhas = dados.linhas.map((l, idx) => {
       const o = {};
       for (const [c, k] of Object.entries(destino)) { o[k.nome] = conv(k, l[c]); if (k.tipo === 'choice' && o[k.nome] !== '' && !k.opcoes.some((x) => String(x.v) === String(o[k.nome]))) semOpcao++; }
       for (const c of soltas) o[c] = l[c];
       let lat = l.__lat, lon = l.__lon;
-      if (lat == null && cLat && cLon) { lat = parseFloat(String(l[cLat]).replace(',', '.')); lon = parseFloat(String(l[cLon]).replace(',', '.')); }
-      if (lat == null && cX && cY && zona) { const g = UTM.paraGeo(parseFloat(String(l[cX]).replace(',', '.')), parseFloat(String(l[cY]).replace(',', '.')), zona); lat = g.lat; lon = g.lon; }
+      if (lat == null && cLat && cLon) { lat = numeroBR(l[cLat]); lon = numeroBR(l[cLon]); }
+      if (lat == null && cX && cY && zona) { const g = UTM.paraGeo(numeroBR(l[cX]), numeroBR(l[cY]), zona); lat = g.lat; lon = g.lon; }
       o.latitude = isFinite(lat) && Math.abs(lat) <= 90 ? Math.round(lat * 1e7) / 1e7 : ''; o.longitude = isFinite(lon) && Math.abs(lon) <= 180 ? Math.round(lon * 1e7) / 1e7 : '';
-      o.uuid = 'imp-' + Arquivos.crc32(new TextEncoder().encode(JSON.stringify(l))).toString(16) + '-' + (l.fid || l.id || Math.random().toString(36).slice(2, 8));
+      o.uuid = 'imp-' + Arquivos.crc32(new TextEncoder().encode(JSON.stringify(l))).toString(16) + '-' + (l.fid || l.id || idx);
       return o;
     });
     if (semOpcao) avisos.push(`${fmtN(semOpcao)} valor(es) de lista não batem com as opções do formulário e foram mantidos como estão. Confira na validação.`);

@@ -2,4 +2,6 @@
 // Depois de publicar o Apps Script, cole aqui a URL que termina em /exec.
 window.NEO_CONFIG = {
   servidor: 'https://script.google.com/macros/s/AKfycbwJJcivOSc9xq0e-oO-66VNjMXeuCqtwB1OiN89qJAAI0g2LqR5NOQXUXKQqZ6Qbhj-/exec',
+  // Dados de contato mostrados no termo de uso e na tela Sobre (preencha antes de entregar ao cliente)
+  contato: { email: '', telefone: '', cnpj: '', encarregado: '', cidade: 'Dois Vizinhos/PR' },
 };
