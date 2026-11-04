@@ -1,53 +1,51 @@
-# Coleta Neofloresta
+# Neofloresta Inventário
 
-App de coleta de campo da arborização urbana. Funciona no navegador do celular (Android e iPhone), pode ser instalado como ícone na tela e funciona sem internet.
+Sistema de inventário da arborização urbana da Neofloresta Serviços Ecossistêmicos: coleta em campo pelo celular (funciona sem internet), validação técnica, painel de indicadores, portal do cliente e entrega dos dados em formatos de SIG e de planilha.
 
-- `app/`: o aplicativo (vai para o GitHub Pages)
-- `apps-script/Code.gs`: a ponte com o Google (planilha e Drive)
+Versão 2.0 · app em `https://neofloresta.github.io/app/`
 
-## 1. Ponte Google (uma vez, cerca de 10 minutos)
+## O que faz
 
-1. Acesse script.google.com com a conta Google da Neofloresta e clique em **Novo projeto**.
-2. Apague o conteúdo e cole o arquivo `apps-script/Code.gs` inteiro. Salve com o nome "Coleta Neofloresta".
-3. No seletor de funções, escolha **configurar** e clique em **Executar**. Autorize o acesso.
-4. Em **Registro de execução** aparecem o usuário `admin` e a senha inicial. Anote.
-   No Drive é criada a pasta **Neofloresta Coleta**.
-5. Clique em **Implantar > Nova implantação**. Em tipo, escolha **App da Web**.
-   - Executar como: **Eu**
-   - Quem pode acessar: **Qualquer pessoa**
-6. Copie a **URL do app da Web** (termina em `/exec`).
+| Perfil | O que vê e faz |
+|---|---|
+| Equipe de campo | Cadastra árvores, locais de plantio e calçadas com fotos e GPS, sem internet. Código automático por equipe. Corrige registros devolvidos pela coordenação. |
+| Revisão técnica | Lista de validação com alertas automáticos (sem foto, GPS ruim, espécie fora da lista, medidas fora do comum, código repetido). Valida em lote, devolve com motivo ou descarta. |
+| Cliente | Portal só de consulta: painel, mapa e relatório dos registros validados, e download dos dados validados. |
+| Coordenação | Tudo acima, mais projetos, usuários, formulários, importação de inventário existente, exportações, cópia de segurança e auditoria. |
 
-O acesso "Qualquer pessoa" só permite falar com o script. Quem controla quem entra é o usuário e a senha cadastrados no app.
+- **Formulário por projeto**, com campos obrigatórios por categoria, regras (árvore morta, local de plantio) e limites de valores (ex.: altura mínima de 2 m).
+- **Trava de registros concluídos**: a equipe só altera no mesmo dia ou quando a coordenação devolve; toda alteração pede duas confirmações e fica no histórico.
+- **Painel** com metas, ritmo, validação, categorias, risco, espécies (com alerta de diversidade 10% por espécie e 20% por gênero), DAP, manejo e ocorrências.
+- **Relatório** pronto para imprimir ou salvar em PDF.
+- **Exportação**: GeoPackage com a simbologia do QGIS embutida, Excel com dicionário de campos, Shapefile, CSV e KML. Numeração única do projeto (`numero_unico`).
+- **Mapa** com ruas ou satélite, filtros, busca por código, espécie ou endereço.
+- **Segurança**: senha criptografada, bloqueio após 5 senhas erradas, sessão com validade de 30 dias, termo de uso e privacidade (LGPD), auditoria e cópia de segurança diária por email.
 
-## 2. Publicar o app (GitHub Pages)
+## Estrutura
 
-1. Na organização `neofloresta` do GitHub, crie o repositório **coleta** (público).
-2. Abra `app/config.js` e cole a URL do passo 1.6 entre as aspas de `servidor`.
-3. Envie **o conteúdo da pasta `app/`** para o repositório (Add file > Upload files, arrastando tudo).
-4. Em **Settings > Pages**, escolha a branch `main`, pasta `/ (root)` e salve.
-5. Em 1 ou 2 minutos o app fica em `https://neofloresta.github.io/coleta/`.
+- `index.html`, `js/`, `styles.css`, `sw.js`, `forms/`: o aplicativo (GitHub Pages)
+- `apps-script/Code.gs`: o servidor no Google (planilhas e Drive)
+- `docs/api.md`: interface de integração
+- `claude/roteiro-poc.md`: roteiro da prova de conceito; `claude/poc/`: testes automáticos
 
-## 3. Primeiro acesso (coordenação)
+## Instalação do servidor (uma vez)
 
-1. Abra o endereço e entre como `admin`.
-2. **Formulários**: instale o formulário de avaliação de risco (SEADE) ou importe um novo do QGIS (.qml + .gpkg).
-3. **Projetos**: crie o projeto (ex.: PMAU Divinópolis). O Drive ganha a pasta do projeto, com a planilha e a subpasta DCIM.
-4. **Equipes e usuários**: crie um usuário por equipe (ex.: `divi-eq1`, `divi-eq2`, `carmo-eq1`) e troque a senha do admin.
+1. Em script.google.com, com a conta Google da Neofloresta, crie um projeto, cole o `apps-script/Code.gs` e salve.
+2. Execute a função **configurar** e autorize. O registro de execução mostra o usuário `admin` e a senha inicial.
+3. **Implantar > Nova implantação > App da Web**. Executar como: **Eu**. Quem pode acessar: **Qualquer pessoa**. Copie a URL que termina em `/exec` para o `config.js`.
 
-## 4. Instalar no celular das equipes
+O acesso "Qualquer pessoa" só permite falar com o script; quem entra é controlado pelo usuário e senha do app.
 
-- Android (Chrome): abra o endereço > menu ⋮ > **Instalar app** (ou "Adicionar à tela inicial").
-- iPhone (Safari): abra o endereço > botão Compartilhar > **Adicionar à Tela de Início**.
+### Atualizar o servidor
 
-Faça o primeiro login com internet. Depois disso o app funciona sem rede.
+1. Cole o `Code.gs` novo por cima do antigo e salve.
+2. Execute **configurar** de novo (cria as abas novas e pede autorização para o que for novo, como email e gatilho diário).
+3. **Implantar > Gerenciar implantações > lápis > Versão: Nova versão > Implantar**. A URL continua a mesma.
 
-## Dados
+## Atualizar o app
 
-- **Planilha**: uma por projeto, na pasta do projeto. Uma linha por árvore, com equipe, usuário, datas, coordenadas e todos os campos. Para Excel: Arquivo > Fazer download > .xlsx.
-- **Fotos**: pasta `DCIM` do projeto, com o mesmo padrão de nome do QField. O campo guarda `DCIM/nome.jpg` e a coluna "Foto N link" guarda o link do Drive.
-- **GeoPackage**: Coordenação > Exportar. Os nomes de campo são os mesmos do QGIS, em SIRGAS 2000 / UTM (fuso automático ou definido no projeto). Se o formulário veio de um .qml, o estilo vai embutido.
-- **Fotos no QGIS**: baixe a pasta DCIM do projeto no Drive e coloque-a ao lado do .gpkg.
+Troque os arquivos no GitHub e mude a versão em `sw.js` (`CACHE`). Os aparelhos atualizam na abertura seguinte com internet.
 
-## Atualizações do app
+## Testes
 
-Ao trocar arquivos no GitHub, altere a versão na primeira linha útil de `sw.js` (ex.: `coleta-v1.0.1`). Os celulares atualizam na abertura seguinte.
+`cd claude/poc && node srv.js` (servidor), `node b12.js` (coleta e envio), `node b47.js 3000` (perfis, validação, painel, exportação, importação), `node b3.js 20000` (mapa em escala), `node b5.js 20000` (exportação em escala).

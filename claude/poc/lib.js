@@ -57,6 +57,9 @@ function gerar(n, projeto = 'divinopolis', semente = 1) {
       else if (f.auto === 'coletor') v = eq;
       l[f.nome] = v; if (f.tipo === 'photo') l[f.nome + ' link'] = '';
     }
+    // campos ocultos pela categoria ou situação ficam vazios, como no app
+    for (const rg of FORM.regras || []) { const cfg = (rg.por || {})[String(l[rg.campo])]; if (!cfg) continue; for (const [nome, est] of Object.entries(cfg)) if (est === 'oculto') { const f = FORM.campos.find((c) => c.nome === nome); l[nome] = f && f.tipo === 'bool' ? 0 : ''; if (f && f.tipo === 'photo') l[nome + ' link'] = ''; } }
+    if (rnd() < 0.85 && l['Categoria'] !== '4' && l['Categoria'] !== '5') l.Risco = 'Baixo';
     linhas.push(l);
   }
   return linhas;
