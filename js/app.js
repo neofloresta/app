@@ -1,6 +1,6 @@
 // App de coleta Neofloresta
 (() => {
-  const VERSAO = '1.9.0';
+  const VERSAO = '1.10.0';
   const S = { sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
 
@@ -58,6 +58,14 @@
         S.pos = { lat: p.coords.latitude, lon: p.coords.longitude, prec: Math.round(p.coords.accuracy * 10) / 10, t: Date.now() };
         this.ouvintes.forEach((f) => f(S.pos));
       }, (e) => { S.posErro = e.message; this.ouvintes.forEach((f) => f(null, e)); }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
+    },
+    // pede uma leitura nova na hora (o watch só avisa quando a posição muda)
+    agora() {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition((p) => {
+        S.pos = { lat: p.coords.latitude, lon: p.coords.longitude, prec: Math.round(p.coords.accuracy * 10) / 10, t: Date.now() };
+        this.ouvintes.forEach((f) => f(S.pos));
+      }, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
     },
   };
   function classeGps(prec) { return prec == null ? 'ruim' : prec <= 5 ? 'bom' : prec <= 15 ? 'medio' : 'ruim'; }
@@ -296,7 +304,8 @@
     const c = S.form.campos.find((x) => x.auto === 'codigo'); if (!c) return;
     try {
       const pre = prefixoEquipe(); let max = 0;
-      for (const l of await Api.b.listar(S.projeto.id)) max = Math.max(max, seqDe(l[c.nome], pre));
+      const m = await Api.b.mapa(S.projeto.id, [c.nome]);
+      for (const l of m.linhas) max = Math.max(max, seqDe(l[0], pre));
       await Store.set(`srvseq:${S.projeto.id}:${pre}`, max);
     } catch (e) { /* sem conexão: usa o que tem no aparelho */ }
   }
@@ -317,6 +326,7 @@
     }
     if (S.pos && Date.now() - S.pos.t < 20000) Object.assign(r, { lat: S.pos.lat, lon: S.pos.lon, prec: S.pos.prec });
     await Store.salvarRegistro(r);
+    Gps.agora();
     S.aba = 0; S.tentou = false;
     ir('#form/' + r.uuid);
   }
@@ -359,6 +369,12 @@
     const E = estadoCampos(S.form, r.valores);
     const f = S.form.campos.filter((c) => E[c.nome].obrig && !E[c.nome].oculto && vazio(c, valorDe(r, c)));
     for (const g of gruposFaltando(S.form, r.valores, E)) f.push({ nome: 'grupo:' + g, rotulo: g, grupo: g });
+    for (const c of S.form.campos) {
+      if (E[c.nome].oculto || (c.min == null && c.max == null)) continue;
+      const v = r.valores[c.nome]; if (v == null || v === '' || typeof v !== 'number') continue;
+      if (c.min != null && v < c.min) f.push({ nome: c.nome, rotulo: `${c.rotulo}: ${c.limiteMsg || 'abaixo do mínimo de ' + numBR(c.min)}` });
+      else if (c.max != null && v > c.max) f.push({ nome: c.nome, rotulo: `${c.rotulo}: ${c.limiteMsgMax || 'acima do máximo de ' + numBR(c.max)}` });
+    }
     return f;
   }
 
@@ -375,6 +391,7 @@
     if (r.projeto !== S.projeto.id) await abrirProjeto(r.projeto);
     if (!S.reg || S.reg.uuid !== r.uuid) { S.aba = 0; S.tentou = false; }
     S.reg = r; r.valores = r.valores || {}; r.fotos = r.fotos || {};
+    if (r.status !== 'rascunho' && !r.__base) r.__base = JSON.stringify(r.valores);
     if (abaParam != null) S.aba = +abaParam || 0;
     const form = S.form; const abas = form.abas;
     S.aba = Math.min(Math.max(0, S.aba), abas.length - 1);
@@ -656,13 +673,24 @@
       // campos ocultos pela classe não levam valor antigo para a planilha
       for (const c of form.campos) if (E[c.nome].oculto) { if (c.tipo === 'photo') delete r.fotos[c.nome]; else r.valores[c.nome] = c.tipo === 'bool' ? false : null; }
       recalcular(r);
+      anotarHistorico();
+      if (!r.concluido_em) r.concluido_em = agoraISO();
       r.status = 'pendente'; r.gpsAuto = false; r.atualizado_em = agoraISO(); delete r.erroSync;
       await Store.salvarRegistro(r);
       Gps.ouvintes.delete(ouvinte); S.reg = null;
       toast('Árvore salva.'); ir('#inicio'); sincronizar(true);
     }
+    // registro já concluído que foi alterado: guarda quem mudou o quê e quando
+    function anotarHistorico() {
+      if (!r.__base) return;
+      const antes = JSON.parse(r.__base); const mud = [];
+      const fmt = (v) => v == null || v === '' ? 'vazio' : v === true ? 'sim' : v === false ? 'não' : typeof v === 'number' ? numBR(v) : String(v);
+      for (const c of form.campos) if (!c.calculado && c.tipo !== 'photo' && fmt(antes[c.nome]) !== fmt(r.valores[c.nome])) mud.push(`${c.rotulo}: ${fmt(antes[c.nome])} → ${fmt(r.valores[c.nome])}`);
+      if (mud.length) (r.historico = r.historico || []).push({ em: agoraISO(), por: S.sessao.u, mud });
+      delete r.__base;
+    }
     async function sairForm() {
-      clearTimeout(salvarTimer); Gps.ouvintes.delete(ouvinte);
+      clearTimeout(salvarTimer); Gps.ouvintes.delete(ouvinte); if (r.status !== 'rascunho') anotarHistorico();
       if (r.status === 'rascunho' && !r.mexido && !Object.keys(r.fotos).length) { await Store.apagarRegistro(r.uuid); }
       else { r.atualizado_em = agoraISO(); if (r.status === 'enviado') r.status = 'pendente'; await Store.salvarRegistro(r); if (r.status === 'rascunho') toast('Guardado como rascunho.'); }
       S.reg = null; ir('#inicio');
@@ -680,29 +708,82 @@
   // ---------- Mapa ----------
   async function telaMapa() {
     const div = h('div', { id: 'mapa' });
-    $app.replaceChildren(topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: centrar }, 'Minha posição')), div);
-    const mapa = L.map(div).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
+    const form = S.form;
+    const cc = campoCodigo(form), ce = campoEspecie(form);
+    const cRisco = form.campos.find((c) => c.tipo === 'choice' && /^risco$/i.test(norm(c.nome)));
+    const cCat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
+    const cFoto = form.campos.find((c) => c.tipo === 'photo');
+    const rotOp = (c, v) => { if (!c || v == null || v === '') return ''; const o = c.opcoes.find((x) => String(x.v) === String(v)); return o ? o.t : String(v); };
+    // filtros
+    const busca = h('input', { class: 'entrada', placeholder: 'Código ou espécie', autocapitalize: 'none' });
+    const selEq = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todas as equipes'));
+    const selRisco = cRisco ? h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todos os riscos'), cRisco.opcoes.map((o) => h('option', { value: o.v }, 'Risco ' + o.t.toLowerCase()))) : null;
+    const selCor = h('select', { class: 'entrada' }, h('option', { value: 'equipe' }, 'Cor por equipe'), cRisco ? h('option', { value: 'risco' }, 'Cor por risco') : null);
+    const conta = h('small', { class: 'mapa-conta' });
+    const barra = h('div', { class: 'mapa-filtros' }, busca, h('div', { class: 'mapa-sel' }, selEq, selRisco, selCor), conta);
+    $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: centrar }, 'Minha posição')), barra, div));
+    const mapa = L.map(div, { preferCanvas: true }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, maxNativeZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapa);
-    const cc = campoCodigo(S.form), ce = campoEspecie(S.form);
-    const cores = ['#00546E', '#E65100', '#6A1B9A', '#2E7D32', '#C62828', '#1565C0'];
-    const equipes = []; const cor = (e) => { if (!equipes.includes(e)) equipes.push(e); return cores[equipes.indexOf(e) % cores.length]; };
-    const grupo = L.featureGroup().addTo(mapa); const vistos = new Set();
-    const ponto = (lat, lon, equipe, rot, esp, uid, local) => {
-      if (lat == null || lat === '' || vistos.has(uid)) return; vistos.add(uid);
-      const m = L.circleMarker([+lat, +lon], { radius: 7, color: '#fff', weight: 2, fillColor: cor(equipe || '-'), fillOpacity: 0.95 }).addTo(grupo);
-      const pop = h('div', null, h('b', null, rot || 'Sem código'), h('br'), h('i', null, esp || ''), h('br'), h('small', null, equipe || ''), local ? h('div', null, h('button', { class: 'btn peq', style: 'margin-top:6px', onclick: () => ir('#form/' + uid) }, 'Abrir')) : null);
-      m.bindPopup(pop);
-    };
-    for (const r of await Store.registros(S.projeto.id)) ponto(r.lat, r.lon, r.equipe, codigoDe(S.form, r.valores), ce && r.valores[ce.nome], r.uuid, true);
-    if (!Api.demo && navigator.onLine) {
-      try { const linhas = await Api.b.listar(S.projeto.id); for (const l of linhas) ponto(l.latitude, l.longitude, l.equipe, codigoDe(S.form, l), ce && l[ce.nome], l.uuid, false); } catch (e) { toast('Não foi possível carregar os pontos das outras equipes.'); }
+    const render = L.canvas({ padding: 0.3 });
+    const cores = ['#00546E', '#CD834C', '#6A1B9A', '#2E7D32', '#C62828', '#12A6C8'];
+    const corRisco = { Baixo: '#2E9E4F', 'Médio': '#E3A322', Alto: '#C8423A' };
+    const equipes = []; const corEq = (e) => { if (!equipes.includes(e)) equipes.push(e); return cores[equipes.indexOf(e) % cores.length]; };
+    // pontos: os do aparelho primeiro (podem ter edição ainda não enviada), depois os do servidor
+    const pts = []; const vistos = new Set();
+    const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
+    for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', foto: '', local: true });
+    const camada = L.layerGroup().addTo(mapa);
+    function desenhar(ajustar) {
+      camada.clearLayers(); mapa.closePopup();
+      const q = norm(busca.value).trim(), eq = selEq.value, rk = selRisco ? selRisco.value : '', porRisco = selCor.value === 'risco';
+      const vis = pts.filter((o) => (!q || o.chave.includes(q)) && (!eq || o.equipe === eq) && (!rk || String(o.risco) === rk));
+      for (const o of vis) {
+        const fill = porRisco ? corRisco[o.risco] || '#8A969C' : corEq(o.equipe || '-');
+        L.circleMarker([o.lat, o.lon], { renderer: render, radius: 6, color: '#fff', weight: 1.5, fillColor: fill, fillOpacity: 0.95 }).on('click', (e) => ficha(o, e.latlng)).addTo(camada);
+      }
+      conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos`;
+      legenda();
+      if (ajustar && vis.length) {
+        if (vis.length === 1) { mapa.setView([vis[0].lat, vis[0].lon], 19); ficha(vis[0]); }
+        else mapa.fitBounds(L.latLngBounds(vis.map((o) => [o.lat, o.lon])), { padding: [30, 30], maxZoom: 19 });
+      }
     }
-    const leg = L.control({ position: 'bottomleft' }); leg.onAdd = () => h('div', { style: 'background:#fff;padding:6px 9px;border-radius:8px;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.2)' }, equipes.map((e) => h('div', null, h('span', { style: `display:inline-block;width:10px;height:10px;border-radius:50%;background:${cor(e)};margin-right:6px` }), e))); leg.addTo(mapa);
+    function ficha(o, ll) {
+      const pop = h('div', { class: 'ficha' }, h('b', null, o.cod || 'Sem código'), o.esp ? h('i', null, o.esp) : null,
+        o.cat ? h('div', null, rotOp(cCat, o.cat)) : null, o.risco ? h('div', null, 'Risco ' + String(rotOp(cRisco, o.risco)).toLowerCase()) : null,
+        h('small', null, o.equipe || ''),
+        o.foto ? h('a', { href: o.foto, target: '_blank', rel: 'noopener' }, 'Ver foto') : null,
+        o.local ? h('button', { class: 'btn peq', onclick: () => ir('#form/' + o.uid) }, 'Abrir') : null);
+      L.popup().setLatLng(ll || [o.lat, o.lon]).setContent(pop).openOn(mapa);
+    }
+    let leg = null;
+    function legenda() {
+      if (leg) leg.remove();
+      leg = L.control({ position: 'bottomleft' });
+      const itens = selCor.value === 'risco' ? Object.entries(corRisco) : equipes.map((e) => [e, corEq(e)]);
+      leg.onAdd = () => h('div', { class: 'mapa-leg' }, itens.map(([t, c]) => h('div', null, h('span', { style: `background:${c}` }), t)));
+      leg.addTo(mapa);
+    }
+    let tBusca = null;
+    busca.addEventListener('input', () => { clearTimeout(tBusca); tBusca = setTimeout(() => desenhar(!!busca.value.trim()), 250); });
+    [selEq, selRisco, selCor].filter(Boolean).forEach((x) => x.addEventListener('change', () => desenhar(x !== selCor)));
+    const preencherEquipes = () => { const atual = selEq.value; selEq.replaceChildren(h('option', { value: '' }, 'Todas as equipes'), ...equipes.filter((e) => e !== '-').map((e) => h('option', { value: e, selected: e === atual }, e))); };
+    preencherEquipes(); desenhar(true);
+    if (!Api.demo && navigator.onLine) {
+      conta.textContent = 'Carregando pontos das equipes...';
+      try {
+        const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link'].map((x) => x || '');
+        const m = await Api.b.mapa(S.projeto.id, campos);
+        for (const l of m.linhas) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6], cat: l[7], foto: l[8], local: false });
+        if (!document.body.contains(div)) return;
+        preencherEquipes(); desenhar(true);
+      } catch (e) { conta.textContent = ''; toast('Não foi possível carregar os pontos das outras equipes.'); }
+    }
     let eu = null;
     function centrar() { if (!S.pos) return toast('GPS ainda sem sinal.'); mapa.setView([S.pos.lat, S.pos.lon], 19); }
     const ouv = (p) => { if (!p || !document.body.contains(div)) return; if (!eu) eu = L.circleMarker([p.lat, p.lon], { radius: 8, color: '#fff', weight: 3, fillColor: '#1E88E5', fillOpacity: 1 }).addTo(mapa); else eu.setLatLng([p.lat, p.lon]); };
     Gps.ouvintes.add(ouv); if (S.pos) ouv(S.pos);
-    if (grupo.getLayers().length) mapa.fitBounds(grupo.getBounds(), { padding: [30, 30], maxZoom: 19 }); else if (S.pos) centrar(); else mapa.setView([-15.8, -47.9], 4);
+    if (!pts.length) { if (S.pos) centrar(); else mapa.setView([-15.8, -47.9], 4); }
   }
 
   // ---------- Coordenação ----------
@@ -745,14 +826,24 @@
       try {
         const p = projetos.find((x) => x.id === sel.value);
         const form = await Api.b.formulario(p.formulario);
-        const linhas = await Api.b.listar(p.id);
+        const linhas = await Api.b.listarTudo(p.id, (n, t) => status.replaceChildren(h('div', { class: 'info' }, `Baixando registros: ${n.toLocaleString('pt-BR')}${t ? ' de ' + t.toLocaleString('pt-BR') : ''}...`)));
         if (!linhas.length) throw new Error('Nenhum registro enviado neste projeto ainda.');
+        // numeração única do projeto, sem distinção de equipe, pela ordem de coleta
+        [...linhas].sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)) || String(a.uuid).localeCompare(String(b.uuid))).forEach((l, i) => { l.numero_unico = i + 1; });
+        const cc = campoCodigo(form), ce = campoEspecie(form);
         const dia = new Date().toISOString().slice(0, 10);
         if (tipo === 'gpkg') {
           const estilo = await Api.b.estilo(form.id).catch(() => null);
           const r = await Gpkg.gerar({ form, linhas, epsg: p.epsg, nomeCamada: Q2F.slug(p.id).replace(/-/g, '_'), estiloQml: estilo });
           baixar(`${p.id}_${dia}.gpkg`, r.bytes, 'application/geopackage+sqlite3');
           status.replaceChildren(h('div', { class: 'info' }, `GeoPackage gerado: ${r.total} árvores em SIRGAS 2000 / UTM (EPSG:${r.srs})${r.semPonto ? `, ${r.semPonto} sem coordenada` : ''}${estilo ? ', com o estilo do QGIS embutido' : ''}. Para ver as fotos no QGIS, baixe a pasta DCIM do projeto no Drive e coloque ao lado do arquivo .gpkg.`));
+        } else if (tipo === 'kml') {
+          const x = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const chave = (n) => n && /^(numero_unico|equipe|criado_em|precisao_gps_m)$|codigo|especie|categoria|situa|dap|altura|risco|foto 1 link/i.test(norm(n));
+          const cols = [...new Set(linhas.flatMap((l) => Object.keys(l)))].filter(chave);
+          const pms = linhas.filter((l) => l.latitude !== '' && l.latitude != null).map((l) => `<Placemark><name>${x(cc ? l[cc.nome] : l.numero_unico)}</name>${ce && l[ce.nome] ? `<description>${x(l[ce.nome])}</description>` : ''}<ExtendedData>${cols.map((c) => `<Data name="${x(c)}"><value>${x(l[c])}</value></Data>`).join('')}</ExtendedData><Point><coordinates>${+l.longitude},${+l.latitude},0</coordinates></Point></Placemark>`);
+          baixar(`${p.id}_${dia}.kml`, `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(p.nome)}</name>${pms.join('\n')}</Document></kml>`, 'application/vnd.google-earth.kml+xml');
+          status.replaceChildren(h('div', { class: 'info' }, `KML gerado com ${pms.length} pontos e os campos principais (abre no Google Earth e no Google Maps). A tabela completa está no GeoPackage e na planilha.`));
         } else {
           const cols = [...new Set(linhas.flatMap((l) => Object.keys(l)))];
           const esc = (v) => { const s = v == null ? '' : String(v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -762,7 +853,7 @@
       } catch (e) { status.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
     }
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Exportar dados'), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), sel), links,
-      h('div', { class: 'linha-btn' }, h('button', { class: 'btn', onclick: () => exportar('gpkg') }, 'GeoPackage (.gpkg)'), h('button', { class: 'btn sec', onclick: () => exportar('csv') }, 'Planilha (.csv)')),
+      h('div', { class: 'linha-btn' }, h('button', { class: 'btn', onclick: () => exportar('gpkg') }, 'GeoPackage (.gpkg)'), h('button', { class: 'btn sec', onclick: () => exportar('csv') }, 'Planilha (.csv)'), h('button', { class: 'btn sec', onclick: () => exportar('kml') }, 'Google Earth (.kml)')),
       h('p', { class: 'dica' }, Api.demo ? 'No modo demonstração a exportação usa os registros deste aparelho.' : 'A exportação usa tudo o que as equipes já enviaram para a planilha do projeto.'), status));
   }
 

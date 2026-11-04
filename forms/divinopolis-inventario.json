@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 2,
+ "versao": 3,
  "campos": [
   {
    "armazenar": "text",
@@ -109,7 +109,9 @@
    "armazenar": "real",
    "nome": "Altura total (m)",
    "rotulo": "Altura total (m)",
-   "tipo": "number"
+   "tipo": "number",
+   "min": 2,
+   "limiteMsg": "abaixo do critério de inclusão (altura a partir de 2 m)"
   },
   {
    "armazenar": "real",

@@ -1,0 +1,7 @@
+node_modules/
+senha.txt
+dump.json
+mock.log
+res-*.json
+saida-*
+*.png

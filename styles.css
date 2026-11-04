@@ -187,6 +187,18 @@ textarea.entrada { min-height: 96px; resize: vertical; }
 
 /* Mapa */
 #mapa, .mapa-mini { width: 100%; height: calc(100vh - 56px); }
+.tela-mapa { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+.tela-mapa #mapa { flex: 1; height: auto; min-height: 0; }
+.mapa-filtros { padding: 8px 12px; background: #fff; border-bottom: 1px solid var(--linha, #dde3e6); display: grid; gap: 6px; }
+.mapa-filtros .entrada { padding: 8px 10px; font-size: 15px; min-height: 0; }
+.mapa-sel { display: flex; gap: 6px; overflow-x: auto; }
+.mapa-sel select { flex: 1 0 auto; width: auto; }
+.mapa-conta { color: #5b6b72; font-size: 12px; }
+.mapa-leg { background: #fff; padding: 6px 9px; border-radius: 8px; font-size: 13px; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+.mapa-leg span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.ficha { display: grid; gap: 2px; min-width: 150px; }
+.ficha a { color: var(--azul, #00546E); font-weight: 500; }
+.ficha .btn { margin-top: 6px; }
 .mapa-mini { height: 52vh; border-radius: 12px; margin-bottom: 12px; }
 
 /* Coordenação */

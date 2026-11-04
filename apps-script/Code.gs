@@ -9,6 +9,7 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
+const VERSAO_SCRIPT = '1.10';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo'];
 const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id'];
 
@@ -35,7 +36,7 @@ function configurar() {
 }
 
 // ---------- Entrada ----------
-function doGet() { return json({ ok: true, app: 'Neofloresta Coleta', configurado: !!PROPS.getProperty('BASE_ID') }); }
+function doGet() { return json({ ok: true, app: 'Neofloresta Coleta', versao: VERSAO_SCRIPT, configurado: !!PROPS.getProperty('BASE_ID') }); }
 
 function doPost(e) {
   try {
@@ -45,12 +46,13 @@ function doPost(e) {
     const exigeAdmin = () => { if (!admin) throw new Error('Acesso restrito à coordenação.'); };
     const exigeProjeto = (id) => { if (!admin && usr.projetos.indexOf(id) < 0) throw new Error('Projeto não liberado para este usuário.'); };
     switch (d.acao) {
-      case 'login': return json({ ok: true, usuario: { login: usr.login, nome: usr.nome, perfil: usr.perfil }, projetos: projetosDoUsuario(usr) });
+      case 'login': return json({ ok: true, versaoScript: VERSAO_SCRIPT, usuario: { login: usr.login, nome: usr.nome, perfil: usr.perfil }, projetos: projetosDoUsuario(usr) });
       case 'formulario': return json({ ok: true, formulario: lerFormulario(d.id) });
       case 'estilo': return json({ ok: true, qml: lerArquivoForm(d.id + '.qml') });
       case 'foto': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarFoto(d.projeto, d.nome, d.mime, d.dados)));
       case 'registro': exigeProjeto(d.projeto); salvarRegistro(d.projeto, d.linha, usr); return json({ ok: true });
-      case 'listar': exigeProjeto(d.projeto); return json({ ok: true, linhas: listar(d.projeto) });
+      case 'listar': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, listarPagina(d.projeto, d.de, d.n)));
+      case 'mapa': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, colunas(d.projeto, d.campos || [])));
       case 'projetos_listar': exigeAdmin(); return json({ ok: true, projetos: tabela('Projetos').map(comLinks) });
       case 'projeto_salvar': exigeAdmin(); salvarProjeto(d.projeto_dados); return json({ ok: true });
       case 'usuarios_listar': exigeAdmin(); return json({ ok: true, usuarios: tabela('Usuarios') });
@@ -208,6 +210,28 @@ function salvarRegistro(projetoId, linha, usr) {
     }
   } finally { lock.releaseLock(); }
 }
+
+// Página de registros (de = posição inicial, n = quantidade). Sem n devolve tudo, como antes.
+function listarPagina(projetoId, de, n) {
+  const sh = planilha(projetoId); const total = Math.max(0, sh.getLastRow() - 1);
+  if (!n) return { linhas: listar(projetoId), total: total };
+  de = Math.max(0, +de || 0); n = Math.min(+n, total - de);
+  if (n <= 0) return { linhas: [], total: total };
+  const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  const v = sh.getRange(2 + de, 1, n, cab.length).getValues();
+  return { linhas: v.map((l) => linhaObj(cab, l)), total: total };
+}
+// Só algumas colunas de todas as linhas, em lista compacta (mapa e sequência do código)
+function colunas(projetoId, campos) {
+  const sh = planilha(projetoId); const total = sh.getLastRow() - 1;
+  if (total < 1) return { cab: campos, linhas: [] };
+  const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const cols = campos.map((c) => { const i = cab.indexOf(c); return i < 0 ? null : sh.getRange(2, i + 1, total, 1).getValues(); });
+  const linhas = [];
+  for (let r = 0; r < total; r++) linhas.push(cols.map((c) => { if (!c) return ''; const x = c[r][0]; return x instanceof Date ? x.toISOString() : typeof x === 'string' ? x.replace(/^'/, '') : x; }));
+  return { cab: campos, linhas: linhas };
+}
+function linhaObj(cab, l) { const o = {}; cab.forEach((c, i) => (o[c] = l[i] instanceof Date ? l[i].toISOString() : typeof l[i] === 'string' ? l[i].replace(/^'/, '') : l[i])); return o; }
 
 function listar(projetoId) {
   const sh = planilha(projetoId);

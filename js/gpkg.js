@@ -5,7 +5,7 @@ const Gpkg = (() => {
 
   const EXTRAS = [
     ['equipe', 'TEXT'], ['usuario', 'TEXT'], ['criado_em', 'DATETIME'], ['atualizado_em', 'DATETIME'],
-    ['latitude', 'REAL'], ['longitude', 'REAL'], ['precisao_gps_m', 'REAL'], ['uuid', 'TEXT'],
+    ['latitude', 'REAL'], ['longitude', 'REAL'], ['precisao_gps_m', 'REAL'], ['uuid', 'TEXT'], ['numero_unico', 'INTEGER'], ['historico', 'TEXT'],
   ];
 
   function tipoSql(c) {

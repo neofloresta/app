@@ -7,6 +7,7 @@ const Api = (() => {
       uuid: r.uuid, projeto: r.projeto, equipe: r.equipe, usuario: r.usuario,
       criado_em: r.criado_em, atualizado_em: r.atualizado_em,
       latitude: r.lat ?? '', longitude: r.lon ?? '', precisao_gps_m: r.prec ?? '',
+      historico: (r.historico || []).map((x) => `${String(x.em).slice(0, 16).replace('T', ' ')} ${x.por}: ${x.mud.join('; ')}`).join(' | '),
     };
     for (const c of form.campos) {
       if (c.tipo === 'photo') { const f = (r.fotos || {})[c.nome]; l[c.nome] = f ? f.nome : ''; l[c.nome + ' link'] = f && f.url ? f.url : ''; }
@@ -15,6 +16,7 @@ const Api = (() => {
     return l;
   }
 
+  function paraMapa(linhas, campos) { return { cab: campos, linhas: linhas.map((l) => campos.map((c) => l[c] ?? '')) }; }
   async function chamar(acao, dados) {
     const corpo = JSON.stringify(Object.assign({ acao, u: cred && cred.u, s: cred && cred.s }, dados || {}));
     const resp = await fetch(url, { method: 'POST', body: corpo, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow' });
@@ -62,6 +64,8 @@ const Api = (() => {
       const b = await this.base(); const p = b.projetos.find((x) => x.id === projeto); const form = b.formularios[p.formulario];
       return (await Store.registros(projeto)).filter((r) => r.status !== 'rascunho').map((r) => achatar(r, form));
     },
+    async mapa(projeto, campos) { return paraMapa(await this.listar(projeto), campos); },
+    async listarTudo(projeto) { return this.listar(projeto); },
     async projetosListar() { return (await this.base()).projetos; },
     async projetoSalvar(p) { const b = await this.base(); const i = b.projetos.findIndex((x) => x.id === p.id); if (i >= 0) b.projetos[i] = p; else b.projetos.push(p); await Store.set('demo:base', b); },
     async usuariosListar() { return (await this.base()).usuarios; },
@@ -83,6 +87,23 @@ const Api = (() => {
     },
     async registro(projeto, linha) { return chamar('registro', { projeto, linha }); },
     async listar(projeto) { return (await chamar('listar', { projeto })).linhas; },
+    // só as colunas pedidas, em lista compacta (mapa e sequência do código). Servidor antigo: cai no listar completo.
+    async mapa(projeto, campos) {
+      try { const j = await chamar('mapa', { projeto, campos }); return { cab: j.cab, linhas: j.linhas }; } catch (e) {
+        if (!/desconhecida/i.test(e.message)) throw e;
+        return paraMapa(await this.listar(projeto), campos);
+      }
+    },
+    // exportação em páginas, para não estourar a resposta do Google em projetos grandes
+    async listarTudo(projeto, progresso) {
+      const N = 4000; let out = [];
+      for (let de = 0; ; de += N) {
+        const j = await chamar('listar', { projeto, de, n: N });
+        out = out.concat(j.linhas); if (progresso) progresso(out.length, j.total);
+        if (j.total == null || j.linhas.length < N || out.length >= j.total) break; // servidor antigo devolve tudo de uma vez
+      }
+      return out;
+    },
     async projetosListar() { return (await chamar('projetos_listar')).projetos; },
     async projetoSalvar(p) { return chamar('projeto_salvar', { projeto_dados: p }); },
     async usuariosListar() { return (await chamar('usuarios_listar')).usuarios; },
