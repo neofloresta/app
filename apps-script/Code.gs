@@ -22,7 +22,8 @@ function configurar() {
     DriveApp.getFileById(base.getId()).moveTo(pasta);
     const u = base.getSheets()[0]; u.setName('Usuarios'); u.appendRow(COLS_USUARIOS);
     const senha = String(Math.floor(100000 + Math.random() * 900000));
-    u.appendRow(['admin', "'" + senha, 'Coordenação', 'admin', '*', 'Coordenação', 'CO']);
+    const r2 = u.getRange(2, 1, 1, COLS_USUARIOS.length);
+    r2.setNumberFormats([COLS_USUARIOS.map(() => '@')]); r2.setValues([['admin', senha, 'Coordenação', 'admin', '*', 'Coordenação', 'CO']]);
     u.setFrozenRows(1);
     const p = base.insertSheet('Projetos'); p.appendRow(COLS_PROJETOS); p.setFrozenRows(1);
     PROPS.setProperty('BASE_ID', base.getId());
@@ -75,23 +76,28 @@ function base() {
 function tabela(nome) {
   const v = base().getSheetByName(nome).getDataRange().getValues();
   const cab = v.shift();
-  return v.filter((l) => l[0] !== '').map((l) => { const o = {}; cab.forEach((c, i) => (o[c] = l[i] instanceof Date ? l[i].toISOString() : String(l[i]))); return o; });
+  return v.filter((l) => l[0] !== '').map((l) => { const o = {}; cab.forEach((c, i) => (o[c] = texto(l[i]))); return o; });
+}
+// valor da célula como texto limpo (sem apóstrofo inicial nem espaços)
+function texto(v) { return v instanceof Date ? v.toISOString() : String(v).replace(/^'/, '').trim();
 }
 function salvarLinha(nome, cols, chave, obj) {
   const sh = base().getSheetByName(nome);
   const v = sh.getDataRange().getValues(); const cab = v[0]; const ic = cab.indexOf(chave);
-  const linha = cab.map((c) => (obj[c] == null ? '' : "'" + String(obj[c])));
-  for (let i = 1; i < v.length; i++) if (String(v[i][ic]) === String(obj[chave])) { sh.getRange(i + 1, 1, 1, linha.length).setValues([linha]); return; }
-  sh.appendRow(linha);
+  const linha = cab.map((c) => (obj[c] == null ? '' : String(obj[c])));
+  let r = v.length + 1;
+  for (let i = 1; i < v.length; i++) if (texto(v[i][ic]) === String(obj[chave])) { r = i + 1; break; }
+  const rg = sh.getRange(r, 1, 1, linha.length);
+  rg.setNumberFormats([linha.map(() => '@')]); rg.setValues([linha]);
 }
 function removerLinha(nome, chave, valor) {
   const sh = base().getSheetByName(nome); const v = sh.getDataRange().getValues(); const ic = v[0].indexOf(chave);
-  for (let i = v.length - 1; i >= 1; i--) if (String(v[i][ic]) === String(valor)) sh.deleteRow(i + 1);
+  for (let i = v.length - 1; i >= 1; i--) if (texto(v[i][ic]) === String(valor)) sh.deleteRow(i + 1);
 }
 
 function autenticar(login, senha) {
   if (!login) throw new Error('Informe usuário e senha.');
-  const u = tabela('Usuarios').find((x) => x.login.toLowerCase() === String(login).toLowerCase() && x.senha === String(senha));
+  const u = tabela('Usuarios').find((x) => x.login.toLowerCase() === String(login).trim().toLowerCase() && x.senha === String(senha).trim());
   if (!u) throw new Error('Usuário ou senha incorretos.');
   u.projetos = u.projeto === '*' ? [] : u.projeto.split(',').map((s) => s.trim()).filter(String);
   return u;
@@ -164,11 +170,14 @@ function planilha(projetoId) { return SpreadsheetApp.openById(projeto(projetoId)
 
 function celula(v) {
   if (v === null || v === undefined) return '';
-  if (typeof v === 'number' || typeof v === 'boolean') return v;
-  const s = String(v);
-  // texto que a planilha converteria sozinha (ex.: 156/2 virar data, 52,6 virar número)
-  if (/^[\d\s.,\/:;+\-]+$/.test(s) || /^\d{4}-\d{2}-\d{2}/.test(s) || /^[=+\-@]/.test(s)) return "'" + s;
-  return s;
+  if (typeof v === 'boolean') return v ? 1 : 0;
+  return v;
+}
+// textos ficam como texto puro (assim 156/2 não vira data nem 52,6 vira número); números ficam como número
+function gravarLinha(sh, r, valores) {
+  const rg = sh.getRange(r, 1, 1, valores.length);
+  rg.setNumberFormats([valores.map((v) => (typeof v === 'number' ? '0.##########' : '@'))]);
+  rg.setValues([valores]);
 }
 
 function salvarRegistro(projetoId, linha, usr) {
@@ -191,11 +200,11 @@ function salvarRegistro(projetoId, linha, usr) {
       const r = achado.getRow();
       const ia = cab.indexOf('atualizado_em');
       const atual = sh.getRange(r, ia + 1).getValue();
-      const atualIso = atual instanceof Date ? atual.toISOString() : String(atual);
+      const atualIso = texto(atual);
       if (atualIso && linha.atualizado_em && atualIso > linha.atualizado_em) return; // já existe versão mais nova
-      sh.getRange(r, 1, 1, valores.length).setValues([valores]);
+      gravarLinha(sh, r, valores);
     } else {
-      sh.getRange(sh.getLastRow() + 1, 1, 1, valores.length).setValues([valores]);
+      gravarLinha(sh, sh.getLastRow() + 1, valores);
     }
   } finally { lock.releaseLock(); }
 }
@@ -204,5 +213,5 @@ function listar(projetoId) {
   const sh = planilha(projetoId);
   if (sh.getLastRow() < 2) return [];
   const v = sh.getDataRange().getValues(); const cab = v.shift();
-  return v.map((l) => { const o = {}; cab.forEach((c, i) => (o[c] = l[i] instanceof Date ? l[i].toISOString() : l[i])); return o; });
+  return v.map((l) => { const o = {}; cab.forEach((c, i) => (o[c] = l[i] instanceof Date ? l[i].toISOString() : typeof l[i] === 'string' ? l[i].replace(/^'/, '') : l[i])); return o; });
 }
