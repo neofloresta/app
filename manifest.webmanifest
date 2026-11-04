@@ -1,12 +1,12 @@
 {
-  "name": "Coleta Neofloresta",
-  "short_name": "Coleta",
+  "name": "Neofloresta Inventário",
+  "short_name": "Neofloresta",
   "description": "Coleta de campo da arborização urbana",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#F2F5F5",
+  "background_color": "#FFFFFF",
   "theme_color": "#00546E",
   "lang": "pt-BR",
   "icons": [

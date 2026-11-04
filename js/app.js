@@ -1,6 +1,6 @@
 // App de coleta Neofloresta
 (() => {
-  const VERSAO = '1.5.0';
+  const VERSAO = '1.7.0';
   const S = { sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
 
@@ -130,12 +130,12 @@
       }
     }
     s.addEventListener('keydown', (e) => e.key === 'Enter' && entrar());
-    $app.replaceChildren(h('div', { class: 'login' },
-      h('div', { class: 'marca' }, h('img', { src: 'icons/icone-192.png', alt: '' }), h('div', null, h('b', null, 'Coleta Neofloresta'), h('span', null, 'Arborização urbana'))),
+    $app.replaceChildren(h('div', { class: 'tela-login' }, h('div', { class: 'login' },
+      h('div', { class: 'marca' }, h('img', { src: 'icons/logo-basica.png', alt: 'Neofloresta Serviços Ecossistêmicos' }), h('span', null, 'Inventário de arborização urbana')),
       Api.demo ? h('div', { class: 'info' }, 'Modo demonstração: os dados ficam só neste aparelho. Usuários de teste: ', h('b', null, 'admin / 1234'), ', ', h('b', null, 'equipe1 / 1111'), ' e ', h('b', null, 'equipe2 / 2222'), '.') : null,
       h('div', { class: 'campo' }, u), h('div', { class: 'campo' }, s), erro, btn,
       h('button', { class: 'btn linha cheio', style: 'margin-top:12px', onclick: configurarServidor }, 'Configurar servidor'),
-      h('p', { class: 'dica', style: 'text-align:center;margin-top:18px' }, 'Versão ' + VERSAO)));
+      h('p', { class: 'dica', style: 'text-align:center;margin-top:18px' }, 'Versão ' + VERSAO)), h('div', { class: 'padronagem', 'aria-hidden': 'true' })));
   }
 
   async function configurarServidor() {
@@ -209,7 +209,7 @@
     $app.replaceChildren(
       topo(S.projeto.nome, S.projeto.equipe || S.sessao.usuario.nome, menu, h('div', { class: 'topo-dir' }, h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')), sync)),
       h('main', null,
-        h('button', { class: 'btn nova', onclick: novoRegistro }, ico('mais'), 'Nova árvore'),
+        h('button', { class: 'btn nova canto', onclick: novoRegistro }, ico('mais'), 'Nova árvore'),
         h('div', { class: 'resumo', id: 'stats' }),
         h('div', { class: 'busca-box' }, ico('busca'), busca),
         h('div', { id: 'lista', class: 'lista' })));
@@ -253,6 +253,7 @@
   function abrirMenu() {
     const it = (txt, fn) => h('button', { class: 'menu-it', onclick: () => { veu.remove(); fn(); } }, txt);
     const veu = h('div', { class: 'veu', onclick: (e) => e.target === veu && veu.remove() }, h('div', { class: 'folha' },
+      h('img', { class: 'folha-marca', src: 'icons/logo-horizontal.png', alt: 'Neofloresta' }),
       h('h3', null, S.sessao.usuario.nome),
       S.sessao.projetos.length > 1 ? it('Trocar projeto', trocarProjeto) : null,
       it('Mapa das árvores', () => ir('#mapa')),

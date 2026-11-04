@@ -1,5 +1,13 @@
+@font-face { font-family: Roboto; font-weight: 300; font-style: normal; font-display: swap; src: url(fonts/roboto-latin-300-normal.woff2) format('woff2'); }
+@font-face { font-family: Roboto; font-weight: 400; font-style: normal; font-display: swap; src: url(fonts/roboto-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: Roboto; font-weight: 400; font-style: italic; font-display: swap; src: url(fonts/roboto-latin-400-italic.woff2) format('woff2'); }
+@font-face { font-family: Roboto; font-weight: 500; font-style: normal; font-display: swap; src: url(fonts/roboto-latin-500-normal.woff2) format('woff2'); }
+@font-face { font-family: Roboto; font-weight: 700; font-style: normal; font-display: swap; src: url(fonts/roboto-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family: Roboto; font-weight: 900; font-style: normal; font-display: swap; src: url(fonts/roboto-latin-900-normal.woff2) format('woff2'); }
+/* Cores do manual da marca Neofloresta: azul #00546E, laranja #CD834C, azul claro #12A6C8 e cinzas */
 :root {
-  --teal: #00546E; --teal-2: #0B6E8C; --tint: #E4F0F3; --fundo: #F4F7F7; --sup: #fff; --texto: #13262B; --suave: #60747A;
+  --laranja: #CD834C; --azul-claro: #12A6C8;
+  --teal: #00546E; --teal-2: #12A6C8; --tint: #E4F0F3; --fundo: #F4F7F7; --sup: #fff; --texto: #13262B; --suave: #60747A;
   --linha: #E1E8EA; --ok: #2E7D32; --alerta: #E09B00; --erro: #C62828; --raio: 12px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -19,7 +27,7 @@ button { cursor: pointer; }
 .topo .ic:active { background: rgba(255, 255, 255, .15); }
 .topo-dir { display: flex; align-items: center; gap: 2px; }
 .sync { font-size: 12px; background: rgba(255, 255, 255, .14); border: 0; color: #fff; padding: 7px 10px; border-radius: 20px; white-space: nowrap; }
-.sync.pend { background: var(--alerta); color: #222; }
+.sync.pend { background: var(--laranja); color: #fff; }
 .sync.off { background: rgba(0, 0, 0, .25); }
 .gps { border: 0; border-radius: 18px; padding: 7px 11px; font-size: 12.5px; font-weight: 600; background: rgba(255, 255, 255, .16); color: #fff; white-space: nowrap; }
 .gps.bom { background: #2E8B3E; }
@@ -29,11 +37,15 @@ button { cursor: pointer; }
 main { padding: 16px 16px 112px; max-width: 760px; margin: 0 auto; }
 
 /* Login */
-.login { min-height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 28px 22px; max-width: 420px; margin: 0 auto; }
-.marca { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
-.marca img { width: 56px; height: 56px; border-radius: 14px; }
-.marca b { font-size: 22px; color: var(--teal); display: block; }
-.marca span { color: var(--suave); font-size: 14px; }
+.tela-login { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; background: #fff; }
+.login { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 32px 22px 24px; width: 100%; max-width: 420px; margin: 0 auto; }
+.marca { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 32px; text-align: center; }
+.marca img { width: 250px; max-width: 78%; height: auto; }
+.marca span { color: var(--suave); font-size: 15px; font-weight: 300; letter-spacing: .02em; }
+.padronagem { height: 120px; background: url(icons/padronagem.jpg) center top / 300px auto repeat-x; opacity: .55; flex: none; }
+/* Corte diagonal no canto superior direito, como no manual (canteadeira) */
+.canto { clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
+.folha-marca { display: block; width: 170px; margin: 2px 0 14px; }
 
 /* Campos */
 .cartao { background: var(--sup); border-radius: 14px; border: 1px solid var(--linha); padding: 16px; margin-bottom: 12px; }
@@ -44,7 +56,7 @@ label.rot, .rot { display: block; font-weight: 600; font-size: 14.5px; margin: 0
 .campo.falta .rot { color: var(--erro); }
 .campo.falta .entrada, .campo.falta .opcoes, .campo.falta .tile { box-shadow: 0 0 0 2px var(--erro); border-radius: 12px; }
 .entrada { width: 100%; border: 1px solid var(--linha); border-radius: var(--raio); padding: 13px 14px; background: var(--sup); font-size: 17px; min-height: 52px; }
-.entrada:focus { outline: none; border-color: var(--teal-2); box-shadow: 0 0 0 3px rgba(11, 110, 140, .15); }
+.entrada:focus { outline: none; border-color: var(--azul-claro); box-shadow: 0 0 0 3px rgba(18, 166, 200, .18); }
 textarea.entrada { min-height: 96px; resize: vertical; }
 .dica { font-size: 12.5px; color: var(--suave); margin-top: 6px; }
 .nota { font-size: 13px; color: var(--suave); margin: -12px 0 22px; }
@@ -133,14 +145,14 @@ textarea.entrada { min-height: 96px; resize: vertical; }
 .rodape { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--sup); border-top: 1px solid var(--linha); padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); display: flex; gap: 10px; }
 .rodape .quad { width: 56px; flex: none; padding: 0; }
 .rodape .prox { flex: 1; justify-content: space-between; padding: 0 18px; font-size: 16.5px; }
-.rodape .prox.fim { justify-content: center; background: var(--ok); }
+.rodape .prox.fim { justify-content: center; background: var(--laranja); }
 
 /* Início */
-.nova { width: 100%; font-size: 18px; min-height: 60px; border-radius: 14px; }
+.nova { width: 100%; font-size: 18px; min-height: 60px; border-radius: 4px; }
 .nova .ico { width: 24px; height: 24px; }
 .resumo { display: flex; gap: 16px; font-size: 14px; color: var(--suave); margin: 14px 2px 16px; }
 .resumo b { color: var(--teal); font-size: 16px; }
-.resumo .pend b { color: #B37A00; }
+.resumo .pend b { color: var(--laranja); }
 .busca-box { position: relative; margin-bottom: 12px; }
 .busca-box .ico { position: absolute; left: 13px; top: 13px; color: var(--suave); width: 20px; height: 20px; }
 .busca { width: 100%; border: 1px solid var(--linha); background: var(--sup); border-radius: var(--raio); padding: 12px 12px 12px 42px; font-size: 16px; min-height: 48px; }
@@ -156,7 +168,7 @@ textarea.entrada { min-height: 96px; resize: vertical; }
 .reg .tx small { color: var(--suave); font-size: 12.5px; }
 .st { font-size: 12px; font-weight: 600; flex: none; }
 .st.rascunho { color: #78909C; }
-.st.pendente { color: #B37A00; }
+.st.pendente { color: var(--laranja); }
 .st.enviado { color: var(--ok); }
 .st.erro { color: var(--erro); }
 .vazio-lista { text-align: center; color: var(--suave); padding: 30px 10px; }
