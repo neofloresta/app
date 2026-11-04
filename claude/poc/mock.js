@@ -19,12 +19,12 @@ class Sheet { constructor(n) { this.n = n; this.d = []; }
 const sss = {};
 const SpreadsheetApp = { create(n) { const id = nid(); const s = { id, sheets: [new Sheet('Planilha1')], getId: () => id, getSheets() { return this.sheets; }, getSheetByName(n) { return this.sheets.find((x) => x.n === n); }, insertSheet(n) { const x = new Sheet(n); this.sheets.push(x); return x; } }; sss[id] = s; files[id] = { name: n, moveTo() {}, makeCopy(nm, pasta) { const c = mkFile(nm, ''); pasta.files.push(c); return c; } }; return s; }, openById(id) { return sss[id]; } };
 function mkFolder(name) { const id = nid(); const f = { id, name, kids: [], files: [], getId: () => id, getUrl: () => 'https://drive/' + id,
-  createFolder(n) { const k = mkFolder(n); this.kids.push(k); return k; },
+  createFolder(n) { const k = mkFolder(n); k.pai = this; this.kids.push(k); return k; }, getParents() { return it(this.pai ? [this.pai] : []); },
   getFoldersByName(n) { return it(this.kids.filter((k) => k.name === n)); },
   getFilesByName(n) { return it(this.files.filter((k) => k.name === n)); }, getFiles() { return it(this.files); },
-  createFile(a, b, c) { const fl = typeof a === 'string' ? mkFile(a, b) : mkFile(a.name, a.bytes); this.files.push(fl); return fl; },
+  createFile(a, b, c) { const fl = typeof a === 'string' ? mkFile(a, b) : mkFile(a.name, a.bytes); fl.pai = this; this.files.push(fl); return fl; },
   getFolders() { return it(this.kids.filter((k) => !k.lixo)); }, setTrashed() { this.lixo = true; }, getName() { return this.name; } }; folders[id] = f; return f; }
-function mkFile(name, content) { const id = nid(); const f = { id, name, content, makeCopy(n, pasta) { const c = mkFile(n, this.content); pasta.files.push(c); return c; }, getId: () => id, getName: () => name, setContent(c) { this.content = c; }, getBlob() { const s = this; return { getDataAsString: () => s.content }; }, moveTo() {} }; files[id] = f; return f; }
+function mkFile(name, content) { const id = nid(); const f = { id, name, content, makeCopy(n, pasta) { const c = mkFile(n, this.content); pasta.files.push(c); return c; }, getId: () => id, getName: () => name, setContent(c) { this.content = c; }, getBlob() { const s = this; return { getDataAsString: () => s.content, getContentType: () => 'image/jpeg', getBytes: () => [...Buffer.from(s.content || '')] }; }, getParents() { return it(this.pai ? [this.pai] : []); }, moveTo() {} }; files[id] = f; return f; }
 function it(a) { let i = 0; return { hasNext: () => i < a.length, next: () => a[i++] }; }
 const props = {}; const CACHE = {}; const MAILS = []; const TRIGGERS = []; global.MAILS = MAILS;
 const ctx = { console, JSON, Date, Math, String, Object, Array, Number,

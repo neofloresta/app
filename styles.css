@@ -315,3 +315,10 @@ input[type=file]::file-selector-button { border: 0; border-radius: 10px; backgro
 .rel-assina { margin: 36px auto 0; text-align: center; width: 320px; max-width: 100%; font-size: 13.5px; line-height: 1.5; }
 .rel-assina .linha-ass { border-top: 1px solid #333; margin-bottom: 6px; }
 @media print { @page { @bottom-right { content: "Página " counter(page) " de " counter(pages); font-family: Roboto, sans-serif; font-size: 9pt; color: #60747A; } } .tab-rel thead { display: table-header-group; } .rel-assina { page-break-inside: avoid; } }
+.rel-assinaturas { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 30px; margin-top: 40px; page-break-inside: avoid; }
+.rel-assinaturas .rel-assina { margin: 0; width: auto; }
+.aviso-campo { color: var(--erro); font-size: 13.5px; margin-top: 6px; line-height: 1.35; }
+.entrada.invalido { border-color: var(--erro); background: #FFF6F6; }
+.pend .pend-aba { border: 0; background: none; color: var(--teal); font-weight: 600; font-size: 15px; padding: 8px 0 2px; }
+.pend ul { margin: 2px 0 8px; padding-left: 18px; font-size: 14.5px; line-height: 1.45; }
+.pend li.lim { color: var(--erro); font-weight: 500; }

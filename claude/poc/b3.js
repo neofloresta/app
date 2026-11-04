@@ -4,7 +4,7 @@ const L = require('./lib');
 const N = +(process.argv[2] || 5000);
 (async () => {
   await L.subir(); await L.configurar(); await L.semear(N);
-  const t0 = Date.now(); const j = await L.post('listar', { projeto: 'divinopolis' }, 'div-1', 'equipe01');
+  const t0 = Date.now(); const j = await L.post('listar', { projeto: 'divinopolis' });
   const bytes = JSON.stringify(j).length; const tl = Date.now() - t0;
   const b = await chromium.launch(); const { p, ctx } = await L.celular(b);
   // limita a rede como um 4G razoável (aprox. 10 Mbps, 60 ms)
@@ -27,8 +27,9 @@ const N = +(process.argv[2] || 5000);
   await p.fill('.mapa-filtros input', ''); await p.waitForTimeout(600);
   const t5 = Date.now(); await p.selectOption('.mapa-sel select >> nth=1', 'Alto'); await p.waitForTimeout(50); const filtrado = await p.locator('.mapa-conta').innerText(); const tFiltro = Date.now() - t5;
   await p.selectOption('.mapa-sel select >> nth=0', 'Equipe 2'); const filtrado2 = await p.locator('.mapa-conta').innerText();
+  await p.selectOption('.mapa-sel select >> nth=2', 'Sidil'); const filtrado3 = await p.locator('.mapa-conta').innerText();
   await p.screenshot({ path: `mapa-${N}.png` });
-  const res = { N, listarMs: tl, listarMB: +(bytes / 1e6).toFixed(1), loginMs: tLogin, mapaMs: tMapa, desenhados, zoomMs: tZoom, tBusca, tFiltro, filtrado, filtrado2, ficha: ficha.replace(/\n/g, ' | '), erros: p.erros };
+  const res = { N, listarMs: tl, listarMB: +(bytes / 1e6).toFixed(1), loginMs: tLogin, mapaMs: tMapa, desenhados, zoomMs: tZoom, tBusca, tFiltro, filtrado, filtrado2, filtrado3, ficha: ficha.replace(/\n/g, ' | '), erros: p.erros };
   console.log(JSON.stringify(res));
   require('fs').writeFileSync(__dirname + `/res-b3-${N}.json`, JSON.stringify(res));
   await b.close(); process.exit(0);

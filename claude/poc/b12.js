@@ -51,6 +51,7 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
   const ficha = await p.locator('text=Editar registro').count();
   await p.click('button:has-text("Editar registro")'); await p.click('.folha button:has-text("Editar registro")'); await p.waitForTimeout(300);
   await A.aba(p, 'Indivíduo'); await A.num(p, 'Altura total (m)', 8); await A.concluir(p);
+  if (await p.locator('.folha >> text=Está certo').count()) { await p.click('.folha button:has-text("Está certo")'); await p.waitForTimeout(300); }
   const conf = await p.locator('.folha >> text=Confirmar alterações').count();
   const mudTxt = conf ? await p.locator('.lista-mud').innerText() : '';
   if (conf) await p.click('.folha button:has-text("Confirmar alterações")');

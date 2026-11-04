@@ -33,7 +33,7 @@ async function configurar(projeto = 'divinopolis') {
 }
 // Base fictícia no formato que o app grava na planilha
 function cabecalho() {
-  const c = ['uuid', 'projeto', 'equipe', 'usuario', 'criado_em', 'atualizado_em', 'latitude', 'longitude', 'precisao_gps_m'];
+  const c = ['uuid', 'projeto', 'equipe', 'usuario', 'criado_em', 'atualizado_em', 'latitude', 'longitude', 'precisao_gps_m', 'bairro_aprox'];
   for (const f of FORM.campos) { c.push(f.nome); if (f.tipo === 'photo') c.push(f.nome + ' link'); }
   return c;
 }
@@ -44,7 +44,7 @@ function gerar(n, projeto = 'divinopolis', semente = 1) {
   for (let i = 0; i < n; i++) {
     const eq = i % 2 ? 'E2' : 'E1'; const d = new Date(Date.UTC(2026, 9, 1) + Math.floor(i / 90) * 86400000).toISOString();
     const l = { uuid: 'seed-' + i, projeto, equipe: eq === 'E1' ? 'Equipe 1' : 'Equipe 2', usuario: eq === 'E1' ? 'div-1' : 'div-2', criado_em: d, atualizado_em: d,
-      latitude: -20.1436 + (rnd() - 0.5) * 0.06, longitude: -44.8908 + (rnd() - 0.5) * 0.06, precisao_gps_m: Math.round(2 + rnd() * 8) };
+      latitude: -20.1436 + (rnd() - 0.5) * 0.06, longitude: -44.8908 + (rnd() - 0.5) * 0.06, precisao_gps_m: Math.round(2 + rnd() * 8), bairro_aprox: ['Centro', 'Sidil', 'Bom Pastor', 'Esplanada', 'Niterói'][Math.floor(rnd() * 5)] };
     for (const f of FORM.campos) {
       let v = '';
       if (f.auto === 'codigo') v = `${eq}-${String(Math.floor(i / 2) + 1).padStart(4, '0')}`;

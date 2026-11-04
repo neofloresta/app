@@ -107,6 +107,7 @@
       if (!S.sessao.t && S.sessao.s) {
         const r = await Api.b.login(S.sessao.u, S.sessao.s, aparelho());
         if (r.token) { S.sessao.t = r.token; delete S.sessao.s; S.sessao.versaoScript = r.versaoScript; Api.credenciais(credDe(S.sessao)); }
+        if (r.usuario.termo_aceito_em === undefined) r.usuario.termo_aceito_em = S.sessao.usuario.termo_aceito_em; // servidor antigo
         Object.assign(S.sessao, { usuario: r.usuario, projetos: r.projetos }); await Store.set('sessao', S.sessao); return;
       }
       const r = await Api.b.sessao(); if (!r) return;
@@ -149,6 +150,7 @@
     if (!S.projeto) { if (pf === 'admin') return telaAdmin('projetos'); return telaLogin(); }
     if (r === 'painel' && pf !== 'coletor') return telaPainel();
     if (r === 'relatorio' && pf !== 'coletor') return telaRelatorio();
+    if (r === 'medicao' && pf !== 'coletor') return telaMedicao();
     if (r === 'mapa') return telaMapa();
     if (r === 'validacao' && ehCoord()) return telaValidacao();
     if (r === 'ficha' && a && pf !== 'coletor') return telaFichaServidor(decodeURIComponent(a));
@@ -170,6 +172,7 @@
         const usuario = u.value.trim().toLowerCase(), senha = s.value.trim();
         const r = await Api.b.login(usuario, senha, aparelho());
         if (r.usuario.perfil === 'campo') r.usuario.perfil = 'coletor';
+        if (r.usuario.termo_aceito_em === undefined) r.usuario.termo_aceito_em = (await Store.get('termo:' + usuario)) || ''; // servidor antigo: aceite guardado no aparelho
         if (!r.projetos.length && r.usuario.perfil !== 'admin') throw new Error('Este usuário não tem projeto liberado.');
         S.sessao = { u: usuario, t: r.token || '', usuario: r.usuario, projetos: r.projetos, projetoAtual: r.projetos.length ? r.projetos[0].id : null, servidor: Api.servidor || '', versaoScript: r.versaoScript || '' };
         if (!r.token) S.sessao.s = senha; // servidor antigo ou demonstração: sem sessão, guarda a senha como antes
@@ -232,7 +235,18 @@
   }
   // recusas definitivas do servidor (não adianta tentar de novo)
   const recusaFinal = (m) => /travado|validado pela coordena|outra equipe|perfil n[aã]o tem acesso/i.test(m || '');
+  async function enderecoDe(lat, lon) {
+    try {
+      const espera = 1100 - (Date.now() - (S.ultimoGeo || 0)); if (espera > 0) await new Promise((r) => setTimeout(r, espera)); S.ultimoGeo = Date.now();
+      const c = new AbortController(); setTimeout(() => c.abort(), 3000);
+      const j = await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=${lat}&lon=${lon}`, { signal: c.signal, headers: { 'Accept-Language': 'pt-BR' } })).json();
+      const a = j.address || {}; const rua = a.road || a.pedestrian || a.footway || '';
+      if (!rua && !a.suburb && !a.neighbourhood) return null;
+      return { endereco: [rua, a.house_number].filter(Boolean).join(', '), bairro: a.suburb || a.neighbourhood || a.quarter || a.city_district || '' };
+    } catch (e) { S.geocodificados = 99; return null; } // falhou: não tenta mais nesta rodada
+  }
   async function enviarPendentes(silencioso) {
+    S.geocodificados = 0;
     const lista = await pendentes(); if (!lista.length) { if (!silencioso) toast('Tudo enviado.'); return; }
     atualizarSync();
     let ok = 0, falhas = 0, ultimoErro = '', aviso = '';
@@ -250,6 +264,10 @@
           if (cur && cur.fotos && cur.fotos[campo] && cur.fotos[campo].chave === f.chave) { Object.assign(cur.fotos[campo], { enviado: true, url: (res && res.url) || '', idDrive: (res && res.id) || '' }); await Store.salvarRegistro(cur); }
         }
         r = await Store.registro(uid); if (!r || r.status !== 'pendente' || r.__base) continue;
+        if (r.lat != null && !r.endereco && S.geocodificados < 20 && !Api.demo) {
+          S.geocodificados++; const e = await enderecoDe(r.lat, r.lon);
+          if (e) { const cur = await Store.registro(uid); if (cur && cur.atualizado_em === r.atualizado_em) { Object.assign(cur, e); await Store.salvarRegistro(cur); r = cur; } }
+        }
         const res = await Api.b.registro(r.projeto, Api.achatar(r, form));
         const atual = await Store.registro(uid);
         if (atual && atual.atualizado_em === r.atualizado_em && !atual.__base) {
@@ -347,7 +365,7 @@
       itens.push(h('button', { class: 'reg', onclick: () => ir('#form/' + r.uuid) },
         img ? h('img', { src: img, alt: '' }) : h('div', { class: 'sem' }),
         h('div', { class: 'tx' }, h('b', null, (cc && r.valores[cc.nome]) || codigoDe(S.form, r.valores) || 'Sem código'),
-          h('i', null, (ce && r.valores[ce.nome]) || 'Espécie não informada'), h('small', null, `${dataBR(r.atualizado_em)} · ${r.equipe || ''}`),
+          h('i', null, (ce && r.valores[ce.nome]) || (() => { const ct = S.form.campos.find((k) => k.tipo === 'choice' && /categoria/i.test(norm(k.nome))); const t = ct && rotuloOpcao(ct, r.valores[ct.nome]); return t ? t.replace(/\s*\(.*\)/, '') : 'Espécie não informada'; })()), h('small', null, `${dataBR(r.atualizado_em)} · ${r.equipe || ''}`),
           r.validacao === 'Devolvido' && r.validacao_obs ? h('small', { class: 'motivo' }, 'Motivo: ' + r.validacao_obs) : null),
         h('span', { class: 'st ' + clsSt }, rotSt)));
     }
@@ -484,12 +502,26 @@
     for (const c of S.form.campos) {
       if (E[c.nome].oculto || (c.min == null && c.max == null)) continue;
       const v = r.valores[c.nome]; if (v == null || v === '' || typeof v !== 'number') continue;
-      if (c.min != null && v < c.min) f.push({ nome: c.nome, rotulo: `${c.rotulo}: ${c.limiteMsg || 'abaixo do mínimo de ' + numBR(c.min)}` });
-      else if (c.max != null && v > c.max) f.push({ nome: c.nome, rotulo: `${c.rotulo}: ${c.limiteMsgMax || 'acima do máximo de ' + numBR(c.max)}` });
+      if (c.min != null && v < c.min) f.push({ nome: c.nome, limite: true, rotulo: `${c.rotulo}: ${c.limiteMsg || 'abaixo do mínimo de ' + numBR(c.min)}` });
+      else if (c.max != null && v > c.max) f.push({ nome: c.nome, limite: true, rotulo: `${c.rotulo}: ${c.limiteMsgMax || 'acima do máximo de ' + numBR(c.max)}` });
     }
     return f;
   }
 
+  // limites de plausibilidade (podem passar, mas pedem confirmação). O formulário pode trazer avisoMax/avisoMin por campo.
+  const PLAUS = [[/altura/i, null, 40, 'm'], [/dap/i, null, 300, 'cm'], [/raio/i, 0.01, 20, 'm']];
+  function conferirValores(r) {
+    const E = estadoCampos(S.form, r.valores); const out = [];
+    for (const c of S.form.campos) {
+      if (E[c.nome].oculto || (c.tipo !== 'number' && c.tipo !== 'multinumber')) continue;
+      const pl = PLAUS.find(([re]) => re.test(c.nome)); const mn = c.avisoMin ?? (pl && pl[1]), mx = c.avisoMax ?? (pl && pl[2]); const un = pl ? ' ' + pl[3] : '';
+      const vs = c.tipo === 'multinumber' ? String(r.valores[c.nome] || '').split(';').map((x) => paraNum(x)).filter((x) => x != null) : [r.valores[c.nome]].filter((x) => typeof x === 'number');
+      for (const v of vs) { if (mx != null && v > mx) out.push(`${c.rotulo}: ${numBR(v)}${un} é muito alto (acima de ${numBR(mx)}${un}).`); else if (mn != null && v < mn) out.push(`${c.rotulo}: ${numBR(v)}${un} é muito baixo.`); }
+    }
+    const ce = campoEspecie(S.form); const e = ce && !E[ce.nome].oculto && String(r.valores[ce.nome] || '').trim();
+    if (e && (S.form.especies || []).length && !S.form.especies.some((x) => norm(x.cientifico) === norm(e))) out.push(`A espécie "${e}" não está na lista do projeto. Confira a grafia.`);
+    return out;
+  }
   let salvarTimer = null;
   function salvarRascunho() {
     clearTimeout(salvarTimer);
@@ -516,7 +548,8 @@
     const gpsBtn = h('button', { class: 'gps', onclick: abrirLocal });
     function pintarGps() {
       gpsBtn.className = 'gps ' + classeGps(r.prec);
-      gpsBtn.textContent = r.lat == null ? (S.posErro ? 'Sem GPS' : 'Buscando GPS...') : `GPS ±${Math.round(r.prec)} m${r.posManual ? ' (ajustado)' : ''}`;
+      if (r.lat == null && !S.posErro) gpsBtn.className = 'gps medio';
+      gpsBtn.textContent = r.lat == null ? (S.posErro ? 'Sem GPS' : 'Aguardando GPS') : `GPS ±${Math.round(r.prec)} m${r.posManual ? ' (ajustado)' : ''}`;
     }
     const ouvinte = (p) => {
       if (!p || !r.gpsAuto || r.posManual) return pintarGps();
@@ -646,8 +679,13 @@
           const grade = h('div', { class: 'opcoes' + (longas ? ' longas' : '') });
           for (const o of c.opcoes) {
             const m = o.t.match(/^([^(]+?)\s*\((.+)\)\s*$/);
-            const b = h('button', { class: 'op' + (String(v) === String(o.v) ? ' sel' : ''), onclick: () => {
+            const b = h('button', { class: 'op' + (String(v) === String(o.v) ? ' sel' : ''), onclick: async () => {
               const novo = String(r.valores[c.nome]) === String(o.v) ? null : o.v;
+              if (camposRegra.has(c.nome) && novo != null) {
+                const E2 = estadoCampos(form, Object.assign({}, r.valores, { [c.nome]: novo }));
+                const perde = form.campos.filter((k) => E2[k.nome].oculto && !E[k.nome].oculto && k.tipo !== 'bool' && !k.calculado && !vazio(k, valorDe(r, k)));
+                if (perde.length && !(await confirmar('Trocar ' + c.rotulo.toLowerCase(), `Com "${o.t.replace(/\s*\(.*\)/, '')}" estes campos já preenchidos deixam de valer: ${perde.map((k) => k.rotulo).join(', ')}. Continuar?`, 'Trocar'))) return;
+              }
               grade.querySelectorAll('.op').forEach((x) => x.classList.remove('sel')); if (novo != null) b.classList.add('sel'); mudar(c, novo);
             } }, m ? [m[1], h('small', null, m[2])] : o.t);
             grade.append(b);
@@ -659,8 +697,15 @@
           box.append(h('div', { class: 'chips' }, b)); break;
         }
         case 'number': {
-          const i = h('input', { class: 'entrada', inputmode: 'decimal', enterkeyhint: 'next', value: numBR(v), oninput: () => mudar(c, c.inteiro ? (paraNum(i.value) == null ? null : Math.round(paraNum(i.value))) : paraNum(i.value)) });
-          box.append(rotulo(c), i); break;
+          const av = h('div', { class: 'aviso-campo oculto' });
+          const checar = () => {
+            const t = i.value.trim(); const n = paraNum(t); let m = '';
+            if (t && n == null) m = 'Número inválido. Use só uma vírgula, ex.: 2,5';
+            else if (n != null && c.min != null && n < c.min) m = c.limiteMsg ? `${c.rotulo.replace(/\s*\(.*\)/, '')}: ${c.limiteMsg}. Mude a categoria ou exclua o registro.` : `Abaixo do mínimo de ${numBR(c.min)}.`;
+            av.textContent = m; av.classList.toggle('oculto', !m); i.classList.toggle('invalido', !!m);
+          };
+          const i = h('input', { class: 'entrada', inputmode: 'decimal', enterkeyhint: 'next', value: numBR(v), oninput: () => { checar(); mudar(c, c.inteiro ? (paraNum(i.value) == null ? null : Math.round(paraNum(i.value))) : paraNum(i.value)); } });
+          box.append(rotulo(c), i, av); checar(); break;
         }
         case 'multinumber': {
           const lista = h('div', { class: 'fustes' });
@@ -781,11 +826,18 @@
       const f = faltando(r);
       if (f.length) {
         pintarAbas();
-        const idx = abas.findIndex((a) => a.campos.some((x) => f.some((c) => c.nome === x.campo || (c.grupo && c.grupo === x.grupo))));
-        await modal('Faltam campos obrigatórios', h('ul', null, f.map((c) => h('li', null, c.rotulo))), [{ texto: 'Preencher', valor: 1 }]);
-        if (idx >= 0) irAba(idx); else render();
+        const abaDe = (c) => abas.findIndex((a) => a.campos.some((x) => c.nome === x.campo || (c.grupo && c.grupo === x.grupo)));
+        const ord = [...f].sort((a, b) => (b.limite ? 1 : 0) - (a.limite ? 1 : 0));
+        const grupos = []; for (const c of ord) { const k = c.limite ? -1 : abaDe(c); let g = grupos.find((x) => x.k === k); if (!g) grupos.push((g = { k, itens: [] })); g.itens.push(c); }
+        const idx = abaDe(ord[0]);
+        const v = await modal('Falta completar', h('div', { class: 'pend' }, grupos.map((g) => h('div', null,
+          h('button', { class: 'pend-aba', onclick: () => { document.querySelector('.veu').remove(); irAba(g.k >= 0 ? g.k : abaDe(g.itens[0])); } }, g.k === -1 ? 'Valores fora do critério' : abas[g.k] ? abas[g.k].nome : 'Outros', ' ›'),
+          h('ul', null, g.itens.map((c) => h('li', { class: c.limite ? 'lim' : '' }, c.rotulo)))))), [{ texto: 'Preencher', valor: 1 }]);
+        if (v === 1) { if (idx >= 0) irAba(idx); else render(); }
         return;
       }
+      const avisos = conferirValores(r);
+      if (avisos.length && !(await modal('Confira os valores', h('div', null, h('p', null, 'Estes valores estão fora do comum:'), h('ul', { class: 'lista-mud' }, avisos.map((a) => h('li', null, a)))), [{ texto: 'Corrigir', classe: 'sec', valor: false }, { texto: 'Está certo', valor: true }]))) return;
       if (r.lat == null && !(await confirmar('Sem localização', 'Esta árvore ainda não tem posição de GPS. Salvar assim mesmo?', 'Salvar sem GPS'))) return;
       if (r.__base) {
         const mud = diferencas();
@@ -796,7 +848,7 @@
       }
       clearTimeout(salvarTimer);
       // campos ocultos pela classe não levam valor antigo para a planilha
-      for (const c of form.campos) if (E[c.nome].oculto) { if (c.tipo === 'photo') delete r.fotos[c.nome]; else r.valores[c.nome] = c.tipo === 'bool' ? false : null; }
+      for (const c of form.campos) if (E[c.nome].oculto) { if (c.tipo === 'photo') delete r.fotos[c.nome]; else r.valores[c.nome] = null; }
       recalcular(r);
       anotarHistorico();
       if (!r.concluido_em) r.concluido_em = agoraISO();
@@ -870,9 +922,10 @@
     const busca = h('input', { class: 'entrada', placeholder: 'Código ou espécie', autocapitalize: 'none' });
     const selEq = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todas as equipes'));
     const selRisco = cRisco ? h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todos os riscos'), cRisco.opcoes.map((o) => h('option', { value: o.v }, 'Risco ' + o.t.toLowerCase()))) : null;
+    const selBairro = h('select', { class: 'entrada oculto' }, h('option', { value: '' }, 'Todos os bairros'));
     const selCor = h('select', { class: 'entrada' }, h('option', { value: 'equipe' }, 'Cor por equipe'), cRisco ? h('option', { value: 'risco' }, 'Cor por risco') : null);
     const conta = h('small', { class: 'mapa-conta' });
-    const barra = h('div', { class: 'mapa-filtros' }, busca, h('div', { class: 'mapa-sel' }, selEq, selRisco, selCor), conta);
+    const barra = h('div', { class: 'mapa-filtros' }, busca, h('div', { class: 'mapa-sel' }, selEq, selRisco, selBairro, selCor), conta);
     $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: centrar }, 'Minha posição')), barra, div));
     const mapa = L.map(div, { preferCanvas: true, maxZoom: 21 }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
     if (S.fundo == null) S.fundo = (await Store.get('fundo')) || 'ruas';
@@ -884,12 +937,13 @@
     // pontos: os do aparelho primeiro (podem ter edição ainda não enviada), depois os do servidor
     const pts = []; const vistos = new Set();
     const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
-    if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', foto: '', local: true });
+    if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, bairro: r.bairro || '', cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', foto: '', local: true });
     const camada = L.layerGroup().addTo(mapa);
     function desenhar(ajustar) {
       camada.clearLayers(); mapa.closePopup();
       const q = norm(busca.value).trim(), eq = selEq.value, rk = selRisco ? selRisco.value : '', porRisco = selCor.value === 'risco';
-      const vis = pts.filter((o) => (!q || o.chave.includes(q)) && (!eq || o.equipe === eq) && (!rk || String(o.risco) === rk));
+      const ba = selBairro.value;
+      const vis = pts.filter((o) => (!q || o.chave.includes(q)) && (!eq || o.equipe === eq) && (!rk || String(o.risco) === rk) && (!ba || o.bairro === ba));
       for (const o of vis) {
         const fill = porRisco ? corRisco[o.risco] || '#8A969C' : corEq(o.equipe || '-');
         L.circleMarker([o.lat, o.lon], { renderer: render, radius: vis.length > 2000 ? 4 : 6, color: '#fff', weight: 1.5, fillColor: fill, fillOpacity: 0.95 }).on('click', (e) => ficha(o, e.latlng)).addTo(camada);
@@ -931,15 +985,16 @@
         if (marcaEnd) marcaEnd.remove(); marcaEnd = L.marker([r.lat, r.lon]).addTo(mapa).bindPopup(r.nome).openPopup();
       } catch (er) { toast('Não foi possível buscar o endereço.'); }
     });
-    [selEq, selRisco, selCor].filter(Boolean).forEach((x) => x.addEventListener('change', () => desenhar(x !== selCor)));
-    const preencherEquipes = () => { const atual = selEq.value; selEq.replaceChildren(h('option', { value: '' }, 'Todas as equipes'), ...equipes.filter((e) => e !== '-').map((e) => h('option', { value: e, selected: e === atual }, e))); };
+    [selEq, selRisco, selBairro, selCor].filter(Boolean).forEach((x) => x.addEventListener('change', () => desenhar(x !== selCor)));
+    const preencherBairros = () => { const bs = [...new Set(pts.map((o) => o.bairro).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt')); const at = selBairro.value; selBairro.replaceChildren(h('option', { value: '' }, 'Todos os bairros'), bs.map((b) => h('option', { value: b, selected: b === at }, b))); selBairro.classList.toggle('oculto', !bs.length); };
+    const preencherEquipes = () => { preencherBairros(); const atual = selEq.value; selEq.replaceChildren(h('option', { value: '' }, 'Todas as equipes'), ...equipes.filter((e) => e !== '-').map((e) => h('option', { value: e, selected: e === atual }, e))); };
     preencherEquipes(); desenhar(true);
     if (!Api.demo && navigator.onLine) {
       conta.textContent = 'Carregando pontos...';
       try {
-        const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link'].map((x) => x || '');
+        const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link', 'bairro_aprox'].map((x) => x || '');
         const m = await Api.b.mapa(S.projeto.id, campos);
-        for (const l of m.linhas) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6], cat: l[7], foto: l[8], local: false });
+        for (const l of m.linhas) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6], cat: l[7], foto: l[8], bairro: l[9] || '', local: false });
         if (!document.body.contains(div)) return;
         preencherEquipes(); desenhar(true);
       } catch (e) { conta.textContent = ''; toast('Não foi possível carregar os pontos das outras equipes.'); }
@@ -1230,7 +1285,7 @@
       if (marc.length) linhas.push(h('div', { class: 'fl col' }, h('span', null, 'Marcados'), h('div', { class: 'chips' }, marc.map((m) => h('span', { class: 'chip sel mini' }, m)))));
       if (linhas.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, a.nome), linhas));
     }
-    if (fotos && fotos.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Fotos'), h('div', { class: 'ficha-fotos' }, fotos.map((f) => h(linkSeguro(f.link) || f.src ? 'a' : 'div', { href: linkSeguro(f.link) || f.src, target: '_blank', rel: 'noopener', class: 'ficha-foto' }, f.src ? h('img', { src: f.src, alt: f.rotulo, loading: 'lazy', onerror: (e) => e.target.remove() }) : null, h('span', null, f.rotulo))))));
+    if (fotos && fotos.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Fotos'), h('div', { class: 'ficha-fotos' }, fotos.map((f) => h(linkSeguro(f.link) || f.src ? 'a' : 'div', { href: linkSeguro(f.link) || f.src, target: '_blank', rel: 'noopener', class: 'ficha-foto', 'data-drive': f.drive || null }, f.src ? h('img', { src: f.src, alt: f.rotulo, loading: 'lazy', onerror: (e) => e.target.remove() }) : null, h('span', null, f.rotulo))))));
     return secoes;
   }
   const ROT_VAL = { Pendente: 'Aguardando validação', Validado: 'Validado', Devolvido: 'Devolvido para correção', Corrigido: 'Corrigido, aguardando nova validação', Descartado: 'Descartado' };
@@ -1268,6 +1323,8 @@
       h('p', null, 'Identificar quem fez cada registro, garantir a qualidade e a rastreabilidade do inventário (histórico de alterações e registro de auditoria) e cumprir o contrato com o cliente. A base legal é a execução de contrato e o legítimo interesse (Lei 13.709/2018, art. 7º, incisos V e IX).'),
       h('h4', null, 'Onde ficam e por quanto tempo'),
       h('p', null, 'Em planilhas e pastas do Google Drive da Neofloresta, com acesso restrito à coordenação, e no próprio aparelho até o envio. Guardamos durante o contrato e pelo prazo exigido para prestação de contas. O cliente recebe os dados do inventário, sem os dados internos das equipes.'),
+      h('h4', null, 'Fotos e dados do inventário'),
+      h('p', null, 'As fotos são das árvores e do seu entorno. Evite enquadrar pessoas, placas de veículos e o interior de imóveis; se aparecerem, a foto é usada só como registro técnico. Os dados do inventário pertencem ao contratante, que é o controlador; a Neofloresta atua como operadora e usa serviços do Google (Planilhas e Drive) para guardar e processar os dados, o que pode envolver servidores fora do Brasil. Ao fim do contrato, os dados e as fotos são entregues ao contratante e as cópias da Neofloresta são descartadas no prazo combinado em contrato.'),
       h('h4', null, 'Segurança'),
       h('p', null, 'Conexão criptografada (HTTPS), senha guardada de forma criptografada, bloqueio após senhas erradas, sessão com prazo de validade e cópia de segurança diária.'),
       h('h4', null, 'Seus direitos'),
@@ -1280,7 +1337,7 @@
   function telaTermo() {
     const btn = h('button', { class: 'btn cheio', onclick: async () => {
       btn.disabled = true;
-      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch((e) => { if (!/desconhecida/i.test(e.message)) throw e; }); S.sessao.usuario.termo_aceito_em = agoraISO(); await Store.set('sessao', S.sessao); rota(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
+      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch((e) => { if (!/desconhecida/i.test(e.message)) throw e; }); S.sessao.usuario.termo_aceito_em = agoraISO(); await Store.set('sessao', S.sessao); await Store.set('termo:' + S.sessao.u, S.sessao.usuario.termo_aceito_em); rota(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
     } }, 'Li e aceito');
     $app.replaceChildren(topo('Termo de uso e privacidade', 'Leia antes de começar', null, null), h('main', null, h('div', { class: 'cartao' }, textoTermo()), h('div', { style: 'margin-bottom:30px' }, btn, h('button', { class: 'btn linha cheio', style: 'margin-top:10px', onclick: () => sair(true) }, 'Não aceito, sair'))));
   }
@@ -1373,7 +1430,7 @@
       h('div', { class: 'painel-cab' }, h('div', null, p.contratante ? h('div', null, p.contratante) : null, p.municipio ? h('small', null, p.municipio + (p.contrato ? ' · Contrato ' + p.contrato : '')) : null),
         h('small', null, (perfil() === 'cliente' ? 'Dados validados pela Neofloresta. ' : '') + 'Atualizado às ' + new Date(d.gerado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), ' ', h('button', { class: 'btn sec peq', onclick: () => telaPainel(true) }, 'Atualizar'))),
       h('div', { class: 'kpis' },
-        kpi('Registros', fmtN(d.total), meta ? `${fmtP(d.total / meta)} da meta de ${fmtN(meta)}` : `${fmtN(A.ind)} indivíduos`),
+        kpi('Registros', fmtN(d.total), `${fmtN(A.ind)} indivíduos e ${fmtN(d.total - A.ind)} pontos sem árvore` + (meta ? ` · ${fmtP(d.total / meta)} da meta de ${fmtN(meta)}` : '')),
         perfil() !== 'cliente' ? kpi('Validados', fmtN(validados), d.total ? fmtP(validados / d.total) + ' do total' : '') : kpi('Indivíduos', fmtN(A.ind), 'árvores, arbustos e palmeiras'),
         kpi('Espécies', fmtN(d.nEspecies), A.esp[0] ? 'mais comum: ' + A.esp[0].rot : ''),
         A.risco.length ? kpi('Risco alto', fmtN(A.altoN), A.nRisco ? fmtP(A.altoN / A.nRisco) + ' dos indivíduos avaliados' : '', A.altoN ? 'alerta' : '') : null,
@@ -1390,7 +1447,7 @@
         A.manejo.length ? h('div', { class: 'cartao' }, h('h3', null, 'Manejo recomendado'), barras(A.manejo.filter((x) => x.n), { total: A.ind, cor: CORES[1] })) : null,
         A.ocorr.length ? h('div', { class: 'cartao' }, h('h3', null, 'Ocorrências observadas'), barras(A.ocorr, { total: A.ind, cor: CORES[2] })) : null,
         perfil() !== 'cliente' ? h('div', { class: 'cartao' }, h('h3', null, 'Por equipe'), barras(equipes.map((e, k) => ({ rot: e, n: d.equipes[e], cor: CORES[k % CORES.length] })))) : null),
-      h('div', { class: 'linha-btn botoes-painel', style: 'margin:6px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#relatorio') }, 'Relatório para imprimir ou PDF'), h('button', { class: 'btn sec', onclick: () => ir('#mapa') }, 'Ver no mapa'),
+      h('div', { class: 'linha-btn botoes-painel', style: 'margin:6px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#relatorio') }, 'Relatório para imprimir ou PDF'), h('button', { class: 'btn sec', onclick: () => ir('#medicao') }, 'Boletim de medição'), h('button', { class: 'btn sec', onclick: () => ir('#mapa') }, 'Ver no mapa'),
         perfil() === 'cliente' ? h('button', { class: 'btn sec', onclick: () => exportarCliente() }, 'Baixar dados') : null));
   }
   function producaoTabela(porDia, dias, equipes, semanal) {
@@ -1433,17 +1490,59 @@
       h('footer', { class: 'rel-rodape' }, 'Neofloresta Serviços Ecossistêmicos Ltda. · Gerado pelo Neofloresta Inventário ' + VERSAO));
   }
 
+  // ---------- Boletim de medição (registros validados num período) ----------
+  async function telaMedicao() {
+    const hoje = new Date(); const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const isoD = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    S.periodo = S.periodo || { de: isoD(ini), ate: isoD(hoje) };
+    const de = h('input', { class: 'entrada', type: 'date', value: S.periodo.de }); const ate = h('input', { class: 'entrada', type: 'date', value: S.periodo.ate });
+    const corpo = h('div', { class: 'relatorio-corpo' });
+    const gerar = async () => {
+      S.periodo = { de: de.value, ate: ate.value };
+      corpo.replaceChildren(h('div', { class: 'info nao-imprime' }, 'Carregando registros...'));
+      let linhas; try { linhas = await linhasProjeto(false); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); return; }
+      const form = S.form; const cc = campoCodigo(form), ce = campoEspecie(form); const cat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
+      const noPer = (l) => { const d = diaLocal(l.validado_em); return d && d >= de.value && d <= ate.value; };
+      const doPer = linhas.filter((l) => noPer(l));
+      const val = doPer.filter((l) => l.validacao === 'Validado'), dev = doPer.filter((l) => l.validacao === 'Devolvido'), desc = doPer.filter((l) => l.validacao === 'Descartado');
+      const ehInd = (l) => !cat || ['1', '2', '3'].includes(String(l[cat.nome]));
+      const equipes = [...new Set(val.map((l) => l.equipe || '-'))].sort();
+      const tab = (cab, ls) => h('table', { class: 'tab-rel' }, h('thead', null, h('tr', null, cab.map((c) => h('th', null, c)))), h('tbody', null, ls.map((l) => h('tr', null, l.map((c) => h('td', null, c))))));
+      const p = S.projeto; const dBR = (x) => x.split('-').reverse().join('/');
+      const acum = linhas.filter((l) => l.validacao === 'Validado' && diaLocal(l.validado_em) <= ate.value).length;
+      Api.b.auditar('relatorio', S.projeto.id, `boletim ${de.value} a ${ate.value}`);
+      corpo.replaceChildren(
+        h('header', { class: 'rel-cab' }, h('img', { src: 'icons/logo-horizontal.png', alt: 'Neofloresta' }), h('div', null, h('h1', null, 'Boletim de medição'), h('p', null, p.nome), h('small', null, [p.contratante, p.municipio, p.contrato ? 'Contrato ' + p.contrato : ''].filter(Boolean).join(' · ')))),
+        h('p', { class: 'rel-data' }, `Período: ${dBR(de.value)} a ${dBR(ate.value)}. Conta os registros pela data da validação técnica.`),
+        h('h2', null, '1. Resumo do período'),
+        tab(['Item', 'Quantidade'], [['Registros validados no período', fmtN(val.length)], ['Indivíduos (árvores, arbustos e palmeiras)', fmtN(val.filter(ehInd).length)], ['Pontos sem árvore (locais de plantio e calçadas)', fmtN(val.filter((l) => !ehInd(l)).length)],
+          ehCoord() ? ['Devolvidos para correção no período', fmtN(dev.length)] : null, ehCoord() ? ['Descartados no período', fmtN(desc.length)] : null,
+          ['Validados acumulados até o fim do período', fmtN(acum) + (p.meta ? ` (${fmtP(acum / p.meta)} da meta de ${fmtN(p.meta)})` : '')]].filter(Boolean)),
+        h('h2', null, '2. Validados por equipe'),
+        tab(['Equipe', 'Indivíduos', 'Pontos sem árvore', 'Total'], [...equipes.map((e) => { const x = val.filter((l) => (l.equipe || '-') === e); return [e, fmtN(x.filter(ehInd).length), fmtN(x.filter((l) => !ehInd(l)).length), fmtN(x.length)]; }), ['Total', fmtN(val.filter(ehInd).length), fmtN(val.filter((l) => !ehInd(l)).length), fmtN(val.length)]]),
+        h('h2', null, '3. Registros validados no período'),
+        val.length ? tab(['Nº', 'Código', 'Categoria', 'Espécie', 'Equipe', 'Validado em'], val.sort((a, b) => (+a.numero_unico || 0) - (+b.numero_unico || 0)).map((l) => [String(l.numero_unico || ''), (cc && l[cc.nome]) || '', cat ? rotuloOpcao(cat, l[cat.nome]).replace(/\s*\(.*\)/, '') : '', h('i', null, (ce && l[ce.nome]) || ''), l.equipe || '', dataBR(l.validado_em)])) : h('p', null, 'Nenhum registro validado neste período.'),
+        h('div', { class: 'rel-assinaturas' },
+          h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, p.responsavel || 'Responsável técnico'), p.registro_profissional ? h('div', null, p.registro_profissional) : null, h('div', null, 'Neofloresta Serviços Ecossistêmicos Ltda.')),
+          h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, 'Fiscal do contrato'), h('div', null, 'Atesto a execução dos serviços acima. Data: ____/____/______'))),
+        h('footer', { class: 'rel-rodape' }, 'Gerado pelo Neofloresta Inventário ' + VERSAO + ' em ' + new Date().toLocaleString('pt-BR')));
+    };
+    $app.replaceChildren(h('div', { class: 'nao-imprime' }, topo('Boletim de medição', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#painel'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: () => window.print() }, 'Imprimir ou PDF'))),
+      h('main', { class: 'relatorio' }, h('div', { class: 'nao-imprime cartao' }, h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'De'), de), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Até'), ate)), h('button', { class: 'btn', onclick: gerar }, 'Gerar boletim')), corpo));
+    gerar();
+  }
+
   // ---------- Validação (coordenação e revisão técnica) ----------
   // grava a decisão no servidor e atualiza a lista guardada; devolve true se gravou
-  async function decidirRegistros(estado, uuids) {
+  async function decidirRegistros(estado, uuids, amostra) {
     let obs = '';
     if (estado !== 'Validado') {
       const t = h('textarea', { class: 'entrada', placeholder: estado === 'Devolvido' ? 'Ex.: conferir a espécie e refazer a foto 1' : 'Ex.: registro duplicado' });
       const ok = await modal(estado === 'Devolvido' ? 'Devolver para a equipe' : 'Descartar', h('div', null, h('p', null, `${uuids.length} registro(s). Escreva o motivo${estado === 'Devolvido' ? ', que a equipe vê no aparelho' : ''}:`), t), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: estado === 'Devolvido' ? 'Devolver' : 'Descartar', classe: estado === 'Descartado' ? 'perigo' : '', valor: true }]);
       if (!ok) return false; obs = t.value.trim(); if (!obs) { toast('Informe o motivo.'); return false; }
-    } else if (uuids.length > 1 && !(await confirmar('Validar registros', `Validar ${uuids.length} registro(s)? Depois de validados, a equipe não consegue mais alterar.`, 'Validar'))) return false;
+    } else if (uuids.length > 1 && !amostra && !(await confirmar('Validar registros', `Validar ${uuids.length} registro(s)? Depois de validados, a equipe não consegue mais alterar.`, 'Validar'))) return false;
     try {
-      for (let i = 0; i < uuids.length; i += 500) await Api.b.validar(S.projeto.id, uuids.slice(i, i + 500).map((u) => ({ uuid: u, estado, obs })));
+      for (let i = 0; i < uuids.length; i += 500) await Api.b.validar(S.projeto.id, uuids.slice(i, i + 500).map((u) => ({ uuid: u, estado, obs, amostra: !!amostra })));
       const c = S.linhas[S.projeto.id]; const agora = agoraISO(); const set = new Set(uuids);
       if (c) for (const l of c.linhas) if (set.has(l.uuid)) Object.assign(l, { validacao: estado, validacao_obs: obs, validado_por: S.sessao.u, validado_em: agora });
       S.painel = null; toast(`${uuids.length} registro(s): ${estado.toLowerCase()}.`); return true;
@@ -1464,6 +1563,8 @@
       if (c.min != null && v < c.min) a.push(c.limiteMsg ? c.rotulo.replace(/\s*\(.*\)/, '') + ' ' + c.limiteMsg.replace(/\s*\(.*\)/, '') : c.rotulo + ' abaixo de ' + numBR(c.min));
     }
     if (cc && l[cc.nome] && dups.has(String(l[cc.nome]))) a.push('Código repetido');
+    const sim = (v) => v === 1 || v === '1' || v === true;
+    for (const g of form.gruposObrig || []) { const cs = form.abas.flatMap((x) => x.campos).filter((x) => x.grupo === g).map((x) => form.campos.find((c) => c.nome === x.campo)).filter(Boolean); const ex = cs.find((c) => c.exclusivo); if (ex && sim(l[ex.nome]) && cs.some((c) => c !== ex && sim(l[c.nome]))) a.push('Contradição em ' + g); }
     return a;
   }
   async function linhasProjeto(forcar, progresso) {
@@ -1516,7 +1617,14 @@
         h('button', { class: 'btn peq', disabled: !sel.size, onclick: () => aplicar('Validado', [...sel]) }, `Validar (${sel.size})`),
         h('button', { class: 'btn sec peq', disabled: !sel.size, onclick: () => aplicar('Devolvido', [...sel]) }, 'Devolver'),
         h('button', { class: 'btn perigo peq', disabled: !sel.size, onclick: () => aplicar('Descartado', [...sel]) }, 'Descartar'),
-        semAlerta.length ? h('button', { class: 'btn sec peq', onclick: () => aplicar('Validado', semAlerta) }, `Validar todos sem alerta (${fmtN(semAlerta.length)})`) : null);
+        semAlerta.length ? h('button', { class: 'btn sec peq', onclick: () => validarLote(semAlerta) }, `Validar todos sem alerta (${fmtN(semAlerta.length)})`) : null);
+    }
+    async function validarLote(uuids) {
+      const n = Math.max(1, Math.ceil(uuids.length * 0.05));
+      const cb = h('input', { type: 'checkbox' });
+      const ok = await modal('Validar em lote', h('div', null, h('p', null, `${fmtN(uuids.length)} registros sem alerta. Antes de validar em lote, confira por amostragem pelo menos ${fmtN(n)} deles (5%), abrindo a ficha e as fotos.`), h('label', null, cb, ` Conferi uma amostra de pelo menos ${fmtN(n)} registros`)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Validar', valor: true }]);
+      if (!ok) return; if (!cb.checked) return toast('Marque a confirmação da amostra conferida.');
+      if (await decidirRegistros('Validado', uuids, true)) desenhar();
     }
     const mudou = () => { F.sit = selSit.value; F.eq = selEq.value; F.alerta = selAl.value; F.q = busca.value; F.limite = 100; sel.clear(); desenhar(); };
     [selSit, selEq, selAl].forEach((x) => x.addEventListener('change', mudou)); let tb; busca.addEventListener('input', () => { clearTimeout(tb); tb = setTimeout(mudou, 250); });
@@ -1529,7 +1637,7 @@
     let linhas; try { linhas = await linhasProjeto(false); } catch (e) { return toast(e.message); }
     const l = linhas.find((x) => x.uuid === uuidR); if (!l) { toast('Registro não encontrado.'); return ir(ehCoord() ? '#validacao' : '#painel'); }
     const valores = {}; for (const c of form.campos) { let v = l[c.nome]; if (c.tipo === 'bool') v = v === 1 || v === '1' || v === true; valores[c.nome] = v; }
-    const fotos = form.campos.filter((c) => c.tipo === 'photo' && l[c.nome]).map((c) => { const link = linkSeguro(l[c.nome + ' link']); const id = idDrive(link); return { rotulo: c.rotulo + (link ? '' : ' (ainda não enviada ao Drive)'), src: id ? `https://drive.google.com/thumbnail?id=${id}&sz=w800` : null, link: link || '' }; });
+    const fotos = form.campos.filter((c) => c.tipo === 'photo' && l[c.nome]).map((c) => { const link = linkSeguro(l[c.nome + ' link']); const id = idDrive(link); return { rotulo: c.rotulo + (link ? '' : ' (ainda não enviada ao Drive)'), src: null, link: link || '', drive: id || '' }; });
     const nav = S.navVal || []; const i = nav.indexOf(uuidR);
     const irPara = (k) => { if (k >= 0 && k < nav.length) ir('#ficha/' + encodeURIComponent(nav[k])); };
     const cc = campoCodigo(form);
@@ -1550,6 +1658,7 @@
           h('button', { class: 'btn sec', onclick: () => decidir('Devolvido') }, 'Devolver'),
           h('button', { class: 'btn', onclick: () => decidir('Validado') }, 'Validar'),
           h('button', { class: 'btn sec', disabled: i < 0 || i >= nav.length - 1, onclick: () => irPara(i + 1) }, 'Próximo')) : null));
+    if (!Api.demo) setTimeout(() => document.querySelectorAll('.ficha-foto[data-drive]').forEach(async (a) => { try { const b = await Api.b.fotoVer(S.projeto.id, a.dataset.drive); const img = h('img', { src: URL.createObjectURL(b), alt: '', loading: 'lazy' }); a.querySelector('img') ? a.querySelector('img').replaceWith(img) : a.prepend(img); } catch (e) { /* sem permissão ou sem conexão: fica o link */ } }), 30);
     if (l.latitude !== '' && l.latitude != null) setTimeout(() => { const m = L.map(mapaDiv, { zoomControl: false }).setView([+l.latitude, +l.longitude], 19); camadasFundo(m, true); L.circleMarker([+l.latitude, +l.longitude], { radius: 8, color: '#fff', weight: 2, fillColor: '#E10000', fillOpacity: 1 }).addTo(m); }, 50);
   }
 
@@ -1564,10 +1673,15 @@
       linhas = linhas.filter((l) => l.validacao !== 'Descartado' && (filtro !== 'validados' || l.validacao === 'Validado'));
       if (!linhas.length) throw new Error(filtro === 'validados' ? 'Nenhum registro validado ainda.' : 'Nenhum registro enviado neste projeto ainda.');
       // numeração única do projeto, sem distinção de equipe, pela ordem de coleta
-      [...linhas].sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)) || String(a.uuid).localeCompare(String(b.uuid))).forEach((l, i) => { l.numero_unico = i + 1; });
+      // numeração única dada pelo servidor; registros antigos sem número recebem a seguinte, pela ordem de coleta
+      let maxN = Math.max(0, ...linhas.map((l) => +l.numero_unico || 0));
+      [...linhas].filter((l) => !(+l.numero_unico)).sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)) || String(a.uuid).localeCompare(String(b.uuid))).forEach((l) => { l.numero_unico = ++maxN; });
+      linhas.sort((a, b) => (+a.numero_unico) - (+b.numero_unico));
+      const cDap = form.campos.find((c) => c.tipo === 'multinumber' && /dap/i.test(c.nome));
+      if (cDap) linhas.forEach((l) => { const v = Indicadores.valorNum(l[cDap.nome], true); l.dap_equivalente_cm = v == null ? '' : Math.round(v * 10) / 10; });
       const cc = campoCodigo(form), ce = campoEspecie(form);
       const dia = new Date().toISOString().slice(0, 10); const base = `${p.id}_${dia}${filtro === 'validados' ? '_validados' : ''}`;
-      const ordem = ['numero_unico', ...form.campos.flatMap((c) => (c.tipo === 'photo' ? [c.nome, c.nome + ' link'] : [c.nome])), 'latitude', 'longitude', 'precisao_gps_m', 'equipe', 'usuario', 'criado_em', 'concluido_em', 'atualizado_em', 'validacao', 'validacao_obs', 'validado_por', 'validado_em', 'historico', 'uuid'];
+      const ordem = ['numero_unico', ...form.campos.flatMap((c) => (c.tipo === 'photo' ? [c.nome, c.nome + ' link'] : [c.nome])), 'dap_equivalente_cm', 'latitude', 'longitude', 'precisao_gps_m', 'endereco_aprox', 'bairro_aprox', 'equipe', 'usuario', 'criado_em', 'concluido_em', 'atualizado_em', 'validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'historico', 'uuid'];
       const todas = [...new Set(linhas.flatMap((l) => Object.keys(l)))].filter((c) => !c.startsWith('__'));
       const cols = [...ordem.filter((c) => todas.includes(c)), ...todas.filter((c) => !ordem.includes(c) && !['projeto', 'servidor_em'].includes(c))];
       // planilhas com rótulos legíveis e opções por extenso
@@ -1581,10 +1695,17 @@
         msg(`GeoPackage gerado: ${fmtN(r.total)} registros em SIRGAS 2000 / UTM (EPSG:${r.srs})${r.semPonto ? `, ${r.semPonto} sem coordenada` : ''}${estilo ? ', com a simbologia do QGIS embutida' : ''}. Fotos: baixe a pasta DCIM do projeto no Drive e coloque ao lado do arquivo.`);
       } else if (formato === 'xlsx') {
         const leg = linhas.map(legivel);
-        const dic = form.campos.map((c) => ({ Campo: c.nome, 'Nome no app': c.rotulo, Tipo: { choice: 'Lista de opções', bool: 'Sim ou não', number: 'Número', multinumber: 'Números por fuste', species: 'Espécie', photo: 'Foto', text: 'Texto', textarea: 'Texto longo', datetime: 'Data e hora', date: 'Data' }[c.tipo] || c.tipo, Opções: (c.opcoes || []).map((o) => `${o.v} = ${o.t}`).join('; ') }));
-        const b = await Arquivos.xlsx([{ nome: 'Registros', cols, linhas: leg.map((l) => Object.fromEntries(cols.map((c) => [c, l[c]]))) }, { nome: 'Dicionário de campos', cols: ['Campo', 'Nome no app', 'Tipo', 'Opções'], linhas: dic }]);
+        const unid = (c) => { const m = String(c.rotulo + ' ' + c.nome).match(/\((cm|m|m2|m²|%|graus)\)/i); return m ? m[1].replace('m2', 'm²') : ''; };
+        const dic = [...form.campos.map((c) => ({ Campo: c.nome, 'Nome no app': c.rotulo, Unidade: unid(c), Descrição: c.ajuda || '', Tipo: { choice: 'Lista de opções', bool: 'Sim ou não', number: 'Número', multinumber: 'Números por fuste', species: 'Espécie', photo: 'Foto', text: 'Texto', textarea: 'Texto longo', datetime: 'Data e hora', date: 'Data' }[c.tipo] || c.tipo, Opções: (c.opcoes || []).map((o) => `${o.v} = ${o.t}`).join('; ') })),
+          ...[['numero_unico', 'Número único do registro no projeto, dado pelo servidor no primeiro envio', ''], ['dap_equivalente_cm', 'DAP equivalente: raiz da soma dos quadrados dos DAP de cada fuste', 'cm'], ['latitude', 'Latitude em graus decimais, SIRGAS 2000', 'graus'], ['longitude', 'Longitude em graus decimais, SIRGAS 2000', 'graus'], ['precisao_gps_m', 'Erro estimado do GPS do aparelho no momento do registro', 'm'],
+            ['endereco_aprox', 'Endereço aproximado obtido do mapa (OpenStreetMap) pela coordenada', ''], ['bairro_aprox', 'Bairro aproximado obtido do mapa (OpenStreetMap)', ''], ['equipe', 'Equipe que coletou', ''], ['criado_em', 'Data e hora da coleta', ''], ['concluido_em', 'Data e hora em que a equipe concluiu o registro', ''],
+            ['validacao', 'Situação da validação técnica (Pendente, Validado, Devolvido, Corrigido, Descartado)', ''], ['validado_por', 'Quem fez a última avaliação', ''], ['validado_em', 'Data e hora da última avaliação', ''], ['validacao_hist', 'Histórico de todas as avaliações do registro', ''], ['historico', 'Histórico de alterações feitas depois de concluído', ''], ['uuid', 'Identificador interno do registro', '']]
+            .map(([c, d, u]) => ({ Campo: c, 'Nome no app': '', Unidade: u, Descrição: d, Tipo: '', Opções: '' }))];
+        const meta = [['Projeto', p.nome], ['Contratante', p.contratante || ''], ['Contrato', p.contrato || ''], ['Município', p.municipio || ''], ['Responsável técnico', [p.responsavel, p.registro_profissional, p.art ? 'ART ' + p.art : ''].filter(Boolean).join(' · ')],
+          ['Registros neste arquivo', String(linhas.length)], ['Filtro', filtro === 'validados' ? 'Somente registros validados' : 'Todos os registros, exceto descartados'], ['Sistema de referência das coordenadas', 'SIRGAS 2000, geográficas (EPSG:4674)'], ['Formulário', `${form.nome} (versão ${form.versao || 1})`], ['Gerado em', new Date().toLocaleString('pt-BR')], ['Gerado por', `${S.sessao.usuario.nome || S.sessao.u} no Neofloresta Inventário ${VERSAO}`]].map(([k, v]) => ({ Item: k, Valor: v }));
+        const b = await Arquivos.xlsx([{ nome: 'Registros', cols, linhas: leg.map((l) => Object.fromEntries(cols.map((c) => [c, l[c]]))) }, { nome: 'Dicionário de campos', cols: ['Campo', 'Nome no app', 'Unidade', 'Descrição', 'Tipo', 'Opções'], linhas: dic }, { nome: 'Metadados', cols: ['Item', 'Valor'], linhas: meta }]);
         void rot; baixar(base + '.xlsx', b);
-        msg(`Excel gerado com ${fmtN(linhas.length)} registros e a aba "Dicionário de campos".`);
+        msg(`Excel gerado com ${fmtN(linhas.length)} registros e as abas "Dicionário de campos" e "Metadados".`);
       } else if (formato === 'shp') {
         const epsg = epsgNum(); const z = UTM.fusoDoEpsg(epsg);
         const pontos = linhas.map((l) => (l.latitude === '' || l.latitude == null ? null : (() => { const u = UTM.paraUTM(+l.latitude, +l.longitude, z); return { x: u.x, y: u.y }; })()));
@@ -1599,8 +1720,8 @@
         baixar(base + '.kml', `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(p.nome)}</name>${pms.join('\n')}</Document></kml>`, 'application/vnd.google-earth.kml+xml');
         msg(`KML gerado com ${fmtN(pms.length)} pontos e os campos principais (abre no Google Earth e no Google Maps).`);
       } else {
-        const esc = (v) => { let s = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(s) && typeof v !== 'number') s = "'" + s; return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-        const valCsv = (v) => (typeof v === 'number' ? String(v).replace('.', ',') : v);
+        const esc = (v) => { if (typeof v === 'number') return String(v).replace('.', ','); let s = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+([.,]\d+)?$/.test(s)) s = "'" + s; return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+        const valCsv = (v) => v;
         const csv = '﻿' + [cols.join(';'), ...linhas.map((l) => cols.map((c) => esc(valCsv(l[c]))).join(';'))].join('\r\n');
         baixar(base + '.csv', csv, 'text/csv'); msg(`CSV gerado com ${fmtN(linhas.length)} linhas (separador ponto e vírgula, decimal com vírgula, pronto para o Excel em português).`);
       }
@@ -1662,7 +1783,7 @@
       if (!(await confirmar('Importar', `Importar ${fmtN(plano.linhas.length)} registros para ${p.nome}? Eles entram como "aguardando validação".`, 'Importar'))) return;
       let ins = 0, ign = 0;
       try {
-        const linhas = plano.linhas.map((l) => { const o = Object.assign({}, l); if (!extra.checked) plano.soltas.forEach((c) => delete o[c]); o.equipe = eq.value.trim() || 'Inventário anterior'; return o; });
+        const linhas = plano.linhas.map((l) => { const o = Object.assign({}, l); if (!extra.checked) plano.soltas.forEach((c) => delete o[c]); o.equipe = o.equipe || eq.value.trim() || 'Inventário anterior'; return o; });
         for (let i = 0; i < linhas.length; i += 1000) {
           st.replaceChildren(h('div', { class: 'info' }, `Enviando ${fmtN(Math.min(i + 1000, linhas.length))} de ${fmtN(linhas.length)}...`));
           const r = await Api.b.importar(p.id, linhas.slice(i, i + 1000)); ins += r.inseridos; ign += r.ignorados;
@@ -1694,7 +1815,7 @@
     let cLat = null, cLon = null, cX = null, cY = null;
     for (const c of dados.cols) {
       if (ehLat(c)) { cLat = c; continue; } if (ehLon(c)) { cLon = c; continue; } if (ehX(c)) { cX = c; continue; } if (ehY(c)) { cY = c; continue; }
-      if (/^(uuid|fid|ogc_fid|id)$/i.test(c)) continue;
+      if (/^(uuid|fid|ogc_fid|id|equipe|criado_em|numero_unico|validacao.*|validado_.*|historico|usuario|projeto|atualizado_em|concluido_em|servidor_em|dap_equivalente_cm|endereco_aprox|bairro_aprox|precisao_gps_m)$/i.test(c)) continue;
       const k = chaveCampo.get(norm(c).replace(/[^a-z0-9]/g, ''));
       if (k) { destino[c] = k; mapeadas.push([c, k.nome]); } else soltas.push(c);
     }
@@ -1717,9 +1838,12 @@
       if (lat == null && cLat && cLon) { lat = numeroBR(l[cLat]); lon = numeroBR(l[cLon]); }
       if (lat == null && cX && cY && zona) { const g = UTM.paraGeo(numeroBR(l[cX]), numeroBR(l[cY]), zona); lat = g.lat; lon = g.lon; }
       o.latitude = isFinite(lat) && Math.abs(lat) <= 90 ? Math.round(lat * 1e7) / 1e7 : ''; o.longitude = isFinite(lon) && Math.abs(lon) <= 180 ? Math.round(lon * 1e7) / 1e7 : '';
-      o.uuid = 'imp-' + Arquivos.crc32(new TextEncoder().encode(JSON.stringify(l))).toString(16) + '-' + (l.fid || l.id || idx);
+      o.uuid = l.uuid ? String(l.uuid) : 'imp-' + Arquivos.crc32(new TextEncoder().encode(JSON.stringify(l))).toString(16) + '-' + (l.fid || l.id || idx);
+      if (l.equipe) o.equipe = l.equipe; if (l.criado_em) o.criado_em = l.criado_em;
       return o;
     });
+    const cc0 = campoCodigo(form); if (cc0) { const vist = {}; let dup = 0; linhas.forEach((o) => { const k = o[cc0.nome]; if (k) { if (vist[k]) dup++; vist[k] = 1; } }); if (dup) avisos.push(`${fmtN(dup)} código(s) de árvore repetido(s) no arquivo. Confira antes de importar.`); }
+    if (dados.cols.includes('uuid')) avisos.push('O arquivo tem a coluna uuid: registros que já existem no projeto serão ignorados, sem duplicar.');
     if (semOpcao) avisos.push(`${fmtN(semOpcao)} valor(es) de lista não batem com as opções do formulário e foram mantidos como estão. Confira na validação.`);
     const cc = campoCodigo(form), ce = campoEspecie(form);
     const amostraCols = [cc && cc.nome, ce && ce.nome, 'latitude', 'longitude', ...mapeadas.map((m) => m[1])].filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 7);

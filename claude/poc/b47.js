@@ -32,7 +32,7 @@ const N = +(process.argv[2] || 3000);
   // valida em lote os sem alerta
   await pr.goto(L.WEB + '#validacao'); await pr.waitForSelector('.val-lista'); await pr.fill('.val-filtros input', ''); await pr.waitForTimeout(700);
   const btnLote = pr.locator('button:has-text("Validar todos sem alerta")'); const txtLote = await btnLote.innerText().catch(() => '');
-  if (await btnLote.count()) { await btnLote.click(); await pr.click('.folha button:has-text("Validar")'); await pr.waitForTimeout(1500); }
+  if (await btnLote.count()) { await btnLote.click(); await pr.check('.folha input[type=checkbox]'); await pr.click('.folha button:has-text("Validar")'); await pr.waitForTimeout(1500); }
   const linhas = (await L.post('listar', { projeto: 'divinopolis' })).linhas;
   const nVal = linhas.filter((l) => l.validacao === 'Validado').length; const dev = linhas.find((l) => l.uuid === meu.uuid);
   ok('V.2', dev.validacao === 'Devolvido' && nVal > 0, `devolvido com motivo "${dev.validacao_obs}"; "${txtLote}" validou ${nVal}`);

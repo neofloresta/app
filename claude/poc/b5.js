@@ -8,7 +8,7 @@ const N = +(process.argv[2] || 5000);
   await p.goto(L.WEB + '#admin/exportar'); await p.waitForSelector('text=Exportar dados');
   await p.selectOption('.cartao select', 'divinopolis');
   const res = { N };
-  for (const [tipo, rot] of [['gpkg', 'GeoPackage'], ['csv', 'Planilha'], ['kml', 'Google Earth']]) {
+  for (const [tipo, rot] of [['gpkg', 'GeoPackage'], ['xlsx', 'Excel'], ['shp', 'Shapefile'], ['csv', 'CSV'], ['kml', 'Google Earth']]) {
     const t = Date.now();
     const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 300000 }), p.click(`button:has-text("${rot}")`)]);
     const arq = `${__dirname}/saida-${N}.${tipo}`; await dl.saveAs(arq);

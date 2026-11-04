@@ -18,9 +18,9 @@ const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
 const PERFIS = ['admin', 'revisor', 'coletor', 'cliente'];
 // Colunas que só o servidor escreve (validação). Um envio do aparelho nunca as apaga.
-const COLS_SISTEMA = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'servidor_em'];
+const COLS_SISTEMA = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'numero_unico', 'servidor_em'];
 // Colunas internas que o perfil cliente não recebe
-const COLS_INTERNAS = ['usuario', 'historico', 'validacao_obs', 'validado_por', 'servidor_em'];
+const COLS_INTERNAS = ['usuario', 'validacao_obs', 'servidor_em'];
 const SESSAO_DIAS = 30;
 const MAX_TENTATIVAS = 5;
 const BLOQUEIO_MIN = 15;
@@ -56,6 +56,7 @@ function configurar() {
   // garante as abas e colunas novas (atualização de versões anteriores)
   garantirColunas('Usuarios', COLS_USUARIOS); garantirColunas('Projetos', COLS_PROJETOS);
   garantirAba('Sessoes', COLS_SESSOES); garantirAba('Auditoria', COLS_AUDITORIA);
+  try { numerarExistentes(); } catch (e) { Logger.log('Numeração: ' + e.message); }
   Logger.log('Versão do servidor: ' + VERSAO_SCRIPT);
 }
 
@@ -92,6 +93,7 @@ function doPost(e) {
       case 'listar': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, listarPagina(d.projeto, d.de, d.n, usr)));
       case 'mapa': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, colunas(d.projeto, d.campos || [], usr)));
       case 'painel': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, painel(d.projeto, usr)));
+      case 'foto_ver': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, verFoto(d.projeto, d.id, usr)));
       case 'situacao_meus': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, itens: situacaoMeus(d.projeto, usr) });
       case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
       case 'projetos_listar': pode(); return json({ ok: true, projetos: tabela('Projetos').map(comLinks) });
@@ -359,6 +361,27 @@ function salvarFoto(projetoId, nome, mime, dados) {
   } finally { lock.releaseLock(); }
 }
 
+// Devolve a foto (reduzida) se ela for da pasta DCIM do projeto; o cliente só vê fotos de registros validados
+function verFoto(projetoId, id, usr) {
+  if (!/^[\w-]{20,80}$/.test(String(id || ''))) throw new Error('Foto inválida.');
+  const p = projeto(projetoId); const arq = DriveApp.getFileById(id);
+  const pais = arq.getParents(); let ok = false;
+  while (pais.hasNext()) { const f = pais.next(); const avo = f.getParents(); while (avo.hasNext()) if (avo.next().getId() === p.pasta_id) ok = true; }
+  if (!ok) throw new Error('Foto não pertence a este projeto.');
+  if (usr.perfil === 'cliente') {
+    const cache = CacheService.getScriptCache(); let lib = cache.get('fotos_val:' + projetoId);
+    if (!lib) {
+      const sh = planilha(projetoId); const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String); const tot = sh.getLastRow() - 1;
+      const iv = cab.indexOf('validacao'); const links = cab.map((c, i) => (/ link$/.test(c) ? i : -1)).filter((i) => i >= 0);
+      const ids = []; if (tot > 0 && iv >= 0) { const v = sh.getRange(2, 1, tot, cab.length).getValues(); v.forEach((l) => { if (l[iv] === 'Validado') links.forEach((i) => { const m = String(l[i]).match(/\/d\/([\w-]+)/); if (m) ids.push(m[1]); }); }); }
+      lib = ids.join(','); try { cache.put('fotos_val:' + projetoId, lib, 600); } catch (e) { /* grande demais */ }
+    }
+    if ((',' + lib + ',').indexOf(',' + id + ',') < 0) throw new Error('Foto de registro ainda não validado.');
+  }
+  const b = arq.getBlob();
+  return { mime: b.getContentType() || 'image/jpeg', dados: Utilities.base64Encode(b.getBytes()) };
+}
+
 // ---------- Registros ----------
 function planilha(projetoId) { return SpreadsheetApp.openById(projeto(projetoId).planilha_id).getSheetByName('Registros'); }
 
@@ -419,12 +442,30 @@ function salvarRegistro(projetoId, linha, usr) {
       gravarLinha(sh, r, valores);
       return { atualizado: true, validacao: linha.validacao || atual.validacao || '' };
     }
-    linha.validacao = 'Pendente';
+    linha.validacao = 'Pendente'; linha.numero_unico = proximoNumero(projetoId, sh, cab);
     gravarLinha(sh, sh.getLastRow() + 1, cab.map((c) => celula(linha[c])));
     return { novo: true };
   } finally { lock.releaseLock(); }
 }
 
+// Número único do projeto (sem distinção de equipe), dado uma vez pelo servidor e nunca recalculado
+function proximoNumero(projetoId, sh, cab) {
+  const k = 'NUM_' + projetoId; let n = +PROPS.getProperty(k) || 0;
+  if (!n && sh.getLastRow() > 1) { const i = cab.indexOf('numero_unico'); if (i >= 0) n = Math.max(0, ...sh.getRange(2, i + 1, sh.getLastRow() - 1, 1).getValues().map((x) => +x[0] || 0)); }
+  n++; PROPS.setProperty(k, String(n)); return n;
+}
+// Numera os registros antigos que ainda não têm número (pela ordem de coleta). Roda no configurar.
+function numerarExistentes() {
+  tabela('Projetos').forEach((p) => {
+    if (!p.planilha_id) return; const sh = planilha(p.id); const tot = sh.getLastRow() - 1; if (tot < 1) return;
+    const cab = cabecalho(sh, ['numero_unico']); const iN = cab.indexOf('numero_unico'), iC = cab.indexOf('criado_em');
+    const nums = sh.getRange(2, iN + 1, tot, 1).getValues(); const cri = iC >= 0 ? sh.getRange(2, iC + 1, tot, 1).getValues() : nums.map(() => ['']);
+    let max = Math.max(0, ...nums.map((x) => +x[0] || 0));
+    const faltam = nums.map((x, i) => i).filter((i) => !(+nums[i][0])).sort((a, b) => String(texto(cri[a][0])).localeCompare(String(texto(cri[b][0]))));
+    if (!faltam.length) return;
+    faltam.forEach((i) => (nums[i] = [++max])); sh.getRange(2, iN + 1, tot, 1).setValues(nums); PROPS.setProperty('NUM_' + p.id, String(max));
+  });
+}
 // Validação pela coordenação ou revisor: Validado, Devolvido (com motivo), Descartado ou Pendente
 function validar(projetoId, itens, usr) {
   const estados = ['Validado', 'Devolvido', 'Descartado', 'Pendente'];
@@ -434,16 +475,22 @@ function validar(projetoId, itens, usr) {
     const n = sh.getLastRow() - 1; if (n < 1) return { alterados: 0 };
     const uu = sh.getRange(2, cab.indexOf('uuid') + 1, n, 1).getValues().map((x) => String(x[0]));
     const pos = {}; uu.forEach((u, i) => (pos[u] = i));
-    const iv = cab.indexOf('validacao') + 1; const agora = new Date().toISOString(); let alterados = 0;
-    // as 4 colunas da validação são lidas e gravadas de uma vez (rápido mesmo com milhares de registros)
-    const bloco = sh.getRange(2, iv, n, 4).getValues();
+    const agora = new Date().toISOString(); let alterados = 0;
+    // cada coluna é lida e gravada de uma vez, pelo nome (rápido mesmo com milhares de registros)
+    const nomes = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist'];
+    const col = {}; nomes.forEach((c) => (col[c] = sh.getRange(2, cab.indexOf(c) + 1, n, 1).getValues()));
+    const quando = Utilities.formatDate(new Date(), FUSO, 'dd/MM/yyyy HH:mm');
     for (const it of itens) {
       if (estados.indexOf(it.estado) < 0) throw new Error('Situação inválida: ' + it.estado);
       if (it.estado === 'Devolvido' && !String(it.obs || '').trim()) throw new Error('Informe o motivo da devolução.');
       const k = pos[String(it.uuid)]; if (k == null) continue;
-      bloco[k] = [it.estado, seguro(String(it.obs || '').slice(0, 500)), usr.login, agora]; alterados++;
+      const obs = seguro(String(it.obs || '').slice(0, 500));
+      col.validacao[k] = [it.estado]; col.validacao_obs[k] = [obs]; col.validado_por[k] = [usr.nome || usr.login]; col.validado_em[k] = [agora];
+      const ant = texto(col.validacao_hist[k][0]);
+      col.validacao_hist[k] = [seguro((ant ? ant + ' | ' : '') + quando + ' ' + (usr.nome || usr.login) + ': ' + it.estado + (obs ? ' (' + obs + ')' : '') + (it.amostra ? ' [lote com amostra conferida]' : '')).slice(-2000)];
+      alterados++;
     }
-    if (alterados) sh.getRange(2, iv, n, 4).setNumberFormat('@').setValues(bloco);
+    if (alterados) nomes.forEach((c) => sh.getRange(2, cab.indexOf(c) + 1, n, 1).setNumberFormat('@').setValues(col[c]));
     if (alterados) auditar(usr.login, 'validar', projetoId, alterados + ' registro(s): ' + itens.map((i) => i.estado).filter((x, i, a) => a.indexOf(x) === i).join(', '));
     CacheService.getScriptCache().remove('painel:' + projetoId + ':cliente'); CacheService.getScriptCache().remove('painel:' + projetoId + ':todos');
     return { alterados: alterados };
@@ -551,15 +598,16 @@ function importar(projetoId, linhas, usr) {
     const n = sh.getLastRow() - 1;
     const existentes = n > 0 ? sh.getRange(2, cab.indexOf('uuid') + 1, n, 1).getValues().map((x) => String(x[0])) : [];
     const set = {}; existentes.forEach((u) => (set[u] = 1));
-    const agora = new Date().toISOString(); const novos = [];
+    const agora = new Date().toISOString(); const novos = []; let num = null;
     for (const l of linhas) {
       const o = Object.assign({}, l);
       o.uuid = String(o.uuid || Utilities.getUuid());
       if (set[o.uuid]) continue; set[o.uuid] = 1;
       o.projeto = projetoId; o.usuario = o.usuario || usr.login; o.criado_em = o.criado_em || agora; o.atualizado_em = o.atualizado_em || agora;
-      o.validacao = o.validacao || 'Pendente'; o.servidor_em = agora; o.origem = o.origem || 'importado';
+      o.validacao = 'Pendente'; o.servidor_em = agora; o.origem = o.origem || 'importado'; if (num == null) num = proximoNumero(projetoId, sh, cab) - 1; o.numero_unico = ++num;
       novos.push(cab.map((c) => celula(o[c])));
     }
+    if (num != null) PROPS.setProperty('NUM_' + projetoId, String(num));
     if (novos.length) {
       const rg = sh.getRange(sh.getLastRow() + 1, 1, novos.length, cab.length);
       rg.setNumberFormats(novos.map((l) => l.map((v) => (typeof v === 'number' ? '0.##########' : '@'))));

@@ -7,11 +7,12 @@ const Api = (() => {
       uuid: r.uuid, projeto: r.projeto, equipe: r.equipe, usuario: r.usuario,
       criado_em: r.criado_em, atualizado_em: r.atualizado_em, concluido_em: r.concluido_em || '',
       latitude: r.lat ?? '', longitude: r.lon ?? '', precisao_gps_m: r.prec ?? '',
+      endereco_aprox: r.endereco || '', bairro_aprox: r.bairro || '',
       historico: (r.historico || []).map((x) => `${String(x.em).slice(0, 16).replace('T', ' ')} ${x.por}: ${x.mud.join('; ')}`).join(' | '),
     };
     for (const c of form.campos) {
       if (c.tipo === 'photo') { const f = (r.fotos || {})[c.nome]; l[c.nome] = f ? f.nome : ''; l[c.nome + ' link'] = f && f.url ? f.url : ''; }
-      else { let v = (r.valores || {})[c.nome]; if (c.tipo === 'bool') v = v ? 1 : 0; l[c.nome] = v ?? ''; }
+      else { let v = (r.valores || {})[c.nome]; if (c.tipo === 'bool') v = v == null ? '' : v ? 1 : 0; l[c.nome] = v ?? ''; }
     }
     return l;
   }
@@ -77,6 +78,7 @@ const Api = (() => {
     async mapa(projeto, campos) { return paraMapa(await this.listar(projeto), campos); },
     async listarTudo(projeto) { return this.listar(projeto); },
     async painel(projeto) { const b = await this.base(); const p = b.projetos.find((x) => x.id === projeto); return Indicadores.calcular(b.formularios[p.formulario], await this.listar(projeto), p); },
+    async fotoVer() { return null; },
     async situacaoMeus() { const b = await this.base(); return Object.entries(b.validacao).filter(([, v]) => v.validacao !== 'Pendente').map(([uuid, v]) => ({ uuid, validacao: v.validacao, obs: v.validacao_obs, em: v.validado_em })); },
     async validar(projeto, itens) {
       const b = await this.base();
@@ -135,6 +137,7 @@ const Api = (() => {
     },
     async painel(projeto) { return chamar('painel', { projeto }); },
     async situacaoMeus(projeto) { return (await chamar('situacao_meus', { projeto })).itens; },
+    async fotoVer(projeto, id) { const j = await chamar('foto_ver', { projeto, id }); const bin = atob(j.dados); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return new Blob([u8], { type: j.mime }); },
     async validar(projeto, itens) { return chamar('validar', { projeto, itens }); },
     async importar(projeto, linhas) { return chamar('importar', { projeto, linhas }); },
     async auditar(tipo, alvo, detalhe) { return chamar('auditar', { tipo, alvo, detalhe }).catch(() => {}); },

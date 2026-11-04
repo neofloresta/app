@@ -10,7 +10,6 @@
       <rule label="Risco baixo" key="{f130be9a-1723-473f-bef8-72e7cbab3aa7}" symbol="5" filter=" &quot;Risco&quot; is 'Baixo'"/>
       <rule label="Risco médio" key="{33030d48-b6b8-441b-82bb-25fd36dc10f8}" symbol="6" filter=" &quot;Risco&quot; is 'Médio'"/>
       <rule label="Risco alto" key="{e1a3c6a6-fee6-41d0-bffa-9d34d44f5e07}" symbol="7" filter=" &quot;Risco&quot; is 'Alto'"/>
-      <rule label="Risco extremo" key="{58d90749-3867-46bf-8a55-faed74df3a45}" symbol="8" filter=" &quot;Risco&quot; is 'Severo'"/>
     </rules>
     <symbols>
       <symbol clip_to_extent="1" type="marker" is_animated="0" alpha="1" name="0" frame_rate="10" force_rhr="0">
