@@ -1,6 +1,6 @@
 // App de coleta Neofloresta
 (() => {
-  const VERSAO = '1.4.0';
+  const VERSAO = '1.5.0';
   const S = { sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
 
@@ -67,6 +67,8 @@
     const servidor = (await Store.get('servidor')) ?? window.NEO_CONFIG.servidor;
     Api.configurar(servidor);
     S.sessao = await Store.get('sessao');
+    // sessão de outro servidor (ex.: da demonstração) não vale mais
+    if (S.sessao && (S.sessao.servidor || '') !== (servidor || '')) { S.sessao = null; await Store.del('sessao'); }
     if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
     window.addEventListener('hashchange', rota);
     window.addEventListener('online', () => { atualizarSync(); sincronizar(); });
@@ -116,7 +118,7 @@
         const usuario = u.value.trim().toLowerCase(), senha = s.value.trim();
         const r = await Api.b.login(usuario, senha);
         if (!r.projetos.length && r.usuario.perfil !== 'admin') throw new Error('Este usuário não tem projeto liberado.');
-        S.sessao = { u: usuario, s: senha, usuario: r.usuario, projetos: r.projetos, projetoAtual: r.projetos.length ? r.projetos[0].id : null };
+        S.sessao = { u: usuario, s: senha, usuario: r.usuario, projetos: r.projetos, projetoAtual: r.projetos.length ? r.projetos[0].id : null, servidor: Api.servidor || '' };
         Api.credenciais(usuario, senha);
         await Store.set('sessao', S.sessao);
         await abrirProjeto(S.sessao.projetoAtual);
