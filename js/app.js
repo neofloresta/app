@@ -1,6 +1,6 @@
 // App de coleta Neofloresta
 (() => {
-  const VERSAO = '1.7.1';
+  const VERSAO = '1.8.0';
   const S = { sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
 
