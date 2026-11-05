@@ -22,7 +22,12 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
   // 1.2 obrigatórios
   await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Árvore'); await A.concluir(p); f = await A.faltas(p);
   rs = await regs(p); const rasc = rs.filter((x) => x.status === 'rascunho').length;
-  ok('1.2', f.length >= 10 && rasc === 1, `bloqueou com ${f.length} pendências (ex.: ${f.slice(0, 4).join(', ')})`);
+  await p.waitForTimeout(500);
+  const barra = await p.locator('.barra-pend span').innerText().catch(() => '');
+  const foco = await p.evaluate(() => { const c = document.activeElement && document.activeElement.closest('.campo'); return c ? c.dataset.campo : ''; });
+  const marcado = await p.locator('.campo.falta').count();
+  await p.screenshot({ path: 'pend.png' });
+  ok('1.2', f.length >= 10 && rasc === 1 && !!barra && marcado > 0, `não salvou; voltou direto ao primeiro campo que falta (cursor em "${foco}"), ${marcado} campo(s) em vermelho na etapa e barra no topo: "${barra}"; ${f.length} pendências`);
 
   // 1.3 morta
   await A.aba(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Morta'); await p.waitForTimeout(150);

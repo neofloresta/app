@@ -7,7 +7,7 @@ async function op(p, nomeCampo, texto) { await campo(p, nomeCampo).locator(`.op:
 async function chip(p, rotulo) { await p.locator(`.chip:text-is("${rotulo}")`).first().click(); }
 async function num(p, nomeCampo, v) { await campo(p, nomeCampo).locator('input').first().fill(String(v)); }
 async function concluir(p) { await p.click('.prog-topo'); await p.click('.folha >> text=Concluir árvore'); await p.waitForTimeout(350); }
-async function faltas(p) { if (await p.locator('.folha >> text=Está certo').count()) { await p.click('.folha button:has-text("Está certo")'); await p.waitForTimeout(300); } const n = await p.locator('.folha li').count(); const t = n ? await p.locator('.folha li').allInnerTexts() : []; if (n) await p.click('.folha >> text=Preencher'); return t; }
+async function faltas(p) { if (await p.locator('.folha >> text=Está certo').count()) { await p.click('.folha button:has-text("Está certo")'); await p.waitForTimeout(300); } await p.waitForTimeout(150); const t = await p.locator('.barra-pend').getAttribute('data-itens').catch(() => null); return t ? JSON.parse(t) : []; }
 async function foto(p, nomeCampo) { await campo(p, nomeCampo).locator('input[capture]').setInputFiles(FOTO); await p.waitForTimeout(250); }
 // Árvore completa da categoria 1 com 3 fotos
 async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, altura = 6.5, morta = false } = {}) {

@@ -1,6 +1,6 @@
 // Neofloresta Inventário
 (() => {
-  const VERSAO = '2.0.0';
+  const VERSAO = '2.1.0';
   const TERMO_VERSAO = '2026-11';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -86,6 +86,7 @@
     window.addEventListener('online', () => { atualizarSync(); sincronizar(); });
     window.addEventListener('offline', atualizarSync);
     setInterval(() => sincronizar(true), 60000);
+    setInterval(() => verificarAtualizacao(), 30 * 60000); verificarAtualizacao();
     Api.aoExpirar(() => { if (!S.expirada) { S.expirada = true; toast('Sua sessão expirou. Entre de novo para continuar enviando. Nada do aparelho foi perdido.', 6000); atualizarSync(); } });
     if (S.sessao) {
       Api.credenciais(credDe(S.sessao));
@@ -97,6 +98,31 @@
     rota(); sincronizar(true);
   }
 
+  // ---------- Atualização do app ----------
+  const maiorVersao = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+  async function verificarAtualizacao(avisar) {
+    if (!navigator.onLine || location.protocol === 'file:') { if (avisar) toast('Sem internet para verificar.'); return null; }
+    try {
+      const j = await (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' })).json();
+      S.novaVersao = maiorVersao(j.versao, VERSAO) ? j : null;
+      if (avisar && !S.novaVersao) toast('O app já está na versão mais nova (' + VERSAO + ').');
+      if (S.novaVersao && (location.hash === '' || location.hash === '#inicio')) pintarAvisoVersao();
+      return S.novaVersao;
+    } catch (e) { if (avisar) toast('Não foi possível verificar agora.'); return null; }
+  }
+  async function atualizarApp() {
+    const pend = (await Store.todosRegistros()).filter((r) => r.__base).length;
+    if (pend && !(await confirmar('Atualizar o app', 'Há uma edição não concluída. Ela continua guardada no aparelho e você termina depois de atualizar.', 'Atualizar'))) return;
+    toast('Atualizando...', 5000);
+    try { const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } catch (e) { /* segue */ }
+    try { for (const k of await caches.keys()) await caches.delete(k); } catch (e) { /* segue */ }
+    location.reload();
+  }
+  function pintarAvisoVersao() {
+    const el = document.getElementById('aviso-versao'); if (!el) return;
+    const v = S.novaVersao;
+    el.replaceChildren(v ? h('div', { class: 'faixa-versao' }, h('div', null, h('b', null, `Nova versão ${v.versao} disponível`), v.notas && v.notas.length ? h('ul', null, v.notas.slice(0, 4).map((n) => h('li', null, n))) : null, h('small', null, 'Seus registros ficam guardados. Leva poucos segundos.')), h('button', { class: 'btn peq', onclick: atualizarApp }, 'Atualizar agora')) : '');
+  }
   const credDe = (ss) => (ss.t ? { u: ss.u, t: ss.t } : { u: ss.u, s: ss.s });
   const perfil = () => (S.sessao ? S.sessao.usuario.perfil : '');
   const ehCoord = () => ['admin', 'revisor'].includes(perfil());
@@ -324,11 +350,12 @@
       h('main', null,
         S.expirada ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo'), ' Os registros continuam guardados aqui.') : null,
         h('button', { class: 'btn nova canto', onclick: novoRegistro }, ico('mais'), 'Nova árvore'),
+        h('div', { id: 'aviso-versao' }),
         h('div', { id: 'devolvidos' }),
         h('div', { class: 'resumo', id: 'stats' }),
         h('div', { class: 'busca-box' }, ico('busca'), busca),
         h('div', { id: 'lista', class: 'lista' })));
-    atualizarSync(); listarRegistros();
+    atualizarSync(); listarRegistros(); pintarAvisoVersao();
   }
 
   const urls = new Map();
@@ -385,6 +412,7 @@
       perfil() === 'admin' ? it('Coordenação (exportar, equipes, formulários, segurança)', () => ir('#admin/exportar')) : null,
       perfil() === 'admin' ? it('Servidor', configurarServidor) : null,
       !Api.demo || true ? it('Trocar minha senha', trocarSenha) : null,
+      S.novaVersao ? it(`Atualizar para a versão ${S.novaVersao.versao}`, atualizarApp) : it('Verificar atualização', () => verificarAtualizacao(true)),
       it('Sobre, termo de uso e privacidade', () => ir('#sobre')),
       it('Sair', () => sair()),
       h('p', { class: 'dica', style: 'margin-top:12px' }, `Versão ${VERSAO}${Api.demo ? ' · demonstração' : ''}`)));
@@ -562,6 +590,7 @@
     const cc = campoCodigo(form);
     const voltar = h('button', { class: 'ic', onclick: sairForm, 'aria-label': 'Voltar' }, ico('voltar'));
     const barraAbas = h('nav', { class: 'prog' });
+    const barraPend = h('div', { class: 'barra-pend oculto', role: 'alert' });
     const conteudo = h('main');
     let E = estadoCampos(form, r.valores);
     const camposRegra = new Set((form.regras || []).map((x) => x.campo));
@@ -580,12 +609,39 @@
       if (!cs.length) return a.campos.some((x) => r.valores[x.campo] === true) ? 'cheio' : '';
       return n === cs.length ? 'cheio' : n ? 'meio' : '';
     }
+    // pendências na ordem do formulário (etapa por etapa, campo por campo)
+    function pendOrdenadas() {
+      const f = faltando(r); const pos = (c) => { for (let i = 0; i < abas.length; i++) { const j = abas[i].campos.findIndex((x) => x.campo === c.nome || (c.grupo && x.grupo === c.grupo)); if (j >= 0) return [i, j]; } return [999, 0]; };
+      return f.map((c) => ({ c, p: pos(c) })).sort((a, b) => a.p[0] - b.p[0] || a.p[1] - b.p[1]).map((x) => ({ c: x.c, aba: x.p[0] }));
+    }
+    // leva direto ao campo que falta: abre a etapa, rola até ele, marca em vermelho e põe o cursor
+    function irPendente(k) {
+      const lista = pendOrdenadas(); if (!lista.length) return atualizarPend();
+      const it = lista[((k % lista.length) + lista.length) % lista.length]; S.pendAtual = it.c.nome;
+      if (it.aba !== S.aba && it.aba < abas.length) { S.aba = it.aba; history.replaceState(null, '', '#form/' + r.uuid + '/' + it.aba); render(); } else render();
+      const el = it.c.grupo ? conteudo.querySelector(`[data-grupo="${CSS.escape(it.c.grupo)}"]`) : conteudo.querySelector(`.campo[data-campo="${CSS.escape(it.c.nome)}"]`) || conteudo.querySelector(`[data-campo="${CSS.escape(it.c.nome)}"]`);
+      if (el) {
+        el.classList.add('falta', 'destaque'); setTimeout(() => el.classList.remove('destaque'), 1600);
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        const inp = el.querySelector('input:not([type=file]), textarea'); if (inp) setTimeout(() => inp.focus({ preventScroll: true }), 350);
+      }
+    }
+    function atualizarPend() {
+      if (!S.tentou) return barraPend.classList.add('oculto');
+      const lista = pendOrdenadas(); barraPend.dataset.itens = JSON.stringify(lista.map((x) => x.c.rotulo));
+      if (!lista.length) { barraPend.replaceChildren(h('span', null, 'Tudo preenchido. Pode concluir.'), h('button', { class: 'btn peq', onclick: concluir }, ico('check'), 'Concluir')); barraPend.className = 'barra-pend ok'; return; }
+      const prox = lista.find((x) => x.aba === S.aba) || lista[0];
+      barraPend.className = 'barra-pend';
+      barraPend.replaceChildren(h('span', null, h('b', null, lista.length === 1 ? 'Falta 1 item' : `Faltam ${lista.length} itens`), ': ', prox.c.rotulo),
+        h('button', { class: 'btn peq', onclick: () => irPendente(lista.indexOf(prox)) }, 'Ir para o campo'));
+    }
     function pintarAbas() {
+      atualizarPend();
       const vis = abas.map((x, i) => i).filter((i) => abaVisivel(abas[i]));
       barraAbas.replaceChildren(
         h('button', { class: 'prog-topo', onclick: abrirEtapas },
           h('span', { class: 'prog-nome' }, abas[S.aba].nome), h('span', { class: 'prog-n' }, `${vis.indexOf(S.aba) + 1} de ${vis.length}`), ico('etapas')),
-        h('div', { class: 'prog-barra' }, vis.map((i) => h('span', { class: 'seg ' + (i === S.aba ? 'at' : estadoAba(abas[i])), onclick: () => irAba(i) }))));
+        h('div', { class: 'prog-barra' }, vis.map((i) => h('span', { class: 'seg ' + (i === S.aba ? 'at' : estadoAba(abas[i])), onclick: () => irAba(i) }))), barraPend);
     }
     function abrirEtapas() {
       const vis = abas.map((x, i) => i).filter((i) => abaVisivel(abas[i]));
@@ -824,18 +880,7 @@
     async function concluir() {
       S.tentou = true;
       const f = faltando(r);
-      if (f.length) {
-        pintarAbas();
-        const abaDe = (c) => abas.findIndex((a) => a.campos.some((x) => c.nome === x.campo || (c.grupo && c.grupo === x.grupo)));
-        const ord = [...f].sort((a, b) => (b.limite ? 1 : 0) - (a.limite ? 1 : 0));
-        const grupos = []; for (const c of ord) { const k = c.limite ? -1 : abaDe(c); let g = grupos.find((x) => x.k === k); if (!g) grupos.push((g = { k, itens: [] })); g.itens.push(c); }
-        const idx = abaDe(ord[0]);
-        const v = await modal('Falta completar', h('div', { class: 'pend' }, grupos.map((g) => h('div', null,
-          h('button', { class: 'pend-aba', onclick: () => { document.querySelector('.veu').remove(); irAba(g.k >= 0 ? g.k : abaDe(g.itens[0])); } }, g.k === -1 ? 'Valores fora do critério' : abas[g.k] ? abas[g.k].nome : 'Outros', ' ›'),
-          h('ul', null, g.itens.map((c) => h('li', { class: c.limite ? 'lim' : '' }, c.rotulo)))))), [{ texto: 'Preencher', valor: 1 }]);
-        if (v === 1) { if (idx >= 0) irAba(idx); else render(); }
-        return;
-      }
+      if (f.length) { if (navigator.vibrate) navigator.vibrate(120); irPendente(0); return; }
       const avisos = conferirValores(r);
       if (avisos.length && !(await modal('Confira os valores', h('div', null, h('p', null, 'Estes valores estão fora do comum:'), h('ul', { class: 'lista-mud' }, avisos.map((a) => h('li', null, a)))), [{ texto: 'Corrigir', classe: 'sec', valor: false }, { texto: 'Está certo', valor: true }]))) return;
       if (r.lat == null && !(await confirmar('Sem localização', 'Esta árvore ainda não tem posição de GPS. Salvar assim mesmo?', 'Salvar sem GPS'))) return;
@@ -1346,6 +1391,7 @@
       h('main', null,
         h('div', { class: 'cartao sobre' }, h('img', { src: 'icons/logo-horizontal.png', alt: 'Neofloresta', style: 'max-width:240px' }),
           h('p', null, h('b', null, 'Neofloresta Inventário'), ' · versão ', VERSAO, S.sessao && S.sessao.versaoScript ? ' · servidor ' + S.sessao.versaoScript : ''),
+          h('div', { class: 'linha-btn' }, S.novaVersao ? h('button', { class: 'btn', onclick: atualizarApp }, `Atualizar para a versão ${S.novaVersao.versao}`) : h('button', { class: 'btn sec', onclick: async () => { await verificarAtualizacao(true); if (S.novaVersao) telaSobre(); } }, 'Verificar atualização')),
           h('p', null, 'Coleta de campo, validação, painel e entrega dos dados do inventário da arborização urbana. Funciona sem internet: os registros ficam no aparelho e são enviados quando houver conexão.'),
           h('p', { class: 'dica' }, ['Neofloresta Serviços Ecossistêmicos Ltda.', CONTATO.cnpj ? 'CNPJ ' + CONTATO.cnpj : '', CONTATO.cidade || 'Dois Vizinhos/PR'].filter(Boolean).join(' · ')),
           CONTATO.email || CONTATO.telefone ? h('p', null, 'Suporte: ', [CONTATO.email, CONTATO.telefone].filter(Boolean).join(' · ')) : null),

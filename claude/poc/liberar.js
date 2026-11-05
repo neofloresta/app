@@ -1,0 +1,47 @@
+// Rotina LIBERAR VERSÃO: só publica se tudo passar.
+// uso: node liberar.js   (na pasta claude/poc)
+const { execSync } = require('child_process');
+const fs = require('fs'); const path = require('path');
+const APP = path.join(__dirname, '../..');
+const ler = (f) => fs.readFileSync(path.join(APP, f), 'utf8');
+const res = []; const ok = (nome, passou, obs) => { res.push({ nome, passou, obs }); console.log(passou ? 'OK   ' : 'FALHA', nome, '|', obs); };
+
+// 1. versões batem
+const vApp = (ler('js/app.js').match(/VERSAO\s*=\s*'([\d.]+)'/) || [])[1];
+const vJson = JSON.parse(ler('version.json')).versao;
+const vSw = (ler('sw.js').match(/coleta-v([\d.]+)/) || [])[1];
+ok('versões iguais (app, version.json, cache)', vApp && vApp === vJson && vJson === vSw, `app ${vApp}, version.json ${vJson}, cache ${vSw}`);
+const notas = JSON.parse(ler('version.json')).notas || [];
+ok('notas da versão preenchidas', notas.length > 0, notas.join(' / ').slice(0, 120));
+
+// 2. sintaxe
+for (const f of ['js/app.js', 'js/api.js', 'js/store.js', 'js/gpkg.js', 'js/arquivos.js', 'js/indicadores.js', 'js/utm.js', 'sw.js']) {
+  if (!fs.existsSync(path.join(APP, f))) continue;
+  try { execSync(`node --check ${path.join(APP, f)}`, { stdio: 'pipe' }); ok('sintaxe ' + f, true, 'ok'); } catch (e) { ok('sintaxe ' + f, false, String(e.stderr).slice(0, 200)); }
+}
+
+// 3. baterias de teste (uma de cada vez, mesmas portas)
+const suites = [
+  ['servidor', 'node srv.js', /(\d+) falha\(s\) de (\d+)/],
+  ['coleta e envio', 'node b12.js'],
+  ['coordenação, cliente, exportação', 'node b47.js 3000'],
+  ['mapa 5 mil', 'node b3.js 5000'],
+  ['exportações 2 mil', 'node b5.js 2000'],
+  ['permissões', 'node b7.js'],
+  ['versão e atualização', 'node bv.js'],
+];
+for (const [nome, cmd, rx] of suites) {
+  let out = ''; let erro = false;
+  try { out = execSync(cmd, { cwd: __dirname, timeout: 600000, stdio: 'pipe', maxBuffer: 64e6 }).toString(); } catch (e) { erro = true; out = String(e.stdout || '') + String(e.stderr || ''); }
+  const falhas = out.split('\n').filter((l) => /FALHOU|^ERRO |PERMITIU|texto puro: true/.test(l));
+  const pag = (out.match(/ERROS DE PÁGINA (.*)/) || [])[1];
+  let passou = !erro && falhas.length === 0 && (!pag || /^\[\]( \[\])?$/.test(pag.trim()));
+  if (rx) { const m = out.match(rx); passou = passou && m && m[1] === '0'; }
+  const n = (out.match(/PASSOU/g) || []).length;
+  ok('testes: ' + nome, passou, passou ? `${n || 'todos'} passaram` : (falhas.slice(0, 3).join(' || ') || out.slice(-300)).slice(0, 400));
+}
+
+const reprov = res.filter((r) => !r.passou);
+fs.writeFileSync(path.join(__dirname, 'res-liberar.json'), JSON.stringify({ versao: vApp, em: new Date().toISOString(), resultado: res }, null, 1));
+console.log('\n' + (reprov.length ? `NÃO LIBERAR: ${reprov.length} problema(s)` : `PODE SEGUIR para os agentes verificadores (versão ${vApp})`));
+process.exit(reprov.length ? 1 : 0);

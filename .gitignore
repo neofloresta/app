@@ -1,0 +1,7 @@
+claude/poc/saida.*
+claude/poc/relatorio.pdf
+claude/poc/importar.csv
+claude/poc/*.png
+claude/poc/mock.log
+claude/poc/mock.pid
+claude/poc/res-*.json

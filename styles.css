@@ -322,3 +322,16 @@ input[type=file]::file-selector-button { border: 0; border-radius: 10px; backgro
 .pend .pend-aba { border: 0; background: none; color: var(--teal); font-weight: 600; font-size: 15px; padding: 8px 0 2px; }
 .pend ul { margin: 2px 0 8px; padding-left: 18px; font-size: 14.5px; line-height: 1.45; }
 .pend li.lim { color: var(--erro); font-weight: 500; }
+/* pendências: barra fixa e campo destacado */
+.barra-pend { margin: 10px -16px -12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #FDECEA; color: #8B1E1E; border-bottom: 2px solid var(--erro); padding: 8px 14px; font-size: 14.5px; }
+.barra-pend span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra-pend .btn { background: var(--erro); flex: none; min-height: 38px; }
+.barra-pend.ok { background: #E8F5E9; color: #1B5E20; border-bottom-color: var(--ok); }
+.barra-pend.ok .btn { background: var(--ok); }
+.campo.destaque { animation: piscar 0.5s ease-in-out 3; }
+@keyframes piscar { 50% { background: #FDECEA; } }
+.campo.falta::after { content: "Falta preencher"; display: block; color: var(--erro); font-size: 13px; font-weight: 500; margin-top: 4px; }
+@media (prefers-reduced-motion: reduce) { .campo.destaque { animation: none; } }
+
+.faixa-versao { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #E3F2F7; border-left: 4px solid var(--azul-claro); border-radius: var(--raio); padding: 10px 14px; margin: 0 0 12px; color: #0B3E4E; }
+.faixa-versao ul { margin: 4px 0; padding-left: 18px; font-size: 13.5px; } .faixa-versao small { color: var(--suave); }
