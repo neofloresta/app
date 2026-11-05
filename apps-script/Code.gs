@@ -11,7 +11,7 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.0';
+const VERSAO_SCRIPT = '2.1';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em'];
 const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
@@ -91,6 +91,7 @@ function doPost(e) {
       case 'foto': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarFoto(d.projeto, d.nome, d.mime, d.dados)));
       case 'registro': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarRegistro(d.projeto, d.linha, usr)));
       case 'listar': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, listarPagina(d.projeto, d.de, d.n, usr)));
+      case 'reservar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, reservar(d.projeto, d.prefixo, d.campo, d.qtd, d.minimo)));
       case 'mapa': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, colunas(d.projeto, d.campos || [], usr)));
       case 'painel': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, painel(d.projeto, usr)));
       case 'foto_ver': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, verFoto(d.projeto, d.id, usr)));
@@ -383,6 +384,28 @@ function verFoto(projetoId, id, usr) {
 }
 
 // ---------- Registros ----------
+// Reserva uma faixa de códigos para o aparelho (ex.: E1-0101 a E1-0200).
+// Dois celulares com o mesmo usuário nunca geram o mesmo código, mesmo sem internet.
+function reservar(projetoId, prefixo, campo, qtd, minimo) {
+  prefixo = String(prefixo || '').toUpperCase(); qtd = Math.min(Math.max(+qtd || 100, 1), 1000);
+  if (!/^[A-Z0-9]{1,10}$/.test(prefixo)) throw new Error('Prefixo de código inválido.');
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const chave = 'seq:' + projetoId + ':' + prefixo;
+    let atual = +(PROPS.getProperty(chave) || 0);
+    if (!PROPS.getProperty(chave)) {
+      const sh = planilha(projetoId);
+      if (sh.getLastRow() > 1 && sh.getLastColumn()) {
+        const ic = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].indexOf(String(campo || ''));
+        const re = new RegExp('^' + prefixo + '-(\\d+)$');
+        if (ic >= 0) sh.getRange(2, ic + 1, sh.getLastRow() - 1, 1).getValues().forEach((l) => { const m = String(l[0]).match(re); if (m) atual = Math.max(atual, +m[1]); });
+      }
+    }
+    atual = Math.max(atual, Math.min(+minimo || 0, 999999));
+    PROPS.setProperty(chave, String(atual + qtd));
+    return { ini: atual + 1, fim: atual + qtd };
+  } finally { lock.releaseLock(); }
+}
 function planilha(projetoId) { return SpreadsheetApp.openById(projeto(projetoId).planilha_id).getSheetByName('Registros'); }
 
 function celula(v) {

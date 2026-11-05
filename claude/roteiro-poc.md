@@ -12,7 +12,7 @@
 6. Quando o Ciro precisar agir (GitHub, Apps Script, celular), passar passo a passo detalhado, uma parte de cada vez.
 7. Registrar a rodada no Histórico de execuções, no fim do documento.
 
-**Onde estão os testes automáticos:** pasta `claude/poc/` do repositório neofloresta/app. Eles sobem o app, uma simulação do Apps Script (`mock.js`) e um celular Android simulado (Playwright, perfil Pixel 7). Comandos: `node srv.js` (servidor e segurança, 42 testes), `node b12.js` (blocos 1 e 2), `node b47.js 3000` (perfis, validação, painel, relatório, cliente, exportação, importação, segurança), `node b3.js 20000` (mapa na escala), `node b5.js 20000` (exportação), `node b7.js` (permissões). Os números de tempo vêm dessa simulação, com CPU 4 vezes mais lenta e rede de 10 Mbps; no Google real há alguns segundos a mais de resposta do servidor.
+**Onde estão os testes automáticos:** pasta `claude/poc/` do repositório neofloresta/app. Eles sobem o app, uma simulação do Apps Script (`mock.js`) e um celular Android simulado (Playwright, perfil Pixel 7). Comandos: `node srv.js` (servidor e segurança, 42 testes), `node b12.js` (blocos 1 e 2), `node b47.js 3000` (perfis, validação, painel, relatório, cliente, exportação, importação, segurança), `node b3.js 20000` (mapa na escala), `node b5.js 20000` (exportação), `node b7.js` (permissões), `node b9.js` (celular parado, mesmo usuário em dois celulares e toque no ponto do mapa). Os números de tempo vêm dessa simulação, com CPU 4 vezes mais lenta e rede de 10 Mbps; no Google real há alguns segundos a mais de resposta do servidor.
 
 ## Escalas de teste
 
@@ -28,7 +28,7 @@
 
 | Ação | Por quê | Situação |
 |---|---|---|
-| Atualizar o servidor no Google para a versão 2.0 (colar Code.gs, rodar configurar, publicar nova versão) | Perfis, validação, portal do cliente, painel, segurança e mapa rápido dependem dele. O app novo funciona com o servidor antigo, mas sem essas funções | Pendente |
+| Atualizar o servidor no Google para a versão 2.1 (colar Code.gs, rodar configurar, publicar nova versão) | Perfis, validação, portal do cliente, painel, segurança, mapa rápido e a reserva de códigos por aparelho (2.2) dependem dele. O app novo funciona com o servidor antigo, mas sem essas funções | Pendente |
 | No app, Coordenação > Formulários > Atualizar formulários prontos | Liga o critério de 2 m, a ajuda do DAP e a simbologia do QGIS | Pendente |
 | Preencher email de contato, CNPJ e encarregado de dados no config.js | Termo de uso (LGPD) e tela Sobre | Pendente |
 | Preencher responsável técnico, registro e ART em cada projeto | Saem no relatório e no boletim de medição | Pendente |
@@ -41,7 +41,7 @@
 
 | Nº | Teste | Critério de aprovação | Status | Data | Observação |
 |---|---|---|---|---|---|
-| 1.1 | Cadastrar árvore com espécie, atributos, 3 fotos e GPS | Menos de 2 min por árvore; precisão do GPS exibida | Passou | 04/11/2026 | Cadastro completo com 3 fotos, GPS exibido no topo ("Aguardando GPS" em amarelo enquanto não fixa) e código automático. Simulação de um dia de coleta: árvore viva completa com cerca de 38 toques e 85 a 90 s de preenchimento; morta cerca de 47 s; plantio e calçada em 3 etapas. Medir em campo real |
+| 1.1 | Cadastrar árvore com espécie, atributos, 3 fotos e GPS | Menos de 2 min por árvore; precisão do GPS exibida | Passou | 04/11/2026 | Cadastro completo com 3 fotos, GPS exibido no topo ("Aguardando GPS" em amarelo enquanto não fixa) e código automático. Simulação de um dia de coleta: árvore viva completa com cerca de 38 toques e 85 a 90 s de preenchimento; morta cerca de 47 s; plantio e calçada em 3 etapas. Medir em campo real. 2ª conferência (04/11): com o celular parado, a árvore nova ficava sem GPS (o aparelho só avisa quando a posição muda); corrigido na 2.0.1, o app reinicia a leitura ao abrir cada árvore |
 | 1.2 | Campos obrigatórios por classe | Não salva sem os obrigatórios | Passou | 04/11/2026 | Bloqueia e lista as pendências agrupadas por etapa; tocar no nome da etapa leva até ela |
 | 1.3 | Árvore morta | Clique libera só os campos pertinentes | Passou | 04/11/2026 | Raios, área e qualidade de copa e fitossanidade somem; espécie fica opcional |
 | 1.4 | Categorias Local de plantio e Calçada sem árvores | Formulário próprio de cada categoria | Passou | 04/11/2026 | 3 etapas próprias. Trocar a categoria de uma árvore já medida pede confirmação e lista o que deixa de valer |
@@ -54,7 +54,7 @@
 | Nº | Teste | Critério de aprovação | Status | Data | Observação |
 |---|---|---|---|---|---|
 | 2.1 | Coletar 50 árvores em modo avião e sincronizar ao voltar | Nenhuma perda, nenhum duplicado | Passou | 04/11/2026 | 50 de 50 chegaram, sem duplicados. Edição em andamento não é enviada antes de confirmada |
-| 2.2 | Duas equipes coletando ao mesmo tempo | Códigos nunca se repetem | Passou | 04/11/2026 | Prefixo por equipe e sequência conferida com o servidor ao abrir o projeto. Outra equipe não altera registro alheio |
+| 2.2 | Duas equipes coletando ao mesmo tempo | Códigos nunca se repetem | Passou | 04/11/2026 | Prefixo por equipe. 2ª conferência: o mesmo usuário em dois celulares sem internet repetia códigos (E2-0001 e E2-0002 saíram duas vezes). Corrigido na 2.0.1: cada aparelho recebe do servidor uma faixa própria de 100 números (ex.: E2-0101 a E2-0200) e pede outra quando sobram menos de 30. Depende do servidor 2.1; com o servidor antigo continua a sequência local. Outra equipe não altera registro alheio |
 | 2.3 | Dois usuários editam o mesmo registro | Regra de conflito definida, sem perda silenciosa | Passou | 04/11/2026 | Entre aparelhos da mesma equipe vale a edição mais recente e o aparelho avisa quando a dele foi ignorada; a coordenação sempre prevalece |
 | 2.4 | Sincronização interrompida no meio | Retoma sem duplicar | Passou | 04/11/2026 | Retoma sem duplicar. Envio nunca roda duas vezes ao mesmo tempo (antes podia duplicar fotos no Drive) |
 | 2.5 | Fotos com sinal fraco | Envio em fila, coleta não trava | Passou | 04/11/2026 | Foto fica na fila e sai na tentativa seguinte; a coleta não trava. Recusas definitivas do servidor aparecem como "Recusado", com opção de remover a cópia do aparelho |
@@ -63,10 +63,10 @@
 
 | Nº | Teste | Critério de aprovação | Status | Data | Observação |
 |---|---|---|---|---|---|
-| 3.1 | Mapa com todos os pontos na escala de teste | Abre em até 5 s (Carmo e Divinópolis); Cemig com agrupamento de pontos | Passou | 04/11/2026 | 5 mil pontos em 2,2 s e 20 mil em 4,8 s (celular simulado mais lento e rede 4G). Depende de atualizar o servidor (versão 2.0) |
+| 3.1 | Mapa com todos os pontos na escala de teste | Abre em até 5 s (Carmo e Divinópolis); Cemig com agrupamento de pontos | Passou | 04/11/2026 | 5 mil pontos em 2,2 s e 20 mil em 4,8 s (celular simulado mais lento e rede 4G); na 2ª conferência 5,1 s, no limite: medir em campo. Depende de atualizar o servidor |
 | 3.2 | Filtros por espécie, estado, bairro e equipe | Resultado correto em até 3 s | Passou | 04/11/2026 | Filtros por código ou espécie, equipe, classe de risco e bairro (bairro aproximado pelo mapa, preenchido no envio), e cor por equipe ou risco. 0,2 a 1,8 s com 20 mil pontos |
 | 3.3 | Busca por código e por endereço | Encontra o registro certo | Passou | 04/11/2026 | Busca por código abre a ficha (1,8 s com 20 mil). Busca por endereço (OpenStreetMap) feita; não deu para testar aqui porque o ambiente de teste não tem internet: conferir em campo |
-| 3.4 | Ficha da árvore ao clicar | Mostra atributos e fotos | Passou | 04/11/2026 | Ficha com atributos, situação da validação, histórico e fotos carregadas pelo próprio app (sem precisar de conta Google); fundo de mapa com ruas ou satélite |
+| 3.4 | Ficha da árvore ao clicar | Mostra atributos e fotos | Passou | 04/11/2026 | 2ª conferência: tocar no ponto não abria a ficha quando a "minha posição" estava no mapa (o desenho dela ficava por cima e engolia o toque; a ficha só abria pela busca). Corrigido na 2.0.1. Ficha com atributos, situação da validação, histórico e fotos carregadas pelo próprio app (sem precisar de conta Google); fundo de mapa com ruas ou satélite |
 
 ## Bloco 4 · Gestão e ordens de serviço
 
@@ -138,4 +138,5 @@ Próximos passos para licitação: ordens de serviço (bloco 4, no sistema de ge
 |---|---|---|---|
 | 04/11/2026 | Criação do roteiro | Nenhum | Roteiro criado, nada testado ainda |
 | 04/11/2026 | Chat do app de coleta (RODAR POC) | Todos | Testes automáticos em celular simulado com 5 mil e 20 mil registros. Corrigidos nesta rodada: critério de 2 m (1.5), histórico de alterações (1.6), mapa lento (3.1), filtros e busca no mapa (3.2, 3.3), ficha com foto (3.4), exportação em páginas, KML e numeração única (5.2, 5.3), documentação da interface (8.4). Confirmado que a Cemig não cabe em planilha Google |
+| 04/11/2026 | 2ª conferência da versão 2.0 (outro chat) | Todos | Suíte da 2.0 rodada de novo (42 testes de servidor, blocos 1, 2, 3, 5, 7 e gestão): tudo passou. Testes extras (b9.js) acharam 3 falhas que a suíte não pegava: celular parado sem GPS (1.1), código repetido com o mesmo usuário em dois celulares (2.2) e toque no ponto do mapa sem abrir a ficha (3.4). Corrigidas na versão 2.0.1 do app e 2.1 do servidor; suíte inteira rodada de novo sem falhas |
 | 04/11/2026 | Chat do app de coleta (versão 2.0) | Todos | Versão 2.0: perfis, validação, portal do cliente, painel, relatório, boletim de medição, exportações (GeoPackage com simbologia, Excel, Shapefile, CSV, KML), importação, segurança (senha criptografada, bloqueio, sessão, auditoria, cópia diária, termo LGPD), mapa com satélite, bairro e endereço. Revisão por 6 agentes e correções. Compatível com o servidor antigo até a atualização |
