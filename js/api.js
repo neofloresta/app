@@ -98,6 +98,39 @@ const Api = (() => {
     async usuarioSalvar(u) { const b = await this.base(); const i = b.usuarios.findIndex((x) => x.login === u.login); if (i >= 0) { if (!u.senha) delete u.senha; b.usuarios[i] = Object.assign(b.usuarios[i], u); } else b.usuarios.push(u); await Store.set('demo:base', b); },
     async usuarioRemover(login) { const b = await this.base(); b.usuarios = b.usuarios.filter((x) => x.login !== login); await Store.set('demo:base', b); },
     async formulariosListar() { const b = await this.base(); return Object.values(b.formularios).map((f) => ({ id: f.id, nome: f.nome, campos: f.campos.length, versao: f.versao || '' })); },
+    // ordens de serviço no modo demonstração (mesmas regras do servidor, guardadas no aparelho)
+    async osListar(projeto) {
+      const b = await this.base(); const u = b.usuarios.find((x) => x.login === (cred && cred.u)) || {};
+      let os = (b.ordens || []).filter((o) => o.projeto === projeto);
+      if ((DEMO_PERFIL[u.perfil] || u.perfil) === 'coletor') os = os.filter((o) => (o.responsavel === u.equipe && o.status !== 'Solicitada') || o.solicitada_por === u.login);
+      return { ordens: os, tipos: ['Poda de limpeza', 'Poda de levantamento de copa', 'Poda de adequação à rede elétrica', 'Poda de condução', 'Supressão', 'Remoção de toco', 'Plantio', 'Substituição', 'Tratamento fitossanitário', 'Avaliação de risco', 'Outro'] };
+    },
+    async osSalvar(projeto, d) {
+      const b = await this.base(); b.ordens = b.ordens || []; const u = b.usuarios.find((x) => x.login === (cred && cred.u)) || {}; const pf = DEMO_PERFIL[u.perfil] || u.perfil; const coord = pf === 'admin' || pf === 'revisor';
+      const hist = (t) => `${new Date().toISOString().slice(0, 16).replace('T', ' ')} ${u.login}: ${t}`;
+      let o = d.id ? b.ordens.find((x) => x.id === d.id) : b.ordens.find((x) => x.id === d.chave);
+      if (o && !d.id) return { ordem: o, ignorado: true };
+      if (o) { if (!coord) throw new Error('Seu perfil não tem acesso a esta função.'); ['tipo', 'prioridade', 'descricao', 'prazo', 'responsavel'].forEach((k) => { if (d[k] != null) o[k] = d[k]; }); o.historico += ' | ' + hist('alterou'); await Store.set('demo:base', b); return { ordem: o }; }
+      if (!d.tipo) throw new Error('Escolha o tipo de serviço.');
+      o = { id: d.chave || String(Date.now()), projeto, numero: b.ordens.filter((x) => x.projeto === projeto).length + 1, tipo: d.tipo, prioridade: d.prioridade || 'Média', descricao: d.descricao || '', prazo: coord ? d.prazo || '' : '', responsavel: coord ? d.responsavel || '' : '' };
+      if (d.registro_uuid) { const r = await Store.registro(d.registro_uuid); if (!r) throw new Error('Árvore não encontrada no projeto.'); const f = b.formularios[(b.projetos.find((p) => p.id === projeto) || {}).formulario]; const cc = f.campos.find((c) => c.auto === 'codigo'); const ce = f.campos.find((c) => c.tipo === 'species'); Object.assign(o, { registro_uuid: r.uuid, codigo_arvore: cc ? r.valores[cc.nome] || '' : '', especie: ce ? r.valores[ce.nome] || '' : '', latitude: r.lat, longitude: r.lon, endereco: r.endereco || '', bairro: r.bairro || '' }); }
+      else Object.assign(o, { latitude: d.latitude, longitude: d.longitude, endereco: d.endereco || '' });
+      if (coord) Object.assign(o, { status: 'Aberta', aberta_por: u.login, aberta_em: new Date().toISOString() }); else Object.assign(o, { status: 'Solicitada', solicitada_por: u.login, solicitada_em: new Date().toISOString() });
+      o.historico = hist(coord ? 'abriu a ordem' : 'solicitou o serviço');
+      b.ordens.push(o); await Store.set('demo:base', b); return { ordem: o };
+    },
+    async osAndamento(projeto, id, etapa, d) {
+      const b = await this.base(); const o = (b.ordens || []).find((x) => x.id === id); if (!o) throw new Error('Ordem de serviço não encontrada.');
+      const u = b.usuarios.find((x) => x.login === (cred && cred.u)) || {}; const agora = new Date().toISOString();
+      const hist = (t) => `${agora.slice(0, 16).replace('T', ' ')} ${u.login}: ${t}`;
+      const novo = { aprovar: 'Aberta', iniciar: 'Em execução', concluir: 'Concluída', cancelar: 'Cancelada', reabrir: 'Aberta' }[etapa]; if (!novo) throw new Error('Etapa inválida.');
+      if (etapa === 'aprovar') Object.assign(o, { responsavel: d.responsavel || o.responsavel, prazo: d.prazo || o.prazo, aberta_por: u.login, aberta_em: agora });
+      if (etapa === 'iniciar') Object.assign(o, { iniciada_por: u.login, iniciada_em: agora });
+      if (etapa === 'concluir') Object.assign(o, { concluida_por: u.login, concluida_em: agora, execucao_obs: d.obs || '', iniciada_em: o.iniciada_em || agora, iniciada_por: o.iniciada_por || u.login });
+      if (etapa === 'cancelar' || etapa === 'reabrir') { if (!d.obs) throw new Error('Informe o motivo.'); o.motivo = d.obs; }
+      o.status = novo; o.historico += ' | ' + hist({ aprovar: 'aprovou o pedido', iniciar: 'iniciou a execução', concluir: 'concluiu o serviço', cancelar: 'cancelou (' + d.obs + ')', reabrir: 'reabriu (' + d.obs + ')' }[etapa]);
+      await Store.set('demo:base', b); return { ordem: o };
+    },
     async formularioSalvar(form, qml) { const b = await this.base(); b.formularios[form.id] = form; if (qml) b.estilos[form.id] = qml; await Store.set('demo:base', b); },
   };
 
@@ -153,6 +186,14 @@ const Api = (() => {
     async usuarioRemover(login) { return chamar('usuario_remover', { login }); },
     async formulariosListar() { return (await chamar('formularios_listar')).formularios; },
     async formularioSalvar(form, qml) { return chamar('formulario_salvar', { formulario: form, qml: qml || '' }); },
+    async osListar(projeto) { const j = await chamar('os_listar', { projeto }); return { ordens: j.ordens, tipos: j.tipos }; },
+    async chavesListar() { return (await chamar('chaves_listar')).chaves; },
+    async chaveCriar(nome, projeto) { return chamar('chave_criar', { nome, projeto }); },
+    async chaveRevogar(id) { return chamar('chave_revogar', { id }); },
+    async backupListar(projeto) { return (await chamar('backup_listar', { projeto })).copias; },
+    async backupRestaurar(projeto, arquivo) { return chamar('backup_restaurar', { projeto, arquivo }); },
+    async osSalvar(projeto, os) { return chamar('os_salvar', { projeto, os }); },
+    async osAndamento(projeto, id, etapa, dados) { return chamar('os_andamento', { projeto, id, etapa, dados }); },
   };
 
   return {

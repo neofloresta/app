@@ -34,6 +34,30 @@ Exemplo:
 | `usuario_remover` | Coordenação | `login` | `ok` |
 | `formularios_listar` | Coordenação | nenhum | `formularios` |
 | `formulario_salvar` | Coordenação | `formulario`, `qml` opcional | `ok` |
+| `os_listar` | Usuários do projeto (a equipe vê só as ordens dela) | `projeto` | `ordens`, `tipos` |
+| `os_salvar` | Coordenação abre; cliente e equipe pedem (fica Solicitada) | `projeto`, `os` (`registro_uuid` ou `latitude` e `longitude`, `tipo`, `prioridade`, `descricao`; coordenação também `responsavel` e `prazo`; `chave` evita duplicar no reenvio) | `ordem` |
+| `os_andamento` | Coordenação; a equipe responsável inicia e conclui | `projeto`, `id`, `etapa` (`aprovar`, `iniciar`, `concluir`, `cancelar`, `reabrir`), `dados` (`foto_antes`, `foto_depois`, `obs`, `em`) | `ordem` |
+| `chave_criar`, `chaves_listar`, `chave_revogar` | Coordenação | `nome`, `projeto` / `id` | a chave aparece só na criação |
+| `backup_listar`, `backup_restaurar` | Coordenação | `projeto` / `projeto`, `arquivo` | quantidade restaurada e identificador da cópia do estado anterior |
+
+## Acesso de outros sistemas (chave de integração)
+
+A coordenação cria a chave em Coordenação > Segurança > Chaves de integração, para um projeto. A chave começa com `neo_`, aparece uma vez só e pode ser revogada a qualquer momento. No servidor fica só o resumo criptográfico.
+
+Com a chave, o sistema externo envia `chave_api` no lugar de `t` e pode usar somente: `listar` (em páginas, com `de` e `n`), `mapa`, `painel`, `os_listar` e `formulario`. Qualquer gravação é recusada, e cada consulta fica no registro de auditoria com o nome da chave.
+
+Exemplo:
+
+```
+POST <endereço do servidor>
+{"acao": "listar", "chave_api": "neo_...", "projeto": "divinopolis", "de": 0, "n": 4000}
+```
+
+Resposta: `{"ok": true, "linhas": [...], "total": 10234, "proximo": 4000}`. Repita com `de` = `proximo` até `proximo` vir vazio.
+
+## Campos de cada ordem de serviço
+
+`id`, `numero` (sequência única do projeto), `registro_uuid` e `codigo_arvore` (quando ligada a uma árvore), `especie`, `latitude`, `longitude`, `endereco`, `bairro`, `tipo`, `prioridade` (Urgente, Alta, Média, Baixa), `descricao`, `status` (Solicitada, Aberta, Em execução, Concluída, Cancelada), `prazo` (AAAA-MM-DD), `responsavel` (equipe), quem e quando em cada etapa (`solicitada_*`, `aberta_*`, `iniciada_*`, `concluida_*`, `cancelada_*`), `foto_antes` e `foto_depois` (links no Drive), `execucao_obs`, `motivo`, `historico`.
 
 ## Campos fixos de cada registro
 
@@ -43,4 +67,4 @@ Exemplo:
 
 - Planilha Google: até 10 milhões de células. Com cerca de 76 colunas, cabem perto de 130 mil registros por projeto.
 - Cada chamada tem até 6 minutos. Para projetos grandes, use `listar` em páginas (`n` = 4000).
-- Autenticação por usuário e senha em cada chamada, sempre por HTTPS. Ainda sem chave de acesso própria para sistemas externos.
+- Autenticação por sessão (token) para pessoas e por chave de integração para sistemas, sempre por HTTPS.

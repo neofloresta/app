@@ -11,11 +11,13 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.0';
+const VERSAO_SCRIPT = '2.2';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em'];
-const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art'];
+const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
+const COLS_CHAVES = ['id', 'nome', 'projeto', 'hash', 'criada_por', 'criada_em', 'ativa'];
+const ACOES_INTEGRACAO = ['listar', 'mapa', 'painel', 'os_listar', 'formulario', 'sessao'];
 const PERFIS = ['admin', 'revisor', 'coletor', 'cliente'];
 // Colunas que só o servidor escreve (validação). Um envio do aparelho nunca as apaga.
 const COLS_SISTEMA = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'numero_unico', 'servidor_em'];
@@ -27,7 +29,7 @@ const BLOQUEIO_MIN = 15;
 const FUSO = 'America/Sao_Paulo';
 const ITERACOES = 1000;
 const SENHA_MIN = 8;
-const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar'];
+const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento'];
 // texto que começaria uma fórmula na planilha vira texto puro
 function seguro(v) { v = v == null ? '' : String(v); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
 function hashToken(t) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'sessao|' + t, Utilities.Charset.UTF_8)); }
@@ -74,7 +76,7 @@ function doPost(e) {
       auditar(usr.login, 'login', '', d.aparelho || '');
       return json({ ok: true, versaoScript: VERSAO_SCRIPT, token: token, expira_em: token ? new Date(Date.now() + SESSAO_DIAS * 864e5).toISOString() : '', usuario: publico(usr), projetos: projetosDoUsuario(usr) });
     }
-    const usr = d.t ? autenticarSessao(d.t) : autenticarSenha(d.u, d.s, true);
+    const usr = d.chave_api ? autenticarChave(d.chave_api, d.acao) : d.t ? autenticarSessao(d.t) : autenticarSenha(d.u, d.s, true);
     if (ACOES_ESCRITA.indexOf(d.acao) >= 0 && !usr.termo_aceito_em && usr.perfil !== 'admin') throw new Error('Aceite o termo de uso e privacidade no app antes de enviar dados (atualize o app e entre de novo).');
     const formLiberado = (id) => { if (usr.perfil !== 'admin' && !projetosDoUsuario(usr).some((p) => p.formulario === id)) throw new Error('Formulário não liberado para este usuário.'); };
     const perfil = usr.perfil;
@@ -96,6 +98,9 @@ function doPost(e) {
       case 'foto_ver': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, verFoto(d.projeto, d.id, usr)));
       case 'situacao_meus': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, itens: situacaoMeus(d.projeto, usr) });
       case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
+      case 'os_listar': exigeProjeto(d.projeto); return json({ ok: true, ordens: listarOS(d.projeto, usr), tipos: tiposOS(d.projeto) });
+      case 'os_salvar': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarOS(d.projeto, d.os || {}, usr)));
+      case 'os_andamento': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, andamentoOS(d.projeto, d.id, d.etapa, d.dados || {}, usr)));
       case 'projetos_listar': pode(); return json({ ok: true, projetos: tabela('Projetos').map(comLinks) });
       case 'projeto_salvar': pode(); salvarProjeto(d.projeto_dados); auditar(usr.login, 'projeto_salvar', d.projeto_dados && d.projeto_dados.id, ''); return json({ ok: true });
       case 'usuarios_listar': pode(); return json({ ok: true, usuarios: tabela('Usuarios').map(paraAdmin) });
@@ -107,6 +112,11 @@ function doPost(e) {
       case 'importar': pode(); exigeProjeto(d.projeto); { const r = importar(d.projeto, d.linhas || [], usr); auditar(usr.login, 'importar', d.projeto, r.inseridos + ' inseridos, ' + r.ignorados + ' já existiam'); return json(Object.assign({ ok: true }, r)); }
       case 'auditar': if (['exportar', 'relatorio'].indexOf(d.tipo) < 0) throw new Error('Evento inválido.'); auditar(usr.login, d.tipo, String(d.alvo || '').slice(0, 100), String(d.detalhe || '').slice(0, 200)); return json({ ok: true });
       case 'auditoria_listar': pode(); return json({ ok: true, itens: auditoriaRecente(+d.n || 300) });
+      case 'chaves_listar': pode(); return json({ ok: true, chaves: tabela('Chaves').map((c) => ({ id: c.id, nome: c.nome, projeto: c.projeto, criada_por: c.criada_por, criada_em: c.criada_em, ativa: c.ativa === 'sim' })) });
+      case 'chave_criar': pode(); return json(Object.assign({ ok: true }, criarChave(d.nome, d.projeto, usr)));
+      case 'chave_revogar': pode(); salvarLinha('Chaves', COLS_CHAVES, 'id', { id: String(d.id), ativa: 'não' }); auditar(usr.login, 'chave_revogar', d.id, ''); return json({ ok: true });
+      case 'backup_listar': pode(); return json({ ok: true, copias: listarCopias(d.projeto) });
+      case 'backup_restaurar': pode(); exigeProjeto(d.projeto); { const r = restaurarCopia(d.projeto, d.arquivo, usr); return json(Object.assign({ ok: true }, r)); }
       case 'backup_status': pode(); return json(Object.assign({ ok: true }, backupStatus()));
       case 'backup_config': pode(); backupConfig(d.emails, d.ativo); auditar(usr.login, 'backup_config', '', (d.ativo ? 'ativo' : 'desligado') + ' ' + (d.emails || '')); return json(Object.assign({ ok: true }, backupStatus()));
       case 'backup_agora': pode(); { const r = backupDiario(); auditar(usr.login, 'backup_agora', '', r.resumo); return json(Object.assign({ ok: true }, r)); }
@@ -376,7 +386,7 @@ function verFoto(projetoId, id, usr) {
       const ids = []; if (tot > 0 && iv >= 0) { const v = sh.getRange(2, 1, tot, cab.length).getValues(); v.forEach((l) => { if (l[iv] === 'Validado') links.forEach((i) => { const m = String(l[i]).match(/\/d\/([\w-]+)/); if (m) ids.push(m[1]); }); }); }
       lib = ids.join(','); try { cache.put('fotos_val:' + projetoId, lib, 600); } catch (e) { /* grande demais */ }
     }
-    if ((',' + lib + ',').indexOf(',' + id + ',') < 0) throw new Error('Foto de registro ainda não validado.');
+    if ((',' + lib + ',').indexOf(',' + id + ',') < 0 && !fotoDeOS(projetoId, id)) throw new Error('Foto de registro ainda não validado.');
   }
   const b = arq.getBlob();
   return { mime: b.getContentType() || 'image/jpeg', dados: Utilities.base64Encode(b.getBytes()) };
@@ -614,6 +624,220 @@ function importar(projetoId, linhas, usr) {
       rg.setValues(novos);
     }
     return { inseridos: novos.length, ignorados: linhas.length - novos.length };
+  } finally { lock.releaseLock(); }
+}
+
+
+// ---------- Ordens de serviço ----------
+// Aba "Ordens" na planilha do projeto. Fluxo: Solicitada (pedido do cliente ou da equipe) > Aberta > Em execução > Concluída; ou Cancelada.
+const COLS_OS = ['id', 'numero', 'registro_uuid', 'codigo_arvore', 'especie', 'latitude', 'longitude', 'endereco', 'bairro', 'tipo', 'prioridade', 'descricao', 'status', 'prazo', 'responsavel',
+  'solicitada_por', 'solicitada_em', 'aberta_por', 'aberta_em', 'iniciada_por', 'iniciada_em', 'foto_antes', 'concluida_por', 'concluida_em', 'foto_depois', 'execucao_obs',
+  'cancelada_por', 'cancelada_em', 'motivo', 'historico', 'atualizado_em'];
+const TIPOS_OS_PADRAO = ['Poda de limpeza', 'Poda de levantamento de copa', 'Poda de adequação à rede elétrica', 'Poda de condução', 'Supressão', 'Remoção de toco', 'Plantio', 'Substituição', 'Tratamento fitossanitário', 'Avaliação de risco', 'Outro'];
+const PRIORIDADES_OS = ['Urgente', 'Alta', 'Média', 'Baixa'];
+const OS_SEM_FOTO_ANTES = ['Plantio', 'Avaliação de risco'];
+function tiposOS(projetoId) {
+  const t = String(projeto(projetoId).tipos_os || '').split(/[;\n]+/).map((x) => x.trim()).filter(Boolean);
+  return t.length ? t : TIPOS_OS_PADRAO;
+}
+function abaOS(projetoId) {
+  const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Ordens');
+  if (!sh) { sh = ss.insertSheet('Ordens'); sh.appendRow(COLS_OS); sh.setFrozenRows(1); }
+  const cab = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String);
+  const faltam = COLS_OS.filter((c) => cab.indexOf(c) < 0);
+  if (faltam.length) sh.getRange(1, cab.filter(String).length + 1, 1, faltam.length).setValues([faltam]);
+  return sh;
+}
+function lerOS(sh) {
+  const v = sh.getDataRange().getValues(); const cab = v.shift().map(String);
+  return v.filter((l) => l[0] !== '').map((l, i) => { const o = { __linha: i + 2 }; cab.forEach((c, k) => { if (c) o[c] = texto(l[k]); }); return o; });
+}
+function gravarOS(sh, o) {
+  const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  o.atualizado_em = new Date().toISOString();
+  const linha = cab.map((c) => seguro(o[c] == null ? '' : String(o[c])));
+  const r = o.__linha || sh.getLastRow() + 1; const rg = sh.getRange(r, 1, 1, linha.length);
+  rg.setNumberFormats([linha.map(() => '@')]); rg.setValues([linha]); o.__linha = r;
+}
+function publicoOS(o) { const x = Object.assign({}, o); delete x.__linha; return x; }
+function listarOS(projetoId, usr) {
+  const todas = lerOS(abaOS(projetoId));
+  let out = todas;
+  if (usr.perfil === 'coletor') out = todas.filter((o) => (o.responsavel && o.responsavel === usr.equipe && o.status !== 'Solicitada') || o.solicitada_por === usr.login);
+  return out.map(publicoOS);
+}
+function fotoDeOS(projetoId, id) {
+  try { return lerOS(abaOS(projetoId)).some((o) => String(o.foto_antes).indexOf(id) >= 0 || String(o.foto_depois).indexOf(id) >= 0); } catch (e) { return false; }
+}
+function carimboHist(usr, txt) { return Utilities.formatDate(new Date(), FUSO, 'yyyy-MM-dd HH:mm') + ' ' + usr.login + ': ' + String(txt).replace(/\s*\|\s*/g, ' / ').slice(0, 300); }
+function linkDrive(u) { u = String(u || ''); return /^https:\/\/drive\.google\.com\//.test(u) ? u : ''; }
+// data informada pelo aparelho (trabalho feito sem internet); se vier no futuro ou muito antiga, vale a do servidor
+function dataAparelho(iso) {
+  const d = iso ? new Date(iso) : null; const agora = Date.now();
+  return d && !isNaN(d) && d.getTime() <= agora + 10 * 60000 && d.getTime() > agora - 60 * 864e5 ? d.toISOString() : new Date().toISOString();
+}
+function dadosArvore(projetoId, uuidR) {
+  const sh = planilha(projetoId); const tot = sh.getLastRow() - 1; if (tot < 1) return null;
+  const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String); const iu = cab.indexOf('uuid'); if (iu < 0) return null;
+  const col = sh.getRange(2, iu + 1, tot, 1).getValues(); let r = -1;
+  for (let i = 0; i < tot; i++) if (String(col[i][0]) === uuidR) { r = i; break; }
+  if (r < 0) return null;
+  return linhaObj(cab, sh.getRange(r + 2, 1, 1, cab.length).getValues()[0]);
+}
+function salvarOS(projetoId, d, usr) {
+  const coord = usr.perfil === 'admin' || usr.perfil === 'revisor';
+  const tipos = tiposOS(projetoId);
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = abaOS(projetoId); const todas = lerOS(sh);
+    if (d.chave && !/^[\w-]{8,60}$/.test(String(d.chave))) throw new Error('Identificador inválido.');
+    if (d.chave) { const ja = todas.find((o) => o.id === d.chave); if (ja) return { ordem: publicoOS(ja), ignorado: true }; } // reenvio do mesmo pedido (aparelho sem internet)
+    const atual = d.id ? todas.find((o) => o.id === d.id) : null;
+    if (d.id && !atual) throw new Error('Ordem de serviço não encontrada.');
+    if (atual && !coord) throw new Error('Seu perfil não tem acesso a esta função.');
+    if (atual && ['Concluída', 'Cancelada'].indexOf(atual.status) >= 0) throw new Error('Ordem ' + atual.status.toLowerCase() + '. Reabra antes de alterar.');
+    const o = atual || { id: String(d.chave || Utilities.getUuid()).slice(0, 60) };
+    if (d.tipo != null) { if (tipos.indexOf(d.tipo) < 0) throw new Error('Tipo de serviço inválido.'); o.tipo = d.tipo; }
+    if (d.prioridade != null) { if (PRIORIDADES_OS.indexOf(d.prioridade) < 0) throw new Error('Prioridade inválida.'); o.prioridade = d.prioridade; }
+    if (d.descricao != null) o.descricao = String(d.descricao).slice(0, 1000);
+    if (coord) {
+      if (d.prazo != null) { if (d.prazo && !/^\d{4}-\d{2}-\d{2}$/.test(d.prazo)) throw new Error('Prazo inválido.'); o.prazo = d.prazo; }
+      if (d.responsavel != null) o.responsavel = String(d.responsavel).slice(0, 60);
+    }
+    if (!o.tipo) throw new Error('Escolha o tipo de serviço.');
+    if (!o.prioridade) o.prioridade = 'Média';
+    if (!atual) {
+      if (d.registro_uuid) {
+        const a = dadosArvore(projetoId, String(d.registro_uuid));
+        if (!a) throw new Error('Árvore não encontrada no projeto. Envie o registro antes de pedir o serviço.');
+        const form = lerFormulario(projeto(projetoId).formulario);
+        const cc = form.campos.find((c) => c.auto === 'codigo') || form.campos.find((c) => /codigo/i.test(c.nome));
+        const ce = form.campos.find((c) => c.tipo === 'species');
+        Object.assign(o, { registro_uuid: a.uuid, codigo_arvore: cc ? a[cc.nome] || '' : '', especie: ce ? a[ce.nome] || '' : '', latitude: a.latitude, longitude: a.longitude, endereco: a.endereco_aprox || '', bairro: a.bairro_aprox || '' });
+      } else {
+        const la = +d.latitude, lo = +d.longitude;
+        if (!(la >= -34 && la <= 6 && lo >= -74 && lo <= -28)) throw new Error('Informe o local do serviço (árvore ou ponto no mapa).');
+        Object.assign(o, { latitude: la, longitude: lo, endereco: String(d.endereco || '').slice(0, 200), bairro: String(d.bairro || '').slice(0, 100) });
+      }
+      const props = PROPS; const k = 'OSN_' + projetoId; const n = (+props.getProperty(k) || todas.reduce((m, x) => Math.max(m, +x.numero || 0), 0)) + 1; props.setProperty(k, String(n));
+      o.numero = n;
+      const agora = dataAparelho(d.em);
+      if (coord) Object.assign(o, { status: 'Aberta', aberta_por: usr.login, aberta_em: agora });
+      else Object.assign(o, { status: 'Solicitada', solicitada_por: usr.login, solicitada_em: agora });
+      o.historico = carimboHist(usr, (coord ? 'abriu a ordem' : 'solicitou o serviço') + ' (' + o.tipo + ', prioridade ' + o.prioridade.toLowerCase() + ')' + (o.responsavel ? ', responsável ' + o.responsavel : ''));
+    } else {
+      o.historico = [atual.historico, carimboHist(usr, 'alterou: ' + ['tipo', 'prioridade', 'prazo', 'responsavel', 'descricao'].filter((c) => d[c] != null && String(d[c]) !== String(atual[c] || '')).join(', '))].filter(Boolean).join(' | ');
+    }
+    gravarOS(sh, o);
+    auditar(usr.login, atual ? 'os_alterar' : 'os_abrir', projetoId, 'OS ' + o.numero + ' ' + o.tipo);
+    return { ordem: publicoOS(o) };
+  } finally { lock.releaseLock(); }
+}
+function andamentoOS(projetoId, id, etapa, d, usr) {
+  const coord = usr.perfil === 'admin' || usr.perfil === 'revisor';
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = abaOS(projetoId); const o = lerOS(sh).find((x) => x.id === id);
+    if (!o) throw new Error('Ordem de serviço não encontrada.');
+    const daEquipe = usr.perfil === 'coletor' && o.responsavel && o.responsavel === usr.equipe;
+    const exige = (ok) => { if (!ok) throw new Error('Seu perfil não tem acesso a esta função.'); };
+    const quando = dataAparelho(d.em); const obs = String(d.obs || '').slice(0, 1000);
+    let txt = '';
+    if (etapa === 'aprovar') {
+      exige(coord); if (o.status === 'Aberta') return { ordem: publicoOS(o), ignorado: true };
+      if (o.status !== 'Solicitada') throw new Error('Só pedidos com situação Solicitada podem ser aprovados.');
+      Object.assign(o, { status: 'Aberta', aberta_por: usr.login, aberta_em: new Date().toISOString() });
+      if (d.responsavel != null) o.responsavel = String(d.responsavel).slice(0, 60);
+      if (d.prazo) { if (!/^\d{4}-\d{2}-\d{2}$/.test(d.prazo)) throw new Error('Prazo inválido.'); o.prazo = d.prazo; }
+      txt = 'aprovou o pedido' + (o.responsavel ? ', responsável ' + o.responsavel : '');
+    } else if (etapa === 'iniciar') {
+      exige(coord || daEquipe); if (o.status === 'Em execução') return { ordem: publicoOS(o), ignorado: true };
+      if (o.status !== 'Aberta') throw new Error('Só ordens abertas podem ser iniciadas (situação atual: ' + o.status + ').');
+      const f = linkDrive(d.foto_antes); if (!f && OS_SEM_FOTO_ANTES.indexOf(o.tipo) < 0) throw new Error('Tire a foto de antes do serviço.');
+      Object.assign(o, { status: 'Em execução', iniciada_por: usr.login, iniciada_em: quando, foto_antes: f || o.foto_antes });
+      txt = 'iniciou a execução';
+    } else if (etapa === 'concluir') {
+      exige(coord || daEquipe); if (o.status === 'Concluída') return { ordem: publicoOS(o), ignorado: true };
+      if (['Aberta', 'Em execução'].indexOf(o.status) < 0) throw new Error('Só ordens abertas ou em execução podem ser concluídas (situação atual: ' + o.status + ').');
+      const fa = linkDrive(d.foto_antes) || o.foto_antes; if (!fa && OS_SEM_FOTO_ANTES.indexOf(o.tipo) < 0) throw new Error('Falta a foto de antes do serviço.');
+      const fd = linkDrive(d.foto_depois); if (!fd) throw new Error('Tire a foto de depois do serviço.');
+      if (o.status === 'Aberta') Object.assign(o, { iniciada_por: usr.login, iniciada_em: dataAparelho(d.iniciada_em || d.em) });
+      Object.assign(o, { status: 'Concluída', concluida_por: usr.login, concluida_em: quando, foto_antes: fa, foto_depois: fd, execucao_obs: obs });
+      txt = 'concluiu o serviço' + (obs ? ' (' + obs + ')' : '');
+    } else if (etapa === 'cancelar') {
+      exige(coord); if (o.status === 'Cancelada') return { ordem: publicoOS(o), ignorado: true };
+      if (o.status === 'Concluída') throw new Error('Ordem concluída não pode ser cancelada. Reabra antes, se precisar.');
+      if (!obs) throw new Error('Informe o motivo do cancelamento.');
+      Object.assign(o, { status: 'Cancelada', cancelada_por: usr.login, cancelada_em: new Date().toISOString(), motivo: obs });
+      txt = 'cancelou (' + obs + ')';
+    } else if (etapa === 'reabrir') {
+      exige(coord); if (['Concluída', 'Cancelada'].indexOf(o.status) < 0) throw new Error('Só ordens concluídas ou canceladas podem ser reabertas.');
+      if (!obs) throw new Error('Informe o motivo para reabrir.');
+      Object.assign(o, { status: 'Aberta', motivo: obs, concluida_por: '', concluida_em: '', cancelada_por: '', cancelada_em: '' });
+      txt = 'reabriu (' + obs + ')';
+    } else throw new Error('Etapa inválida.');
+    o.historico = [o.historico, carimboHist(usr, txt)].filter(Boolean).join(' | ');
+    gravarOS(sh, o);
+    auditar(usr.login, 'os_' + etapa, projetoId, 'OS ' + o.numero);
+    return { ordem: publicoOS(o) };
+  } finally { lock.releaseLock(); }
+}
+
+
+// ---------- Chaves de integração (outros sistemas, só leitura) ----------
+// A chave aparece uma vez para a coordenação; no servidor fica só o resumo criptográfico.
+function hashChave(k) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'chave|' + k, Utilities.Charset.UTF_8)); }
+function criarChave(nome, projetoId, usr) {
+  nome = String(nome || '').trim().slice(0, 60); if (!nome) throw new Error('Dê um nome à chave (ex.: Sistema da prefeitura).');
+  projeto(projetoId);
+  garantirAba('Chaves', COLS_CHAVES);
+  const k = 'neo_' + Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 16);
+  const id = Utilities.getUuid().slice(0, 8);
+  salvarLinha('Chaves', COLS_CHAVES, 'id', { id: id, nome: seguro(nome), projeto: projetoId, hash: hashChave(k), criada_por: usr.login, criada_em: new Date().toISOString(), ativa: 'sim' });
+  auditar(usr.login, 'chave_criar', projetoId, nome);
+  return { id: id, chave: k };
+}
+function autenticarChave(k, acao) {
+  if (!/^neo_[a-f0-9]{48}$/.test(String(k))) throw Object.assign(new Error('Chave de integração inválida.'), { sessao: true });
+  const c = tabela('Chaves').find((x) => x.hash === hashChave(k) && x.ativa === 'sim');
+  if (!c) throw Object.assign(new Error('Chave de integração inválida ou revogada.'), { sessao: true });
+  if (ACOES_INTEGRACAO.indexOf(acao) < 0) throw new Error('A chave de integração só permite consultar dados.');
+  auditar('integração: ' + c.nome, 'api_' + acao, c.projeto, '');
+  return { login: 'integracao-' + c.id, nome: c.nome, perfil: 'revisor', equipe: '', projetos: [c.projeto], termo_aceito_em: c.criada_em, integracao: true };
+}
+
+// ---------- Restauração de cópia de segurança ----------
+function listarCopias(projetoId) {
+  const p = projeto(projetoId); const out = []; const raiz = pastaBackup(); const it = raiz.getFolders();
+  const soltos = raiz.getFiles(); while (soltos.hasNext()) { const a = soltos.next(); if (String(a.getName()).indexOf(p.nome + ' - antes da restauração') === 0) out.push({ id: a.getId(), nome: a.getName(), dia: String(a.getName()).slice(-16, -6) }); }
+  while (it.hasNext()) {
+    const f = it.next(); const fs = f.getFiles();
+    while (fs.hasNext()) { const a = fs.next(); if (String(a.getName()).indexOf(p.nome + ' - ') === 0) out.push({ id: a.getId(), nome: a.getName(), dia: f.getName() }); }
+  }
+  return out.sort((a, b) => (a.dia < b.dia ? 1 : -1)).slice(0, 60);
+}
+// Troca o conteúdo das abas Registros e Ordens pelo da cópia escolhida. Antes, guarda uma cópia do estado atual.
+function restaurarCopia(projetoId, arquivoId, usr) {
+  const p = projeto(projetoId);
+  if (!listarCopias(projetoId).some((c) => c.id === arquivoId)) throw new Error('Cópia não encontrada na pasta de cópias deste projeto.');
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const agora = Utilities.formatDate(new Date(), FUSO, 'yyyy-MM-dd HH-mm');
+    const antes = DriveApp.getFileById(p.planilha_id).makeCopy(p.nome + ' - antes da restauração ' + agora, pastaBackup());
+    const origem = SpreadsheetApp.openById(arquivoId); const destino = SpreadsheetApp.openById(p.planilha_id);
+    const res = {};
+    ['Registros', 'Ordens'].forEach((nome) => {
+      const de = origem.getSheetByName(nome); let para = destino.getSheetByName(nome);
+      if (!de) return;
+      if (!para) para = destino.insertSheet(nome);
+      const v = de.getLastRow() ? de.getRange(1, 1, de.getLastRow(), de.getLastColumn()).getValues() : [];
+      if (para.getLastRow()) para.getRange(1, 1, para.getLastRow(), Math.max(1, para.getLastColumn())).clearContent();
+      if (v.length) { const rg = para.getRange(1, 1, v.length, v[0].length); rg.setNumberFormat('@'); rg.setValues(v.map((l) => l.map((x) => (x instanceof Date ? x.toISOString() : x)))); }
+      res[nome] = Math.max(0, v.length - 1);
+    });
+    try { CacheService.getScriptCache().removeAll(['painel:' + projetoId + ':todos', 'painel:' + projetoId + ':cliente', 'fotos_val:' + projetoId]); } catch (e) { /* segue */ }
+    auditar(usr.login, 'backup_restaurar', projetoId, 'restaurou ' + arquivoId + ' (' + (res.Registros || 0) + ' registros); estado anterior guardado em ' + antes.getId());
+    return { registros: res.Registros || 0, ordens: res.Ordens || 0, copiaAnterior: antes.getId() };
   } finally { lock.releaseLock(); }
 }
 

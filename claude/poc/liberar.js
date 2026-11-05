@@ -23,11 +23,15 @@ for (const f of ['js/app.js', 'js/api.js', 'js/store.js', 'js/gpkg.js', 'js/arqu
 // 3. baterias de teste (uma de cada vez, mesmas portas)
 const suites = [
   ['servidor', 'node srv.js', /(\d+) falha\(s\) de (\d+)/],
+  ['servidor: ordens de serviço', 'node sos.js', /(\d+) falha\(s\) de (\d+)/],
+  ['servidor: chave de integração e restauração', 'node skr.js', /(\d+) falha\(s\) de (\d+)/],
   ['coleta e envio', 'node b12.js'],
   ['coordenação, cliente, exportação', 'node b47.js 3000'],
   ['mapa 5 mil', 'node b3.js 5000'],
   ['exportações 2 mil', 'node b5.js 2000'],
   ['permissões', 'node b7.js'],
+  ['ordens de serviço nas telas', 'node bos.js'],
+  ['pacote de entrega, chave e restauração nas telas', 'node b8.js'],
   ['versão e atualização', 'node bv.js'],
 ];
 for (const [nome, cmd, rx] of suites) {

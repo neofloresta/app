@@ -1,6 +1,6 @@
 // Neofloresta Inventário
 (() => {
-  const VERSAO = '2.1.0';
+  const VERSAO = '2.2.0';
   const TERMO_VERSAO = '2026-11';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -178,6 +178,9 @@
     if (r === 'relatorio' && pf !== 'coletor') return telaRelatorio();
     if (r === 'medicao' && pf !== 'coletor') return telaMedicao();
     if (r === 'mapa') return telaMapa();
+    if (r === 'ordens') return telaOrdens();
+    if (r === 'os' && a) return telaOS(decodeURIComponent(a));
+    if (r === 'os-nova') return telaNovaOS(a ? decodeURIComponent(a) : null);
     if (r === 'validacao' && ehCoord()) return telaValidacao();
     if (r === 'ficha' && a && pf !== 'coletor') return telaFichaServidor(decodeURIComponent(a));
     if (pf === 'cliente') return telaPainel();
@@ -244,7 +247,7 @@
   async function pendentes() { return (await Store.todosRegistros()).filter((r) => r.status === 'pendente' && !r.__base); }
   async function atualizarSync() {
     const el = $sync(); if (!el) return;
-    const n = (await pendentes()).length;
+    const n = (await pendentes()).length + (await nFilaOS());
     el.className = 'sync' + (!navigator.onLine ? ' off' : n ? ' pend' : '');
     if (S.expirada) { el.className = 'sync pend'; el.textContent = 'Entrar de novo'; return; }
     el.textContent = S.sincronizando ? 'Enviando...' : !navigator.onLine ? (n ? `Sem rede · ${n}` : 'Sem rede') : n ? `${n} a enviar` : (Api.demo ? 'Demonstração' : 'Tudo enviado');
@@ -254,7 +257,7 @@
     if (S.sincronizando || !S.sessao || S.expirada || perfil() === 'cliente') return;
     if (!navigator.onLine) { if (!silencioso) toast('Sem internet. Os dados ficam guardados e serão enviados depois.'); return atualizarSync(); }
     S.sincronizando = true; // marcado antes de qualquer espera: nunca roda duas vezes ao mesmo tempo
-    try { await enviarPendentes(silencioso); } finally { S.sincronizando = false; await atualizarSync(); }
+    try { await enviarPendentes(silencioso); if (!S.expirada) await enviarFilaOS(silencioso); } finally { S.sincronizando = false; await atualizarSync(); }
     if (S.expirada) return;
     await atualizarSituacao();
     if (location.hash === '' || location.hash === '#inicio') listarRegistros();
@@ -352,12 +355,21 @@
         h('button', { class: 'btn nova canto', onclick: novoRegistro }, ico('mais'), 'Nova árvore'),
         h('div', { id: 'aviso-versao' }),
         h('div', { id: 'devolvidos' }),
+        h('div', { id: 'os-equipe' }),
         h('div', { class: 'resumo', id: 'stats' }),
         h('div', { class: 'busca-box' }, ico('busca'), busca),
         h('div', { id: 'lista', class: 'lista' })));
-    atualizarSync(); listarRegistros(); pintarAvisoVersao();
+    atualizarSync(); listarRegistros(); pintarAvisoVersao(); pintarOSEquipe();
   }
 
+  async function pintarOSEquipe() {
+    const el = document.getElementById('os-equipe'); if (!el || perfil() !== 'coletor') return;
+    try {
+      const d = await carregarOS(false); if (!document.body.contains(el)) return;
+      const f = d.ordens.filter((o) => ehMinhaOS(o) && ['Aberta', 'Em execução'].includes(o.status)); const at = f.filter(atrasada).length;
+      el.replaceChildren(f.length ? h('button', { class: 'faixa-os', onclick: () => { S.filtroOS = 'fazer'; ir('#ordens'); } }, h('b', null, `${f.length} ordem${f.length > 1 ? 'ns' : ''} de serviço para a sua equipe`), h('span', null, at ? `${at} atrasada${at > 1 ? 's' : ''}. Toque para ver` : 'Toque para ver e registrar a execução')) : '');
+    } catch (e) { /* sem ordens */ }
+  }
   const urls = new Map();
   async function miniatura(r) {
     const f = Object.values(r.fotos || {}).find((x) => x && x.chave); if (!f) return null;
@@ -406,6 +418,7 @@
       h('h3', null, S.sessao.usuario.nome, h('small', { class: 'perfil-tag' }, ROT_PERFIL[perfil()] || '')),
       S.sessao.projetos.length > 1 ? it('Trocar projeto', trocarProjeto) : null,
       it('Mapa das árvores', () => ir('#mapa')),
+      it('Ordens de serviço', () => ir('#ordens')),
       perfil() !== 'cliente' ? it('Enviar agora', () => sincronizar()) : null,
       perfil() !== 'coletor' ? it('Painel do projeto', () => ir('#painel')) : null,
       ehCoord() ? it('Validação dos registros', () => ir('#validacao')) : null,
@@ -968,7 +981,13 @@
     const selEq = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todas as equipes'));
     const selRisco = cRisco ? h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todos os riscos'), cRisco.opcoes.map((o) => h('option', { value: o.v }, 'Risco ' + o.t.toLowerCase()))) : null;
     const selBairro = h('select', { class: 'entrada oculto' }, h('option', { value: '' }, 'Todos os bairros'));
-    const selCor = h('select', { class: 'entrada' }, h('option', { value: 'equipe' }, 'Cor por equipe'), cRisco ? h('option', { value: 'risco' }, 'Cor por risco') : null);
+    const selCor = h('select', { class: 'entrada' }, h('option', { value: 'equipe' }, 'Cor por equipe'), cRisco ? h('option', { value: 'risco' }, 'Cor por risco') : null, h('option', { value: 'os' }, 'Cor por ordem de serviço'));
+    if (S.corMapa) { selCor.value = S.corMapa; S.corMapa = null; }
+    let osPorArv = null; const osSoltas = []; const ORD_OS = ['Em execução', 'Aberta', 'Solicitada', 'Concluída', 'Cancelada'];
+    const carregarOSMapa = async () => {
+      if (osPorArv) return; osPorArv = new Map();
+      try { const d = await carregarOS(false); for (const o of d.ordens) { if (!o.registro_uuid) { if (o.latitude !== '' && !isNaN(+o.latitude)) osSoltas.push(o); continue; } const a = osPorArv.get(o.registro_uuid); if (!a || ORD_OS.indexOf(o.status) < ORD_OS.indexOf(a.status)) osPorArv.set(o.registro_uuid, o); } } catch (e) { /* sem ordens */ }
+    };
     const conta = h('small', { class: 'mapa-conta' });
     const barra = h('div', { class: 'mapa-filtros' }, busca, h('div', { class: 'mapa-sel' }, selEq, selRisco, selBairro, selCor), conta);
     $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: centrar }, 'Minha posição')), barra, div));
@@ -987,13 +1006,16 @@
     function desenhar(ajustar) {
       camada.clearLayers(); mapa.closePopup();
       const q = norm(busca.value).trim(), eq = selEq.value, rk = selRisco ? selRisco.value : '', porRisco = selCor.value === 'risco';
-      const ba = selBairro.value;
+      const ba = selBairro.value; const porOS = selCor.value === 'os';
+      if (porOS && !osPorArv) { carregarOSMapa().then(() => desenhar(false)); }
       const vis = pts.filter((o) => (!q || o.chave.includes(q)) && (!eq || o.equipe === eq) && (!rk || String(o.risco) === rk) && (!ba || o.bairro === ba));
       for (const o of vis) {
-        const fill = porRisco ? corRisco[o.risco] || '#8A969C' : corEq(o.equipe || '-');
+        const os = porOS && osPorArv ? osPorArv.get(o.uid) : null;
+        const fill = porOS ? (os ? COR_OS[os.status] : '#C9D3D6') : porRisco ? corRisco[o.risco] || '#8A969C' : corEq(o.equipe || '-');
         L.circleMarker([o.lat, o.lon], { renderer: render, radius: vis.length > 2000 ? 4 : 6, color: '#fff', weight: 1.5, fillColor: fill, fillOpacity: 0.95 }).on('click', (e) => ficha(o, e.latlng)).addTo(camada);
       }
-      conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos`;
+      if (porOS && osPorArv) for (const o of osSoltas) L.circleMarker([+o.latitude, +o.longitude], { renderer: render, radius: 8, color: '#13262B', weight: 2, fillColor: COR_OS[o.status], fillOpacity: 0.95 }).on('click', () => ir('#os/' + encodeURIComponent(o.id))).addTo(camada);
+      conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos` + (porOS && osPorArv ? ` · ${[...osPorArv.values()].filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length + osSoltas.filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length} com ordem em aberto` : '');
       legenda();
       if (ajustar && vis.length) {
         if (vis.length === 1) { mapa.setView([vis[0].lat, vis[0].lon], 19); ficha(vis[0]); }
@@ -1005,14 +1027,15 @@
         o.cat ? h('div', null, rotOp(cCat, o.cat)) : null, o.risco ? h('div', null, 'Risco ' + String(rotOp(cRisco, o.risco)).toLowerCase()) : null,
         h('small', null, o.equipe || ''),
         linkSeguro(o.foto) ? h('a', { href: linkSeguro(o.foto), target: '_blank', rel: 'noopener' }, 'Ver foto') : null,
-        o.local ? h('button', { class: 'btn peq', onclick: () => ir('#form/' + o.uid) }, 'Abrir') : ehCoord() ? h('button', { class: 'btn peq', onclick: () => { S.navVal = []; ir('#ficha/' + encodeURIComponent(o.uid)); } }, 'Ver ficha') : null);
+        osPorArv && osPorArv.get(o.uid) ? h('button', { class: 'btn sec peq', onclick: () => ir('#os/' + encodeURIComponent(osPorArv.get(o.uid).id)) }, `${numOS(osPorArv.get(o.uid))} · ${osPorArv.get(o.uid).status}`) : null,
+        o.local ? h('button', { class: 'btn peq', onclick: () => ir('#form/' + o.uid) }, 'Abrir') : perfil() !== 'coletor' ? h('button', { class: 'btn peq', onclick: () => { S.navVal = []; ir('#ficha/' + encodeURIComponent(o.uid)); } }, 'Ver ficha') : null);
       L.popup().setLatLng(ll || [o.lat, o.lon]).setContent(pop).openOn(mapa);
     }
     let leg = null;
     function legenda() {
       if (leg) leg.remove();
       leg = L.control({ position: 'bottomleft' });
-      const itens = selCor.value === 'risco' ? Object.entries(corRisco) : equipes.map((e) => [e, corEq(e)]);
+      const itens = selCor.value === 'os' ? [...Object.entries(COR_OS), ['Sem ordem', '#C9D3D6']] : selCor.value === 'risco' ? Object.entries(corRisco) : equipes.map((e) => [e, corEq(e)]);
       leg.onAdd = () => h('div', { class: 'mapa-leg' }, itens.map(([t, c]) => h('div', null, h('span', { style: `background:${c}` }), t)));
       leg.addTo(mapa);
     }
@@ -1099,6 +1122,7 @@
       const rt = h('input', { class: 'entrada', value: p.responsavel || '', placeholder: 'ex.: Nome do engenheiro florestal' });
       const reg = h('input', { class: 'entrada', value: p.registro_profissional || '', placeholder: 'ex.: CREA-PR 000.000/D' });
       const art = h('input', { class: 'entrada', value: p.art || '', placeholder: 'nº da ART' });
+      const tos = h('textarea', { class: 'entrada', rows: 4, placeholder: 'Um por linha. Vazio usa a lista padrão: ' + TIPOS_OS_PADRAO.join(', ') }); tos.value = String(p.tipos_os || '').split(/[;\n]+/).filter(Boolean).join('\n');
       const cve = h('select', { class: 'entrada' }, h('option', { value: 'validados', selected: p.cliente_ve !== 'todos' }, 'Só registros validados'), h('option', { value: 'todos', selected: p.cliente_ve === 'todos' }, 'Todos, inclusive aguardando validação'));
       const ok = await modal(novo ? 'Novo projeto' : 'Editar projeto', h('div', null,
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Identificador (sem espaços)'), id), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), nome),
@@ -1108,12 +1132,13 @@
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Município'), mun), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Meta de registros'), meta)),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Responsável técnico (sai no relatório)'), rt),
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Registro profissional'), reg), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'ART'), art)),
-        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'O cliente vê no portal'), cve)),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'O cliente vê no portal'), cve),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Tipos de serviço das ordens de serviço'), tos)),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
       const pid = Q2F.slug(id.value || nome.value); if (!pid || !nome.value.trim()) return toast('Preencha identificador e nome.');
       if (novo && projetos.some((x) => x.id === pid)) return toast('Já existe projeto com esse identificador.');
-      try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value, responsavel: rt.value.trim(), registro_profissional: reg.value.trim(), art: art.value.trim() })); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
+      try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value, responsavel: rt.value.trim(), registro_profissional: reg.value.trim(), art: art.value.trim(), tipos_os: tos.value.split('\n').map((x) => x.trim()).filter(Boolean).join('; ') })); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
     }
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Projetos'),
       h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Projeto'), h('th', null, 'Formulário'), h('th', null, '')),
@@ -1354,6 +1379,7 @@
           r.status === 'recusado' ? h('p', { class: 'trava' }, 'Esta alteração não foi aceita. Fale com a coordenação ou remova a cópia do aparelho.', h('br'), h('button', { class: 'btn perigo peq', style: 'margin-top:8px', onclick: descartarLocal }, 'Remover do aparelho')) : null,
           !pe.ok && r.status !== 'recusado' ? h('p', { class: 'trava' }, pe.motivo) : null),
         fichaConteudo(form, r.valores, fotos),
+        secaoOSArvore(r.uuid, r.status === 'enviado'),
         (r.historico || []).length ? h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Histórico de alterações'), r.historico.map((x) => h('div', { class: 'hist' }, h('small', null, `${dataBR(x.em)} · ${x.por}`), h('ul', null, x.mud.map((m) => h('li', null, m)))))) : null,
         h('div', { class: 'linha-btn', style: 'margin:8px 0 30px' }, h('button', { class: 'btn sec', onclick: () => ir('#inicio') }, 'Voltar'), pe.ok ? h('button', { class: 'btn', onclick: editar }, 'Editar registro') : null)));
   }
@@ -1403,6 +1429,7 @@
   const ROT_CURTO = { Pendente: 'Aguardando', Validado: 'Validados', Corrigido: 'Corrigidos', Devolvido: 'Devolvidos', Descartado: 'Descartados' };
   const COR_VAL = { Validado: '#2E7D32', Pendente: '#8A969C', Corrigido: '#12A6C8', Devolvido: '#CD834C', Descartado: '#B0BEC5' };
   const CORES = ['#00546E', '#CD834C', '#12A6C8', '#5B8C5A', '#8E6C8A', '#C9A227'];
+  const pl = (n, um, varios) => `${fmtN(n)} ${n === 1 ? um : varios}`;
   const fmtN = (n) => (n == null ? '' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 1 }));
   const fmtP = (x) => (x == null || !isFinite(x) ? '' : (x * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%');
   function barras(itens, opts = {}) {
@@ -1495,6 +1522,28 @@
         perfil() !== 'cliente' ? h('div', { class: 'cartao' }, h('h3', null, 'Por equipe'), barras(equipes.map((e, k) => ({ rot: e, n: d.equipes[e], cor: CORES[k % CORES.length] })))) : null),
       h('div', { class: 'linha-btn botoes-painel', style: 'margin:6px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#relatorio') }, 'Relatório para imprimir ou PDF'), h('button', { class: 'btn sec', onclick: () => ir('#medicao') }, 'Boletim de medição'), h('button', { class: 'btn sec', onclick: () => ir('#mapa') }, 'Ver no mapa'),
         perfil() === 'cliente' ? h('button', { class: 'btn sec', onclick: () => exportarCliente() }, 'Baixar dados') : null));
+    pintarPainelOS(corpo);
+  }
+  function resumoOS(ordens) {
+    const ativos = ordens.filter((o) => !o.__pend || o.numero);
+    const porSt = {}; const porTipo = {}; ativos.forEach((o) => { porSt[o.status] = (porSt[o.status] || 0) + 1; porTipo[o.tipo] = porTipo[o.tipo] || {}; porTipo[o.tipo][o.status] = (porTipo[o.tipo][o.status] || 0) + 1; });
+    const conc = ativos.filter((o) => o.status === 'Concluída' && o.concluida_em);
+    const dias = conc.map((o) => (new Date(o.concluida_em) - new Date(o.solicitada_em || o.aberta_em)) / 864e5).filter((x) => isFinite(x) && x >= 0);
+    const mes = diaLocal(agoraISO()).slice(0, 7);
+    return { total: ativos.length, porSt, porTipo, atrasadas: ativos.filter(atrasada).length, concMes: conc.filter((o) => diaLocal(o.concluida_em).slice(0, 7) === mes).length, prazoMedio: dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : null };
+  }
+  async function pintarPainelOS(corpo) {
+    let d; try { d = await carregarOS(false); } catch (e) { return; }
+    if (d.semServidor || !d.ordens.length || !document.body.contains(corpo)) return;
+    const r = resumoOS(d.ordens); const abertas = (r.porSt.Aberta || 0) + (r.porSt['Em execução'] || 0);
+    const sec = h('section', { class: 'painel-os' }, h('h2', { class: 'painel-tit' }, 'Ordens de serviço'),
+      h('div', { class: 'kpis' }, kpi('Em aberto', fmtN(abertas), `${fmtN(r.porSt['Em execução'] || 0)} em execução`), kpi('Pedidos a aprovar', fmtN(r.porSt.Solicitada || 0), ''), kpi('Atrasadas', fmtN(r.atrasadas), 'prazo vencido', r.atrasadas ? 'alerta' : ''),
+        kpi('Concluídas no mês', fmtN(r.concMes), `${fmtN(r.porSt['Concluída'] || 0)} no total`), r.prazoMedio != null ? kpi('Tempo médio', fmtN(Math.round(r.prazoMedio * 10) / 10) + ' dias', 'do pedido à conclusão') : null),
+      h('div', { class: 'grade-cartoes' },
+        h('div', { class: 'cartao' }, h('h3', null, 'Situação'), barras(['Solicitada', 'Aberta', 'Em execução', 'Concluída', 'Cancelada'].map((k) => ({ rot: k, n: r.porSt[k] || 0, cor: COR_OS[k] })).filter((x) => x.n), { total: r.total })),
+        h('div', { class: 'cartao' }, h('h3', null, 'Por tipo de serviço'), barras(Object.entries(r.porTipo).map(([t, o]) => ({ rot: t, n: Object.values(o).reduce((a, b) => a + b, 0) })).sort((a, b) => b.n - a.n), { total: r.total, cor: CORES[1] }))),
+      h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: () => ir('#ordens') }, 'Ver ordens de serviço')));
+    const bt = corpo.querySelector('.botoes-painel'); if (bt) corpo.insertBefore(sec, bt); else corpo.append(sec);
   }
   function producaoTabela(porDia, dias, equipes, semanal) {
     const dt = (x) => `${x.slice(8, 10)}/${x.slice(5, 7)}/${x.slice(0, 4)}`;
@@ -1532,8 +1581,17 @@
       h('h2', null, '8. Produção de campo'),
       h('p', null, dias.length > 14 ? 'Registros por semana (de segunda a domingo).' : 'Registros por dia de campo.'),
       tab([dias.length > 14 ? 'Semana' : 'Data', ...equipes, 'Total'], producaoTabela(d.porDia, dias, equipes, dias.length > 14)),
+      h('div', { id: 'rel-os' }),
       p.responsavel ? h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, p.responsavel), p.registro_profissional ? h('div', null, p.registro_profissional) : null, p.art ? h('div', null, 'ART nº ' + p.art) : null, h('div', null, 'Responsável técnico · Neofloresta Serviços Ecossistêmicos Ltda.')) : null,
       h('footer', { class: 'rel-rodape' }, 'Neofloresta Serviços Ecossistêmicos Ltda. · Gerado pelo Neofloresta Inventário ' + VERSAO));
+    try {
+      const od = await carregarOS(false); const el = document.getElementById('rel-os');
+      if (el && !od.semServidor && od.ordens.length) {
+        const r = resumoOS(od.ordens); const sts = ['Solicitada', 'Aberta', 'Em execução', 'Concluída', 'Cancelada'];
+        el.replaceChildren(h('h2', null, '9. Ordens de serviço'), h('p', null, `${fmtN(r.total)} ordens registradas, ${fmtN(r.porSt['Concluída'] || 0)} concluídas e ${fmtN(r.atrasadas)} com prazo vencido` + (r.prazoMedio != null ? `. Tempo médio do pedido à conclusão: ${fmtN(Math.round(r.prazoMedio * 10) / 10)} dias.` : '.')),
+          tab(['Tipo de serviço', ...sts, 'Total'], [...Object.entries(r.porTipo).sort((a, b) => a[0].localeCompare(b[0], 'pt')).map(([t, o]) => [t, ...sts.map((k) => fmtN(o[k] || 0)), fmtN(Object.values(o).reduce((a, b) => a + b, 0))]), ['Total', ...sts.map((k) => fmtN(r.porSt[k] || 0)), fmtN(r.total)]]));
+      }
+    } catch (e) { /* sem ordens */ }
   }
 
   // ---------- Boletim de medição (registros validados num período) ----------
@@ -1568,10 +1626,22 @@
         tab(['Equipe', 'Indivíduos', 'Pontos sem árvore', 'Total'], [...equipes.map((e) => { const x = val.filter((l) => (l.equipe || '-') === e); return [e, fmtN(x.filter(ehInd).length), fmtN(x.filter((l) => !ehInd(l)).length), fmtN(x.length)]; }), ['Total', fmtN(val.filter(ehInd).length), fmtN(val.filter((l) => !ehInd(l)).length), fmtN(val.length)]]),
         h('h2', null, '3. Registros validados no período'),
         val.length ? tab(['Nº', 'Código', 'Categoria', 'Espécie', 'Equipe', 'Validado em'], val.sort((a, b) => (+a.numero_unico || 0) - (+b.numero_unico || 0)).map((l) => [String(l.numero_unico || ''), (cc && l[cc.nome]) || '', cat ? rotuloOpcao(cat, l[cat.nome]).replace(/\s*\(.*\)/, '') : '', h('i', null, (ce && l[ce.nome]) || ''), l.equipe || '', dataBR(l.validado_em)])) : h('p', null, 'Nenhum registro validado neste período.'),
+        h('div', { id: 'med-os' }),
         h('div', { class: 'rel-assinaturas' },
           h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, p.responsavel || 'Responsável técnico'), p.registro_profissional ? h('div', null, p.registro_profissional) : null, h('div', null, 'Neofloresta Serviços Ecossistêmicos Ltda.')),
           h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, 'Fiscal do contrato'), h('div', null, 'Atesto a execução dos serviços acima. Data: ____/____/______'))),
         h('footer', { class: 'rel-rodape' }, 'Gerado pelo Neofloresta Inventário ' + VERSAO + ' em ' + new Date().toLocaleString('pt-BR')));
+      try {
+        const od = await carregarOS(false); const el = document.getElementById('med-os');
+        const feitas = od.ordens.filter((o) => o.status === 'Concluída' && o.numero && (() => { const x = diaLocal(o.concluida_em); return x && x >= de.value && x <= ate.value; })()).sort((a, b) => +a.numero - +b.numero);
+        if (el && !od.semServidor && od.ordens.length) {
+          const tipos = [...new Set(feitas.map((o) => o.tipo))].sort((a, b) => a.localeCompare(b, 'pt')); const eqs = [...new Set(feitas.map((o) => o.responsavel || '-'))].sort();
+          el.replaceChildren(h('h2', null, '4. Serviços executados no período (ordens de serviço concluídas)'),
+            h('p', null, 'Conta as ordens pela data de conclusão em campo. Cada ordem tem foto de antes e de depois guardada no sistema.'),
+            feitas.length ? [tab(['Tipo de serviço', ...eqs, 'Total'], [...tipos.map((t) => [t, ...eqs.map((e) => fmtN(feitas.filter((o) => o.tipo === t && (o.responsavel || '-') === e).length)), fmtN(feitas.filter((o) => o.tipo === t).length)]), ['Total', ...eqs.map((e) => fmtN(feitas.filter((o) => (o.responsavel || '-') === e).length)), fmtN(feitas.length)]]),
+              tab(['Ordem', 'Serviço', 'Árvore ou local', 'Equipe', 'Concluída em'], feitas.map((o) => [numOS(o), o.tipo, o.codigo_arvore || o.endereco || '', o.responsavel || '', dataBR(o.concluida_em)]))] : h('p', null, 'Nenhuma ordem de serviço concluída neste período.'));
+        }
+      } catch (e) { /* sem ordens */ }
     };
     $app.replaceChildren(h('div', { class: 'nao-imprime' }, topo('Boletim de medição', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#painel'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: () => window.print() }, 'Imprimir ou PDF'))),
       h('main', { class: 'relatorio' }, h('div', { class: 'nao-imprime cartao' }, h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'De'), de), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Até'), ate)), h('button', { class: 'btn', onclick: gerar }, 'Gerar boletim')), corpo));
@@ -1697,6 +1767,7 @@
           l.__alertas && l.__alertas.length ? h('p', { class: 'al' }, 'Alertas: ' + l.__alertas.join(' · ')) : null),
         l.latitude !== '' && l.latitude != null ? h('div', { class: 'cartao' }, mapaDiv, h('a', { href: `https://www.google.com/maps/search/?api=1&query=${l.latitude},${l.longitude}`, target: '_blank', rel: 'noopener' }, 'Abrir no Google Maps')) : null,
         fichaConteudo(form, valores, fotos),
+        secaoOSArvore(uuidR, true),
         l.historico ? h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Histórico de alterações'), String(l.historico).split(' | ').map((x) => h('p', { class: 'hist' }, x))) : null,
         ehCoord() ? h('div', { class: 'linha-btn val-dec' },
           h('button', { class: 'btn sec', disabled: i <= 0, onclick: () => irPara(i - 1) }, 'Anterior'),
@@ -1708,9 +1779,306 @@
     if (l.latitude !== '' && l.latitude != null) setTimeout(() => { const m = L.map(mapaDiv, { zoomControl: false }).setView([+l.latitude, +l.longitude], 19); camadasFundo(m, true); L.circleMarker([+l.latitude, +l.longitude], { radius: 8, color: '#fff', weight: 2, fillColor: '#E10000', fillOpacity: 1 }).addTo(m); }, 50);
   }
 
+  // ---------- Ordens de serviço ----------
+  // Fluxo: Solicitada (pedido do cliente ou da equipe) > Aberta > Em execução > Concluída, ou Cancelada.
+  // Sem internet, o pedido e a execução ficam numa fila no aparelho e sobem no próximo envio.
+  const TIPOS_OS_PADRAO = ['Poda de limpeza', 'Poda de levantamento de copa', 'Poda de adequação à rede elétrica', 'Poda de condução', 'Supressão', 'Remoção de toco', 'Plantio', 'Substituição', 'Tratamento fitossanitário', 'Avaliação de risco', 'Outro'];
+  const PRIOR_OS = ['Urgente', 'Alta', 'Média', 'Baixa'];
+  const OS_SEM_ANTES = ['Plantio', 'Avaliação de risco'];
+  const COR_OS = { Solicitada: '#8E6C8A', Aberta: '#CD834C', 'Em execução': '#12A6C8', 'Concluída': '#2E7D32', Cancelada: '#90A4AE' };
+  const numOS = (o) => (o.numero ? 'OS ' + String(o.numero).padStart(4, '0') : 'Nova ordem');
+  const hojeISO = () => diaLocal(agoraISO());
+  const atrasada = (o) => !!o.prazo && ['Aberta', 'Em execução', 'Solicitada'].includes(o.status) && o.prazo < hojeISO();
+  const ehMinhaOS = (o) => perfil() === 'coletor' && o.responsavel && o.responsavel === (S.projeto.equipe || S.sessao.usuario.equipe);
+  const podeExecutar = (o) => ehCoord() || ehMinhaOS(o);
+  async function filaOS() { return (await Store.get('osfila')) || []; }
+  async function mexerFilaOS(fn) { const f = await filaOS(); const n = (await fn(f)) || f; await Store.set('osfila', n); return n; }
+  async function carregarOS(forcar) {
+    const chave = 'os:' + S.projeto.id; const c = (await Store.get(chave)) || { ordens: [], tipos: [] };
+    {
+      if (navigator.onLine && !S.expirada && (forcar || !S.osEm || S.osEm.p !== S.projeto.id || Date.now() - S.osEm.t > 60000)) {
+        try { const j = await Api.b.osListar(S.projeto.id); c.ordens = j.ordens || []; c.tipos = j.tipos || []; c.em = agoraISO(); delete c.semServidor; await Store.set(chave, c); S.osEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { if (/desconhecida/i.test(e.message)) c.semServidor = true; }
+      }
+    }
+    const ordens = (c.ordens || []).map((o) => Object.assign({}, o));
+    for (const it of (await filaOS()).filter((x) => x.projeto === S.projeto.id)) {
+      if (it.tipo === 'salvar' && !it.dados.id) { if (!ordens.some((o) => o.id === it.dados.chave)) ordens.unshift(Object.assign({ id: it.dados.chave, numero: '', status: ehCoord() ? 'Aberta' : 'Solicitada', aberta_em: it.dados.em, solicitada_em: it.dados.em, __pend: true, __erro: it.erro || '' }, it.dados)); continue; }
+      const o = ordens.find((x) => x.id === (it.id || it.dados.id)); if (!o) continue;
+      o.__pend = true; o.__erro = it.erro || '';
+      if (it.etapa === 'iniciar' && o.status === 'Aberta') o.status = 'Em execução';
+      if (it.etapa === 'concluir') { o.status = 'Concluída'; o.execucao_obs = it.dados.obs || ''; }
+      if (it.fotos) o.__fotos = Object.assign(o.__fotos || {}, it.fotos);
+    }
+    return { ordens, tipos: (c.tipos && c.tipos.length) ? c.tipos : TIPOS_OS_PADRAO, em: c.em, semServidor: !!c.semServidor };
+  }
+  // tenta mandar na hora; sem internet (ou servidor fora do ar) guarda na fila do aparelho
+  async function enviarOS(item) {
+    item.chave = item.chave || uuid(); item.projeto = S.projeto.id; item.dados.em = item.dados.em || agoraISO();
+    if (navigator.onLine && !S.expirada) {
+      try { const r = await mandarItemOS(item); S.osEm = null; return { ok: true, ordem: r && r.ordem }; } catch (e) {
+        if (!/Sem conexão|Servidor respondeu 5/i.test(e.message)) { for (const f of Object.values(item.fotos || {})) if (f && f.chave && !f.url) await Store.apagarFoto(f.chave); throw e; }
+      }
+    }
+    await mexerFilaOS((f) => { f.push(item); }); atualizarSync();
+    return { ok: true, fila: true };
+  }
+  async function mandarItemOS(item) {
+    const dados = Object.assign({}, item.dados);
+    for (const [k, f] of Object.entries(item.fotos || {})) {
+      if (!f) continue;
+      if (!f.url) {
+        const b = await Store.foto(f.chave); if (!b) throw new Error('Foto não encontrada no aparelho.');
+        const r = await Api.b.foto(item.projeto, f.nome, b); f.url = r.url || '';
+        await mexerFilaOS((fila) => { const x = fila.find((y) => y.chave === item.chave); if (x) x.fotos[k].url = f.url; });
+      }
+      dados[k] = f.url;
+    }
+    const r = item.tipo === 'salvar' ? await Api.b.osSalvar(item.projeto, dados) : await Api.b.osAndamento(item.projeto, item.id, item.etapa, dados);
+    for (const f of Object.values(item.fotos || {})) if (f && f.chave) await Store.apagarFoto(f.chave);
+    return r;
+  }
+  async function enviarFilaOS(silencioso) {
+    const fila = (await filaOS()).filter((x) => !x.recusado); if (!fila.length) return;
+    let ok = 0, falhas = 0, erro = '';
+    for (const it of fila) {
+      try { await mandarItemOS(it); await mexerFilaOS((f) => f.filter((y) => y.chave !== it.chave)); ok++; } catch (e) {
+        if (e.sessao) break; falhas++; erro = e.message;
+        const final = !/Sem conexão|Servidor respondeu 5/i.test(e.message);
+        await mexerFilaOS((f) => { const x = f.find((y) => y.chave === it.chave); if (x) { x.erro = e.message; if (final) x.recusado = true; } });
+      }
+    }
+    S.osEm = null;
+    if (ok || falhas) if (!silencioso || falhas) toast(falhas ? `Ordens de serviço: ${ok} enviada(s), ${falhas} com problema: ${erro}` : `${ok} atualização(ões) de ordem de serviço enviada(s).`, falhas ? 5000 : 2600);
+  }
+  async function nFilaOS() { return (await filaOS()).filter((x) => !x.recusado).length; }
+
+  function etiquetaOS(o) { return h('span', { class: 'os-st', style: `background:${COR_OS[o.status] || '#8A969C'}` }, o.status + (o.__pend ? ' · a enviar' : '')); }
+  function itemOS(o) {
+    const local = o.codigo_arvore ? `Árvore ${o.codigo_arvore}` : (o.endereco || 'Ponto no mapa');
+    return h('button', { class: 'os-item' + (atrasada(o) ? ' atrasada' : ''), onclick: () => ir('#os/' + encodeURIComponent(o.id)) },
+      h('div', { class: 'os-l1' }, h('b', null, numOS(o)), h('span', null, o.tipo), etiquetaOS(o)),
+      h('div', { class: 'os-l2' }, local, o.especie ? h('i', null, ' · ' + o.especie) : null, o.bairro ? ' · ' + o.bairro : ''),
+      h('small', { class: 'os-l3' }, ['Prioridade ' + String(o.prioridade || 'Média').toLowerCase(), o.prazo ? 'prazo ' + o.prazo.split('-').reverse().join('/') : '', o.responsavel || 'sem equipe definida'].filter(Boolean).join(' · '), atrasada(o) ? h('b', { class: 'os-atraso' }, ' · Atrasada') : null),
+      o.__erro ? h('small', { class: 'motivo' }, 'Não enviado: ' + o.__erro) : null);
+  }
+  const ordenarOS = (a, b) => (atrasada(b) - atrasada(a)) || (PRIOR_OS.indexOf(a.prioridade || 'Média') - PRIOR_OS.indexOf(b.prioridade || 'Média')) || String(a.prazo || '9').localeCompare(String(b.prazo || '9')) || ((+b.numero || 1e9) - (+a.numero || 1e9));
+
+  async function telaOrdens() {
+    const pf = perfil();
+    const voltar = h('button', { class: 'ic', onclick: () => ir(pf === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar'));
+    const lista = h('div', { class: 'os-lista' }, h('div', { class: 'info' }, 'Carregando ordens de serviço...'));
+    const busca = h('input', { class: 'entrada', placeholder: 'Número, árvore, endereço ou bairro', enterkeyhint: 'search' });
+    const selTipo = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todos os tipos'));
+    const filtros = h('div', { class: 'chips os-chips' });
+    S.filtroOS = S.filtroOS || (pf === 'coletor' ? 'fazer' : 'abertas');
+    const novo = pf === 'cliente' ? 'Solicitar serviço' : ehCoord() ? 'Nova ordem' : 'Pedir serviço';
+    $app.replaceChildren(topo('Ordens de serviço', S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, h('button', { class: 'ic', onclick: () => { S.corMapa = 'os'; ir('#mapa'); }, 'aria-label': 'Mapa' }, ico('mapa')))),
+      h('main', null, h('button', { class: 'btn nova canto', onclick: () => ir('#os-nova') }, ico('mais'), novo), filtros, h('div', { class: 'grade2 os-busca' }, busca, selTipo), lista));
+    const d = await carregarOS(true);
+    if (!document.body.contains(lista)) return;
+    if (d.semServidor) { lista.replaceChildren(h('div', { class: 'aviso' }, 'O servidor do projeto ainda está numa versão sem ordens de serviço. A coordenação precisa atualizar o servidor (versão 2.2).')); return; }
+    selTipo.replaceChildren(h('option', { value: '' }, 'Todos os tipos'), d.tipos.map((t) => h('option', { value: t }, t)));
+    const grupos = [['fazer', 'A fazer', (o) => ['Aberta', 'Em execução'].includes(o.status)], ['abertas', 'Em aberto', (o) => ['Solicitada', 'Aberta', 'Em execução'].includes(o.status)], ['solicitadas', 'Pedidos', (o) => o.status === 'Solicitada'], ['atrasadas', 'Atrasadas', atrasada], ['concluidas', 'Concluídas', (o) => o.status === 'Concluída'], ['canceladas', 'Canceladas', (o) => o.status === 'Cancelada'], ['todas', 'Todas', () => true]].filter(([k]) => pf !== 'coletor' || !['abertas', 'canceladas'].includes(k));
+    const pintar = () => {
+      const g = grupos.find((x) => x[0] === S.filtroOS) || grupos[0];
+      filtros.replaceChildren(grupos.map(([k, t, f]) => h('button', { class: 'chip' + (k === g[0] ? ' sel' : ''), onclick: () => { S.filtroOS = k; pintar(); } }, `${t} (${d.ordens.filter(f).length})`)));
+      const q = norm(busca.value).trim();
+      const vis = d.ordens.filter(g[2]).filter((o) => !selTipo.value || o.tipo === selTipo.value).filter((o) => !q || norm([numOS(o), o.numero, o.codigo_arvore, o.especie, o.endereco, o.bairro, o.descricao, o.responsavel].join(' ')).includes(q)).sort(ordenarOS);
+      lista.replaceChildren(vis.length ? vis.slice(0, 500).map(itemOS) : h('div', { class: 'vazio-lista' }, d.ordens.length ? 'Nenhuma ordem neste filtro.' : pf === 'coletor' ? 'Nenhuma ordem de serviço para a sua equipe.' : 'Nenhuma ordem de serviço ainda. Abra uma pela ficha da árvore ou pelo botão acima.'));
+    };
+    busca.addEventListener('input', pintar); selTipo.addEventListener('change', pintar); pintar();
+  }
+
+  // foto de antes ou depois: tira, reduz e guarda no aparelho até enviar
+  function campoFotoOS(rotulo, alvo, k) {
+    const img = h('div', { class: 'os-foto-vazia' }, 'Sem foto');
+    const cam = h('input', { type: 'file', accept: 'image/*', capture: 'environment', class: 'oculto', onchange: async () => {
+      const arq = cam.files && cam.files[0]; if (!arq) return;
+      try {
+        const blob = await reduzir(arq, 2048, 0.85); const chave = 'os-' + uuid();
+        if (alvo[k] && alvo[k].chave) await Store.apagarFoto(alvo[k].chave);
+        await Store.salvarFoto(chave, blob); alvo[k] = { chave, nome: `OS-${chave.slice(3, 11)}-${k === 'foto_antes' ? 'antes' : 'depois'}.jpg` };
+        img.replaceWith(h('img', { class: 'os-foto', src: URL.createObjectURL(blob), alt: rotulo })); bloco.classList.remove('falta');
+      } catch (e) { toast('Não foi possível usar esta foto: ' + e.message); }
+    } });
+    const bloco = h('div', { class: 'campo os-foto-campo', 'data-foto': k }, h('label', { class: 'rot' }, rotulo), img, h('button', { class: 'btn sec peq', onclick: () => cam.click() }, ico('camera'), 'Tirar foto'), cam);
+    return bloco;
+  }
+  async function verFotoOS(link, alvo, local) {
+    if (local && local.chave) { const b = await Store.foto(local.chave); if (b) return alvo.replaceChildren(h('img', { class: 'os-foto', src: URL.createObjectURL(b), alt: '' })); }
+    const id = idDrive(link); if (!id) return;
+    alvo.replaceChildren(h('a', { href: linkSeguro(link), target: '_blank', rel: 'noopener' }, 'Abrir foto'));
+    if (Api.demo) return;
+    try { const b = await Api.b.fotoVer(S.projeto.id, id); alvo.replaceChildren(h('a', { href: linkSeguro(link), target: '_blank', rel: 'noopener' }, h('img', { class: 'os-foto', src: URL.createObjectURL(b), alt: '' }))); } catch (e) { /* sem conexão: fica o link */ }
+  }
+
+  async function telaOS(id) {
+    const d = await carregarOS(false); let o = d.ordens.find((x) => x.id === id);
+    if (!o) { const d2 = await carregarOS(true); o = d2.ordens.find((x) => x.id === id); }
+    if (!o) { toast('Ordem de serviço não encontrada.'); return ir('#ordens'); }
+    const fotos = {};
+    const exec = async (etapa) => {
+      const dados = {}; let fts = {};
+      if (etapa === 'iniciar' || etapa === 'concluir') {
+        if (etapa === 'iniciar' && !o.foto_antes && !fotos.foto_antes && !OS_SEM_ANTES.includes(o.tipo)) return falta('foto_antes', 'Tire a foto de antes do serviço.');
+        if (etapa === 'concluir') {
+          if (!o.foto_antes && !fotos.foto_antes && !OS_SEM_ANTES.includes(o.tipo)) return falta('foto_antes', 'Falta a foto de antes do serviço.');
+          if (!fotos.foto_depois) return falta('foto_depois', 'Tire a foto de depois do serviço.');
+          dados.obs = obs.value.trim();
+          if (o.status === 'Aberta') dados.iniciada_em = agoraISO();
+        }
+        fts = Object.fromEntries(Object.entries(fotos).filter(([, v]) => v));
+      } else if (etapa === 'cancelar' || etapa === 'reabrir') {
+        const t = h('textarea', { class: 'entrada', placeholder: etapa === 'cancelar' ? 'Ex.: árvore já removida pela concessionária' : 'Ex.: faltou retirar galho sobre a fiação' });
+        const okm = await modal(etapa === 'cancelar' ? 'Cancelar ordem' : 'Reabrir ordem', h('div', null, h('p', null, 'Escreva o motivo:'), t), [{ texto: 'Voltar', classe: 'sec', valor: false }, { texto: etapa === 'cancelar' ? 'Cancelar ordem' : 'Reabrir', classe: etapa === 'cancelar' ? 'perigo' : '', valor: true }]);
+        if (!okm) return; dados.obs = t.value.trim(); if (!dados.obs) return toast('Informe o motivo.');
+      } else if (etapa === 'aprovar') {
+        const r = await escolherEquipePrazo(o, 'Aprovar pedido'); if (!r) return; Object.assign(dados, r);
+      }
+      if (etapa === 'concluir' && !(await confirmar('Concluir serviço', `Concluir ${numOS(o)} (${o.tipo})? Depois de concluída, só a coordenação pode reabrir.`, 'Concluir'))) return;
+      try {
+        const r = await enviarOS({ tipo: 'andamento', id: o.id, etapa, dados, fotos: fts });
+        toast(r.fila ? 'Sem internet: guardado no aparelho. Será enviado depois.' : { iniciar: 'Execução iniciada.', concluir: 'Serviço concluído.', cancelar: 'Ordem cancelada.', reabrir: 'Ordem reaberta.', aprovar: 'Pedido aprovado.' }[etapa]);
+        telaOS(id);
+      } catch (e) { toast(e.message, 5000); }
+    };
+    const falta = (k, msg) => { if (navigator.vibrate) navigator.vibrate(120); const el = document.querySelector(`[data-foto="${k}"]`); if (el) { el.classList.add('falta', 'destaque'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); setTimeout(() => el.classList.remove('destaque'), 1600); } toast(msg); };
+    const editar = async () => {
+      const r = await escolherEquipePrazo(o, 'Alterar ordem', true); if (!r) return;
+      try { const x = await enviarOS({ tipo: 'salvar', dados: Object.assign({ id: o.id }, r) }); toast(x.fila ? 'Guardado no aparelho.' : 'Ordem alterada.'); telaOS(id); } catch (e) { toast(e.message, 5000); }
+    };
+    const obs = h('textarea', { class: 'entrada', placeholder: 'O que foi feito (opcional). Ex.: 3 galhos secos removidos' });
+    const mapaDiv = h('div', { class: 'mapa-mini', style: 'height:200px' });
+    const temPonto = o.latitude !== '' && o.latitude != null && !isNaN(+o.latitude);
+    const fa = h('div', { class: 'os-foto-box' }), fd = h('div', { class: 'os-foto-box' });
+    const linha = (rot, v) => (v ? h('div', { class: 'os-dado' }, h('small', null, rot), h('span', null, v)) : null);
+    const ativo = ['Aberta', 'Em execução'].includes(o.status) && podeExecutar(o) && !o.__pend;
+    const hist = String(o.historico || '').split(' | ').filter(Boolean);
+    $app.replaceChildren(topo(numOS(o), o.tipo, h('button', { class: 'ic', onclick: () => ir('#ordens'), 'aria-label': 'Voltar' }, ico('voltar')), null),
+      h('main', null,
+        h('div', { class: 'cartao os-cab', style: `border-left:6px solid ${COR_OS[o.status] || '#8A969C'}` }, h('div', { class: 'os-l1' }, h('b', null, o.tipo), etiquetaOS(o)),
+          h('div', { class: 'os-dados' }, linha('Prioridade', o.prioridade), linha('Prazo', o.prazo ? o.prazo.split('-').reverse().join('/') + (atrasada(o) ? ' (atrasada)' : '') : ''), linha('Equipe responsável', o.responsavel || 'A definir'),
+            linha('Pedido por', o.solicitada_por ? `${o.solicitada_por} em ${dataBR(o.solicitada_em)}` : ''), linha('Aberta por', o.aberta_por ? `${o.aberta_por} em ${dataBR(o.aberta_em)}` : ''),
+            linha('Iniciada', o.iniciada_em ? `${dataBR(o.iniciada_em)} por ${o.iniciada_por}` : ''), linha('Concluída', o.concluida_em ? `${dataBR(o.concluida_em)} por ${o.concluida_por}` : ''),
+            o.status === 'Cancelada' ? linha('Motivo do cancelamento', o.motivo) : o.motivo ? linha('Motivo da reabertura', o.motivo) : null),
+          o.descricao ? h('p', { class: 'os-desc' }, o.descricao) : null,
+          o.__erro ? h('p', { class: 'trava' }, 'Não foi aceito pelo servidor: ' + o.__erro) : null),
+        h('section', { class: 'cartao' }, h('h3', null, o.codigo_arvore ? 'Árvore ' + o.codigo_arvore : 'Local do serviço'),
+          o.especie ? h('p', null, h('i', null, o.especie)) : null, o.endereco || o.bairro ? h('p', null, [o.endereco, o.bairro].filter(Boolean).join(' · ')) : null,
+          temPonto ? mapaDiv : null,
+          h('div', { class: 'linha-btn quebra' }, temPonto ? h('a', { class: 'btn sec peq', href: `https://www.google.com/maps/dir/?api=1&destination=${o.latitude},${o.longitude}`, target: '_blank', rel: 'noopener' }, 'Como chegar') : null,
+            o.registro_uuid && perfil() !== 'coletor' ? h('button', { class: 'btn sec peq', onclick: () => { S.navVal = []; ir('#ficha/' + encodeURIComponent(o.registro_uuid)); } }, 'Ficha da árvore') : null)),
+        h('section', { class: 'cartao' }, h('h3', null, 'Execução'),
+          ativo ? h('div', { class: 'grade2' }, o.foto_antes ? h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Foto de antes'), fa) : campoFotoOS('Foto de antes' + (OS_SEM_ANTES.includes(o.tipo) ? ' (opcional)' : ''), fotos, 'foto_antes'), campoFotoOS('Foto de depois', fotos, 'foto_depois'))
+            : h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Foto de antes'), fa), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Foto de depois'), fd)),
+          ativo ? h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Observação da execução'), obs) : o.execucao_obs ? h('p', null, o.execucao_obs) : null,
+          ativo ? h('div', { class: 'linha-btn' }, o.status === 'Aberta' ? h('button', { class: 'btn sec', onclick: () => exec('iniciar') }, 'Iniciar serviço') : null, h('button', { class: 'btn', onclick: () => exec('concluir') }, 'Concluir serviço')) : null,
+          !ativo && ['Aberta', 'Em execução'].includes(o.status) && !podeExecutar(o) ? h('p', { class: 'dica' }, o.responsavel ? `A execução é registrada pela ${o.responsavel}.` : 'A coordenação ainda vai definir a equipe.') : null,
+          o.status === 'Solicitada' ? h('p', { class: 'dica' }, 'Pedido aguardando aprovação da coordenação.') : null),
+        hist.length ? h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Histórico'), hist.map((x) => h('p', { class: 'hist' }, x))) : null,
+        ehCoord() && !o.__pend ? h('div', { class: 'linha-btn quebra', style: 'margin:8px 0 30px' },
+          o.status === 'Solicitada' ? h('button', { class: 'btn', onclick: () => exec('aprovar') }, 'Aprovar pedido') : null,
+          ['Solicitada', 'Aberta', 'Em execução'].includes(o.status) ? h('button', { class: 'btn sec', onclick: editar }, 'Alterar') : null,
+          ['Solicitada', 'Aberta', 'Em execução'].includes(o.status) ? h('button', { class: 'btn perigo', onclick: () => exec('cancelar') }, 'Cancelar ordem') : null,
+          ['Concluída', 'Cancelada'].includes(o.status) ? h('button', { class: 'btn sec', onclick: () => exec('reabrir') }, 'Reabrir') : null) : null,
+        o.__erro && o.__pend ? h('div', { class: 'linha-btn' }, h('button', { class: 'btn perigo peq', onclick: async () => { await mexerFilaOS((f) => f.filter((y) => !(y.id === o.id || y.dados.chave === o.id || y.dados.id === o.id))); toast('Removido do aparelho.'); ir('#ordens'); } }, 'Remover do aparelho')) : null));
+    verFotoOS(o.foto_antes, fa, o.__fotos && o.__fotos.foto_antes); verFotoOS(o.foto_depois, fd, o.__fotos && o.__fotos.foto_depois);
+    if (!o.foto_antes && !(o.__fotos && o.__fotos.foto_antes)) fa.replaceChildren(h('div', { class: 'os-foto-vazia' }, 'Sem foto'));
+    if (!o.foto_depois && !(o.__fotos && o.__fotos.foto_depois)) fd.replaceChildren(h('div', { class: 'os-foto-vazia' }, 'Sem foto'));
+    if (temPonto) setTimeout(() => { const m = L.map(mapaDiv, { zoomControl: false }).setView([+o.latitude, +o.longitude], 19); camadasFundo(m, true); L.circleMarker([+o.latitude, +o.longitude], { radius: 8, color: '#fff', weight: 2, fillColor: COR_OS[o.status] || '#E10000', fillOpacity: 1 }).addTo(m); }, 50);
+  }
+  // equipes conhecidas: as do projeto (usuários, para a coordenação) ou as que já coletaram
+  async function equipesProjeto() {
+    const s = new Set();
+    try { if (perfil() === 'admin') (await Api.b.usuariosListar()).filter((u) => u.perfil === 'coletor' && u.equipe && String(u.projeto || '').split(',').map((x) => x.trim()).some((x) => x === S.projeto.id || x === '*')).forEach((u) => s.add(u.equipe)); } catch (e) { /* segue */ }
+    try { const c = S.linhas[S.projeto.id]; if (c) c.linhas.forEach((l) => l.equipe && s.add(l.equipe)); } catch (e) { /* segue */ }
+    ((await Store.get('os:' + S.projeto.id)) || { ordens: [] }).ordens.forEach((o) => o.responsavel && s.add(o.responsavel));
+    return [...s].sort();
+  }
+  async function escolherEquipePrazo(o, titulo, completo) {
+    const eqs = await equipesProjeto();
+    const resp = h('input', { class: 'entrada', value: o.responsavel || '', list: 'os-equipes', placeholder: 'Ex.: Equipe 1' });
+    const dl = h('datalist', { id: 'os-equipes' }, eqs.map((e) => h('option', { value: e })));
+    const prazo = h('input', { class: 'entrada', type: 'date', value: o.prazo || '' });
+    const prio = h('select', { class: 'entrada' }, PRIOR_OS.map((p) => h('option', { value: p, selected: (o.prioridade || 'Média') === p }, p)));
+    const desc = h('textarea', { class: 'entrada' }); desc.value = o.descricao || '';
+    const ok = await modal(titulo, h('div', null, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe responsável'), resp, dl), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Prazo'), prazo),
+      completo ? [h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Prioridade'), prio), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Descrição'), desc)] : null), [{ texto: 'Voltar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
+    if (!ok) return null;
+    const r = { responsavel: resp.value.trim(), prazo: prazo.value };
+    if (completo) Object.assign(r, { prioridade: prio.value, descricao: desc.value.trim() });
+    return r;
+  }
+
+  // nova ordem: a partir da árvore (uuid) ou de um ponto marcado no mapa
+  async function telaNovaOS(uuidR) {
+    const pf = perfil(); const coord = ehCoord();
+    const d = await carregarOS(false);
+    let arv = null;
+    if (uuidR) {
+      const r = await Store.registro(uuidR);
+      const cc = campoCodigo(S.form), ce = campoEspecie(S.form);
+      if (r) arv = { uuid: r.uuid, cod: cc ? r.valores[cc.nome] : '', esp: ce ? r.valores[ce.nome] : '', lat: r.lat, lon: r.lon, local: r.status !== 'enviado' };
+      else { try { const ls = await linhasProjeto(false); const l = ls.find((x) => x.uuid === uuidR); if (l) arv = { uuid: l.uuid, cod: cc ? l[cc.nome] : '', esp: ce ? l[ce.nome] : '', lat: +l.latitude, lon: +l.longitude }; } catch (e) { /* sem acesso à lista */ } }
+    }
+    const tipo = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Escolha o tipo de serviço'), d.tipos.map((t) => h('option', { value: t }, t)));
+    let prio = 'Média';
+    const chips = h('div', { class: 'chips' }); const pintarPrio = () => chips.replaceChildren(PRIOR_OS.map((p) => h('button', { class: 'chip' + (p === prio ? ' sel' : ''), onclick: () => { prio = p; pintarPrio(); } }, p))); pintarPrio();
+    const desc = h('textarea', { class: 'entrada', placeholder: 'O que precisa ser feito e por quê. Ex.: galho seco sobre a calçada, risco de queda' });
+    const resp = h('input', { class: 'entrada', list: 'os-equipes', placeholder: 'Ex.: Equipe 1' }); const dl = h('datalist', { id: 'os-equipes' });
+    const prazo = h('input', { class: 'entrada', type: 'date' });
+    const end = h('input', { class: 'entrada', placeholder: 'Rua e número, ou referência' });
+    const mapaDiv = h('div', { class: 'mapa-mini', style: 'height:260px' });
+    let ponto = arv && arv.lat ? { lat: arv.lat, lon: arv.lon } : null;
+    const salvar = async () => {
+      if (!tipo.value) { tipo.classList.add('invalido'); tipo.focus(); return toast('Escolha o tipo de serviço.'); }
+      if (!arv && !ponto) return toast('Toque no mapa para marcar o local do serviço.');
+      if (arv && arv.local) return toast('Envie o registro da árvore antes de pedir o serviço.');
+      const dados = { chave: uuid(), tipo: tipo.value, prioridade: prio, descricao: desc.value.trim() };
+      if (arv) dados.registro_uuid = arv.uuid; else Object.assign(dados, { latitude: ponto.lat, longitude: ponto.lon, endereco: end.value.trim() });
+      if (coord) Object.assign(dados, { responsavel: resp.value.trim(), prazo: prazo.value });
+      try {
+        const r = await enviarOS({ tipo: 'salvar', chave: dados.chave, dados });
+        toast(r.fila ? 'Sem internet: o pedido ficou guardado e será enviado depois.' : coord ? `${r.ordem ? numOS(r.ordem) : 'Ordem'} aberta.` : 'Pedido enviado à coordenação.');
+        ir(arv && pf === 'coletor' ? '#form/' + arv.uuid : '#ordens');
+      } catch (e) { toast(e.message, 5000); }
+    };
+    $app.replaceChildren(topo(pf === 'cliente' ? 'Solicitar serviço' : coord ? 'Nova ordem de serviço' : 'Pedir serviço', S.projeto.nome, h('button', { class: 'ic', onclick: () => history.back(), 'aria-label': 'Voltar' }, ico('voltar')), null),
+      h('main', null,
+        arv ? h('div', { class: 'cartao' }, h('h3', null, 'Árvore ' + (arv.cod || '')), arv.esp ? h('p', null, h('i', null, arv.esp)) : null, arv.local ? h('p', { class: 'trava' }, 'Este registro ainda não foi enviado. Envie antes de pedir o serviço.') : null)
+          : h('div', { class: 'cartao' }, h('h3', null, 'Local do serviço'), h('p', { class: 'dica' }, 'Toque no mapa para marcar o ponto. Para uma árvore já cadastrada, abra o pedido pela ficha dela.'), mapaDiv, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Endereço ou referência'), end)),
+        h('div', { class: 'cartao' },
+          h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Tipo de serviço *'), tipo),
+          h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Prioridade'), chips),
+          h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Descrição'), desc),
+          coord ? h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe responsável'), resp, dl), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Prazo'), prazo)) : h('p', { class: 'dica' }, 'A coordenação aprova o pedido e define a equipe e o prazo.')),
+        h('div', { class: 'linha-btn', style: 'margin:8px 0 30px' }, h('button', { class: 'btn sec', onclick: () => history.back() }, 'Cancelar'), h('button', { class: 'btn', onclick: salvar }, pf === 'cliente' || !coord ? 'Enviar pedido' : 'Abrir ordem'))));
+    if (coord) equipesProjeto().then((eqs) => dl.replaceChildren(eqs.map((e) => h('option', { value: e }))));
+    if (!arv) setTimeout(() => {
+      const c = ponto || S.pos || (() => { const ps = d.ordens.filter((o) => o.latitude !== '' && !isNaN(+o.latitude)); return ps.length ? { lat: +ps[0].latitude, lon: +ps[0].longitude } : null; })();
+      const m = L.map(mapaDiv, { maxZoom: 21 }).setView(c ? [c.lat, c.lon] : [-15.8, -47.9], c ? 18 : 4); camadasFundo(m, true);
+      let mk = null; const marcar = (lat, lon) => { ponto = { lat, lon }; if (mk) mk.setLatLng([lat, lon]); else mk = L.marker([lat, lon]).addTo(m); };
+      m.on('click', (e) => marcar(e.latlng.lat, e.latlng.lng));
+      if (S.pos && perfil() === 'coletor') marcar(S.pos.lat, S.pos.lon);
+    }, 50);
+  }
+  // seção "Ordens de serviço" da ficha de uma árvore
+  function secaoOSArvore(uuidR, enviado) {
+    const box = h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Ordens de serviço'), h('small', null, 'Carregando...'));
+    (async () => {
+      const d = await carregarOS(false); const os = d.ordens.filter((o) => o.registro_uuid === uuidR).sort((a, b) => (+b.numero || 1e9) - (+a.numero || 1e9));
+      const pf = perfil(); const rot = pf === 'cliente' ? 'Solicitar serviço' : ehCoord() ? 'Abrir ordem de serviço' : 'Pedir serviço para esta árvore';
+      box.replaceChildren(h('h3', null, 'Ordens de serviço'), d.semServidor ? h('p', { class: 'dica' }, 'Disponível depois da atualização do servidor.') : null,
+        os.length ? os.map(itemOS) : h('p', { class: 'dica' }, 'Nenhuma intervenção registrada nesta árvore.'),
+        d.semServidor ? null : enviado ? h('button', { class: 'btn sec peq', style: 'margin-top:8px', onclick: () => ir('#os-nova/' + encodeURIComponent(uuidR)) }, rot) : h('p', { class: 'dica' }, 'Para pedir um serviço, envie o registro primeiro.'));
+    })();
+    return box;
+  }
+
   // ---------- Exportação (coordenação e cliente) ----------
   const FORMATOS = [['gpkg', 'GeoPackage (QGIS)'], ['xlsx', 'Excel (.xlsx)'], ['shp', 'Shapefile (.zip)'], ['csv', 'CSV'], ['kml', 'Google Earth (.kml)']];
-  async function exportarDados(p, formato, filtro, status) {
+  async function exportarDados(p, formato, filtro, status, saida) {
+    const entregar = (nome, dados, tipo) => (saida ? saida.push({ nome, dados: dados instanceof Blob ? dados : new Blob([dados], { type: tipo || '' }) }) : baixar(nome, dados, tipo));
     const msg = (t, cls = 'info') => status.replaceChildren(h('div', { class: cls }, t));
     msg('Preparando...');
     try {
@@ -1737,7 +2105,7 @@
       if (formato === 'gpkg') {
         const estilo = await Api.b.estilo(form.id).catch(() => null);
         const r = await Gpkg.gerar({ form, linhas, epsg: p.epsg, nomeCamada: Q2F.slug(p.id).replace(/-/g, '_'), estiloQml: estilo });
-        baixar(base + '.gpkg', r.bytes, 'application/geopackage+sqlite3');
+        entregar(base + '.gpkg', r.bytes, 'application/geopackage+sqlite3');
         msg(`GeoPackage gerado: ${fmtN(r.total)} registros em SIRGAS 2000 / UTM (EPSG:${r.srs})${r.semPonto ? `, ${r.semPonto} sem coordenada` : ''}${estilo ? ', com a simbologia do QGIS embutida' : ''}. Fotos: baixe a pasta DCIM do projeto no Drive e coloque ao lado do arquivo.`);
       } else if (formato === 'xlsx') {
         const leg = linhas.map(legivel);
@@ -1749,29 +2117,67 @@
             .map(([c, d, u]) => ({ Campo: c, 'Nome no app': '', Unidade: u, Descrição: d, Tipo: '', Opções: '' }))];
         const meta = [['Projeto', p.nome], ['Contratante', p.contratante || ''], ['Contrato', p.contrato || ''], ['Município', p.municipio || ''], ['Responsável técnico', [p.responsavel, p.registro_profissional, p.art ? 'ART ' + p.art : ''].filter(Boolean).join(' · ')],
           ['Registros neste arquivo', String(linhas.length)], ['Filtro', filtro === 'validados' ? 'Somente registros validados' : 'Todos os registros, exceto descartados'], ['Sistema de referência das coordenadas', 'SIRGAS 2000, geográficas (EPSG:4674)'], ['Formulário', `${form.nome} (versão ${form.versao || 1})`], ['Gerado em', new Date().toLocaleString('pt-BR')], ['Gerado por', `${S.sessao.usuario.nome || S.sessao.u} no Neofloresta Inventário ${VERSAO}`]].map(([k, v]) => ({ Item: k, Valor: v }));
-        const b = await Arquivos.xlsx([{ nome: 'Registros', cols, linhas: leg.map((l) => Object.fromEntries(cols.map((c) => [c, l[c]]))) }, { nome: 'Dicionário de campos', cols: ['Campo', 'Nome no app', 'Unidade', 'Descrição', 'Tipo', 'Opções'], linhas: dic }, { nome: 'Metadados', cols: ['Item', 'Valor'], linhas: meta }]);
-        void rot; baixar(base + '.xlsx', b);
-        msg(`Excel gerado com ${fmtN(linhas.length)} registros e as abas "Dicionário de campos" e "Metadados".`);
+        const abas = [{ nome: 'Registros', cols, linhas: leg.map((l) => Object.fromEntries(cols.map((c) => [c, l[c]]))) }];
+        try {
+          const os = (await Api.b.osListar(p.id)).ordens || [];
+          if (os.length) {
+            const dt = (v) => { const d = v ? new Date(v) : null; return d && !isNaN(d) ? d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''; };
+            const co = [['numero', 'Número'], ['tipo', 'Serviço'], ['status', 'Situação'], ['prioridade', 'Prioridade'], ['codigo_arvore', 'Árvore'], ['especie', 'Espécie'], ['endereco', 'Endereço'], ['bairro', 'Bairro'], ['latitude', 'Latitude'], ['longitude', 'Longitude'], ['descricao', 'Descrição'], ['responsavel', 'Equipe'], ['prazo', 'Prazo'], ['solicitada_por', 'Pedido por'], ['solicitada_em', 'Pedido em'], ['aberta_por', 'Aberta por'], ['aberta_em', 'Aberta em'], ['iniciada_em', 'Iniciada em'], ['concluida_por', 'Concluída por'], ['concluida_em', 'Concluída em'], ['execucao_obs', 'Observação da execução'], ['foto_antes', 'Foto de antes'], ['foto_depois', 'Foto de depois'], ['motivo', 'Motivo (cancelamento ou reabertura)'], ['historico', 'Histórico'], ['registro_uuid', 'Identificador da árvore']];
+            abas.push({ nome: 'Ordens de serviço', cols: co.map((c) => c[1]), linhas: os.sort((a, b) => +a.numero - +b.numero).map((o) => Object.fromEntries(co.map(([k, t]) => [t, /_em$/.test(k) ? dt(o[k]) : k === 'numero' || k === 'latitude' || k === 'longitude' ? (o[k] === '' || o[k] == null ? '' : +o[k]) : k === 'prazo' && o[k] ? o[k].split('-').reverse().join('/') : o[k] ?? ''])) ) });
+            meta.push({ Item: 'Ordens de serviço neste arquivo', Valor: String(os.length) });
+          }
+        } catch (e) { /* servidor sem ordens de serviço */ }
+        const b = await Arquivos.xlsx([...abas, { nome: 'Dicionário de campos', cols: ['Campo', 'Nome no app', 'Unidade', 'Descrição', 'Tipo', 'Opções'], linhas: dic }, { nome: 'Metadados', cols: ['Item', 'Valor'], linhas: meta }]);
+        void rot; entregar(base + '.xlsx', b);
+        msg(`Excel gerado com ${fmtN(linhas.length)} registros${abas.length > 1 ? `, ${pl(abas[1].linhas.length, 'ordem de serviço', 'ordens de serviço')}` : ''} e as abas "Dicionário de campos" e "Metadados".`);
       } else if (formato === 'shp') {
         const epsg = epsgNum(); const z = UTM.fusoDoEpsg(epsg);
         const pontos = linhas.map((l) => (l.latitude === '' || l.latitude == null ? null : (() => { const u = UTM.paraUTM(+l.latitude, +l.longitude, z); return { x: u.x, y: u.y }; })()));
         const b = await Arquivos.shapefile({ nome: base, cols, linhas, pontos, prj: UTM.wkt(z) });
-        baixar(base + '_shapefile.zip', b);
+        entregar(base + '_shapefile.zip', b);
         msg(`Shapefile gerado com ${fmtN(linhas.length)} pontos em SIRGAS 2000 / UTM ${z}S (EPSG:${epsg}). Os nomes de campo do shapefile têm até 10 letras; o arquivo _campos.csv traz o nome completo de cada um.`);
       } else if (formato === 'kml') {
         const x = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const chave = (n) => n && /^(numero_unico|equipe|criado_em|precisao_gps_m|validacao)$|codigo|especie|categoria|situa|dap|altura|risco|foto 1 link/i.test(norm(n));
         const ck = cols.filter(chave);
         const pms = linhas.filter((l) => l.latitude !== '' && l.latitude != null).map((l) => { const g = legivel(l); return `<Placemark><name>${x(cc ? l[cc.nome] : l.numero_unico)}</name>${ce && l[ce.nome] ? `<description>${x(l[ce.nome])}</description>` : ''}<ExtendedData>${ck.map((c) => `<Data name="${x(rot(c))}"><value>${x(g[c])}</value></Data>`).join('')}</ExtendedData><Point><coordinates>${+l.longitude},${+l.latitude},0</coordinates></Point></Placemark>`; });
-        baixar(base + '.kml', `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(p.nome)}</name>${pms.join('\n')}</Document></kml>`, 'application/vnd.google-earth.kml+xml');
+        entregar(base + '.kml', `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(p.nome)}</name>${pms.join('\n')}</Document></kml>`, 'application/vnd.google-earth.kml+xml');
         msg(`KML gerado com ${fmtN(pms.length)} pontos e os campos principais (abre no Google Earth e no Google Maps).`);
       } else {
         const esc = (v) => { if (typeof v === 'number') return String(v).replace('.', ','); let s = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+([.,]\d+)?$/.test(s)) s = "'" + s; return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
         const valCsv = (v) => v;
         const csv = '﻿' + [cols.join(';'), ...linhas.map((l) => cols.map((c) => esc(valCsv(l[c]))).join(';'))].join('\r\n');
-        baixar(base + '.csv', csv, 'text/csv'); msg(`CSV gerado com ${fmtN(linhas.length)} linhas (separador ponto e vírgula, decimal com vírgula, pronto para o Excel em português).`);
+        entregar(base + '.csv', csv, 'text/csv'); msg(`CSV gerado com ${fmtN(linhas.length)} linhas (separador ponto e vírgula, decimal com vírgula, pronto para o Excel em português).`);
       }
       Api.b.auditar('exportar', p.id, `${formato} ${filtro} ${linhas.length}`);
+    } catch (e) { msg(e.message, 'aviso'); if (saida) throw e; }
+  }
+  // pacote final de entrega: dados em todos os formatos, dicionário, ordens de serviço, leia-me e, em projetos pequenos, as fotos
+  async function pacoteEntrega(p, filtro, status) {
+    const msg = (t, cls = 'info') => status.replaceChildren(h('div', { class: cls }, t));
+    const arqs = [];
+    try {
+      for (const f of ['gpkg', 'xlsx', 'shp', 'csv', 'kml']) { const st = h('div'); msg(`Gerando ${FORMATOS.find((x) => x[0] === f)[1]}...`); await exportarDados(p, f, filtro, st, arqs); }
+      const linhas = (await Api.b.listarTudo(p.id)).filter((l) => l.validacao !== 'Descartado' && (filtro !== 'validados' || l.validacao === 'Validado'));
+      const form = await Api.b.formulario(p.formulario);
+      const fotos = []; for (const l of linhas) for (const c of form.campos.filter((k) => k.tipo === 'photo')) { const id = idDrive(l[c.nome + ' link']); if (id) fotos.push({ id, nome: String(l[c.nome] || id).replace(/^DCIM\//, '') }); }
+      let os = []; try { os = (await Api.b.osListar(p.id)).ordens || []; } catch (e) { /* sem ordens */ }
+      os.forEach((o) => [['foto_antes', 'antes'], ['foto_depois', 'depois']].forEach(([k, t]) => { const id = idDrive(o[k]); if (id) fotos.push({ id, nome: `ordens/OS-${String(o.numero).padStart(4, '0')}-${t}.jpg` }); }));
+      const LIM = 300; let baixadas = 0;
+      if (fotos.length <= LIM) for (const f of fotos) { msg(`Baixando fotos: ${baixadas + 1} de ${fotos.length}...`); try { arqs.push({ nome: 'DCIM/' + f.nome, dados: await Api.b.fotoVer(p.id, f.id) }); baixadas++; } catch (e) { /* fica o link na planilha */ } }
+      const dia = new Date().toLocaleDateString('pt-BR');
+      const leia = [`Pacote de entrega: ${p.nome}`, `Gerado em ${dia} pelo Neofloresta Inventário ${VERSAO}.`, `Contratante: ${p.contratante || ''}  Contrato: ${p.contrato || ''}  Município: ${p.municipio || ''}`, `Responsável técnico: ${[p.responsavel, p.registro_profissional, p.art ? 'ART ' + p.art : ''].filter(Boolean).join(', ')}`, '',
+        `Registros: ${linhas.length} (${filtro === 'validados' ? 'somente validados' : 'todos, exceto descartados'}).`, `Ordens de serviço: ${os.length}.`, '',
+        'Arquivos:', ...arqs.filter((a) => !a.nome.startsWith('DCIM/')).map((a) => '  ' + a.nome + ({ gpkg: ': GeoPackage para o QGIS, em SIRGAS 2000 / UTM, com a simbologia embutida', xlsx: ': Excel com os registros, as ordens de serviço, o dicionário de campos (unidade e descrição) e os metadados', zip: ': Shapefile em SIRGAS 2000 / UTM; o arquivo _campos.csv traz o nome completo de cada campo', csv: ': texto separado por ponto e vírgula, decimal com vírgula', kml: ': Google Earth e Google Maps' }[a.nome.split('.').pop()] || '')),
+        fotos.length <= LIM ? `  DCIM/: ${baixadas} fotos dos registros e das ordens de serviço (os nomes batem com as colunas de foto da planilha).` : `  Fotos: são ${fotos.length}, grandes demais para um arquivo só. Baixe a pasta DCIM do projeto no Google Drive (botão direito > Fazer download) e coloque ao lado do GeoPackage. Cada linha da planilha tem o link da foto.`,
+        '', 'Coordenadas: SIRGAS 2000. Datas e horas no horário de Brasília nas planilhas legíveis e em UTC (ISO 8601) no CSV.', 'Os dados pertencem ao contratante. A Neofloresta atua como operadora dos dados, conforme o termo de uso e privacidade do sistema.'].join('\r\n');
+      arqs.push({ nome: 'LEIA-ME.txt', dados: new Blob(['﻿' + leia], { type: 'text/plain' }) });
+      msg('Compactando...');
+      const prontos = []; for (const a of arqs) prontos.push({ nome: a.nome, dados: new Uint8Array(await a.dados.arrayBuffer()) });
+      const z = await Arquivos.zip(prontos);
+      baixar(`${p.id}_pacote_entrega_${new Date().toISOString().slice(0, 10)}.zip`, z);
+      msg(`Pacote gerado: ${pl(linhas.length, 'registro', 'registros')}, ${pl(os.length, 'ordem de serviço', 'ordens de serviço')}, 5 formatos de dados${fotos.length <= LIM ? `, ${pl(baixadas, 'foto', 'fotos')}` : ''} e o LEIA-ME com o conteúdo.`);
+      Api.b.auditar('exportar', p.id, `pacote ${filtro} ${linhas.length}`);
     } catch (e) { msg(e.message, 'aviso'); }
   }
   async function adminExportar(corpo) {
@@ -1784,6 +2190,7 @@
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Exportar dados'),
       h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), sel), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Registros'), filtro)), links,
       h('div', { class: 'linha-btn quebra' }, FORMATOS.map(([f, t], i) => h('button', { class: 'btn' + (i ? ' sec' : ''), onclick: () => exportarDados(projetos.find((x) => x.id === sel.value), f, filtro.value, status) }, t))),
+      h('div', { class: 'linha-btn' }, h('button', { class: 'btn linha', onclick: () => pacoteEntrega(projetos.find((x) => x.id === sel.value), filtro.value, status) }, 'Pacote final de entrega (tudo num arquivo .zip)')),
       h('p', { class: 'dica' }, 'Todos os formatos trazem a coluna numero_unico (numeração única do projeto, sem distinção de equipe) e a situação da validação. O Excel traz as opções por extenso e um dicionário de campos.'), status));
   }
   async function exportarCliente() {
@@ -1905,8 +2312,9 @@
     const salvar = async () => { try { const r = await Api.b.backupConfig(emails.value, ativo.checked); msg.replaceChildren(h('div', { class: 'info' }, r.ativo ? `Cópia diária ligada (todo dia às 2h). Emails: ${r.emails || 'nenhum'}.` : 'Cópia diária desligada.')); } catch (e) { msg.replaceChildren(h('div', { class: 'aviso' }, e.message)); } };
     const agora = async () => { msg.replaceChildren(h('div', { class: 'info' }, 'Copiando as planilhas...')); try { const r = await Api.b.backupAgora(); msg.replaceChildren(h('div', { class: r.erros && r.erros.length ? 'aviso' : 'info' }, `Cópia feita: ${r.resumo}. `, r.pasta ? h('a', { href: r.pasta, target: '_blank', rel: 'noopener' }, 'Abrir pasta') : null)); } catch (e) { msg.replaceChildren(h('div', { class: 'aviso' }, e.message)); } };
     const filtro = h('input', { class: 'entrada', placeholder: 'Filtrar por usuário ou ação' });
+    const restaura = h('div', null, h('small', null, 'Carregando...')); const chaves = h('div', null, h('small', null, 'Carregando...'));
     const tabela = h('div', { style: 'overflow-x:auto' });
-    const ROT_AC = { login: 'Entrou', login_falhou: 'Senha errada', usuario_bloqueado: 'Usuário bloqueado', usuario_desbloquear: 'Desbloqueou usuário', usuario_salvar: 'Salvou usuário', usuario_remover: 'Removeu usuário', projeto_salvar: 'Salvou projeto', formulario_salvar: 'Salvou formulário', validar: 'Validação', importar: 'Importação', exportar: 'Exportação', relatorio: 'Relatório', backup_agora: 'Cópia de segurança', backup_config: 'Configurou cópia', trocar_senha: 'Trocou a senha', aceitar_termo: 'Aceitou o termo' };
+    const ROT_AC = { login: 'Entrou', login_falhou: 'Senha errada', usuario_bloqueado: 'Usuário bloqueado', usuario_desbloquear: 'Desbloqueou usuário', usuario_salvar: 'Salvou usuário', usuario_remover: 'Removeu usuário', projeto_salvar: 'Salvou projeto', formulario_salvar: 'Salvou formulário', validar: 'Validação', importar: 'Importação', exportar: 'Exportação', relatorio: 'Relatório', backup_agora: 'Cópia de segurança', backup_config: 'Configurou cópia', backup_restaurar: 'Restaurou cópia', trocar_senha: 'Trocou a senha', aceitar_termo: 'Aceitou o termo', chave_criar: 'Criou chave de integração', chave_revogar: 'Revogou chave de integração', os_abrir: 'Abriu ordem de serviço', os_alterar: 'Alterou ordem de serviço', os_aprovar: 'Aprovou pedido de serviço', os_iniciar: 'Iniciou ordem de serviço', os_concluir: 'Concluiu ordem de serviço', os_cancelar: 'Cancelou ordem de serviço', os_reabrir: 'Reabriu ordem de serviço', api_listar: 'Integração: consultou registros', api_os_listar: 'Integração: consultou ordens', api_painel: 'Integração: consultou indicadores', api_mapa: 'Integração: consultou mapa' };
     let itens = [];
     const pintar = () => { const q = norm(filtro.value); tabela.replaceChildren(h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Quando'), h('th', null, 'Usuário'), h('th', null, 'Ação'), h('th', null, 'Detalhe')),
       itens.filter((i) => !q || norm(i.login + ' ' + i.acao + ' ' + (ROT_AC[i.acao] || '') + ' ' + i.alvo + ' ' + i.detalhe).includes(q)).slice(0, 300).map((i) => h('tr', null, h('td', null, dataBR(i.em)), h('td', null, i.login), h('td', null, ROT_AC[i.acao] || i.acao), h('td', null, [i.alvo, i.detalhe].filter(Boolean).join(' · ')))))); };
@@ -1918,8 +2326,54 @@
           st.ultimo ? h('p', null, `Última cópia: ${dataBR(st.ultimo.em)} (${st.ultimo.resumo}). `, st.ultimo.pasta ? h('a', { href: st.ultimo.pasta, target: '_blank', rel: 'noopener' }, 'Abrir') : null) : h('p', null, 'Nenhuma cópia feita ainda.'),
           h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Enviar para os emails'), emails), h('label', null, ativo, ' Fazer cópia automática todo dia'),
           h('div', { class: 'linha-btn' }, h('button', { class: 'btn', onclick: salvar }, 'Salvar'), h('button', { class: 'btn sec', onclick: agora }, 'Fazer cópia agora')), msg]),
+      st.demo ? null : h('div', { class: 'cartao' }, h('h3', null, 'Restaurar uma cópia'), h('p', { class: 'dica' }, 'Volta os registros e as ordens de serviço de um projeto para como estavam no dia da cópia. Antes, o app guarda uma cópia do estado atual, que aparece nesta lista para desfazer.'), restaura),
+      st.demo ? null : h('div', { class: 'cartao' }, h('h3', null, 'Chaves de integração'), h('p', { class: 'dica' }, 'Para outro sistema (da prefeitura ou da concessionária) consultar os dados do projeto. A chave só permite ler registros, ordens de serviço e indicadores; não grava nada. Cada uso fica na auditoria. Como usar: docs/api.md no repositório do app.'), chaves),
       h('div', { class: 'cartao' }, h('h3', null, 'Registro de auditoria'), h('p', { class: 'dica' }, 'Entradas no sistema, senhas erradas, bloqueios, mudanças em usuários, projetos e formulários, validações, importações e exportações. As alterações em cada árvore ficam na coluna historico do próprio registro.'), filtro, tabela));
     try { itens = await Api.b.auditoria(500); pintar(); } catch (e) { tabela.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
+    if (!st.demo) { pintarRestauracao(restaura); pintarChaves(chaves); }
+  }
+  async function pintarRestauracao(box) {
+    const projetos = await Api.b.projetosListar().catch(() => []);
+    const selP = h('select', { class: 'entrada' }, projetos.map((p) => h('option', { value: p.id, selected: S.projeto && p.id === S.projeto.id }, p.nome)));
+    const selC = h('select', { class: 'entrada' }); const msg = h('div');
+    const carregar = async () => { selC.replaceChildren(h('option', { value: '' }, 'Carregando...')); try { const cs = await Api.b.backupListar(selP.value); selC.replaceChildren(cs.length ? cs.map((c) => h('option', { value: c.id }, /antes da restauração/.test(c.nome) ? 'Estado antes de uma restauração (' + c.nome.slice(-16).replace(/-(\d\d)$/, ':$1') + ')' : 'Cópia de ' + c.dia.split('-').reverse().join('/'))) : h('option', { value: '' }, 'Nenhuma cópia deste projeto ainda')); } catch (e) { selC.replaceChildren(h('option', { value: '' }, e.message)); } };
+    const restaurar = async () => {
+      const p = projetos.find((x) => x.id === selP.value); if (!selC.value || !p) return toast('Escolha a cópia.');
+      const conf = h('input', { class: 'entrada', placeholder: p.nome });
+      const ok = await modal('Restaurar cópia', h('div', null, h('p', null, `Os registros e as ordens de serviço de "${p.nome}" vão voltar para: ${selC.selectedOptions[0].textContent}.`), h('div', { class: 'aviso' }, 'O que foi enviado depois dessa data deixa de aparecer na planilha (fica guardado na cópia "antes da restauração"). Avise as equipes antes.'), h('p', null, 'Para confirmar, escreva o nome do projeto:'), conf), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Restaurar', classe: 'perigo', valor: true }]);
+      if (!ok) return; if (conf.value.trim() !== p.nome) return toast('O nome não confere. Nada foi alterado.');
+      msg.replaceChildren(h('div', { class: 'info' }, 'Restaurando...'));
+      try { const r = await Api.b.backupRestaurar(p.id, selC.value); S.linhas = {}; S.painel = null; msg.replaceChildren(h('div', { class: 'info' }, `Restaurado: ${pl(r.registros, 'registro', 'registros')} e ${pl(r.ordens, 'ordem de serviço', 'ordens de serviço')}. O estado anterior foi guardado e aparece na lista para desfazer.`)); carregar(); } catch (e) { msg.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
+    };
+    selP.addEventListener('change', carregar);
+    box.replaceChildren(h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), selP), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Cópia'), selC)), h('div', { class: 'linha-btn' }, h('button', { class: 'btn perigo', onclick: restaurar }, 'Restaurar esta cópia')), msg);
+    carregar();
+  }
+  async function pintarChaves(box) {
+    const projetos = await Api.b.projetosListar().catch(() => []);
+    const nome = h('input', { class: 'entrada', placeholder: 'Ex.: Sistema da prefeitura' });
+    const selP = h('select', { class: 'entrada' }, projetos.map((p) => h('option', { value: p.id, selected: S.projeto && p.id === S.projeto.id }, p.nome)));
+    const lista = h('div'); const msg = h('div');
+    const pintar = async () => {
+      try {
+        const cs = await Api.b.chavesListar();
+        lista.replaceChildren(cs.length ? h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Nome'), h('th', null, 'Projeto'), h('th', null, 'Criada'), h('th', null, 'Situação'), h('th', null, '')),
+          cs.map((c) => h('tr', null, h('td', null, c.nome), h('td', null, c.projeto), h('td', null, `${dataBR(c.criada_em)} por ${c.criada_por}`), h('td', null, c.ativa ? 'Ativa' : 'Revogada'),
+            h('td', null, c.ativa ? h('button', { class: 'btn perigo peq', onclick: async () => { if (!(await confirmar('Revogar chave', `O sistema "${c.nome}" deixa de conseguir consultar os dados. Revogar?`, 'Revogar', 'perigo'))) return; try { await Api.b.chaveRevogar(c.id); toast('Chave revogada.'); pintar(); } catch (e) { toast(e.message); } } }, 'Revogar') : null))))
+          : h('p', { class: 'dica' }, 'Nenhuma chave criada.'));
+      } catch (e) { lista.replaceChildren(h('div', { class: 'aviso' }, /desconhecida/i.test(e.message) ? 'Disponível depois da atualização do servidor (versão 2.2).' : e.message)); }
+    };
+    const criar = async () => {
+      if (!nome.value.trim()) return toast('Dê um nome à chave.');
+      try {
+        const r = await Api.b.chaveCriar(nome.value.trim(), selP.value); nome.value = '';
+        const campo = h('input', { class: 'entrada', value: r.chave, readonly: true, onfocus: (e) => e.target.select() });
+        msg.replaceChildren(h('div', { class: 'info' }, h('p', null, 'Copie a chave agora. Ela não aparece de novo; se perder, revogue e crie outra.'), campo, h('button', { class: 'btn sec peq', style: 'margin-top:8px', onclick: async () => { try { await navigator.clipboard.writeText(r.chave); toast('Chave copiada.'); } catch (e) { campo.select(); } } }, 'Copiar')));
+        pintar();
+      } catch (e) { toast(e.message, 5000); }
+    };
+    box.replaceChildren(h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome do sistema'), nome), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), selP)), h('div', { class: 'linha-btn' }, h('button', { class: 'btn', onclick: criar }, 'Criar chave')), msg, lista);
+    pintar();
   }
 
   // ---------- Fundo do mapa: ruas ou satélite ----------
