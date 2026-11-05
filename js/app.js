@@ -27,6 +27,7 @@
   const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const pad = (n, l = 2) => String(n).padStart(l, '0');
   function carimbo(d = new Date()) { return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}${pad(d.getMilliseconds(), 3)}`; }
+  function dataAno(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }); }
   function dataBR(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return String(iso); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   function numBR(v) { return v == null || v === '' ? '' : String(v).replace('.', ','); }
   function paraNum(s) { if (s == null) return null; const t = String(s).trim().replace(',', '.'); if (t === '') return null; const n = Number(t); return isNaN(n) ? null : n; }
@@ -34,7 +35,8 @@
   function modal(titulo, corpo, botoes) {
     return new Promise((res) => {
       const fechar = (v) => { veu.remove(); res(v); };
-      const veu = h('div', { class: 'veu', onclick: (e) => { if (e.target === veu) fechar(null); } },
+      const aberto = Date.now();
+      const veu = h('div', { class: 'veu', onclick: (e) => { if (e.target === veu && Date.now() - aberto > 400) fechar(null); } },
         h('div', { class: 'folha' }, titulo ? h('h3', null, titulo) : null, corpo,
           botoes && botoes.length ? h('div', { class: 'linha-btn', style: 'margin-top:14px' }, botoes.map((b) => h('button', { class: 'btn ' + (b.classe || ''), onclick: () => fechar(b.valor) }, b.texto))) : null));
       document.body.append(veu);
@@ -236,8 +238,8 @@
   }
 
   async function sair(semPerguntar) {
-    const pend = (await Store.todosRegistros()).filter((r) => r.status === 'pendente').length;
-    if (!semPerguntar && pend && !(await confirmar('Sair', `Há ${pend} registro(s) ainda não enviados. Eles continuam guardados neste aparelho e serão enviados no próximo acesso.`, 'Sair mesmo assim'))) return;
+    const pend = (await Store.todosRegistros()).filter((r) => r.status === 'pendente').length + (S.sessao ? await nFilaOS() : 0);
+    if (!semPerguntar && pend && !(await confirmar('Sair', `Há ${pend} registro(s) ou atualização(ões) de ordem de serviço ainda não enviados. Eles continuam guardados neste aparelho e serão enviados no próximo acesso.`, 'Sair mesmo assim'))) return;
     try { await Api.b.sair(); } catch (e) { /* sem conexão: a sessão expira sozinha */ }
     S.ultimoUsuario = S.sessao && S.sessao.u; S.sessao = null; S.projeto = null; S.linhas = {}; await Store.del('sessao'); location.hash = ''; telaLogin();
   }
@@ -367,7 +369,7 @@
     try {
       const d = await carregarOS(false); if (!document.body.contains(el)) return;
       const f = d.ordens.filter((o) => ehMinhaOS(o) && ['Aberta', 'Em execução'].includes(o.status)); const at = f.filter(atrasada).length;
-      el.replaceChildren(f.length ? h('button', { class: 'faixa-os', onclick: () => { S.filtroOS = 'fazer'; ir('#ordens'); } }, h('b', null, `${f.length} ordem${f.length > 1 ? 'ns' : ''} de serviço para a sua equipe`), h('span', null, at ? `${at} atrasada${at > 1 ? 's' : ''}. Toque para ver` : 'Toque para ver e registrar a execução')) : '');
+      el.replaceChildren(f.length ? h('button', { class: 'faixa-os', onclick: () => { S.filtroOS = 'fazer'; ir('#ordens'); } }, h('b', null, `${f.length} ${f.length > 1 ? 'ordens' : 'ordem'} de serviço para a sua equipe`), h('span', null, at ? `${at} atrasada${at > 1 ? 's' : ''}. Toque para ver` : 'Toque para ver e registrar a execução')) : '');
     } catch (e) { /* sem ordens */ }
   }
   const urls = new Map();
@@ -1530,7 +1532,7 @@
     const conc = ativos.filter((o) => o.status === 'Concluída' && o.concluida_em);
     const dias = conc.map((o) => (new Date(o.concluida_em) - new Date(o.solicitada_em || o.aberta_em)) / 864e5).filter((x) => isFinite(x) && x >= 0);
     const mes = diaLocal(agoraISO()).slice(0, 7);
-    return { total: ativos.length, porSt, porTipo, atrasadas: ativos.filter(atrasada).length, concMes: conc.filter((o) => diaLocal(o.concluida_em).slice(0, 7) === mes).length, prazoMedio: dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : null };
+    return { total: ativos.length, porSt, porTipo, atrasadas: ativos.filter(atrasada).length, concMes: conc.filter((o) => diaLocal(o.concluida_em).slice(0, 7) === mes).length, foraPrazo: conc.filter((o) => o.prazo && diaLocal(o.concluida_em) > o.prazo).length, prazoMedio: dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : null };
   }
   async function pintarPainelOS(corpo) {
     let d; try { d = await carregarOS(false); } catch (e) { return; }
@@ -1538,7 +1540,7 @@
     const r = resumoOS(d.ordens); const abertas = (r.porSt.Aberta || 0) + (r.porSt['Em execução'] || 0);
     const sec = h('section', { class: 'painel-os' }, h('h2', { class: 'painel-tit' }, 'Ordens de serviço'),
       h('div', { class: 'kpis' }, kpi('Em aberto', fmtN(abertas), `${fmtN(r.porSt['Em execução'] || 0)} em execução`), kpi('Pedidos a aprovar', fmtN(r.porSt.Solicitada || 0), ''), kpi('Atrasadas', fmtN(r.atrasadas), 'prazo vencido', r.atrasadas ? 'alerta' : ''),
-        kpi('Concluídas no mês', fmtN(r.concMes), `${fmtN(r.porSt['Concluída'] || 0)} no total`), r.prazoMedio != null ? kpi('Tempo médio', fmtN(Math.round(r.prazoMedio * 10) / 10) + ' dias', 'do pedido à conclusão') : null),
+        kpi('Concluídas no mês', fmtN(r.concMes), `${fmtN(r.porSt['Concluída'] || 0)} no total` + (r.foraPrazo ? `, ${fmtN(r.foraPrazo)} depois do prazo` : '')), r.prazoMedio != null ? kpi('Tempo médio', fmtN(Math.round(r.prazoMedio * 10) / 10) + ' dias', 'do pedido à conclusão') : null),
       h('div', { class: 'grade-cartoes' },
         h('div', { class: 'cartao' }, h('h3', null, 'Situação'), barras(['Solicitada', 'Aberta', 'Em execução', 'Concluída', 'Cancelada'].map((k) => ({ rot: k, n: r.porSt[k] || 0, cor: COR_OS[k] })).filter((x) => x.n), { total: r.total })),
         h('div', { class: 'cartao' }, h('h3', null, 'Por tipo de serviço'), barras(Object.entries(r.porTipo).map(([t, o]) => ({ rot: t, n: Object.values(o).reduce((a, b) => a + b, 0) })).sort((a, b) => b.n - a.n), { total: r.total, cor: CORES[1] }))),
@@ -1637,9 +1639,9 @@
         if (el && !od.semServidor && od.ordens.length) {
           const tipos = [...new Set(feitas.map((o) => o.tipo))].sort((a, b) => a.localeCompare(b, 'pt')); const eqs = [...new Set(feitas.map((o) => o.responsavel || '-'))].sort();
           el.replaceChildren(h('h2', null, '4. Serviços executados no período (ordens de serviço concluídas)'),
-            h('p', null, 'Conta as ordens pela data de conclusão em campo. Cada ordem tem foto de antes e de depois guardada no sistema.'),
+            h('p', null, 'Conta as ordens pela data de conclusão em campo. As fotos de cada serviço ficam guardadas no sistema (antes e depois; plantio e avaliação de risco têm ao menos a foto de depois). ' + (feitas.filter((o) => o.prazo && diaLocal(o.concluida_em) > o.prazo).length ? `${pl(feitas.filter((o) => o.prazo && diaLocal(o.concluida_em) > o.prazo).length, 'ordem foi concluída', 'ordens foram concluídas')} depois do prazo.` : 'Todas as ordens com prazo foram concluídas dentro dele.')),
             feitas.length ? [tab(['Tipo de serviço', ...eqs, 'Total'], [...tipos.map((t) => [t, ...eqs.map((e) => fmtN(feitas.filter((o) => o.tipo === t && (o.responsavel || '-') === e).length)), fmtN(feitas.filter((o) => o.tipo === t).length)]), ['Total', ...eqs.map((e) => fmtN(feitas.filter((o) => (o.responsavel || '-') === e).length)), fmtN(feitas.length)]]),
-              tab(['Ordem', 'Serviço', 'Árvore ou local', 'Equipe', 'Concluída em'], feitas.map((o) => [numOS(o), o.tipo, o.codigo_arvore || o.endereco || '', o.responsavel || '', dataBR(o.concluida_em)]))] : h('p', null, 'Nenhuma ordem de serviço concluída neste período.'));
+              tab(['Ordem', 'Serviço', 'Árvore ou local', 'Equipe', 'Prazo', 'Concluída em', 'No prazo', 'Fotos'], feitas.map((o) => [numOS(o), o.tipo, o.codigo_arvore || o.endereco || '', o.responsavel || '', o.prazo ? o.prazo.split('-').reverse().join('/') : '', dataAno(o.concluida_em), o.prazo ? (diaLocal(o.concluida_em) <= o.prazo ? 'Sim' : 'Não') : '', [linkSeguro(o.foto_antes) ? h('a', { href: linkSeguro(o.foto_antes), target: '_blank', rel: 'noopener' }, 'antes') : null, linkSeguro(o.foto_depois) ? h('a', { href: linkSeguro(o.foto_depois), target: '_blank', rel: 'noopener' }, 'depois') : null].filter(Boolean).flatMap((x, i) => (i ? [' · ', x] : [x]))]))] : h('p', null, 'Nenhuma ordem de serviço concluída neste período.'));
         }
       } catch (e) { /* sem ordens */ }
     };
@@ -1791,8 +1793,9 @@
   const atrasada = (o) => !!o.prazo && ['Aberta', 'Em execução', 'Solicitada'].includes(o.status) && o.prazo < hojeISO();
   const ehMinhaOS = (o) => perfil() === 'coletor' && o.responsavel && o.responsavel === (S.projeto.equipe || S.sessao.usuario.equipe);
   const podeExecutar = (o) => ehCoord() || ehMinhaOS(o);
-  async function filaOS() { return (await Store.get('osfila')) || []; }
-  async function mexerFilaOS(fn) { const f = await filaOS(); const n = (await fn(f)) || f; await Store.set('osfila', n); return n; }
+  async function filaTodaOS() { return (await Store.get('osfila')) || []; }
+  async function filaOS() { const u = S.sessao && S.sessao.u; return (await filaTodaOS()).filter((x) => !x.usuario || x.usuario === u); }
+  async function mexerFilaOS(fn) { const toda = await filaTodaOS(); const u = S.sessao && S.sessao.u; const minha = toda.filter((x) => !x.usuario || x.usuario === u); const outras = toda.filter((x) => x.usuario && x.usuario !== u); const n = (await fn(minha)) || minha; await Store.set('osfila', [...outras, ...n]); return n; }
   async function carregarOS(forcar) {
     const chave = 'os:' + S.projeto.id; const c = (await Store.get(chave)) || { ordens: [], tipos: [] };
     {
@@ -1805,17 +1808,19 @@
       if (it.tipo === 'salvar' && !it.dados.id) { if (!ordens.some((o) => o.id === it.dados.chave)) ordens.unshift(Object.assign({ id: it.dados.chave, numero: '', status: ehCoord() ? 'Aberta' : 'Solicitada', aberta_em: it.dados.em, solicitada_em: it.dados.em, __pend: true, __erro: it.erro || '' }, it.dados)); continue; }
       const o = ordens.find((x) => x.id === (it.id || it.dados.id)); if (!o) continue;
       o.__pend = true; o.__erro = it.erro || '';
+      if (it.recusado) continue; // não aceito pelo servidor: vale a situação que está lá
       if (it.etapa === 'iniciar' && o.status === 'Aberta') o.status = 'Em execução';
-      if (it.etapa === 'concluir') { o.status = 'Concluída'; o.execucao_obs = it.dados.obs || ''; }
+      if (it.etapa === 'concluir') { o.status = 'Concluída'; o.execucao_obs = it.dados.obs || ''; o.__pendConcluir = true; }
+      if (it.etapa !== 'iniciar' && it.etapa !== 'concluir') o.__pendCoord = true;
       if (it.fotos) o.__fotos = Object.assign(o.__fotos || {}, it.fotos);
     }
     return { ordens, tipos: (c.tipos && c.tipos.length) ? c.tipos : TIPOS_OS_PADRAO, em: c.em, semServidor: !!c.semServidor };
   }
   // tenta mandar na hora; sem internet (ou servidor fora do ar) guarda na fila do aparelho
   async function enviarOS(item) {
-    item.chave = item.chave || uuid(); item.projeto = S.projeto.id; item.dados.em = item.dados.em || agoraISO();
+    item.chave = item.chave || uuid(); item.projeto = S.projeto.id; item.usuario = S.sessao.u; item.dados.em = item.dados.em || agoraISO();
     if (navigator.onLine && !S.expirada) {
-      try { const r = await mandarItemOS(item); S.osEm = null; return { ok: true, ordem: r && r.ordem }; } catch (e) {
+      try { const r = await mandarItemOS(item); S.osEm = null; if (r && r.aviso) toast(r.aviso, 6000); return { ok: true, ordem: r && r.ordem, aviso: r && r.aviso }; } catch (e) {
         if (!/Sem conexão|Servidor respondeu 5/i.test(e.message)) { for (const f of Object.values(item.fotos || {})) if (f && f.chave && !f.url) await Store.apagarFoto(f.chave); throw e; }
       }
     }
@@ -1841,7 +1846,7 @@
     const fila = (await filaOS()).filter((x) => !x.recusado); if (!fila.length) return;
     let ok = 0, falhas = 0, erro = '';
     for (const it of fila) {
-      try { await mandarItemOS(it); await mexerFilaOS((f) => f.filter((y) => y.chave !== it.chave)); ok++; } catch (e) {
+      try { const r = await mandarItemOS(it); await mexerFilaOS((f) => f.filter((y) => y.chave !== it.chave)); ok++; if (r && r.aviso) { falhas++; erro = r.aviso; } } catch (e) {
         if (e.sessao) break; falhas++; erro = e.message;
         const final = !/Sem conexão|Servidor respondeu 5/i.test(e.message);
         await mexerFilaOS((f) => { const x = f.find((y) => y.chave === it.chave); if (x) { x.erro = e.message; if (final) x.recusado = true; } });
@@ -1852,7 +1857,7 @@
   }
   async function nFilaOS() { return (await filaOS()).filter((x) => !x.recusado).length; }
 
-  function etiquetaOS(o) { return h('span', { class: 'os-st', style: `background:${COR_OS[o.status] || '#8A969C'}` }, o.status + (o.__pend ? ' · a enviar' : '')); }
+  function etiquetaOS(o) { return h('span', { class: 'os-st', style: `background:${COR_OS[o.status] || '#8A969C'}` }, o.status + (o.__erro && o.__pend ? ' · não aceito' : o.__pend ? ' · a enviar' : '')); }
   function itemOS(o) {
     const local = o.codigo_arvore ? `Árvore ${o.codigo_arvore}` : (o.endereco || 'Ponto no mapa');
     return h('button', { class: 'os-item' + (atrasada(o) ? ' atrasada' : ''), onclick: () => ir('#os/' + encodeURIComponent(o.id)) },
@@ -1920,9 +1925,9 @@
     const exec = async (etapa) => {
       const dados = {}; let fts = {};
       if (etapa === 'iniciar' || etapa === 'concluir') {
-        if (etapa === 'iniciar' && !o.foto_antes && !fotos.foto_antes && !OS_SEM_ANTES.includes(o.tipo)) return falta('foto_antes', 'Tire a foto de antes do serviço.');
+        if (etapa === 'iniciar' && !temAntes && !fotos.foto_antes && !OS_SEM_ANTES.includes(o.tipo)) return falta('foto_antes', 'Tire a foto de antes do serviço.');
         if (etapa === 'concluir') {
-          if (!o.foto_antes && !fotos.foto_antes && !OS_SEM_ANTES.includes(o.tipo)) return falta('foto_antes', 'Falta a foto de antes do serviço.');
+          if (!temAntes && !fotos.foto_antes && !OS_SEM_ANTES.includes(o.tipo)) return falta('foto_antes', 'Falta a foto de antes do serviço.');
           if (!fotos.foto_depois) return falta('foto_depois', 'Tire a foto de depois do serviço.');
           dados.obs = obs.value.trim();
           if (o.status === 'Aberta') dados.iniciada_em = agoraISO();
@@ -1952,14 +1957,16 @@
     const temPonto = o.latitude !== '' && o.latitude != null && !isNaN(+o.latitude);
     const fa = h('div', { class: 'os-foto-box' }), fd = h('div', { class: 'os-foto-box' });
     const linha = (rot, v) => (v ? h('div', { class: 'os-dado' }, h('small', null, rot), h('span', null, v)) : null);
-    const ativo = ['Aberta', 'Em execução'].includes(o.status) && podeExecutar(o) && !o.__pend;
+    const ativo = ['Aberta', 'Em execução'].includes(o.status) && podeExecutar(o) && !o.__pendConcluir && !o.__pendCoord && !o.__erro;
+    const temAntes = !!(o.foto_antes || (o.__fotos && o.__fotos.foto_antes));
     const hist = String(o.historico || '').split(' | ').filter(Boolean);
     $app.replaceChildren(topo(numOS(o), o.tipo, h('button', { class: 'ic', onclick: () => ir('#ordens'), 'aria-label': 'Voltar' }, ico('voltar')), null),
       h('main', null,
         h('div', { class: 'cartao os-cab', style: `border-left:6px solid ${COR_OS[o.status] || '#8A969C'}` }, h('div', { class: 'os-l1' }, h('b', null, o.tipo), etiquetaOS(o)),
           h('div', { class: 'os-dados' }, linha('Prioridade', o.prioridade), linha('Prazo', o.prazo ? o.prazo.split('-').reverse().join('/') + (atrasada(o) ? ' (atrasada)' : '') : ''), linha('Equipe responsável', o.responsavel || 'A definir'),
-            linha('Pedido por', o.solicitada_por ? `${o.solicitada_por} em ${dataBR(o.solicitada_em)}` : ''), linha('Aberta por', o.aberta_por ? `${o.aberta_por} em ${dataBR(o.aberta_em)}` : ''),
-            linha('Iniciada', o.iniciada_em ? `${dataBR(o.iniciada_em)} por ${o.iniciada_por}` : ''), linha('Concluída', o.concluida_em ? `${dataBR(o.concluida_em)} por ${o.concluida_por}` : ''),
+            linha('Pedido por', o.solicitada_por ? `${o.solicitada_por} em ${dataAno(o.solicitada_em)}` : ''), linha('Aberta por', o.aberta_por ? `${o.aberta_por} em ${dataAno(o.aberta_em)}` : ''),
+            linha('Iniciada', o.iniciada_em ? `${dataAno(o.iniciada_em)} por ${o.iniciada_por}` : ''), linha('Concluída', o.concluida_em ? `${dataAno(o.concluida_em)} por ${o.concluida_por}` + (o.prazo && o.status === 'Concluída' && diaLocal(o.concluida_em) > o.prazo ? ' (depois do prazo)' : '') : ''),
+            o.status === 'Cancelada' ? linha('Cancelada', `${dataAno(o.cancelada_em)} por ${o.cancelada_por}`) : null,
             o.status === 'Cancelada' ? linha('Motivo do cancelamento', o.motivo) : o.motivo ? linha('Motivo da reabertura', o.motivo) : null),
           o.descricao ? h('p', { class: 'os-desc' }, o.descricao) : null,
           o.__erro ? h('p', { class: 'trava' }, 'Não foi aceito pelo servidor: ' + o.__erro) : null),
@@ -1969,7 +1976,7 @@
           h('div', { class: 'linha-btn quebra' }, temPonto ? h('a', { class: 'btn sec peq', href: `https://www.google.com/maps/dir/?api=1&destination=${o.latitude},${o.longitude}`, target: '_blank', rel: 'noopener' }, 'Como chegar') : null,
             o.registro_uuid && perfil() !== 'coletor' ? h('button', { class: 'btn sec peq', onclick: () => { S.navVal = []; ir('#ficha/' + encodeURIComponent(o.registro_uuid)); } }, 'Ficha da árvore') : null)),
         h('section', { class: 'cartao' }, h('h3', null, 'Execução'),
-          ativo ? h('div', { class: 'grade2' }, o.foto_antes ? h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Foto de antes'), fa) : campoFotoOS('Foto de antes' + (OS_SEM_ANTES.includes(o.tipo) ? ' (opcional)' : ''), fotos, 'foto_antes'), campoFotoOS('Foto de depois', fotos, 'foto_depois'))
+          ativo ? h('div', { class: 'grade2' }, temAntes ? h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Foto de antes'), fa) : campoFotoOS('Foto de antes' + (OS_SEM_ANTES.includes(o.tipo) ? ' (opcional)' : ''), fotos, 'foto_antes'), campoFotoOS('Foto de depois', fotos, 'foto_depois'))
             : h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Foto de antes'), fa), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Foto de depois'), fd)),
           ativo ? h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Observação da execução'), obs) : o.execucao_obs ? h('p', null, o.execucao_obs) : null,
           ativo ? h('div', { class: 'linha-btn' }, o.status === 'Aberta' ? h('button', { class: 'btn sec', onclick: () => exec('iniciar') }, 'Iniciar serviço') : null, h('button', { class: 'btn', onclick: () => exec('concluir') }, 'Concluir serviço')) : null,
@@ -1981,7 +1988,7 @@
           ['Solicitada', 'Aberta', 'Em execução'].includes(o.status) ? h('button', { class: 'btn sec', onclick: editar }, 'Alterar') : null,
           ['Solicitada', 'Aberta', 'Em execução'].includes(o.status) ? h('button', { class: 'btn perigo', onclick: () => exec('cancelar') }, 'Cancelar ordem') : null,
           ['Concluída', 'Cancelada'].includes(o.status) ? h('button', { class: 'btn sec', onclick: () => exec('reabrir') }, 'Reabrir') : null) : null,
-        o.__erro && o.__pend ? h('div', { class: 'linha-btn' }, h('button', { class: 'btn perigo peq', onclick: async () => { await mexerFilaOS((f) => f.filter((y) => !(y.id === o.id || y.dados.chave === o.id || y.dados.id === o.id))); toast('Removido do aparelho.'); ir('#ordens'); } }, 'Remover do aparelho')) : null));
+        o.__erro && o.__pend ? h('div', { class: 'linha-btn' }, h('button', { class: 'btn perigo peq', onclick: async () => { await mexerFilaOS(async (f) => { for (const y of f.filter((y) => y.id === o.id || y.dados.chave === o.id || y.dados.id === o.id)) for (const ft of Object.values(y.fotos || {})) if (ft && ft.chave) await Store.apagarFoto(ft.chave); return f.filter((y) => !(y.id === o.id || y.dados.chave === o.id || y.dados.id === o.id)); }); toast('Removido do aparelho.'); ir('#ordens'); } }, 'Remover do aparelho')) : null));
     verFotoOS(o.foto_antes, fa, o.__fotos && o.__fotos.foto_antes); verFotoOS(o.foto_depois, fd, o.__fotos && o.__fotos.foto_depois);
     if (!o.foto_antes && !(o.__fotos && o.__fotos.foto_antes)) fa.replaceChildren(h('div', { class: 'os-foto-vazia' }, 'Sem foto'));
     if (!o.foto_depois && !(o.__fotos && o.__fotos.foto_depois)) fd.replaceChildren(h('div', { class: 'os-foto-vazia' }, 'Sem foto'));
@@ -2032,7 +2039,7 @@
     let ponto = arv && arv.lat ? { lat: arv.lat, lon: arv.lon } : null;
     const salvar = async () => {
       if (!tipo.value) { tipo.classList.add('invalido'); tipo.focus(); return toast('Escolha o tipo de serviço.'); }
-      if (!arv && !ponto) return toast('Toque no mapa para marcar o local do serviço.');
+      if (!arv && !ponto) { mapaDiv.scrollIntoView({ block: 'center', behavior: 'smooth' }); mapaDiv.classList.add('destaque-mapa'); setTimeout(() => mapaDiv.classList.remove('destaque-mapa'), 1600); return toast('Toque no mapa para marcar o local do serviço.'); }
       if (arv && arv.local) return toast('Envie o registro da árvore antes de pedir o serviço.');
       const dados = { chave: uuid(), tipo: tipo.value, prioridade: prio, descricao: desc.value.trim() };
       if (arv) dados.registro_uuid = arv.uuid; else Object.assign(dados, { latitude: ponto.lat, longitude: ponto.lon, endereco: end.value.trim() });
@@ -2055,7 +2062,7 @@
         h('div', { class: 'linha-btn', style: 'margin:8px 0 30px' }, h('button', { class: 'btn sec', onclick: () => history.back() }, 'Cancelar'), h('button', { class: 'btn', onclick: salvar }, pf === 'cliente' || !coord ? 'Enviar pedido' : 'Abrir ordem'))));
     if (coord) equipesProjeto().then((eqs) => dl.replaceChildren(eqs.map((e) => h('option', { value: e }))));
     if (!arv) setTimeout(() => {
-      const c = ponto || S.pos || (() => { const ps = d.ordens.filter((o) => o.latitude !== '' && !isNaN(+o.latitude)); return ps.length ? { lat: +ps[0].latitude, lon: +ps[0].longitude } : null; })();
+      const c = ponto || S.pos || (() => { const ps = d.ordens.filter((o) => o.latitude !== '' && !isNaN(+o.latitude)); if (ps.length) return { lat: +ps[0].latitude, lon: +ps[0].longitude }; const ls = (S.linhas[S.projeto.id] || { linhas: [] }).linhas.filter((l) => l.latitude !== '' && !isNaN(+l.latitude)); return ls.length ? { lat: +ls[0].latitude, lon: +ls[0].longitude } : null; })();
       const m = L.map(mapaDiv, { maxZoom: 21 }).setView(c ? [c.lat, c.lon] : [-15.8, -47.9], c ? 18 : 4); camadasFundo(m, true);
       let mk = null; const marcar = (lat, lon) => { ponto = { lat, lon }; if (mk) mk.setLatLng([lat, lon]); else mk = L.marker([lat, lon]).addTo(m); };
       m.on('click', (e) => marcar(e.latlng.lat, e.latlng.lng));
@@ -2121,9 +2128,11 @@
         try {
           const os = (await Api.b.osListar(p.id)).ordens || [];
           if (os.length) {
-            const dt = (v) => { const d = v ? new Date(v) : null; return d && !isNaN(d) ? d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''; };
-            const co = [['numero', 'Número'], ['tipo', 'Serviço'], ['status', 'Situação'], ['prioridade', 'Prioridade'], ['codigo_arvore', 'Árvore'], ['especie', 'Espécie'], ['endereco', 'Endereço'], ['bairro', 'Bairro'], ['latitude', 'Latitude'], ['longitude', 'Longitude'], ['descricao', 'Descrição'], ['responsavel', 'Equipe'], ['prazo', 'Prazo'], ['solicitada_por', 'Pedido por'], ['solicitada_em', 'Pedido em'], ['aberta_por', 'Aberta por'], ['aberta_em', 'Aberta em'], ['iniciada_em', 'Iniciada em'], ['concluida_por', 'Concluída por'], ['concluida_em', 'Concluída em'], ['execucao_obs', 'Observação da execução'], ['foto_antes', 'Foto de antes'], ['foto_depois', 'Foto de depois'], ['motivo', 'Motivo (cancelamento ou reabertura)'], ['historico', 'Histórico'], ['registro_uuid', 'Identificador da árvore']];
-            abas.push({ nome: 'Ordens de serviço', cols: co.map((c) => c[1]), linhas: os.sort((a, b) => +a.numero - +b.numero).map((o) => Object.fromEntries(co.map(([k, t]) => [t, /_em$/.test(k) ? dt(o[k]) : k === 'numero' || k === 'latitude' || k === 'longitude' ? (o[k] === '' || o[k] == null ? '' : +o[k]) : k === 'prazo' && o[k] ? o[k].split('-').reverse().join('/') : o[k] ?? ''])) ) });
+            const dt = (v) => { const d = v ? new Date(v) : null; if (!d || isNaN(d)) return ''; let t; try { t = d.toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }); } catch (e) { t = d.toISOString().replace('T', ' '); } return { __data: Math.round((Date.parse(t.slice(0, 19).replace(' ', 'T') + 'Z') / 864e5 + 25569) * 1e6) / 1e6 }; };
+            const dtDia = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? { __data: Date.parse(v + 'T00:00:00Z') / 864e5 + 25569, dia: true } : '');
+            const nomeFoto = (o, t) => (idDrive(o['foto_' + t]) ? `DCIM/ordens/OS-${String(o.numero).padStart(4, '0')}-${t}.jpg` : '');
+            const co = [['numero', 'Número'], ['tipo', 'Serviço'], ['status', 'Situação'], ['prioridade', 'Prioridade'], ['codigo_arvore', 'Árvore'], ['especie', 'Espécie'], ['endereco', 'Endereço'], ['bairro', 'Bairro'], ['latitude', 'Latitude'], ['longitude', 'Longitude'], ['descricao', 'Descrição'], ['responsavel', 'Equipe'], ['prazo', 'Prazo'], ['solicitada_por', 'Pedido por'], ['solicitada_em', 'Pedido em'], ['aberta_por', 'Aberta por'], ['aberta_em', 'Aberta em'], ['iniciada_em', 'Iniciada em'], ['concluida_por', 'Concluída por'], ['concluida_em', 'Concluída em'], ['execucao_obs', 'Observação da execução'], ['iniciada_por', 'Iniciada por'], ['cancelada_por', 'Cancelada por'], ['cancelada_em', 'Cancelada em'], ['no_prazo', 'Concluída no prazo'], ['foto_antes', 'Foto de antes (link)'], ['arq_antes', 'Foto de antes (arquivo no pacote)'], ['foto_depois', 'Foto de depois (link)'], ['arq_depois', 'Foto de depois (arquivo no pacote)'], ['motivo', 'Motivo (cancelamento ou reabertura)'], ['historico', 'Histórico'], ['registro_uuid', 'Identificador da árvore']];
+            abas.push({ nome: 'Ordens de serviço', cols: co.map((c) => c[1]), linhas: os.sort((a, b) => +a.numero - +b.numero).map((o) => Object.fromEntries(co.map(([k, t]) => [t, /_em$/.test(k) ? dt(o[k]) : k === 'numero' || k === 'latitude' || k === 'longitude' ? (o[k] === '' || o[k] == null ? '' : +o[k]) : k === 'prazo' ? dtDia(o[k]) : k === 'arq_antes' ? nomeFoto(o, 'antes') : k === 'arq_depois' ? nomeFoto(o, 'depois') : k === 'no_prazo' ? (o.status === 'Concluída' && o.prazo ? (diaLocal(o.concluida_em) <= o.prazo ? 'Sim' : 'Não') : '') : o[k] ?? ''])) ) });
             meta.push({ Item: 'Ordens de serviço neste arquivo', Valor: String(os.length) });
           }
         } catch (e) { /* servidor sem ordens de serviço */ }
@@ -2169,7 +2178,7 @@
       const leia = [`Pacote de entrega: ${p.nome}`, `Gerado em ${dia} pelo Neofloresta Inventário ${VERSAO}.`, `Contratante: ${p.contratante || ''}  Contrato: ${p.contrato || ''}  Município: ${p.municipio || ''}`, `Responsável técnico: ${[p.responsavel, p.registro_profissional, p.art ? 'ART ' + p.art : ''].filter(Boolean).join(', ')}`, '',
         `Registros: ${linhas.length} (${filtro === 'validados' ? 'somente validados' : 'todos, exceto descartados'}).`, `Ordens de serviço: ${os.length}.`, '',
         'Arquivos:', ...arqs.filter((a) => !a.nome.startsWith('DCIM/')).map((a) => '  ' + a.nome + ({ gpkg: ': GeoPackage para o QGIS, em SIRGAS 2000 / UTM, com a simbologia embutida', xlsx: ': Excel com os registros, as ordens de serviço, o dicionário de campos (unidade e descrição) e os metadados', zip: ': Shapefile em SIRGAS 2000 / UTM; o arquivo _campos.csv traz o nome completo de cada campo', csv: ': texto separado por ponto e vírgula, decimal com vírgula', kml: ': Google Earth e Google Maps' }[a.nome.split('.').pop()] || '')),
-        fotos.length <= LIM ? `  DCIM/: ${baixadas} fotos dos registros e das ordens de serviço (os nomes batem com as colunas de foto da planilha).` : `  Fotos: são ${fotos.length}, grandes demais para um arquivo só. Baixe a pasta DCIM do projeto no Google Drive (botão direito > Fazer download) e coloque ao lado do GeoPackage. Cada linha da planilha tem o link da foto.`,
+        fotos.length <= LIM ? `  DCIM/: ${baixadas} fotos. As dos registros têm o nome da coluna de foto da planilha; as das ordens de serviço ficam em DCIM/ordens/ com o nome indicado nas colunas "arquivo no pacote" da aba Ordens de serviço.` : `  Fotos: são ${fotos.length}, grandes demais para um arquivo só. Baixe a pasta DCIM do projeto no Google Drive (botão direito > Fazer download) e coloque ao lado do GeoPackage. Cada linha da planilha tem o link da foto.`,
         '', 'Coordenadas: SIRGAS 2000. Datas e horas no horário de Brasília nas planilhas legíveis e em UTC (ISO 8601) no CSV.', 'Os dados pertencem ao contratante. A Neofloresta atua como operadora dos dados, conforme o termo de uso e privacidade do sistema.'].join('\r\n');
       arqs.push({ nome: 'LEIA-ME.txt', dados: new Blob(['﻿' + leia], { type: 'text/plain' }) });
       msg('Compactando...');

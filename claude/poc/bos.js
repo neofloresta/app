@@ -85,6 +85,21 @@ const sync = (p) => p.evaluate(() => window.__app.sincronizar(true));
   const aprov = await pc.locator('.os-cab').innerText();
   ok('4.5', nCli === 1 && fotosCli === 2 && semBotoes === 0 && /mapa/i.test(pedeLocal) && /OS 0002/.test(ped) && /Solicitada/.test(ped) && /Aberta/.test(aprov) && /Equipe 2/.test(aprov), `cliente vê ${nCli} ordem com ${fotosCli} fotos, sem botões de coordenação; sem ponto pede "${pedeLocal}"; pedido "${ped.replace(/\s+/g, ' ')}"; aprovado: ${aprov.replace(/\s+/g, ' ').slice(0, 120)}`);
 
+  // 4.7 iniciar e concluir sem internet, sem voltar para a rede no meio
+  const TR2 = (await P('login', { u: 'rev', s: 'revisor1' })).token;
+  const o3 = (await P('os_salvar', { t: TR2, projeto: 'divinopolis', os: { registro_uuid: uuidArv, tipo: 'Poda de condução', responsavel: 'Equipe 1' } })).ordem;
+  await pe.goto(L.WEB + '#ordens'); await pe.reload(); await pe.waitForTimeout(1500);
+  await pe.goto(L.WEB + '#os/' + encodeURIComponent(o3.id)); await pe.waitForSelector('text=Iniciar serviço');
+  await E.ctx.setOffline(true);
+  await pe.locator('[data-foto="foto_antes"] input[type=file]').setInputFiles(A.FOTO); await pe.waitForTimeout(300);
+  await pe.click('button:has-text("Iniciar serviço")'); await pe.waitForTimeout(800);
+  const temConcluir = await pe.locator('button:has-text("Concluir serviço")').count();
+  const fotoAntesVisivel = await pe.locator('.os-foto').count();
+  if (temConcluir) { await pe.locator('[data-foto="foto_depois"] input[type=file]').setInputFiles(A.FOTO); await pe.waitForTimeout(300); await pe.click('button:has-text("Concluir serviço")'); await pe.waitForSelector('.folha'); await pe.click('.folha button:has-text("Concluir")'); await pe.waitForTimeout(800); }
+  await E.ctx.setOffline(false); await sync(pe); await pe.waitForTimeout(1500);
+  const o3s = (await P('os_listar', { t: TR2, projeto: 'divinopolis' })).ordens.find((x) => x.id === o3.id);
+  ok('4.7', temConcluir === 1 && fotoAntesVisivel >= 1 && o3s.status === 'Concluída' && o3s.foto_antes && o3s.foto_depois, `sem internet: iniciou e o botão Concluir continuou disponível (${temConcluir}), foto de antes visível (${fotoAntesVisivel}); no servidor: ${o3s.status}`);
+
   ok('4.6', !errosC.length && !pe.erros.length && !pk.erros.length, `erros de página: ${JSON.stringify([errosC, pe.erros, pk.erros])}`);
   require('fs').writeFileSync('res-bos.json', JSON.stringify(R, null, 1));
   await b.close(); process.exit(0);

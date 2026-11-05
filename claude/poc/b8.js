@@ -3,7 +3,7 @@ const { chromium } = require('playwright'); const L = require('./lib'); const fs
 const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
 const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.stringify(Object.assign({ acao }, d)) })).json();
 (async () => {
-  await L.subir(); await L.configurar(); await L.semear(60);
+  await L.subir(); await L.configurar(); await L.semear(60); await L.post('projeto_salvar', { projeto_dados: { id: 'divinopolis', cliente_ve: 'todos' } });
   const TA = (await P('login', { u: 'admin', s: L.senha() })).token;
   // uma foto real e uma ordem concluída, para o pacote levar fotos
   const foto = fs.readFileSync(__dirname + '/foto.jpg').toString('base64');

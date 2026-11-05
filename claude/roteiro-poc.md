@@ -72,10 +72,10 @@
 
 | Nº | Teste | Critério de aprovação | Status | Data | Observação |
 |---|---|---|---|---|---|
-| 4.1 | Criar ordem de serviço (poda, supressão, plantio, remoção) a partir da árvore | Ordem vinculada à árvore | Não implementado | 04/11/2026 | Fica para o sistema de gestão (tratado no chat da Cemig) |
-| 4.2 | Fluxo de status: aberta, em execução, concluída | Responsável e data em cada etapa | Não implementado | 04/11/2026 | Idem |
-| 4.3 | Registro da execução | Foto antes e depois | Não implementado | 04/11/2026 | Idem |
-| 4.4 | Histórico de intervenções por árvore | Lista completa e em ordem | Não implementado | 04/11/2026 | Idem |
+| 4.1 | Criar ordem de serviço (poda, supressão, plantio, remoção) a partir da árvore | Ordem vinculada à árvore | Passou | 05/11/2026 | Versão 2.2. A coordenação abre pela ficha da árvore (código, espécie, endereço e coordenada vêm da árvore), com tipo, prioridade, equipe e prazo. Cliente e equipe pedem serviço pela ficha ou marcando um ponto no mapa; o pedido fica Solicitado até a coordenação aprovar. Tipos de serviço configuráveis por projeto |
+| 4.2 | Fluxo de status: aberta, em execução, concluída | Responsável e data em cada etapa | Passou | 05/11/2026 | Solicitada, Aberta, Em execução, Concluída ou Cancelada, com quem e quando em cada etapa. Cancelar e reabrir exigem motivo; reabrir guarda a execução anterior no histórico. A equipe só vê e executa as ordens dela (conferido também chamando o servidor direto) |
+| 4.3 | Registro da execução | Foto antes e depois | Passou | 05/11/2026 | Foto de antes e de depois obrigatórias (plantio e avaliação de risco: só a de depois), com observação. Funciona sem internet: iniciar e concluir ficam no aparelho e sobem depois, sem duplicar. Fotos só aceitas da pasta do projeto |
+| 4.4 | Histórico de intervenções por árvore | Lista completa e em ordem | Passou | 05/11/2026 | A ficha da árvore lista todas as ordens. Ordens também no mapa (cor por situação), no painel (em aberto, atrasadas, tempo médio), no relatório, no boletim de medição (serviços concluídos no período, com prazo e fotos) e no Excel |
 
 ## Bloco 5 · Relatórios, exportação e importação
 
@@ -107,7 +107,7 @@
 | 7.3 | Portal do cliente com login | Mapa e painel, somente leitura | Passou | 04/11/2026 | Cliente entra direto no painel, vê só os validados (ou todos, se o projeto permitir), mapa, relatório, boletim de medição, fotos e download dos dados |
 | 7.4 | Registro de auditoria | Mostra quem alterou o quê e quando | Passou | 04/11/2026 | Auditoria de entradas, senhas erradas, bloqueios, usuários, projetos, formulários, validações, importações, exportações e relatórios; histórico de alterações e de validação em cada registro |
 | 7.5 | Login, expiração de sessão, conexão segura | Funciona sem falhas | Passou | 04/11/2026 | Senha criptografada (mínimo 8 caracteres), bloqueio de 15 min após 5 erros, sessão de 30 dias que se renova, troca de senha encerra as outras sessões, HTTPS e política de segurança de conteúdo no app |
-| 7.6 | Cópia de segurança e restauração | Restauração testada de fato | Não testado | 04/11/2026 | Cópia diária automática da base e de cada projeto na pasta Backup (30 dias) com email e planilhas em Excel, mais botão "Fazer cópia agora". Falta fazer uma restauração de verdade no Google |
+| 7.6 | Cópia de segurança e restauração | Restauração testada de fato | Passou | 05/11/2026 | Versão 2.2: restauração pelo app (Coordenação > Segurança), com confirmação pelo nome do projeto e cópia automática do estado anterior para desfazer. Testada no servidor simulado (restaurar e desfazer). Falta repetir uma vez no Google de verdade |
 | 7.7 | Lei Geral de Proteção de Dados | Só dados pessoais necessários, com termo de uso | Falhou | 04/11/2026 | Termo de uso e privacidade com aceite registrado e cobrado pelo servidor. Falta o Ciro preencher email de contato, CNPJ e encarregado de dados (config.js) e combinar em contrato a entrega e o descarte dos dados |
 
 ## Bloco 8 · Plataformas e integração
@@ -117,20 +117,20 @@
 | 8.1 | Android, incluindo aparelhos mais antigos | Funciona em Android 8 ou superior | Não testado | 04/11/2026 | Testado em Android simulado (Pixel 7). Falta aparelho real; o Chrome atual pode não rodar em Android 8 e 9 |
 | 8.2 | Navegador no computador | Funciona em Chrome, Edge e Firefox | Não testado | 04/11/2026 | Chrome no computador ok (coordenação, revisão, cliente). Edge usa o mesmo motor; Firefox não testado |
 | 8.3 | iPhone | Funciona, se o edital exigir | Não testado | 04/11/2026 | Precisa de iPhone real |
-| 8.4 | Integração com outros sistemas (provável na Cemig) | Interface de integração documentada e testada | Falhou | 04/11/2026 | Interface documentada em docs/api.md (ações, perfis, limites). Falta chave de acesso para sistemas externos e teste com um sistema de verdade |
+| 8.4 | Integração com outros sistemas (provável na Cemig) | Interface de integração documentada e testada | Passou | 05/11/2026 | Versão 2.2: chave de integração por projeto, criada e revogada pela coordenação, só de leitura (registros em páginas, ordens, indicadores), com o mesmo filtro do cliente e uso registrado na auditoria. Documentada em docs/api.md e testada como sistema externo |
 
-## Resumo da rodada de 04/11/2026 (versão 2.0)
+## Resumo da rodada de 05/11/2026 (versão 2.2)
 
 | Status | Quantidade |
 |---|---|
-| Passou | 31 |
-| Falhou | 2 |
-| Não implementado | 4 |
-| Não testado | 5 |
+| Passou | 37 |
+| Falhou | 1 |
+| Não implementado | 0 |
+| Não testado | 4 |
 
 Revisões feitas nesta rodada: segurança, lógica e experiência de uso (agentes revisores), e avaliação por agentes no papel de coletor de campo, fiscal de contrato e analista de dados. Os problemas apontados foram corrigidos e testados de novo; os que dependem do Ciro estão em "Ações pendentes".
 
-Próximos passos para licitação: ordens de serviço (bloco 4, no sistema de gestão), testes em aparelhos reais (8.1 e 8.3), restauração da cópia de segurança (7.6), chave de integração (8.4), pacote de entrega com fotos (ZIP com DCIM) e lista de espécies completa.
+Próximos passos para licitação: testes em aparelhos reais (8.1 e 8.3), uma restauração no Google de verdade (7.6), usuários simultâneos no Google (6.4), dados de contato e encarregado (7.7) e lista de espécies completa.
 
 ## Histórico de execuções
 
@@ -139,3 +139,4 @@ Próximos passos para licitação: ordens de serviço (bloco 4, no sistema de ge
 | 04/11/2026 | Criação do roteiro | Nenhum | Roteiro criado, nada testado ainda |
 | 04/11/2026 | Chat do app de coleta (RODAR POC) | Todos | Testes automáticos em celular simulado com 5 mil e 20 mil registros. Corrigidos nesta rodada: critério de 2 m (1.5), histórico de alterações (1.6), mapa lento (3.1), filtros e busca no mapa (3.2, 3.3), ficha com foto (3.4), exportação em páginas, KML e numeração única (5.2, 5.3), documentação da interface (8.4). Confirmado que a Cemig não cabe em planilha Google |
 | 04/11/2026 | Chat do app de coleta (versão 2.0) | Todos | Versão 2.0: perfis, validação, portal do cliente, painel, relatório, boletim de medição, exportações (GeoPackage com simbologia, Excel, Shapefile, CSV, KML), importação, segurança (senha criptografada, bloqueio, sessão, auditoria, cópia diária, termo LGPD), mapa com satélite, bairro e endereço. Revisão por 6 agentes e correções. Compatível com o servidor antigo até a atualização |
+| 05/11/2026 | Chat do app de coleta (versões 2.1 e 2.2) | Todos, mais o bloco 4 | 2.1: ao concluir, o app leva direto ao campo que falta, em vermelho; aviso de versão nova com botão de atualizar; rotina LIBERAR VERSÃO (claude/rotina-de-versao.md). 2.2: ordens de serviço completas (bloco 4), pedido de serviço pelo cliente, pacote final de entrega, chave de integração (8.4) e restauração de cópia (7.6). Verificação por agentes (equipe de campo, fiscal e analista, segurança) e correções antes de publicar |

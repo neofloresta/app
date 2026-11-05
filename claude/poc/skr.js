@@ -2,14 +2,14 @@
 const L = require('./lib'); const R = []; const ok = (n, c, o = '') => { R.push([n, c]); console.log(c ? 'OK  ' : 'FALHA', n, o); };
 const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.stringify(Object.assign({ acao }, d)) })).json();
 (async () => {
-  await L.subir(); await L.configurar(); await L.semear(300);
+  await L.subir(); await L.configurar(); await L.semear(300); await L.post('projeto_salvar', { projeto_dados: { id: 'divinopolis', cliente_ve: 'todos' } });
   const T = (await P('login', { u: 'admin', s: L.senha() })).token;
   const T1 = (await P('login', { u: 'div-1', s: 'equipe01' })).token;
   // 8.4
   let j = await P('chave_criar', { t: T1, nome: 'x', projeto: 'divinopolis' }); ok('equipe não cria chave', !j.ok, j.erro);
   j = await P('chave_criar', { t: T, nome: 'Sistema da prefeitura', projeto: 'divinopolis' }); const K = j.chave; ok('coordenação cria chave (mostrada uma vez)', j.ok && /^neo_[a-f0-9]{48}$/.test(K), j.erro);
   j = await P('chaves_listar', { t: T }); ok('lista não mostra a chave nem o resumo', j.ok && j.chaves.length === 1 && !JSON.stringify(j).includes(K) && !('hash' in j.chaves[0]), JSON.stringify(j.chaves));
-  j = await P('listar', { chave_api: K, projeto: 'divinopolis', de: 0, n: 100 }); ok('sistema externo lê os registros em páginas', j.ok && j.linhas.length === 100 && j.total === 300 && j.proximo === 100, j.erro);
+  j = await P('listar', { chave_api: K, projeto: 'divinopolis', de: 0, n: 100 }); ok('sistema externo lê os registros em páginas', j.ok && j.linhas.length === 100 && j.proximo === 100, j.erro);
   j = await P('os_listar', { chave_api: K, projeto: 'divinopolis' }); ok('lê as ordens de serviço', j.ok && Array.isArray(j.ordens), j.erro);
   j = await P('painel', { chave_api: K, projeto: 'divinopolis' }); ok('lê os indicadores', j.ok && j.total === 300, j.erro);
   j = await P('registro', { chave_api: K, projeto: 'divinopolis', linha: { uuid: 'api1' } }); ok('chave não grava registro', !j.ok, j.erro);
@@ -17,10 +17,14 @@ const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.s
   j = await P('usuarios_listar', { chave_api: K }); ok('chave não lê usuários', !j.ok, j.erro);
   j = await P('listar', { chave_api: K, projeto: 'carmo' }); ok('chave não lê outro projeto', !j.ok, j.erro);
   j = await P('listar', { chave_api: 'neo_' + 'a'.repeat(48), projeto: 'divinopolis' }); ok('chave inventada recusada', !j.ok && j.sessao, j.erro);
+  j = await P('mapa', { chave_api: K, projeto: 'divinopolis', campos: ['uuid', 'usuario', 'validacao_obs'] }); ok('chave não lê colunas internas', j.ok && j.linhas.every((l) => l[1] === '' && l[2] === ''));
+  j = await P('sessao', { chave_api: K }); ok('chave tem perfil de consulta (cliente)', j.ok && j.usuario.perfil === 'cliente', j.usuario && j.usuario.perfil);
+  j = await P('chave_revogar', { t: T, id: 'inexistente' }); ok('revogar chave inexistente recusado', !j.ok);
   j = await P('auditoria_listar', { t: T, n: 50 }); ok('uso da chave fica na auditoria', j.itens.some((x) => x.acao === 'api_listar' && /prefeitura/.test(x.login)));
   const id = (await P('chaves_listar', { t: T })).chaves[0].id;
   j = await P('chave_revogar', { t: T, id }); j = await P('listar', { chave_api: K, projeto: 'divinopolis' }); ok('chave revogada para de funcionar', !j.ok, j.erro);
   // 7.6
+  j = await P('projeto_salvar', { t: T, projeto_dados: { id: 'outro', nome: 'PMAU divinópolis', formulario: 'x' } }); ok('nome de projeto repetido recusado', !j.ok, j.erro);
   j = await P('backup_agora', { t: T }); ok('cópia feita', j.ok, j.erro || j.resumo);
   j = await P('backup_listar', { t: T, projeto: 'divinopolis' }); const copia = j.copias && j.copias[0]; ok('lista as cópias do projeto', j.ok && copia && /PMAU Divinópolis/.test(copia.nome), JSON.stringify(j.copias));
   await L.semear(50); // dados que chegaram depois da cópia

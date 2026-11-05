@@ -53,7 +53,7 @@ POST <endereço do servidor>
 {"acao": "listar", "chave_api": "neo_...", "projeto": "divinopolis", "de": 0, "n": 4000}
 ```
 
-Resposta: `{"ok": true, "linhas": [...], "total": 10234, "proximo": 4000}`. Repita com `de` = `proximo` até `proximo` vir vazio.
+Resposta: `{"ok": true, "linhas": [...], "proximo": 4000}`. Repita com `de` = `proximo` até `proximo` vir vazio. A chave enxerga o mesmo que o perfil cliente: só os registros que o projeto libera ao cliente (validados, ou todos se o projeto estiver configurado assim), sem colunas internas, e no máximo 5000 linhas por página.
 
 ## Campos de cada ordem de serviço
 

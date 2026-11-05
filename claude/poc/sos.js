@@ -1,7 +1,7 @@
 // Ordens de serviço: teste direto do servidor
 const L = require('./lib'); const R = []; const ok = (n, c, o = '') => { R.push([n, c]); console.log(c ? 'OK  ' : 'FALHA', n, o); };
 const P = async (acao, d) => { const r = await fetch(L.MOCK, { method: 'POST', body: JSON.stringify(Object.assign({ acao }, d)) }); return r.json(); };
-const LINK = (x) => 'https://drive.google.com/file/d/' + x + 'abcdefghijklmnopqrstuv/view';
+const FOTO = require('fs').readFileSync(__dirname + '/foto.jpg').toString('base64'); const LK = {};
 (async () => {
   await L.subir(); await L.configurar(); const senha = L.senha();
   const T = (await P('login', { u: 'admin', s: senha })).token;
@@ -13,6 +13,8 @@ const LINK = (x) => 'https://drive.google.com/file/d/' + x + 'abcdefghijklmnopqr
   const T2 = (await P('login', { u: 'div-2', s: 'equipe02' })).token;
   const TO = (await P('login', { u: 'outra', s: 'outra001' })).token;
   const agora = new Date().toISOString();
+  for (const k of ['a', 'b', 'c']) LK[k] = (await P('foto', { t: T1, projeto: 'divinopolis', nome: 'os-' + k + '.jpg', mime: 'image/jpeg', dados: FOTO })).url;
+  const LINK = (k) => LK[k];
   await P('registro', { t: T1, projeto: 'divinopolis', linha: { uuid: 'arv1', projeto: 'divinopolis', equipe: 'Equipe 1', criado_em: agora, atualizado_em: agora, latitude: -20.14, longitude: -44.89, Codigo: 'E1-0001', Especie: 'Moquilea tomentosa', Categoria: '1', bairro_aprox: 'Centro', endereco_aprox: 'Rua Goiás, 100' } });
 
   let j = await P('os_listar', { t: TR, projeto: 'divinopolis' }); ok('lista vazia e tipos padrão', j.ok && j.ordens.length === 0 && j.tipos.includes('Supressão'), j.erro || j.tipos.join(', '));
@@ -35,7 +37,8 @@ const LINK = (x) => 'https://drive.google.com/file/d/' + x + 'abcdefghijklmnopqr
   j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'iniciar', dados: {} }); ok('iniciar poda exige foto de antes', !j.ok && /antes/.test(j.erro), j.erro);
   j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'iniciar', dados: { foto_antes: 'javascript:alert(1)' } }); ok('link de foto fora do Drive recusado', !j.ok, j.erro);
   const ontem = new Date(Date.now() - 864e5).toISOString();
-  j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'iniciar', dados: { foto_antes: LINK('a'), em: ontem } }); ok('equipe inicia com foto (data do aparelho)', j.ok && j.ordem.status === 'Em execução' && j.ordem.iniciada_em === ontem, j.erro || j.ordem.iniciada_em);
+  j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'iniciar', dados: { foto_antes: 'https://drive.google.com/file/d/' + 'x'.repeat(30) + '/view' } }); ok('foto que não é do projeto recusada', !j.ok, j.erro);
+  j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'iniciar', dados: { foto_antes: LINK('a'), em: ontem } }); ok('equipe inicia com foto (data antes da abertura vira a do servidor)', j.ok && j.ordem.status === 'Em execução' && j.ordem.iniciada_em >= os1.aberta_em, j.erro || j.ordem.iniciada_em);
   j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'iniciar', dados: { foto_antes: LINK('a') } }); ok('reenvio de iniciar é ignorado', j.ok && j.ignorado);
   j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'concluir', dados: { obs: 'ok' } }); ok('concluir exige foto de depois', !j.ok && /depois/.test(j.erro), j.erro);
   j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'concluir', dados: { foto_depois: LINK('b'), obs: '3 galhos removidos', em: '2099-01-01T00:00:00Z' } }); ok('conclui; data futura do aparelho vira a do servidor', j.ok && j.ordem.status === 'Concluída' && j.ordem.concluida_em < '2099' && j.ordem.execucao_obs === '3 galhos removidos', j.erro || j.ordem.concluida_em);
@@ -44,7 +47,8 @@ const LINK = (x) => 'https://drive.google.com/file/d/' + x + 'abcdefghijklmnopqr
   j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'reabrir', dados: { obs: 'x' } }); ok('equipe não reabre', !j.ok, j.erro);
   j = await P('os_andamento', { t: TR, projeto: 'divinopolis', id: os1.id, etapa: 'reabrir', dados: {} }); ok('reabrir exige motivo', !j.ok, j.erro);
   j = await P('os_andamento', { t: TR, projeto: 'divinopolis', id: os1.id, etapa: 'reabrir', dados: { obs: 'Faltou um galho' } }); ok('revisor reabre com motivo', j.ok && j.ordem.status === 'Aberta');
-  j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'concluir', dados: { foto_depois: LINK('c') } }); ok('conclui direto de Aberta mantendo a foto de antes', j.ok && j.ordem.status === 'Concluída' && /\/d\/a/.test(j.ordem.foto_antes), j.erro);
+  j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'concluir', dados: { foto_depois: LINK('c'), em: ontem } }); ok('conclusão registrada antes da reabertura é recusada', !j.ok && /reabriu/.test(j.erro), j.erro);
+  j = await P('os_andamento', { t: T1, projeto: 'divinopolis', id: os1.id, etapa: 'concluir', dados: { foto_depois: LINK('c') } }); ok('conclui direto de Aberta mantendo a foto de antes', j.ok && j.ordem.status === 'Concluída' && j.ordem.foto_antes === LK.a, j.erro);
   const hist = j.ordem && j.ordem.historico.split(' | ');
   ok('histórico guarda cada etapa', hist && hist.length >= 5, hist && hist.join(' || '));
 

@@ -92,7 +92,7 @@ function doPost(e) {
       case 'estilo': formLiberado(d.id); return json({ ok: true, qml: lerArquivoForm(d.id + '.qml') });
       case 'foto': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarFoto(d.projeto, d.nome, d.mime, d.dados)));
       case 'registro': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarRegistro(d.projeto, d.linha, usr)));
-      case 'listar': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, listarPagina(d.projeto, d.de, d.n, usr)));
+      case 'listar': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, listarPagina(d.projeto, d.de, usr.integracao ? Math.min(+d.n || 5000, 5000) : d.n, usr)));
       case 'mapa': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, colunas(d.projeto, d.campos || [], usr)));
       case 'painel': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, painel(d.projeto, usr)));
       case 'foto_ver': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, verFoto(d.projeto, d.id, usr)));
@@ -114,7 +114,7 @@ function doPost(e) {
       case 'auditoria_listar': pode(); return json({ ok: true, itens: auditoriaRecente(+d.n || 300) });
       case 'chaves_listar': pode(); return json({ ok: true, chaves: tabela('Chaves').map((c) => ({ id: c.id, nome: c.nome, projeto: c.projeto, criada_por: c.criada_por, criada_em: c.criada_em, ativa: c.ativa === 'sim' })) });
       case 'chave_criar': pode(); return json(Object.assign({ ok: true }, criarChave(d.nome, d.projeto, usr)));
-      case 'chave_revogar': pode(); salvarLinha('Chaves', COLS_CHAVES, 'id', { id: String(d.id), ativa: 'não' }); auditar(usr.login, 'chave_revogar', d.id, ''); return json({ ok: true });
+      case 'chave_revogar': pode(); if (!tabela('Chaves').some((c) => c.id === String(d.id))) throw new Error('Chave não encontrada.'); salvarLinha('Chaves', COLS_CHAVES, 'id', { id: String(d.id), ativa: 'não' }); auditar(usr.login, 'chave_revogar', d.id, ''); return json({ ok: true });
       case 'backup_listar': pode(); return json({ ok: true, copias: listarCopias(d.projeto) });
       case 'backup_restaurar': pode(); exigeProjeto(d.projeto); { const r = restaurarCopia(d.projeto, d.arquivo, usr); return json(Object.assign({ ok: true }, r)); }
       case 'backup_status': pode(); return json(Object.assign({ ok: true }, backupStatus()));
@@ -311,6 +311,7 @@ function salvarProjeto(p) {
   if (!p || !p.id) throw new Error('Projeto sem identificador.');
   if (!/^[a-z0-9-]{2,60}$/.test(p.id)) throw new Error('Identificador do projeto: use só letras minúsculas, números e hífen.');
   const atual = tabela('Projetos').find((x) => x.id === p.id);
+  if (p.nome && tabela('Projetos').some((x) => x.id !== p.id && String(x.nome).trim().toLowerCase() === String(p.nome).trim().toLowerCase())) throw new Error('Já existe outro projeto com esse nome. Use um nome diferente (as cópias de segurança são separadas pelo nome).');
   if (atual) { p.pasta_id = atual.pasta_id; p.planilha_id = atual.planilha_id; }
   if (!p.pasta_id) {
     const pasta = DriveApp.getFolderById(PROPS.getProperty('RAIZ_ID')).createFolder(p.nome);
@@ -632,7 +633,7 @@ function importar(projetoId, linhas, usr) {
 // Aba "Ordens" na planilha do projeto. Fluxo: Solicitada (pedido do cliente ou da equipe) > Aberta > Em execução > Concluída; ou Cancelada.
 const COLS_OS = ['id', 'numero', 'registro_uuid', 'codigo_arvore', 'especie', 'latitude', 'longitude', 'endereco', 'bairro', 'tipo', 'prioridade', 'descricao', 'status', 'prazo', 'responsavel',
   'solicitada_por', 'solicitada_em', 'aberta_por', 'aberta_em', 'iniciada_por', 'iniciada_em', 'foto_antes', 'concluida_por', 'concluida_em', 'foto_depois', 'execucao_obs',
-  'cancelada_por', 'cancelada_em', 'motivo', 'historico', 'atualizado_em'];
+  'cancelada_por', 'cancelada_em', 'reaberta_em', 'motivo', 'historico', 'atualizado_em'];
 const TIPOS_OS_PADRAO = ['Poda de limpeza', 'Poda de levantamento de copa', 'Poda de adequação à rede elétrica', 'Poda de condução', 'Supressão', 'Remoção de toco', 'Plantio', 'Substituição', 'Tratamento fitossanitário', 'Avaliação de risco', 'Outro'];
 const PRIORIDADES_OS = ['Urgente', 'Alta', 'Média', 'Baixa'];
 const OS_SEM_FOTO_ANTES = ['Plantio', 'Avaliação de risco'];
@@ -664,17 +665,35 @@ function listarOS(projetoId, usr) {
   const todas = lerOS(abaOS(projetoId));
   let out = todas;
   if (usr.perfil === 'coletor') out = todas.filter((o) => (o.responsavel && o.responsavel === usr.equipe && o.status !== 'Solicitada') || o.solicitada_por === usr.login);
+  if (usr.perfil === 'cliente' && !clienteVeTodos(projetoId)) {
+    const c = colunas(projetoId, ['uuid', 'validacao'], { perfil: 'admin' }); const val = {}; c.linhas.forEach((l) => { if (l[1] === 'Validado') val[l[0]] = 1; });
+    out = out.map((o) => (!o.registro_uuid || val[o.registro_uuid] || o.solicitada_por === usr.login ? o : Object.assign({}, o, { codigo_arvore: '', especie: '', latitude: '', longitude: '', endereco: '', bairro: '', registro_uuid: '' })));
+  }
   return out.map(publicoOS);
 }
+function idFoto(u) { const m = String(u || '').match(/^https:\/\/drive\.google\.com\/file\/d\/([\w-]{20,80})\/view$/); return m ? m[1] : ''; }
 function fotoDeOS(projetoId, id) {
-  try { return lerOS(abaOS(projetoId)).some((o) => String(o.foto_antes).indexOf(id) >= 0 || String(o.foto_depois).indexOf(id) >= 0); } catch (e) { return false; }
+  try {
+    const cache = CacheService.getScriptCache(); let lib = cache.get('fotos_os:' + projetoId);
+    if (lib == null) { lib = lerOS(abaOS(projetoId)).flatMap((o) => [idFoto(o.foto_antes), idFoto(o.foto_depois)]).filter(Boolean).join(','); try { cache.put('fotos_os:' + projetoId, lib, 600); } catch (e) { /* grande demais */ } }
+    return (',' + lib + ',').indexOf(',' + id + ',') >= 0;
+  } catch (e) { return false; }
 }
-function carimboHist(usr, txt) { return Utilities.formatDate(new Date(), FUSO, 'yyyy-MM-dd HH:mm') + ' ' + usr.login + ': ' + String(txt).replace(/\s*\|\s*/g, ' / ').slice(0, 300); }
-function linkDrive(u) { u = String(u || ''); return /^https:\/\/drive\.google\.com\//.test(u) ? u : ''; }
+// a foto da ordem precisa estar no DCIM deste projeto
+function fotoDoProjeto(projetoId, u) {
+  const id = idFoto(u); if (!id) return '';
+  try { const p = projeto(projetoId); const pais = DriveApp.getFileById(id).getParents(); while (pais.hasNext()) { const avo = pais.next().getParents(); while (avo.hasNext()) if (avo.next().getId() === p.pasta_id) return 'https://drive.google.com/file/d/' + id + '/view'; } } catch (e) { /* não existe */ }
+  return '';
+}
+function carimboHist(usr, txt, quando) {
+  const agora = new Date(); const q = quando ? new Date(quando) : agora; const f = (d) => Utilities.formatDate(d, FUSO, 'yyyy-MM-dd HH:mm');
+  return f(q) + ' ' + usr.login + ': ' + String(txt).replace(/\s*\|\s*/g, ' / ').slice(0, 300) + (agora - q > 10 * 60000 ? ' (registrado no aparelho, enviado em ' + f(agora) + ')' : '');
+}
+
 // data informada pelo aparelho (trabalho feito sem internet); se vier no futuro ou muito antiga, vale a do servidor
-function dataAparelho(iso) {
-  const d = iso ? new Date(iso) : null; const agora = Date.now();
-  return d && !isNaN(d) && d.getTime() <= agora + 10 * 60000 && d.getTime() > agora - 60 * 864e5 ? d.toISOString() : new Date().toISOString();
+function dataAparelho(iso, minimo) {
+  const d = iso ? new Date(iso) : null; const agora = Date.now(); const min = minimo ? new Date(minimo).getTime() : agora - 60 * 864e5;
+  return d && !isNaN(d) && d.getTime() <= agora + 10 * 60000 && d.getTime() >= Math.max(min || 0, agora - 60 * 864e5) ? d.toISOString() : new Date().toISOString();
 }
 function dadosArvore(projetoId, uuidR) {
   const sh = planilha(projetoId); const tot = sh.getLastRow() - 1; if (tot < 1) return null;
@@ -691,7 +710,7 @@ function salvarOS(projetoId, d, usr) {
   try {
     const sh = abaOS(projetoId); const todas = lerOS(sh);
     if (d.chave && !/^[\w-]{8,60}$/.test(String(d.chave))) throw new Error('Identificador inválido.');
-    if (d.chave) { const ja = todas.find((o) => o.id === d.chave); if (ja) return { ordem: publicoOS(ja), ignorado: true }; } // reenvio do mesmo pedido (aparelho sem internet)
+    if (d.chave) { const ja = todas.find((o) => o.id === d.chave); if (ja) { if (ja.solicitada_por !== usr.login && ja.aberta_por !== usr.login) throw new Error('Identificador inválido.'); return { ordem: publicoOS(ja), ignorado: true }; } } // reenvio do mesmo pedido (aparelho sem internet)
     const atual = d.id ? todas.find((o) => o.id === d.id) : null;
     if (d.id && !atual) throw new Error('Ordem de serviço não encontrada.');
     if (atual && !coord) throw new Error('Seu perfil não tem acesso a esta função.');
@@ -705,11 +724,12 @@ function salvarOS(projetoId, d, usr) {
       if (d.responsavel != null) o.responsavel = String(d.responsavel).slice(0, 60);
     }
     if (!o.tipo) throw new Error('Escolha o tipo de serviço.');
+    if (!atual && !coord) { const hoje = Utilities.formatDate(new Date(), FUSO, 'yyyy-MM-dd'); if (todas.filter((x) => x.solicitada_por === usr.login && dia(x.solicitada_em) === hoje).length >= 50) throw new Error('Limite de 50 pedidos por dia atingido. Fale com a coordenação.'); }
     if (!o.prioridade) o.prioridade = 'Média';
     if (!atual) {
       if (d.registro_uuid) {
         const a = dadosArvore(projetoId, String(d.registro_uuid));
-        if (!a) throw new Error('Árvore não encontrada no projeto. Envie o registro antes de pedir o serviço.');
+        if (!a || (usr.perfil === 'cliente' && a.validacao === 'Descartado') || (usr.perfil === 'cliente' && !clienteVeTodos(projetoId) && a.validacao !== 'Validado')) throw new Error('Árvore não disponível para pedido. Envie o registro antes de pedir o serviço.');
         const form = lerFormulario(projeto(projetoId).formulario);
         const cc = form.campos.find((c) => c.auto === 'codigo') || form.campos.find((c) => /codigo/i.test(c.nome));
         const ce = form.campos.find((c) => c.tipo === 'species');
@@ -721,7 +741,7 @@ function salvarOS(projetoId, d, usr) {
       }
       const props = PROPS; const k = 'OSN_' + projetoId; const n = (+props.getProperty(k) || todas.reduce((m, x) => Math.max(m, +x.numero || 0), 0)) + 1; props.setProperty(k, String(n));
       o.numero = n;
-      const agora = dataAparelho(d.em);
+      const agora = new Date().toISOString(); // pedido e abertura sempre com a hora do servidor
       if (coord) Object.assign(o, { status: 'Aberta', aberta_por: usr.login, aberta_em: agora });
       else Object.assign(o, { status: 'Solicitada', solicitada_por: usr.login, solicitada_em: agora });
       o.historico = carimboHist(usr, (coord ? 'abriu a ordem' : 'solicitou o serviço') + ' (' + o.tipo + ', prioridade ' + o.prioridade.toLowerCase() + ')' + (o.responsavel ? ', responsável ' + o.responsavel : ''));
@@ -741,8 +761,10 @@ function andamentoOS(projetoId, id, etapa, d, usr) {
     if (!o) throw new Error('Ordem de serviço não encontrada.');
     const daEquipe = usr.perfil === 'coletor' && o.responsavel && o.responsavel === usr.equipe;
     const exige = (ok) => { if (!ok) throw new Error('Seu perfil não tem acesso a esta função.'); };
-    const quando = dataAparelho(d.em); const obs = String(d.obs || '').slice(0, 1000);
+    const base = o.reaberta_em || o.aberta_em || o.solicitada_em;
+    const quando = dataAparelho(d.em, etapa === 'concluir' ? (o.iniciada_em && o.status === 'Em execução' ? o.iniciada_em : base) : base); const obs = String(d.obs || '').slice(0, 1000);
     let txt = '';
+    if ((etapa === 'iniciar' || etapa === 'concluir') && o.reaberta_em && d.em && new Date(d.em) < new Date(o.reaberta_em)) throw new Error('A coordenação reabriu esta ordem depois do registro feito no aparelho. Abra a ordem e registre a execução de novo.');
     if (etapa === 'aprovar') {
       exige(coord); if (o.status === 'Aberta') return { ordem: publicoOS(o), ignorado: true };
       if (o.status !== 'Solicitada') throw new Error('Só pedidos com situação Solicitada podem ser aprovados.');
@@ -753,15 +775,15 @@ function andamentoOS(projetoId, id, etapa, d, usr) {
     } else if (etapa === 'iniciar') {
       exige(coord || daEquipe); if (o.status === 'Em execução') return { ordem: publicoOS(o), ignorado: true };
       if (o.status !== 'Aberta') throw new Error('Só ordens abertas podem ser iniciadas (situação atual: ' + o.status + ').');
-      const f = linkDrive(d.foto_antes); if (!f && OS_SEM_FOTO_ANTES.indexOf(o.tipo) < 0) throw new Error('Tire a foto de antes do serviço.');
+      const f = fotoDoProjeto(projetoId, d.foto_antes); if (!f && OS_SEM_FOTO_ANTES.indexOf(o.tipo) < 0) throw new Error('Tire a foto de antes do serviço.');
       Object.assign(o, { status: 'Em execução', iniciada_por: usr.login, iniciada_em: quando, foto_antes: f || o.foto_antes });
       txt = 'iniciou a execução';
     } else if (etapa === 'concluir') {
-      exige(coord || daEquipe); if (o.status === 'Concluída') return { ordem: publicoOS(o), ignorado: true };
+      exige(coord || daEquipe); if (o.status === 'Concluída') return { ordem: publicoOS(o), ignorado: true, aviso: o.concluida_por !== usr.login ? 'Esta ordem já tinha sido concluída por ' + o.concluida_por + '. O seu registro não foi aplicado.' : '' };
       if (['Aberta', 'Em execução'].indexOf(o.status) < 0) throw new Error('Só ordens abertas ou em execução podem ser concluídas (situação atual: ' + o.status + ').');
-      const fa = linkDrive(d.foto_antes) || o.foto_antes; if (!fa && OS_SEM_FOTO_ANTES.indexOf(o.tipo) < 0) throw new Error('Falta a foto de antes do serviço.');
-      const fd = linkDrive(d.foto_depois); if (!fd) throw new Error('Tire a foto de depois do serviço.');
-      if (o.status === 'Aberta') Object.assign(o, { iniciada_por: usr.login, iniciada_em: dataAparelho(d.iniciada_em || d.em) });
+      const fa = fotoDoProjeto(projetoId, d.foto_antes) || o.foto_antes; if (!fa && OS_SEM_FOTO_ANTES.indexOf(o.tipo) < 0) throw new Error('Falta a foto de antes do serviço.');
+      const fd = fotoDoProjeto(projetoId, d.foto_depois); if (!fd) throw new Error('Tire a foto de depois do serviço.');
+      if (o.status === 'Aberta') Object.assign(o, { iniciada_por: usr.login, iniciada_em: dataAparelho(d.iniciada_em || d.em, base) });
       Object.assign(o, { status: 'Concluída', concluida_por: usr.login, concluida_em: quando, foto_antes: fa, foto_depois: fd, execucao_obs: obs });
       txt = 'concluiu o serviço' + (obs ? ' (' + obs + ')' : '');
     } else if (etapa === 'cancelar') {
@@ -773,11 +795,14 @@ function andamentoOS(projetoId, id, etapa, d, usr) {
     } else if (etapa === 'reabrir') {
       exige(coord); if (['Concluída', 'Cancelada'].indexOf(o.status) < 0) throw new Error('Só ordens concluídas ou canceladas podem ser reabertas.');
       if (!obs) throw new Error('Informe o motivo para reabrir.');
-      Object.assign(o, { status: 'Aberta', motivo: obs, concluida_por: '', concluida_em: '', cancelada_por: '', cancelada_em: '' });
-      txt = 'reabriu (' + obs + ')';
+      const fh = (x) => Utilities.formatDate(new Date(x), FUSO, 'yyyy-MM-dd HH:mm');
+      const ant = o.concluida_em || o.iniciada_em ? '. Execução anterior: ' + [o.iniciada_em ? 'iniciada ' + fh(o.iniciada_em) + ' por ' + o.iniciada_por : '', o.concluida_em ? 'concluída ' + fh(o.concluida_em) + ' por ' + o.concluida_por : '', o.execucao_obs ? 'observação: ' + o.execucao_obs : '', o.foto_antes ? 'foto de antes ' + o.foto_antes : '', o.foto_depois ? 'foto de depois ' + o.foto_depois : ''].filter(Boolean).join(', ') : '';
+      Object.assign(o, { status: 'Aberta', motivo: obs, iniciada_por: '', iniciada_em: '', concluida_por: '', concluida_em: '', foto_depois: '', execucao_obs: '', cancelada_por: '', cancelada_em: '', reaberta_em: new Date().toISOString() });
+      txt = 'reabriu (' + obs + ')' + ant;
     } else throw new Error('Etapa inválida.');
-    o.historico = [o.historico, carimboHist(usr, txt)].filter(Boolean).join(' | ');
-    gravarOS(sh, o);
+    o.historico = [o.historico, carimboHist(usr, txt, etapa === 'iniciar' || etapa === 'concluir' ? quando : null)].filter(Boolean).join(' | ');
+    o.historico = String(o.historico).slice(-20000);
+    gravarOS(sh, o); try { CacheService.getScriptCache().remove('fotos_os:' + projetoId); } catch (e) { /* segue */ }
     auditar(usr.login, 'os_' + etapa, projetoId, 'OS ' + o.numero);
     return { ordem: publicoOS(o) };
   } finally { lock.releaseLock(); }
@@ -802,17 +827,19 @@ function autenticarChave(k, acao) {
   const c = tabela('Chaves').find((x) => x.hash === hashChave(k) && x.ativa === 'sim');
   if (!c) throw Object.assign(new Error('Chave de integração inválida ou revogada.'), { sessao: true });
   if (ACOES_INTEGRACAO.indexOf(acao) < 0) throw new Error('A chave de integração só permite consultar dados.');
-  auditar('integração: ' + c.nome, 'api_' + acao, c.projeto, '');
-  return { login: 'integracao-' + c.id, nome: c.nome, perfil: 'revisor', equipe: '', projetos: [c.projeto], termo_aceito_em: c.criada_em, integracao: true };
+  try { const ck = 'api:' + c.id + ':' + acao + ':' + Utilities.formatDate(new Date(), FUSO, 'yyyyMMddHH'); const cache = CacheService.getScriptCache(); if (!cache.get(ck)) { cache.put(ck, '1', 3700); auditar('integração: ' + c.nome, 'api_' + acao, c.projeto, 'primeira consulta desta hora'); } } catch (e) { auditar('integração: ' + c.nome, 'api_' + acao, c.projeto, ''); }
+  return { login: 'integracao-' + c.id, nome: c.nome, perfil: 'cliente', equipe: '', projetos: [c.projeto], termo_aceito_em: c.criada_em, integracao: true };
 }
 
 // ---------- Restauração de cópia de segurança ----------
 function listarCopias(projetoId) {
   const p = projeto(projetoId); const out = []; const raiz = pastaBackup(); const it = raiz.getFolders();
-  const soltos = raiz.getFiles(); while (soltos.hasNext()) { const a = soltos.next(); if (String(a.getName()).indexOf(p.nome + ' - antes da restauração') === 0) out.push({ id: a.getId(), nome: a.getName(), dia: String(a.getName()).slice(-16, -6) }); }
+  const esc = String(p.nome).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rxDia = new RegExp('^' + esc + ' - \\d{4}-\\d{2}-\\d{2}$'); const rxAntes = new RegExp('^' + esc + ' - antes da restauração \\d{4}-\\d{2}-\\d{2} \\d{2}-\\d{2}$');
+  const soltos = raiz.getFiles(); while (soltos.hasNext()) { const a = soltos.next(); if (rxAntes.test(String(a.getName()))) out.push({ id: a.getId(), nome: a.getName(), dia: String(a.getName()).slice(-16, -6) }); }
   while (it.hasNext()) {
     const f = it.next(); const fs = f.getFiles();
-    while (fs.hasNext()) { const a = fs.next(); if (String(a.getName()).indexOf(p.nome + ' - ') === 0) out.push({ id: a.getId(), nome: a.getName(), dia: f.getName() }); }
+    while (fs.hasNext()) { const a = fs.next(); if (rxDia.test(String(a.getName()))) out.push({ id: a.getId(), nome: a.getName(), dia: f.getName() }); }
   }
   return out.sort((a, b) => (a.dia < b.dia ? 1 : -1)).slice(0, 60);
 }
@@ -828,11 +855,12 @@ function restaurarCopia(projetoId, arquivoId, usr) {
     const res = {};
     ['Registros', 'Ordens'].forEach((nome) => {
       const de = origem.getSheetByName(nome); let para = destino.getSheetByName(nome);
-      if (!de) return;
+      if (!de && !para) return;
       if (!para) para = destino.insertSheet(nome);
+      if (!de) { if (para.getLastRow()) para.getRange(1, 1, para.getLastRow(), Math.max(1, para.getLastColumn())).clearContent(); res[nome] = 0; return; } // cópia anterior às ordens de serviço: a aba fica vazia (o estado anterior está na cópia guardada)
       const v = de.getLastRow() ? de.getRange(1, 1, de.getLastRow(), de.getLastColumn()).getValues() : [];
       if (para.getLastRow()) para.getRange(1, 1, para.getLastRow(), Math.max(1, para.getLastColumn())).clearContent();
-      if (v.length) { const rg = para.getRange(1, 1, v.length, v[0].length); rg.setNumberFormat('@'); rg.setValues(v.map((l) => l.map((x) => (x instanceof Date ? x.toISOString() : x)))); }
+      if (v.length) { const rg = para.getRange(1, 1, v.length, v[0].length); rg.setNumberFormat('@'); rg.setValues(v.map((l) => l.map((x) => (x instanceof Date ? x.toISOString() : typeof x === 'string' ? seguro(x.replace(/^'/, '')) : x)))); }
       res[nome] = Math.max(0, v.length - 1);
     });
     try { CacheService.getScriptCache().removeAll(['painel:' + projetoId + ':todos', 'painel:' + projetoId + ':cliente', 'fotos_val:' + projetoId]); } catch (e) { /* segue */ }
