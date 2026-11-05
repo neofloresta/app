@@ -13,7 +13,7 @@ const FOTO = require('fs').readFileSync(__dirname + '/foto.jpg').toString('base6
   const T2 = (await P('login', { u: 'div-2', s: 'equipe02' })).token;
   const TO = (await P('login', { u: 'outra', s: 'outra001' })).token;
   const agora = new Date().toISOString();
-  for (const k of ['a', 'b', 'c']) LK[k] = (await P('foto', { t: T1, projeto: 'divinopolis', nome: 'os-' + k + '.jpg', mime: 'image/jpeg', dados: FOTO })).url;
+  for (const k of ['a', 'b', 'c']) LK[k] = (await P('foto', { t: T1, projeto: 'divinopolis', nome: 'OS-teste-' + k + '.jpg', mime: 'image/jpeg', dados: FOTO })).url;
   const LINK = (k) => LK[k];
   await P('registro', { t: T1, projeto: 'divinopolis', linha: { uuid: 'arv1', projeto: 'divinopolis', equipe: 'Equipe 1', criado_em: agora, atualizado_em: agora, latitude: -20.14, longitude: -44.89, Codigo: 'E1-0001', Especie: 'Moquilea tomentosa', Categoria: '1', bairro_aprox: 'Centro', endereco_aprox: 'Rua Goiás, 100' } });
 

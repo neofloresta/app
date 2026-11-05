@@ -7,7 +7,7 @@ const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.s
   const TA = (await P('login', { u: 'admin', s: L.senha() })).token;
   // uma foto real e uma ordem concluída, para o pacote levar fotos
   const foto = fs.readFileSync(__dirname + '/foto.jpg').toString('base64');
-  const f1 = await P('foto', { t: TA, projeto: 'divinopolis', nome: 'E1_0.jpg', mime: 'image/jpeg', dados: foto });
+  const f1 = await P('foto', { t: TA, projeto: 'divinopolis', nome: 'OS-E1_0.jpg', mime: 'image/jpeg', dados: foto });
   const o = (await P('os_salvar', { t: TA, projeto: 'divinopolis', os: { registro_uuid: 'seed-0', tipo: 'Supressão', responsavel: 'Equipe 1' } })).ordem;
   await P('os_andamento', { t: TA, projeto: 'divinopolis', id: o.id, etapa: 'concluir', dados: { foto_antes: f1.url, foto_depois: f1.url } });
   const b = await chromium.launch(); const { p } = await L.celular(b, { acceptDownloads: true, viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false, deviceScaleFactor: 1 });

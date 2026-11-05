@@ -682,7 +682,7 @@ function fotoDeOS(projetoId, id) {
 // a foto da ordem precisa estar no DCIM deste projeto
 function fotoDoProjeto(projetoId, u) {
   const id = idFoto(u); if (!id) return '';
-  try { const p = projeto(projetoId); const pais = DriveApp.getFileById(id).getParents(); while (pais.hasNext()) { const avo = pais.next().getParents(); while (avo.hasNext()) if (avo.next().getId() === p.pasta_id) return 'https://drive.google.com/file/d/' + id + '/view'; } } catch (e) { /* não existe */ }
+  try { const p = projeto(projetoId); const arq = DriveApp.getFileById(id); if (!/^OS-/.test(String(arq.getName()))) return ''; const pais = arq.getParents(); while (pais.hasNext()) { const avo = pais.next().getParents(); while (avo.hasNext()) if (avo.next().getId() === p.pasta_id) return 'https://drive.google.com/file/d/' + id + '/view'; } } catch (e) { /* não existe */ }
   return '';
 }
 function carimboHist(usr, txt, quando) {
