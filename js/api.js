@@ -71,6 +71,7 @@ const Api = (() => {
     async estilo(id) { const b = await this.base(); if (b.estilos[id]) return b.estilos[id]; try { const r = await fetch(`forms/${id}.qml`); return r.ok ? await r.text() : null; } catch (e) { return null; } },
     async foto() { return { id: '', url: '' }; },
     async registro() { return { ok: true }; },
+    async reservar() { return null; }, // na demonstração só existe um aparelho
     async listar(projeto) {
       const b = await this.base(); const p = b.projetos.find((x) => x.id === projeto); const form = b.formularios[p.formulario];
       return (await Store.registros(projeto)).filter((r) => r.status !== 'rascunho').map((r) => Object.assign(achatar(r, form), b.validacao[r.uuid] || { validacao: 'Pendente' }));
@@ -153,6 +154,8 @@ const Api = (() => {
       return { id: j.id, url: j.url };
     },
     async registro(projeto, linha) { return chamar('registro', { projeto, linha }); },
+    // faixa exclusiva de códigos para este aparelho. Servidor antigo (sem a ação): devolve null e o app usa a sequência local
+    async reservar(projeto, prefixo, campo, qtd, minimo) { try { const j = await chamar('reservar', { projeto, prefixo, campo, qtd, minimo }); return { ini: j.ini, fim: j.fim }; } catch (e) { if (/desconhecida/i.test(e.message)) return null; throw e; } },
     async listar(projeto) { return (await chamar('listar', { projeto })).linhas; },
     // só as colunas pedidas, em lista compacta (mapa e sequência do código). Servidor antigo: cai no listar completo.
     async mapa(projeto, campos) {

@@ -65,9 +65,11 @@
         this.ouvintes.forEach((f) => f(S.pos));
       }, (e) => { S.posErro = e.message; this.ouvintes.forEach((f) => f(null, e)); }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
     },
-    // pede uma leitura nova na hora (o watch só avisa quando a posição muda)
+    // pede uma leitura nova na hora. O watch só avisa quando a posição muda: com o celular parado ele fica quieto
+    // e a árvore nova ficava sem GPS. Reiniciar o acompanhamento força o aparelho a entregar a posição atual.
     agora() {
       if (!navigator.geolocation) return;
+      if (this.id != null) { navigator.geolocation.clearWatch(this.id); this.id = null; this.iniciar(); }
       navigator.geolocation.getCurrentPosition((p) => {
         S.pos = { lat: p.coords.latitude, lon: p.coords.longitude, prec: Math.round(p.coords.accuracy * 10) / 10, t: Date.now() };
         this.ouvintes.forEach((f) => f(S.pos));
@@ -155,6 +157,7 @@
     S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
     S.form = await carregarForm(p.formulario);
     await Promise.race([sincronizarSequencia(), new Promise((r) => setTimeout(r, 8000))]);
+    await Promise.race([garantirFaixa(), new Promise((r) => setTimeout(r, 8000))]);
   }
   async function carregarForm(id, forcarCache) {
     const chave = 'form:' + id;
@@ -260,6 +263,7 @@
     if (!navigator.onLine) { if (!silencioso) toast('Sem internet. Os dados ficam guardados e serão enviados depois.'); return atualizarSync(); }
     S.sincronizando = true; // marcado antes de qualquer espera: nunca roda duas vezes ao mesmo tempo
     try { await enviarPendentes(silencioso); if (!S.expirada) await enviarFilaOS(silencioso); if (!S.expirada) await enviarFilaQd(silencioso); } finally { S.sincronizando = false; await atualizarSync(); }
+    garantirFaixa();
     if (S.expirada) return;
     await atualizarSituacao();
     if (location.hash === '' || location.hash === '#inicio') listarRegistros();
@@ -468,12 +472,33 @@
     return dig ? 'E' + dig[0] : norm(eq).replace(/[^a-z]/g, '').slice(0, 3).toUpperCase() || 'EQ';
   }
   function seqDe(cod, pre) { const m = String(cod || '').match(new RegExp('^' + pre + '-(\\d+)$')); return m ? parseInt(m[1], 10) : 0; }
-  async function proximoCodigo(campo) {
-    const pre = prefixoEquipe(); const chave = `seq:${S.projeto.id}:${pre}`;
-    let max = Math.max((await Store.get(chave)) || 0, (await Store.get('srv' + chave)) || 0);
+  async function maxLocal(campo, pre) {
+    let max = Math.max((await Store.get(`seq:${S.projeto.id}:${pre}`)) || 0, (await Store.get(`srvseq:${S.projeto.id}:${pre}`)) || 0);
     for (const r of await Store.registros(S.projeto.id)) max = Math.max(max, seqDe(r.valores[campo], pre));
-    await Store.set(chave, max + 1);
-    return `${pre}-${String(max + 1).padStart(4, '0')}`;
+    return max;
+  }
+  // Cada aparelho usa uma faixa de números reservada no servidor (ex.: E1-0101 a E1-0200), então dois celulares
+  // com o mesmo usuário nunca repetem código, mesmo sem internet. Sem faixa (servidor antigo ou nunca conectou): sequência local.
+  async function proximoCodigo(campo) {
+    const pre = prefixoEquipe(); const chave = `seq:${S.projeto.id}:${pre}`; const kf = `faixa:${S.projeto.id}:${pre}`;
+    const faixas = ((await Store.get(kf)) || []).filter((f) => f[0] <= f[1]);
+    let n;
+    if (faixas.length) { n = faixas[0][0]++; await Store.set(kf, faixas.filter((f) => f[0] <= f[1])); }
+    else n = (await maxLocal(campo, pre)) + 1;
+    await Store.set(chave, Math.max((await Store.get(chave)) || 0, n));
+    garantirFaixa();
+    return `${pre}-${String(n).padStart(4, '0')}`;
+  }
+  let reservando = false;
+  async function garantirFaixa() {
+    if (Api.demo || reservando || !navigator.onLine || !S.projeto || !S.form || !['coletor', 'revisor', 'admin'].includes(perfil())) return;
+    const c = S.form.campos.find((x) => x.auto === 'codigo'); if (!c) return;
+    const pre = prefixoEquipe(); const kf = `faixa:${S.projeto.id}:${pre}`;
+    const faixas = ((await Store.get(kf)) || []).filter((f) => f[0] <= f[1]);
+    if (faixas.reduce((s, f) => s + f[1] - f[0] + 1, 0) >= 30) return;
+    reservando = true;
+    try { const r = await Api.b.reservar(S.projeto.id, pre, c.nome, 100, await maxLocal(c.nome, pre)); if (r) { faixas.push([r.ini, r.fim]); await Store.set(kf, faixas); } }
+    catch (e) { /* sem conexão: tenta de novo na próxima abertura ou envio */ } finally { reservando = false; }
   }
   async function sincronizarSequencia() {
     if (Api.demo || !navigator.onLine || !S.projeto || !S.form) return;
@@ -603,6 +628,8 @@
       pintarGps();
     };
     Gps.ouvintes.forEach((f) => f.__form && Gps.ouvintes.delete(f)); ouvinte.__form = true; Gps.ouvintes.add(ouvinte);
+    // árvore nova sem posição: usa a leitura recente ou pede outra (a resposta pode ter chegado antes desta tela abrir)
+    if (r.lat == null && r.gpsAuto && !r.posManual) { if (S.pos && Date.now() - S.pos.t < 20000) ouvinte(S.pos); else Gps.agora(); }
     pintarGps();
 
     const cc = campoCodigo(form);
@@ -999,10 +1026,11 @@
     const barra = h('div', { class: 'mapa-filtros' }, busca, h('div', { class: 'mapa-sel' }, selEq, selRisco, selBairro, selCor, selQd), conta);
     const barraSel = h('div', { class: 'qd-selecao oculto' });
     $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: centrar }, 'Minha posição')), barra, div, barraSel));
-    const mapa = L.map(div, { preferCanvas: true, maxZoom: 21 }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
+    // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
+    const render = L.canvas({ padding: 0.3, tolerance: 8 });
+    const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21 }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
     if (S.fundo == null) S.fundo = (await Store.get('fundo')) || 'ruas';
     camadasFundo(mapa, false);
-    const render = L.canvas({ padding: 0.3, tolerance: 8 });
     const cores = ['#00546E', '#CD834C', '#6A1B9A', '#2E7D32', '#C62828', '#12A6C8'];
     const corRisco = { Baixo: COR_RISCO.Baixo, 'Médio': COR_RISCO['Médio'], Alto: COR_RISCO.Alto };
     const equipes = []; const corEq = (e) => { if (!equipes.includes(e)) equipes.push(e); return cores[equipes.indexOf(e) % cores.length]; };

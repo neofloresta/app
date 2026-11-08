@@ -5,3 +5,6 @@ mock.log
 res-*.json
 saida-*
 *.png
+saida.*
+importar.csv
+relatorio.pdf
