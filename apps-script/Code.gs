@@ -863,7 +863,9 @@ function andamentoOS(projetoId, id, etapa, d, usr) {
 
 // ---------- Quadras ----------
 // A camada (polígonos e números) fica num arquivo no Drive do projeto; a situação de cada quadra fica na aba "Quadras".
-const COLS_QUADRAS = ['numero', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'obs', 'historico', 'atualizado_em'];
+const COLS_QUADRAS = ['numero', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'obs', 'historico', 'atualizado_em', 'atribuida'];
+// atribuida: 'sim' quando a coordenação definiu a equipe; 'nao' quando a equipe pegou sozinha (aí não prende as faces de outras equipes)
+function garantirCab(sh, cols) { const cab = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String); const faltam = cols.filter((c) => cab.indexOf(c) < 0); if (faltam.length) sh.getRange(1, cab.filter(String).length + 1, 1, faltam.length).setValues([faltam]); return sh; }
 const SITUACOES_QUADRA = ['A levantar', 'Em levantamento', 'Levantada'];
 function infoQuadras(projetoId) { try { return JSON.parse(PROPS.getProperty('QD_' + projetoId) || 'null'); } catch (e) { return null; } }
 function importarQuadras(projetoId, camada, usr) {
@@ -926,17 +928,17 @@ function abaQuadras(projetoId) {
   const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Quadras');
   if (!sh) { sh = ss.insertSheet('Quadras'); sh.appendRow(COLS_QUADRAS); sh.setFrozenRows(1); }
   if (!sh.getLastRow()) sh.appendRow(COLS_QUADRAS);
-  return sh;
+  return garantirCab(sh, COLS_QUADRAS);
 }
 function lerSitQuadras(projetoId) { return lerOS(abaQuadras(projetoId)); }
-const COLS_FACES = ['numero', 'quadra', 'rua', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'largura', 'registro', 'obs', 'historico', 'atualizado_em'];
+const COLS_FACES = ['numero', 'quadra', 'rua', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'largura', 'registro', 'obs', 'historico', 'atualizado_em', 'atribuida'];
 const SITUACOES_FACE = ['A levantar', 'Em levantamento', 'Levantada', 'Levantada, sem árvores'];
 const FACE_FEITA = ['Levantada', 'Levantada, sem árvores'];
 function abaFaces(projetoId) {
   const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Faces');
   if (!sh) { sh = ss.insertSheet('Faces'); sh.appendRow(COLS_FACES); sh.setFrozenRows(1); }
   if (!sh.getLastRow()) sh.appendRow(COLS_FACES);
-  return sh;
+  return garantirCab(sh, COLS_FACES);
 }
 function lerSitFaces(projetoId) { return lerOS(abaFaces(projetoId)); }
 // Marca quadras e faces (itens com tipo "face", número "quadra-letra"). Ao mexer numa face, a quadra acompanha:
@@ -956,7 +958,7 @@ function marcarQuadras(projetoId, itens, usr) {
   } finally { lock.releaseLock(); }
 }
 function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
-  const eqQuadra = {}; lerSitQuadras(projetoId).forEach((q) => { if (q.equipe) eqQuadra[q.numero] = q.equipe; });
+  const eqQuadra = {}; lerSitQuadras(projetoId).forEach((q) => { if (q.equipe && q.atribuida !== 'nao') eqQuadra[q.numero] = q.equipe; });
   const sh = abaFaces(projetoId); const por = {}; const todas = [];
   const v0 = sh.getDataRange().getValues(); const cab0 = v0.shift().map(String);
   v0.forEach((l, i) => { if (l[0] === '') return; const o = { __linha: i + 2 }; cab0.forEach((c, k) => { if (c) o[c] = texto(l[k]); }); todas.push(o); por[o.numero] = o; }); // linha real na planilha, mesmo com linhas em branco no meio
@@ -969,20 +971,23 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     if (it.situacao != null && SITUACOES_FACE.indexOf(it.situacao) < 0) { recusadas.push({ numero: id, motivo: 'Situação inválida.' }); return; }
     if (it.situacao === 'Levantada, sem árvores') {
       const lt = String(it.largura == null ? '' : it.largura).trim(); const lg = +lt.replace(',', '.');
-      if (!/^[0-9a-f-]{8,60}$/i.test(String(it.registro || '')) || !/^\d{1,2}([.,]\d{1,2})?$/.test(lt) || !(lg > 0)) { recusadas.push({ numero: id, motivo: 'Face sem árvores precisa da foto e da largura da calçada (cadastro de calçada).' }); return; }
+      if (!/^[0-9a-f-]{8,60}$/i.test(String(it.registro || '')) || !/^\d{1,2}([.,]\d{1,3})?$/.test(lt) || !(lg > 0)) { recusadas.push({ numero: id, motivo: 'Face sem árvores precisa da foto e da largura da calçada (cadastro de calçada).' }); return; }
     }
     if (!coord) {
       if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
       if (f.equipe && f.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Face da ' + f.equipe + '.' }); return; }
       // face ainda sem equipe numa quadra de outra equipe: só a coordenação passa a face para outra equipe
       if (!f.equipe && eqQuadra[qn] && eqQuadra[qn] !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Quadra da ' + eqQuadra[qn] + '.' }); return; }
-      if (!f.equipe && it.situacao != null) f.equipe = usr.equipe;
-    } else if (it.equipe != null) f.equipe = String(it.equipe).slice(0, 60);
+      if (!f.equipe && it.situacao != null && it.situacao !== 'A levantar') { f.equipe = usr.equipe; f.atribuida = 'nao'; }
+      if (it.situacao === 'A levantar' && f.atribuida !== 'sim') f.equipe = ''; // desmarcou: a face volta a ficar livre (se não foi a coordenação que deu a equipe)
+    } else if (it.equipe != null) { f.equipe = String(it.equipe).slice(0, 60); f.atribuida = f.equipe ? 'sim' : ''; }
     if (it.rua != null) f.rua = String(it.rua).slice(0, 60);
     if (it.auto && (f.situacao || 'A levantar') !== 'A levantar') return;
     if (it.situacao != null && it.em && f.marcada_em && new Date(it.em) < new Date(f.marcada_em)) { recusadas.push({ numero: id, motivo: 'A face foi marcada depois por ' + f.marcada_por + ' (' + f.situacao.toLowerCase() + ').' }); return; }
     const txt = [];
-    if (it.situacao != null && (it.situacao !== f.situacao || (it.situacao === 'Levantada, sem árvores' && it.registro !== f.registro))) {
+    const lgNova = it.situacao === 'Levantada, sem árvores' ? String(+String(it.largura).replace(',', '.')) : '';
+    if (it.situacao === 'Levantada, sem árvores' && it.situacao === f.situacao && it.registro === f.registro && lgNova !== f.largura) { f.largura = lgNova; txt.push('largura da calçada ' + lgNova.replace('.', ',') + ' m'); } // cadastro corrigido depois
+    else if (it.situacao != null && (it.situacao !== f.situacao || (it.situacao === 'Levantada, sem árvores' && it.registro !== f.registro))) {
       f.situacao = it.situacao; f.marcada_por = usr.login; f.marcada_em = dataAparelho(it.em); txt.push(it.situacao.toLowerCase());
       if (it.situacao === 'Levantada, sem árvores') { f.registro = String(it.registro).slice(0, 60); f.largura = String(+String(it.largura).replace(',', '.')); } else { f.registro = ''; f.largura = ''; }
     }
@@ -1010,7 +1015,7 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     const st = idx.faces[qn].map((l) => (por[qn + '-' + l] || {}).situacao || 'A levantar');
     if (st.every((x) => FACE_FEITA.indexOf(x) >= 0)) return { numero: qn, situacao: 'Levantada', sistema: 'todas as faces levantadas' };
     if (st.some((x) => x !== 'A levantar')) return { numero: qn, situacao: 'Em levantamento', sistema: 'face em levantamento' };
-    return { numero: qn, situacao: 'A levantar', sistema: 'nenhuma face levantada', soDe: 'Levantada' }; // só desfaz quadra levantada; em levantamento fica como está
+    return { numero: qn, situacao: 'A levantar', sistema: 'nenhuma face começada', soDe: 'faces' }; // desfaz só o que veio das faces
   }).filter(Boolean);
   return { alteradas: mudou.length, recusadas, quadras };
 }
@@ -1026,17 +1031,19 @@ function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums) {
       if (it.situacao != null && SITUACOES_QUADRA.indexOf(it.situacao) < 0) { recusadas.push({ numero: n, motivo: 'Situação inválida.' }); return; }
       if (it.sistema) { // efeito das faces: não muda a equipe nem é recusado pela equipe da quadra
         const atual = q.situacao || 'A levantar';
-        if (atual === it.situacao || (it.soDe && atual !== it.soDe)) return;
+        if (atual === it.situacao) return;
+        if (it.soDe === 'faces' && !(atual === 'Levantada' || (atual === 'Em levantamento' && /\(face em levantamento\)$/.test(q.historico || '')))) return; // quadra começada por árvore ou pela equipe fica como está
         q.situacao = it.situacao; q.marcada_por = usr.login; q.marcada_em = new Date().toISOString();
-        if (!q.equipe && !coord && usr.equipe) q.equipe = usr.equipe; // quadra feita pelas faces fica com a equipe que fez
+        if (it.situacao === 'Levantada' && !q.equipe && !coord && usr.equipe) { q.equipe = usr.equipe; q.atribuida = 'nao'; } // quadra feita pelas faces fica com a equipe que fez
+        if (it.situacao === 'A levantar' && q.atribuida === 'nao') q.equipe = '';
         q.historico = [q.historico, carimboHist(usr, it.situacao.toLowerCase() + ' (' + it.sistema + ')', q.marcada_em)].filter(Boolean).join(' | ').slice(-5000);
         q.atualizado_em = q.marcada_em; if (q0) Object.assign(q0, q); else { por[n] = q; todas.push(q); } mudou.push(n); return;
       }
       if (!coord) {
         if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
         if (q.equipe && q.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Quadra da ' + q.equipe + '.' }); return; }
-        if (!q.equipe) q.equipe = usr.equipe;
-      } else if (it.equipe != null) q.equipe = String(it.equipe).slice(0, 60);
+        if (!q.equipe) { q.equipe = usr.equipe; q.atribuida = 'nao'; }
+      } else if (it.equipe != null) { q.equipe = String(it.equipe).slice(0, 60); q.atribuida = q.equipe ? 'sim' : ''; }
       if (it.auto && (q.situacao || 'A levantar') !== 'A levantar') return; // automática ao salvar árvore: só vale para quadra ainda a levantar
       if (it.situacao != null && it.em && q.marcada_em && new Date(it.em) < new Date(q.marcada_em)) { recusadas.push({ numero: n, motivo: 'A quadra foi marcada depois por ' + q.marcada_por + ' (' + q.situacao.toLowerCase() + ').' }); return; }
       const txt = [];

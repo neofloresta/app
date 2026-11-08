@@ -192,6 +192,9 @@ textarea.entrada { min-height: 96px; resize: vertical; }
 .mapa-filtros { padding: 8px 12px; background: #fff; border-bottom: 1px solid var(--linha, #dde3e6); display: grid; gap: 6px; }
 .mapa-filtros .entrada { padding: 8px 10px; font-size: 15px; min-height: 0; }
 .mapa-sel { display: flex; gap: 6px; overflow-x: auto; }
+.mapa-busca { display: flex; gap: 6px; align-items: center; }
+.mapa-busca .entrada { flex: 1; min-width: 0; }
+.bt-filtros { flex: none; }
 .mapa-sel select { flex: 1 0 auto; width: auto; }
 .mapa-conta { color: #5b6b72; font-size: 12px; }
 .mapa-leg { background: #fff; padding: 6px 9px; border-radius: 8px; font-size: 13px; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
@@ -383,6 +386,9 @@ input[type=file]::file-selector-button { border: 0; border-radius: 10px; backgro
 .tela-mapa { position: relative; }
 .leg-tit { display: block; margin-top: 6px; font-size: 12px; }
 .mapa-leg .leg-qd { border-radius: 2px; }
+.mapa-leg .leg-bt { display: block; background: none; border: 0; padding: 0 0 4px; font: inherit; font-weight: 600; color: #00546E; cursor: pointer; }
+.mapa-leg.recolhida > :not(.leg-bt) { display: none; }
+.mapa-leg.recolhida .leg-bt { padding: 0; }
 .mapa-leg .leg-fc { width: 14px; height: 4px; border-radius: 0; vertical-align: middle; }
 .faixa-face { margin: 8px 12px 0; padding: 10px 12px; border-left: 4px solid #00838F; background: #E6F4F5; border-radius: 6px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
 .faixa-face span { color: #37474F; }

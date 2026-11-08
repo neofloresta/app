@@ -103,7 +103,16 @@ const sitF = async (T) => { const j = await P('quadras_situacao', { t: T, projet
   const vista = await pa.evaluate(() => { const m = window.__app.mapa; const c = m.getCenter(); return { z: m.getZoom(), lat: c.lat, lon: c.lng }; });
   ok('F.11', vista.z <= 14 && Math.abs(vista.lat + 20.14) < 0.1 && Math.abs(vista.lon + 44.89) < 0.1, `depois de "Ver a cidade": zoom ${vista.z}, centro ${vista.lat.toFixed(3)}, ${vista.lon.toFixed(3)}`);
   await pa.evaluate(([a, c]) => { window.__app.mapa.setView([a, c], 17, { animate: false }); }, meio(q1, f1)); await pa.waitForTimeout(1200); await pa.screenshot({ path: 'fc-mapa.png' });
-  const erros = [...pa.erros, ...pe.erros, ...E2.p.erros]; ok('F.12', !erros.length, erros.length ? erros.join(' | ') : 'sem erros de JavaScript nas telas');
+  // tela pequena: todos os botões da ficha da face dá para tocar (a legenda não pode ficar por cima)
+  const Pq = await L.celular(b, { viewport: { width: 360, height: 640 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await L.logar(Pq.p, 'div-2', 'equipe02'); await Pq.p.waitForSelector('button.nova'); await Pq.p.goto(L.WEB + '#mapa'); await Pq.p.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000, state: 'attached' });
+  const filtrosRecolhidos = await Pq.p.locator('.mapa-sel').evaluate((e) => e.classList.contains('oculto')); const altMapa = await Pq.p.locator('#mapa').evaluate((e) => e.getBoundingClientRect().height); await Pq.p.waitForTimeout(1200);
+  const qL2 = cam.quadras.find((q) => q.f && q.n !== q1.n && Math.abs(q.b[1] - centro[0]) < 0.01 && q.f.length >= 3 && +q.n > 2300);
+  await tocar(Pq.p, ...meio(qL2, qL2.f[0]));
+  const tapados = await Pq.p.evaluate(() => [...document.querySelectorAll('.qd-ficha button')].filter((b) => { b.scrollIntoView({ block: 'nearest' }); const r = b.getBoundingClientRect(); const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !el || !(el === b || b.contains(el)); }).map((b) => b.textContent));
+  const nBt = await Pq.p.locator('.qd-ficha button').count(); await Pq.p.screenshot({ path: 'fc-tela-pequena.png' });
+  ok('F.13', nBt >= 4 && !tapados.length && filtrosRecolhidos && altMapa > 400, `celular 360x640: filtros recolhidos=${filtrosRecolhidos}, mapa com ${Math.round(altMapa)} px de altura; ${nBt} botões na ficha da face, tapados: ${tapados.join(', ') || 'nenhum'}`);
+  const erros = [...pa.erros, ...pe.erros, ...E2.p.erros, ...Pq.p.erros]; ok('F.12', !erros.length, erros.length ? erros.join(' | ') : 'sem erros de JavaScript nas telas');
   fs.writeFileSync(__dirname + '/res-bfc.json', JSON.stringify(R, null, 1));
   const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

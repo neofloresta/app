@@ -63,6 +63,18 @@ const Q = ctx.Quadras;
   ok('números de face estranhos recusados sem derrubar o lote', j.ok && j.recusadas.length === 3, j.erro || '');
   j = await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ tipo: 'face', numero: ids[2], situacao: 'Levantada, sem árvores', registro: 'x', largura: '0x10' }] });
   ok('registro e largura inválidos recusados', j.recusadas.length === 1);
+  // desmarcar solta a face; quadra pega sozinha pela equipe (árvore salva) não prende as faces das outras
+  const q30 = cam.quadras.find((x) => x.n === '30'); const id30 = '30-' + q30.f[0].i, id30b = '30-' + q30.f[1].i;
+  await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ tipo: 'face', numero: id30, situacao: 'Em levantamento' }] });
+  await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ tipo: 'face', numero: id30, situacao: 'A levantar' }] });
+  s = await P('quadras_situacao', { t: T, projeto: 'divinopolis', faces: true }); let x30 = s.faces.find((x) => x.numero === id30); let qx = s.quadras.find((x) => x.numero === '30');
+  ok('face desmarcada fica livre e a quadra volta', x30.equipe === '' && x30.situacao === 'A levantar' && qx.situacao === 'A levantar', `face ${x30.situacao}/${x30.equipe || 'sem equipe'}; quadra ${qx.situacao}`);
+  await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ numero: '30', situacao: 'Em levantamento', auto: true }] });
+  j = await P('quadras_marcar', { t: T2, projeto: 'divinopolis', itens: [{ tipo: 'face', numero: id30b, situacao: 'Levantada' }] });
+  ok('quadra pega sozinha não prende as faces da outra equipe', !j.recusadas.length, JSON.stringify(j.recusadas));
+  await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ tipo: 'face', numero: ids[1], situacao: 'Levantada, sem árvores', registro: 'a1b2c3d4-0000-4000-8000-000000000001', largura: '3,45' }] });
+  s = await P('quadras_situacao', { t: T, projeto: 'divinopolis', faces: true });
+  ok('largura corrigida no cadastro atualiza a face', s.faces.find((x) => x.numero === ids[1]).largura === '3.45');
   // reimportar mantém a situação das faces
   j = await P('quadras_importar', { t: T, projeto: 'divinopolis', camada: txt }); s = await P('quadras_situacao', { t: T, projeto: 'divinopolis', faces: true });
   ok('reimportar mantém as faces', s.faces.find((x) => x.numero === ids[1]).situacao === 'Levantada, sem árvores');
