@@ -17,7 +17,7 @@ async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, al
   await aba(p, 'Indivíduo'); await op(p, 'Situacao', morta ? 'Morta' : 'Viva');
   if (!morta) {
     await campo(p, 'Especie').locator('input').first().fill(especie); await p.waitForTimeout(80);
-    await campo(p, 'DAP (cm)').locator('input').first().fill('32,5'); await num(p, 'Altura total (m)', altura);
+    await campo(p, 'CAP (cm)').locator('input').first().fill('102'); await num(p, 'Altura total (m)', altura);
     for (const k of [1, 2, 3, 4]) if (await campo(p, `Raio de copa ${k} (m)`).count()) await num(p, `Raio de copa ${k} (m)`, 2 + k / 2);
     if (await campo(p, 'Area de copa medida (m2)').count()) await num(p, 'Area de copa medida (m2)', 18);
     await aba(p, 'Meio'); await op(p, 'Conflitos no raio de 2 m', 'Ausente'); await p.locator('.chip[data-campo="Fiação ausente"]').click(); await op(p, 'Marquise ou toldo', 'Ausente');

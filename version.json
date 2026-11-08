@@ -1,10 +1,13 @@
 {
- "versao": "2.3.0",
+ "versao": "2.4.0",
  "data": "2026-11-07",
  "notas": [
-  "Camada de quadras no mapa, com o número de cada quadra",
-  "Marcar quadra como em levantamento ou levantada, também sem internet; ao salvar uma árvore, a quadra passa a em levantamento",
-  "A coordenação distribui quadras por equipe, uma a uma ou várias de uma vez, e o mapa pinta por situação ou por equipe",
-  "Andamento por quadras no painel e na tela inicial da equipe"
+  "Formulário de Divinópolis revisado: cada categoria mostra só o que vale para ela; árvore morta e calçada sem árvores ficam com poucos campos",
+  "CAP em centímetros no lugar do DAP, com no máximo 3 caules",
+  "Risco calculado pela matriz da ISA, com as cores de baixo a severo",
+  "Espécie não identificada pede 4 fotos para identificação",
+  "Ajuda (?) em todos os campos e desenho dos tipos de fiação",
+  "Preferência de cada usuário: medir a copa por 4 raios ou pela área direto",
+  "Botão para a equipe assumir uma quadra sem equipe"
  ]
 }

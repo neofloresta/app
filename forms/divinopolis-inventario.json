@@ -106,13 +106,13 @@
   },
   {
    "armazenar": "text",
-   "nome": "DAP (cm)",
-   "rotulo": "DAP (cm)",
+   "nome": "CAP (cm)",
+   "rotulo": "CAP (cm)",
    "tipo": "multinumber",
-   "maxFustes": {
-    "2": 3
-   },
-   "ajuda": "Diâmetro do tronco a 1,30 m do chão, em centímetros. Árvore com mais de um tronco abaixo de 1,30 m: use \"+ fuste\" para cada um. Arbusto: escolha os três caules mais representativos (os maiores) e meça somente esses."
+   "maxFustes": 3,
+   "avisoMin": 2,
+   "avisoMax": 900,
+   "ajuda": "Circunferência do caule a 1,30 m do chão, medida com fita, em centímetros. Com mais de um caule abaixo de 1,30 m, escolha os três mais representativos (os maiores) e meça somente esses, um em cada linha (máximo de 3)."
   },
   {
    "armazenar": "real",
@@ -120,6 +120,7 @@
    "rotulo": "Altura total (m)",
    "tipo": "number",
    "min": 2,
+   "avisoMax": 40,
    "limiteMsg": "abaixo do critério de inclusão (altura a partir de 2 m)",
    "ajuda": "Do chão ao ponto mais alto da copa, em metros."
   },
@@ -136,6 +137,8 @@
    "nome": "Raio de copa 1 (m)",
    "rotulo": "Raio de copa 1 (m)",
    "tipo": "number",
+   "avisoMin": 0.1,
+   "avisoMax": 20,
    "ajuda": "Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).",
    "oculto": true
   },
@@ -144,6 +147,8 @@
    "nome": "Raio de copa 2 (m)",
    "rotulo": "Raio de copa 2 (m)",
    "tipo": "number",
+   "avisoMin": 0.1,
+   "avisoMax": 20,
    "ajuda": "Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).",
    "oculto": true
   },
@@ -152,6 +157,8 @@
    "nome": "Raio de copa 3 (m)",
    "rotulo": "Raio de copa 3 (m)",
    "tipo": "number",
+   "avisoMin": 0.1,
+   "avisoMax": 20,
    "ajuda": "Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).",
    "oculto": true
   },
@@ -160,6 +167,8 @@
    "nome": "Raio de copa 4 (m)",
    "rotulo": "Raio de copa 4 (m)",
    "tipo": "number",
+   "avisoMin": 0.1,
+   "avisoMax": 20,
    "ajuda": "Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).",
    "oculto": true
   },
@@ -179,6 +188,8 @@
    "rotulo": "Área de copa medida (m²)",
    "tipo": "number",
    "oculto": true,
+   "avisoMin": 1,
+   "avisoMax": 1200,
    "ajuda": "Área da projeção da copa medida direto, com trena a laser, em metros quadrados."
   },
   {
@@ -331,6 +342,8 @@
    "rotulo": "Largura da calçada (m)",
    "tipo": "number",
    "oculto": true,
+   "avisoMin": 0.5,
+   "avisoMax": 10,
    "ajuda": "Do meio-fio até o muro ou a fachada, em metros."
   },
   {
@@ -776,7 +789,7 @@
      "campo": "Especie"
     },
     {
-     "campo": "DAP (cm)"
+     "campo": "CAP (cm)"
     },
     {
      "campo": "Altura total (m)"
@@ -1305,7 +1318,7 @@
     "1": {
      "Situacao": "obrig",
      "Especie": "obrig",
-     "DAP (cm)": "obrig",
+     "CAP (cm)": "obrig",
      "Altura total (m)": "obrig",
      "Conflitos no raio de 2 m": "obrig",
      "Marquise ou toldo": "obrig",
@@ -1318,7 +1331,7 @@
     "2": {
      "Situacao": "obrig",
      "Especie": "obrig",
-     "DAP (cm)": "obrig",
+     "CAP (cm)": "obrig",
      "Altura total (m)": "obrig",
      "Conflitos no raio de 2 m": "obrig",
      "Marquise ou toldo": "obrig",
@@ -1331,7 +1344,7 @@
     "3": {
      "Situacao": "obrig",
      "Especie": "obrig",
-     "DAP (cm)": "obrig",
+     "CAP (cm)": "obrig",
      "Altura total (m)": "obrig",
      "Conflitos no raio de 2 m": "obrig",
      "Marquise ou toldo": "obrig",
@@ -1344,7 +1357,7 @@
     "5": {
      "Situacao": "oculto",
      "Especie": "oculto",
-     "DAP (cm)": "oculto",
+     "CAP (cm)": "oculto",
      "Altura total (m)": "oculto",
      "Modo de copa": "oculto",
      "Raio de copa 1 (m)": "oculto",
@@ -1452,7 +1465,7 @@
    "por": {
     "Morta": {
      "Especie": "oculto",
-     "DAP (cm)": "oculto",
+     "CAP (cm)": "oculto",
      "Altura total (m)": "oculto",
      "Modo de copa": "oculto",
      "Raio de copa 1 (m)": "oculto",

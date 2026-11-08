@@ -22,13 +22,13 @@ foto('Foto 1', 'Foto geral', { obrigatorio: true, ajuda: 'Árvore, arbusto ou pa
 tab('Indivíduo');
 ch('Situacao', 'Situação', ['Viva', 'Morta'], { ajuda: 'Morta: sem folhas vivas nem brotação, fora da época de queda natural das folhas. Para morta, o cadastro é só o ponto e a foto geral.' });
 add({ nome: 'Especie', rotulo: 'Espécie', tipo: 'species', ajuda: 'Digite parte do nome científico ou popular. Se não souber, escolha "Não identificada": o app pede as fotos para identificação.' });
-add({ nome: 'DAP (cm)', rotulo: 'DAP (cm)', tipo: 'multinumber', maxFustes: { '2': 3 }, ajuda: 'Diâmetro do tronco a 1,30 m do chão, em centímetros. Árvore com mais de um tronco abaixo de 1,30 m: use "+ fuste" para cada um. Arbusto: escolha os três caules mais representativos (os maiores) e meça somente esses.' });
-n('Altura total (m)', 'Altura total (m)', { min: 2, limiteMsg: 'abaixo do critério de inclusão (altura a partir de 2 m)', ajuda: 'Do chão ao ponto mais alto da copa, em metros.' });
+add({ nome: 'CAP (cm)', rotulo: 'CAP (cm)', tipo: 'multinumber', maxFustes: 3, avisoMin: 2, avisoMax: 900, ajuda: 'Circunferência do caule a 1,30 m do chão, medida com fita, em centímetros. Com mais de um caule abaixo de 1,30 m, escolha os três mais representativos (os maiores) e meça somente esses, um em cada linha (máximo de 3).' });
+n('Altura total (m)', 'Altura total (m)', { min: 2, avisoMax: 40, limiteMsg: 'abaixo do critério de inclusão (altura a partir de 2 m)', ajuda: 'Do chão ao ponto mais alto da copa, em metros.' });
 add({ nome: 'Modo de copa', rotulo: 'Modo de medir a copa', tipo: 'hidden', auto: 'modocopa', armazenar: 'text', ajuda: 'Raios ou área medida, conforme a preferência de quem coletou.' });
-for (const k of [1, 2, 3, 4]) n(`Raio de copa ${k} (m)`, `Raio de copa ${k} (m)`, { ajuda: 'Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).', oculto: true });
+for (const k of [1, 2, 3, 4]) n(`Raio de copa ${k} (m)`, `Raio de copa ${k} (m)`, { avisoMin: 0.1, avisoMax: 20, ajuda: 'Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).', oculto: true });
 const R = (k) => `"Raio de copa ${k} (m)"`;
 add({ nome: 'Area de copa (m2)', rotulo: 'Área de copa (m²)', tipo: 'text', armazenar: 'real', calculado: true, oculto: true, expr: `round(3.1416 * ((${R(1)} + ${R(2)} + ${R(3)} + ${R(4)}) / 4) * ((${R(1)} + ${R(2)} + ${R(3)} + ${R(4)}) / 4), 2)`, ajuda: 'Calculada pelos quatro raios: área do círculo com o raio médio.' });
-n('Area de copa medida (m2)', 'Área de copa medida (m²)', { oculto: true, ajuda: 'Área da projeção da copa medida direto, com trena a laser, em metros quadrados.' });
+n('Area de copa medida (m2)', 'Área de copa medida (m²)', { oculto: true, avisoMin: 1, avisoMax: 1200, ajuda: 'Área da projeção da copa medida direto, com trena a laser, em metros quadrados.' });
 foto('Foto folha face superior', 'Foto da folha: face de cima', { oculto: true, ajuda: 'Uma folha inteira e madura, aberta sobre a mão ou um fundo liso, com a face de cima para a câmera. Encha a tela com a folha.' });
 foto('Foto folha face inferior', 'Foto da folha: face de baixo', { oculto: true, ajuda: 'A mesma folha virada, com a face de baixo para a câmera. Mostra pelos, nervuras e cor, que ajudam a identificar.' });
 foto('Foto ramo filotaxia', 'Foto do ramo (filotaxia)', { oculto: true, ajuda: 'Um ramo com várias folhas presas, mostrando como elas saem do ramo (alternadas, opostas ou em roseta) e se a folha é simples ou composta.' });
@@ -48,7 +48,7 @@ ch('Marquise ou toldo', 'Presença de marquise ou toldo', ['Presente', 'Ausente'
 b('Interfere pedestres', 'Pedestres', 'Interferência no tráfego', { ajuda: 'Galhos abaixo de cerca de 2,4 m sobre a calçada ou tronco que estreita a passagem.' });
 b('Interfere veículos', 'Veículos', 'Interferência no tráfego', { ajuda: 'Galhos abaixo de cerca de 4,5 m sobre a pista, ou que encostam em veículos altos.' });
 b('Tráfego sem interferência', 'Ausente', 'Interferência no tráfego', { exclusivo: true, ajuda: 'A árvore não atrapalha pedestres nem veículos.' });
-n('Largura da calcada (m)', 'Largura da calçada (m)', { oculto: true, ajuda: 'Do meio-fio até o muro ou a fachada, em metros.' });
+n('Largura da calcada (m)', 'Largura da calçada (m)', { oculto: true, avisoMin: 0.5, avisoMax: 10, ajuda: 'Do meio-fio até o muro ou a fachada, em metros.' });
 
 tab('Podas e danos');
 const pod = { 'Danos por podas': 'Cortes mal feitos, lascas ou tocos deixados por podas anteriores.', 'Galhos secos, podres ou com risco de queda': 'Galhos mortos, ocos, rachados ou pendurados.', 'Poda drástica': 'Copa reduzida a poucos galhos grossos (poda em "cabeça de palito").', 'Poda de raiz': 'Raízes cortadas, por obra na calçada ou na rede.' };
@@ -95,7 +95,7 @@ foto('Foto 4', 'Foto 4', { ajuda: 'Opcional: outra característica geral.' });
 const nomesAba = (nm) => A.find((a) => a.nome === nm).campos.map((x) => x.campo);
 const set = (o, cs, e) => cs.forEach((k) => { o[k] = e; });
 const VIVO = {}; // árvore, arbusto e palmeira
-set(VIVO, ['Situacao', 'Especie', 'DAP (cm)', 'Altura total (m)', 'Conflitos no raio de 2 m', 'Marquise ou toldo', 'Ocos e cavidades', 'Qualidade da copa', 'Probabilidade de falha', 'Probabilidade de impacto', 'Consequencias'], 'obrig');
+set(VIVO, ['Situacao', 'Especie', 'CAP (cm)', 'Altura total (m)', 'Conflitos no raio de 2 m', 'Marquise ou toldo', 'Ocos e cavidades', 'Qualidade da copa', 'Probabilidade de falha', 'Probabilidade de impacto', 'Consequencias'], 'obrig');
 const CAL = {}; // calçada sem árvores: só ponto, foto da calçada e largura
 for (const t of ['Indivíduo', 'Meio', 'Podas e danos', 'Fitossanidade e risco', 'Manejo', 'Fotos e observações']) set(CAL, nomesAba(t), 'oculto');
 CAL['Largura da calcada (m)'] = 'obrig';

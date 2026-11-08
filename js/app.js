@@ -1,6 +1,6 @@
 // Neofloresta Inventário
 (() => {
-  const VERSAO = '2.3.0';
+  const VERSAO = '2.4.0';
   const TERMO_VERSAO = '2026-11';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -597,7 +597,7 @@
   }
 
   // limites de plausibilidade (podem passar, mas pedem confirmação). O formulário pode trazer avisoMax/avisoMin por campo.
-  const PLAUS = [[/altura/i, null, 40, 'm'], [/dap/i, null, 300, 'cm'], [/raio/i, 0.01, 20, 'm']];
+  const PLAUS = [[/altura/i, null, 40, 'm'], [/dap/i, null, 300, 'cm'], [/cap/i, 2, 900, 'cm'], [/raio/i, 0.01, 20, 'm'], [/area de copa/i, 1, 1200, 'm²'], [/largura/i, 0.5, 10, 'm']];
   function conferirValores(r) {
     const E = estadoCampos(S.form, r.valores); const out = [];
     for (const c of S.form.campos) {
@@ -607,9 +607,9 @@
       for (const v of vs) { if (mx != null && v > mx) out.push(`${c.rotulo}: ${numBR(v)}${un} é muito alto (acima de ${numBR(mx)}${un}).`); else if (mn != null && v < mn) out.push(`${c.rotulo}: ${numBR(v)}${un} é muito baixo.`); }
     }
     for (const c of S.form.campos) if (c.maxFustes && !E[c.nome].oculto) {
-      const cat = S.form.campos.find((x) => x.nome === 'Categoria'); const lim = cat && c.maxFustes[String(r.valores[cat.nome])];
+      const cat = S.form.campos.find((x) => x.nome === 'Categoria'); const lim = typeof c.maxFustes === 'number' ? c.maxFustes : cat && c.maxFustes[String(r.valores[cat.nome])];
       const n = String(r.valores[c.nome] || '').split(';').filter((x) => x.trim()).length;
-      if (lim && n > lim) out.push(`${c.rotulo}: ${n} caules medidos. Para ${String(rotuloOpcao(cat, r.valores[cat.nome])).split(' (')[0].toLowerCase()}, meça só os ${lim} caules mais representativos (os maiores).`);
+      if (lim && n > lim) out.push(`${c.rotulo}: ${n} caules medidos. Meça só os ${lim} mais representativos (os maiores).`);
     }
     const ce = campoEspecie(S.form); const e = ce && !E[ce.nome].oculto && String(r.valores[ce.nome] || '').trim();
     if (e && (S.form.especies || []).length && !S.form.especies.some((x) => norm(x.cientifico) === norm(e))) out.push(`A espécie "${e}" não está na lista do projeto. Confira a grafia.`);
@@ -848,12 +848,14 @@
           const desenhar = () => {
             lista.replaceChildren(...valores.map((val, k) => {
               const i = h('input', { class: 'entrada', inputmode: 'decimal', value: val, placeholder: '0,0', oninput: () => { valores[k] = i.value; gravar(); } });
-              return h('div', { class: 'fuste' }, h('span', null, `Fuste ${k + 1}`), i,
+              return h('div', { class: 'fuste' }, h('span', null, `${/cap/i.test(c.nome) ? 'Caule' : 'Fuste'} ${k + 1}`), i,
                 valores.length > 1 ? h('button', { onclick: () => { valores.splice(k, 1); gravar(); desenhar(); }, 'aria-label': 'Remover fuste' }, '×') : null);
             }));
           };
           desenhar();
-          box.append(rotulo(c), lista, h('button', { class: 'btn sec peq', style: 'margin-top:8px', onclick: () => { valores.push(''); desenhar(); lista.lastChild.querySelector('input').focus(); } }, '+ fuste'));
+          const maisBt = h('button', { class: 'btn sec peq', style: 'margin-top:8px', onclick: () => { if (c.maxFustes && valores.length >= c.maxFustes) return; valores.push(''); desenhar(); lista.lastChild.querySelector('input').focus(); maisBt.classList.toggle('oculto', !!c.maxFustes && valores.length >= c.maxFustes); } }, /cap/i.test(c.nome) ? '+ caule' : '+ fuste');
+          maisBt.classList.toggle('oculto', !!c.maxFustes && valores.length >= c.maxFustes);
+          box.append(rotulo(c), lista, maisBt);
           break;
         }
         case 'species': box.append(rotulo(c), especieEl(c)); break;
@@ -1122,6 +1124,7 @@
         q.p ? Object.entries(q.p).map(([k, v]) => h('small', null, (/^ruas?$/i.test(k) ? '' : k + ': ') + v)) : null,
         h('div', null, h('span', { class: 'os-st', style: `background:${COR_QD[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', s.equipe ? s.equipe : 'sem equipe'),
         h('small', null, `${pl(arv, 'árvore cadastrada', 'árvores cadastradas')} dentro dela` + (s.marcada_por ? ` · marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` : '')),
+        perfil() === 'coletor' && !s.equipe ? h('button', { class: 'btn peq', onclick: () => marcar([{ numero: q.n, situacao: st === 'A levantar' ? 'Em levantamento' : st }]) }, 'Assumir esta quadra para a minha equipe') : null,
         podeMarcarQd(s) ? h('div', { class: 'chips qd-chips' }, SIT_QD.map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: q.n, situacao: x }]) }, x))) : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn, h('datalist', { id: 'qd-equipes' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e }))), h('button', { class: 'btn sec peq', onclick: () => marcar([{ numero: q.n, equipe: eqIn.value.trim() }]) }, 'Definir equipe')) : null,
         ehCoord() ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selecao = new Set([q.n]); pintarSelecao(); restilizar([q.n]); } }, 'Escolher várias quadras') : null);
@@ -1826,6 +1829,7 @@
       if (c.tipo !== 'number' && c.tipo !== 'multinumber') continue; const v = Indicadores.valorNum(l[c.nome], c.tipo === 'multinumber'); if (v == null) continue;
       if (/altura/i.test(c.nome) && v > 35) a.push('Altura alta: ' + numBR(v) + ' m');
       if (/dap/i.test(c.nome) && v > 200) a.push('DAP alto: ' + numBR(Math.round(v)) + ' cm');
+      if (/cap/i.test(c.nome) && v > 628) a.push('CAP alto: ' + numBR(Math.round(v)) + ' cm');
       if (/raio/i.test(c.nome) && v > 20) { if (!a.some((x) => /^Raio/.test(x))) a.push('Raio de copa alto'); }
       if (c.min != null && v < c.min) a.push(c.limiteMsg ? c.rotulo.replace(/\s*\(.*\)/, '') + ' ' + c.limiteMsg.replace(/\s*\(.*\)/, '') : c.rotulo + ' abaixo de ' + numBR(c.min));
     }
@@ -2352,13 +2356,13 @@
       let maxN = Math.max(0, ...linhas.map((l) => +l.numero_unico || 0));
       [...linhas].filter((l) => !(+l.numero_unico)).sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)) || String(a.uuid).localeCompare(String(b.uuid))).forEach((l) => { l.numero_unico = ++maxN; });
       linhas.sort((a, b) => (+a.numero_unico) - (+b.numero_unico));
-      const cDap = form.campos.find((c) => c.tipo === 'multinumber' && /dap/i.test(c.nome));
-      if (cDap) linhas.forEach((l) => { const v = Indicadores.valorNum(l[cDap.nome], true); l.dap_equivalente_cm = v == null ? '' : Math.round(v * 10) / 10; });
+      const cDap = form.campos.find((c) => c.tipo === 'multinumber' && /dap|cap/i.test(c.nome)); const ehCap = cDap && /cap/i.test(cDap.nome);
+      if (cDap) linhas.forEach((l) => { const v = Indicadores.valorNum(l[cDap.nome], true); l.dap_equivalente_cm = v == null ? '' : Math.round((ehCap ? v / Math.PI : v) * 10) / 10; if (ehCap) l.cap_equivalente_cm = v == null ? '' : Math.round(v * 10) / 10; });
       let camQd = null; // número da quadra de cada ponto, quando o projeto tem camada de quadras
       try { const qj = await Api.b.quadrasCamada(p.id); if (qj && qj.camada) { camQd = JSON.parse(qj.camada); const ix = Quadras.indice(camQd.quadras); linhas.forEach((l) => { const q = l.longitude !== '' && isFinite(+l.longitude) && +l.longitude ? ix.achar(+l.longitude, +l.latitude) : null; l.quadra = q ? q.n : ''; }); } } catch (e) { /* sem camada */ }
       const cc = campoCodigo(form), ce = campoEspecie(form);
       const dia = new Date().toISOString().slice(0, 10); const base = `${p.id}_${dia}${filtro === 'validados' ? '_validados' : ''}`;
-      const ordem = ['numero_unico', ...form.campos.flatMap((c) => (c.tipo === 'photo' ? [c.nome, c.nome + ' link'] : [c.nome])), 'dap_equivalente_cm', 'latitude', 'longitude', 'precisao_gps_m', 'endereco_aprox', 'bairro_aprox', 'quadra', 'equipe', 'usuario', 'criado_em', 'concluido_em', 'atualizado_em', 'validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'historico', 'uuid'];
+      const ordem = ['numero_unico', ...form.campos.flatMap((c) => (c.tipo === 'photo' ? [c.nome, c.nome + ' link'] : [c.nome])), 'cap_equivalente_cm', 'dap_equivalente_cm', 'latitude', 'longitude', 'precisao_gps_m', 'endereco_aprox', 'bairro_aprox', 'quadra', 'equipe', 'usuario', 'criado_em', 'concluido_em', 'atualizado_em', 'validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'historico', 'uuid'];
       const todas = [...new Set(linhas.flatMap((l) => Object.keys(l)))].filter((c) => !c.startsWith('__'));
       const cols = [...ordem.filter((c) => todas.includes(c)), ...todas.filter((c) => !ordem.includes(c) && !['projeto', 'servidor_em'].includes(c))];
       // planilhas com rótulos legíveis e opções por extenso
@@ -2374,7 +2378,7 @@
         const leg = linhas.map(legivel);
         const unid = (c) => { const m = String(c.rotulo + ' ' + c.nome).match(/\((cm|m|m2|m²|%|graus)\)/i); return m ? m[1].replace('m2', 'm²') : ''; };
         const dic = [...form.campos.map((c) => ({ Campo: c.nome, 'Nome no app': c.rotulo, Unidade: unid(c), Descrição: c.ajuda || '', Tipo: { choice: 'Lista de opções', bool: 'Sim ou não', number: 'Número', multinumber: 'Números por fuste', species: 'Espécie', photo: 'Foto', text: 'Texto', textarea: 'Texto longo', datetime: 'Data e hora', date: 'Data' }[c.tipo] || c.tipo, Opções: (c.opcoes || []).map((o) => `${o.v} = ${o.t}`).join('; ') })),
-          ...[['numero_unico', 'Número único do registro no projeto, dado pelo servidor no primeiro envio', ''], ['dap_equivalente_cm', 'DAP equivalente: raiz da soma dos quadrados dos DAP de cada fuste', 'cm'], ['latitude', 'Latitude em graus decimais, SIRGAS 2000', 'graus'], ['longitude', 'Longitude em graus decimais, SIRGAS 2000', 'graus'], ['precisao_gps_m', 'Erro estimado do GPS do aparelho no momento do registro', 'm'],
+          ...[['numero_unico', 'Número único do registro no projeto, dado pelo servidor no primeiro envio', ''], ['cap_equivalente_cm', 'CAP equivalente: raiz da soma dos quadrados dos CAP de cada caule', 'cm'], ['dap_equivalente_cm', 'DAP equivalente, calculado do CAP (CAP dividido por pi); com mais de um caule, raiz da soma dos quadrados', 'cm'], ['latitude', 'Latitude em graus decimais, SIRGAS 2000', 'graus'], ['longitude', 'Longitude em graus decimais, SIRGAS 2000', 'graus'], ['precisao_gps_m', 'Erro estimado do GPS do aparelho no momento do registro', 'm'],
             ['endereco_aprox', 'Endereço aproximado obtido do mapa (OpenStreetMap) pela coordenada', ''], ['bairro_aprox', 'Bairro aproximado obtido do mapa (OpenStreetMap)', ''], ['quadra', 'Número da quadra onde está o ponto, pela camada de quadras do projeto', ''], ['equipe', 'Equipe que coletou', ''], ['criado_em', 'Data e hora da coleta', ''], ['concluido_em', 'Data e hora em que a equipe concluiu o registro', ''],
             ['validacao', 'Situação da validação técnica (Pendente, Validado, Devolvido, Corrigido, Descartado)', ''], ['validado_por', 'Quem fez a última avaliação', ''], ['validado_em', 'Data e hora da última avaliação', ''], ['validacao_hist', 'Histórico de todas as avaliações do registro', ''], ['historico', 'Histórico de alterações feitas depois de concluído', ''], ['uuid', 'Identificador interno do registro', '']]
             .map(([c, d, u]) => ({ Campo: c, 'Nome no app': '', Unidade: u, Descrição: d, Tipo: '', Opções: '' }))];
@@ -2540,7 +2544,7 @@
     let cLat = null, cLon = null, cX = null, cY = null;
     for (const c of dados.cols) {
       if (ehLat(c)) { cLat = c; continue; } if (ehLon(c)) { cLon = c; continue; } if (ehX(c)) { cX = c; continue; } if (ehY(c)) { cY = c; continue; }
-      if (/^(uuid|fid|ogc_fid|id|equipe|criado_em|numero_unico|validacao.*|validado_.*|historico|usuario|projeto|atualizado_em|concluido_em|servidor_em|dap_equivalente_cm|endereco_aprox|bairro_aprox|precisao_gps_m)$/i.test(c)) continue;
+      if (/^(uuid|fid|ogc_fid|id|equipe|criado_em|numero_unico|validacao.*|validado_.*|historico|usuario|projeto|atualizado_em|concluido_em|servidor_em|dap_equivalente_cm|cap_equivalente_cm|endereco_aprox|bairro_aprox|precisao_gps_m)$/i.test(c)) continue;
       const k = chaveCampo.get(norm(c).replace(/[^a-z0-9]/g, ''));
       if (k) { destino[c] = k; mapeadas.push([c, k.nome]); } else soltas.push(c);
     }

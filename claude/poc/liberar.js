@@ -34,6 +34,7 @@ const suites = [
   ['ordens de serviço nas telas', 'node bos.js'],
   ['pacote de entrega, chave e restauração nas telas', 'node b8.js'],
   ['quadras nas telas', 'node bqd.js'],
+  ['formulário de Divinópolis (categorias, CAP, risco, ajuda)', 'node bf5.js'],
   ['GPS parado, códigos em dois celulares, toque no ponto', 'node b9.js'],
   ['versão e atualização', 'node bv.js'],
 ];
