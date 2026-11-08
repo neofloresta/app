@@ -157,7 +157,8 @@
     S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
     S.form = await carregarForm(p.formulario);
     // a numeração dos códigos se prepara em segundo plano: a tela abre na hora
-    S.prepCodigos = (async () => { await Promise.race([sincronizarSequencia(), new Promise((r) => setTimeout(r, 8000))]); await Promise.race([garantirFaixa(), new Promise((r) => setTimeout(r, 8000))]); })();
+    S.prepCodigosOk = false;
+    S.prepCodigos = (async () => { await Promise.race([sincronizarSequencia(), new Promise((r) => setTimeout(r, 8000))]); await Promise.race([garantirFaixa(), new Promise((r) => setTimeout(r, 8000))]); S.prepCodigosOk = true; })();
   }
   // O formulário guardado no aparelho abre na hora; a versão do servidor é conferida em segundo plano
   // e passa a valer quando não houver cadastro aberto.
@@ -501,11 +502,22 @@
   }
   // Cada aparelho usa uma faixa de números reservada no servidor (ex.: E1-0101 a E1-0200), então dois celulares
   // com o mesmo usuário nunca repetem código, mesmo sem internet. Sem faixa (servidor antigo ou nunca conectou): sequência local.
+  // um código de cada vez no aparelho: dois cadastros abertos quase juntos nunca pegam o mesmo número
+  let travaCodigo = Promise.resolve();
+  function comTravaCodigo(fn) { const p = travaCodigo.then(fn, fn); travaCodigo = p.catch(() => {}); return p; }
   async function proximoCodigo(campo) {
+    // sem número reservado: espera a numeração do servidor (fora da trava). A numeração local, sem faixa, só vale sem internet:
+    // com dois celulares no mesmo login ela poderia repetir o código do outro
+    const kf = `faixa:${S.projeto.id}:${prefixoEquipe()}`; const temFaixa = async () => ((await Store.get(kf)) || []).some((f) => f[0] <= f[1]);
+    if (!(await temFaixa())) {
+      if (S.prepCodigos && !S.prepCodigosOk) await S.prepCodigos;
+      if (!(await temFaixa()) && navigator.onLine && !Api.demo) await Promise.race([garantirFaixa(true), new Promise((r) => setTimeout(r, 15000))]);
+    }
+    return comTravaCodigo(() => proximoCodigo1(campo));
+  }
+  async function proximoCodigo1(campo) {
     const pre = prefixoEquipe(); const chave = `seq:${S.projeto.id}:${pre}`; const kf = `faixa:${S.projeto.id}:${pre}`;
-    let faixas = ((await Store.get(kf)) || []).filter((f) => f[0] <= f[1]);
-    // aparelho novo: espera a numeração do servidor ficar pronta para não repetir código
-    if (!faixas.length && S.prepCodigos) { await S.prepCodigos; faixas = ((await Store.get(kf)) || []).filter((f) => f[0] <= f[1]); }
+    const faixas = ((await Store.get(kf)) || []).filter((f) => f[0] <= f[1]);
     let n;
     if (faixas.length) { n = faixas[0][0]++; await Store.set(kf, faixas.filter((f) => f[0] <= f[1])); }
     else n = (await maxLocal(campo, pre)) + 1;
@@ -513,16 +525,26 @@
     garantirFaixa();
     return `${pre}-${String(n).padStart(4, '0')}`;
   }
-  let reservando = false;
-  async function garantirFaixa() {
-    if (Api.demo || reservando || !navigator.onLine || !S.projeto || !S.form || !['coletor', 'revisor', 'admin'].includes(perfil())) return;
+  // reserva de números no servidor: pede mais quando sobram menos de 60; "urgente" espera a reserva que já está a caminho
+  async function garantirFaixa(urgente) {
+    if (S.reservaP) { if (urgente) await S.reservaP; return; }
+    if (Api.demo || !navigator.onLine || !S.projeto || !S.form || !['coletor', 'revisor', 'admin'].includes(perfil())) return;
     const c = S.form.campos.find((x) => x.auto === 'codigo'); if (!c) return;
     const pre = prefixoEquipe(); const kf = `faixa:${S.projeto.id}:${pre}`;
     const faixas = ((await Store.get(kf)) || []).filter((f) => f[0] <= f[1]);
-    if (faixas.reduce((s, f) => s + f[1] - f[0] + 1, 0) >= 30) return;
-    reservando = true;
-    try { const r = await Api.b.reservar(S.projeto.id, pre, c.nome, 100, await maxLocal(c.nome, pre)); if (r) { faixas.push([r.ini, r.fim]); await Store.set(kf, faixas); } }
-    catch (e) { /* sem conexão: tenta de novo na próxima abertura ou envio */ } finally { reservando = false; }
+    if (faixas.reduce((s, f) => s + f[1] - f[0] + 1, 0) >= 60) return;
+    if (S.reservaP) { if (urgente) await S.reservaP; return; }
+    S.reservaP = (async () => {
+      try {
+        const r = await Api.b.reservar(S.projeto.id, pre, c.nome, 200, await maxLocal(c.nome, pre));
+        // relê as faixas na hora de gravar: enquanto a reserva ia e voltava, códigos podem ter sido usados (não pode voltar atrás)
+        if (r) await comTravaCodigo(async () => {
+          const usado = (await Store.get(`seq:${S.projeto.id}:${pre}`)) || 0; const ini = Math.max(r.ini, usado + 1); // número usado sem faixa enquanto a reserva ia e voltava
+          const atual = ((await Store.get(kf)) || []).filter((f) => f[0] <= f[1]); if (ini <= r.fim) atual.push([ini, r.fim]); await Store.set(kf, atual);
+        });
+      } catch (e) { /* sem conexão: tenta de novo na próxima abertura ou envio */ }
+    })();
+    try { await S.reservaP; } finally { S.reservaP = null; }
   }
   async function sincronizarSequencia() {
     if (Api.demo || !navigator.onLine || !S.projeto || !S.form) return;

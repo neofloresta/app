@@ -22,14 +22,17 @@ const ctxq = { TextDecoder, console }; vm.createContext(ctxq); vm.runInContext(f
     const E = await L.celular(b, { geolocation: { latitude: centros[i][0], longitude: centros[i][1], accuracy: 4 } });
     await L.logar(E.p, 'div-' + (i + 1), 'equipe0' + (i + 1)); await E.p.waitForSelector('button.nova', { timeout: 60000 }); eqs.push(E);
   }
-  console.log('5 equipes logadas', min());
+  // a Equipe 1 com dois celulares no mesmo login (os códigos não podem repetir entre eles)
+  { const E = await L.celular(b, { geolocation: { latitude: centros[0][0] + 0.003, longitude: centros[0][1], accuracy: 4 } }); await L.logar(E.p, 'div-1', 'equipe01'); await E.p.waitForSelector('button.nova', { timeout: 60000 }); eqs.push(E); }
+  const ND = eqs.length; const ceq = (i) => centros[i % EQ];
+  console.log(ND + ' celulares logados (Equipe 1 com dois)', min());
   // 1. pela tela inteira, as 5 ao mesmo tempo; equipes 2 e 4 sem internet
   await eqs[1].ctx.setOffline(true); await eqs[3].ctx.setOffline(true);
   const tUI = Date.now();
   const faltasUI = await Promise.all(eqs.map(async (E) => { let f = 0; for (let k = 0; k < UI; k++) { const x = await A.arvoreCompleta(E.p, { fotos: 1 }); f += x.length; await E.p.waitForSelector('button.nova', { timeout: 30000 }); } return f; }));
-  ok('S.1', faltasUI.every((f) => f === 0), `${EQ * UI} cadastros pela tela inteira (${UI} por equipe, ao mesmo tempo) em ${((Date.now() - tUI) / 1000).toFixed(0)} s; campos faltando: ${faltasUI.join(', ')}`);
+  ok('S.1', faltasUI.every((f) => f === 0), `${ND * UI} cadastros pela tela inteira (${UI} por equipe, ao mesmo tempo) em ${((Date.now() - tUI) / 1000).toFixed(0)} s; campos faltando: ${faltasUI.join(', ')}`);
   // 2. o resto do dia: cada equipe gera seus cadastros com o mecanismo do app (código pela faixa reservada, foto em 20%)
-  const porEq = Math.floor((N - EQ * UI) / EQ); const tG = Date.now();
+  const porEq = Math.floor((N - ND * UI) / ND); const tG = Date.now();
   await Promise.all(eqs.map((E, i) => E.p.evaluate(async ([n, c, pf, i]) => {
     const app = window.__app; const S = app.S; const todos = await app.Store.todosRegistros(); const tpl = todos.find((r) => r.status !== 'rascunho' && !r.faceId);
     const cc = S.form.campos.find((x) => x.auto === 'codigo'); const fotoCampo = Object.keys(tpl.fotos)[0];
@@ -41,8 +44,8 @@ const ctxq = { TextDecoder, console }; vm.createContext(ctxq); vm.runInContext(f
       if (Math.random() < pf && fotoCampo) r.fotos = { [fotoCampo]: Object.assign({}, tpl.fotos[fotoCampo], { nome: `DCIM/e${i}_${k}_${r.uuid.slice(0, 6)}.jpg`, enviado: false, url: '' }) }; else r.fotos = {};
       await app.Store.salvarRegistro(r);
     }
-  }, [porEq, centros[i], FOTOS, i + 1])));
-  const resto = N - EQ * UI - porEq * EQ; if (resto) await eqs[0].p.evaluate(async (n) => { const app = window.__app; const tpl = (await app.Store.todosRegistros()).find((r) => r.status === 'pendente'); const cc = app.S.form.campos.find((x) => x.auto === 'codigo'); for (let k = 0; k < n; k++) { const r = JSON.parse(JSON.stringify(tpl)); r.uuid = crypto.randomUUID(); r.valores[cc.nome] = await app.proximoCodigo(cc.nome); r.fotos = {}; await app.Store.salvarRegistro(r); } }, resto);
+  }, [porEq, ceq(i), FOTOS, i + 1])));
+  const resto = N - ND * UI - porEq * ND; if (resto) await eqs[0].p.evaluate(async (n) => { const app = window.__app; const tpl = (await app.Store.todosRegistros()).find((r) => r.status === 'pendente'); const cc = app.S.form.campos.find((x) => x.auto === 'codigo'); for (let k = 0; k < n; k++) { const r = JSON.parse(JSON.stringify(tpl)); r.uuid = crypto.randomUUID(); r.valores[cc.nome] = await app.proximoCodigo(cc.nome); r.fotos = {}; await app.Store.salvarRegistro(r); } }, resto);
   const noAparelho = await Promise.all(eqs.map((E) => E.p.evaluate(async () => (await window.__app.Store.todosRegistros()).filter((r) => r.status !== 'rascunho').length)));
   ok('S.2', noAparelho.reduce((a, x) => a + x, 0) === N, `${N} cadastros guardados nos 5 celulares (${noAparelho.join(' + ')}) em ${((Date.now() - tG) / 1000).toFixed(0)} s`);
   // 3. todo mundo manda ao mesmo tempo; as equipes sem internet voltam; 6 quedas no meio do envio
@@ -70,7 +73,7 @@ const ctxq = { TextDecoder, console }; vm.createContext(ctxq); vm.runInContext(f
   ok('S.5', nFotos === espTot, `${nFotos} fotos no Drive, ${espTot} esperadas`);
   // 4. faces: as 5 equipes marcam 80 faces cada ao mesmo tempo (duas sem internet, mandam depois)
   const idx = Q.indice(cam.quadras); const alvo = centros.map((c) => idx.faces(c[1], c[0], 400).filter((x, k, arr) => arr.findIndex((y) => y.id === x.id) === k).slice(0, 80).map((x) => x.id));
-  const ja = new Set(); const minhas = alvo.map((l) => l.filter((id) => !ja.has(id) && ja.add(id)));
+  const ja = new Set(); const minhas = alvo.map((l) => l.filter((id) => !ja.has(id) && ja.add(id))); minhas.push([]); // o segundo celular da Equipe 1 não marca faces
   await eqs[2].ctx.setOffline(true); await eqs[4].ctx.setOffline(true);
   const recF = await Promise.all(eqs.map((E, i) => E.p.evaluate(async (ids) => { const rec = []; for (let k = 0; k < ids.length; k += 10) { try { const r = await window.__app.marcarQuadras(ids.slice(k, k + 10).map((id) => ({ tipo: 'face', numero: id, situacao: 'Levantada' }))); rec.push(...(r.recusadas || []).map((x) => x.numero + ': ' + x.motivo)); } catch (e) { rec.push('erro: ' + e.message); } } return rec; }, minhas[i])));
   const recT = recF.flat(); if (recT.length) console.log('   recusadas nas faces:', recT.length, recT.slice(0, 6).join(' | '));
@@ -81,7 +84,7 @@ const ctxq = { TextDecoder, console }; vm.createContext(ctxq); vm.runInContext(f
     if (!f) break; await eqs[0].p.waitForTimeout(2000);
   }
   const sit = await P('quadras_situacao', { t: T, projeto: 'divinopolis', faces: true }); const fl = (sit.faces || []).filter((f) => f.situacao === 'Levantada');
-  const certos = minhas.every((ids, i) => ids.every((id) => (sit.faces.find((f) => f.numero === id) || {}).equipe === 'Equipe ' + (i + 1)));
+  const certos = minhas.slice(0, EQ).every((ids, i) => ids.every((id) => (sit.faces.find((f) => f.numero === id) || {}).equipe === 'Equipe ' + (i + 1)));
   const totF = minhas.reduce((a, l) => a + l.length, 0);
   ok('S.6', fl.length === totF && certos, `${fl.length} de ${totF} faces levantadas no servidor, cada uma com a equipe certa=${certos}`);
   // 5. coordenação: painel e mapa com tudo
