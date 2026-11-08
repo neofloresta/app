@@ -2,28 +2,31 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 4,
+ "versao": 5,
  "campos": [
   {
    "armazenar": "text",
    "nome": "Codigo",
    "rotulo": "Código da árvore",
    "tipo": "text",
-   "auto": "codigo"
+   "auto": "codigo",
+   "ajuda": "Gerado pelo app, sem repetir entre equipes. Não precisa digitar."
   },
   {
    "armazenar": "datetime",
    "nome": "Data e hora",
    "rotulo": "Data e hora da avaliação",
    "tipo": "datetime",
-   "agora": true
+   "agora": true,
+   "ajuda": "Preenchida pelo app no momento do cadastro."
   },
   {
    "armazenar": "text",
    "nome": "Coletor",
    "rotulo": "Coletor",
    "tipo": "text",
-   "auto": "coletor"
+   "auto": "coletor",
+   "ajuda": "Nome de quem está logado no app."
   },
   {
    "armazenar": "text",
@@ -40,7 +43,8 @@
      "t": "Canteiro central"
     }
    ],
-   "obrigatorio": true
+   "obrigatorio": true,
+   "ajuda": "Onde está o ponto: na calçada ou no canteiro central da via."
   },
   {
    "armazenar": "text",
@@ -61,21 +65,20 @@
      "t": "Palmeira (altura igual ou superior a 2 m)"
     },
     {
-     "v": "4",
-     "t": "Local de novo plantio"
-    },
-    {
      "v": "5",
      "t": "Calçada sem árvores"
     }
    ],
-   "obrigatorio": true
+   "obrigatorio": true,
+   "ajuda": "Árvore, arbusto e palmeira entram a partir de 2 m de altura. Calçada sem árvores: trecho de calçada sem nenhum indivíduo."
   },
   {
    "armazenar": "text",
    "nome": "Foto 1",
-   "rotulo": "Foto 1",
-   "tipo": "photo"
+   "rotulo": "Foto geral",
+   "tipo": "photo",
+   "obrigatorio": true,
+   "ajuda": "Árvore, arbusto ou palmeira: o indivíduo inteiro, da base ao topo da copa. Calçada sem árvores: a calçada inteira, no sentido do comprimento."
   },
   {
    "armazenar": "text",
@@ -91,20 +94,25 @@
      "v": "Morta",
      "t": "Morta"
     }
-   ]
+   ],
+   "ajuda": "Morta: sem folhas vivas nem brotação, fora da época de queda natural das folhas. Para morta, o cadastro é só o ponto e a foto geral."
   },
   {
    "armazenar": "text",
    "nome": "Especie",
    "rotulo": "Espécie",
-   "tipo": "species"
+   "tipo": "species",
+   "ajuda": "Digite parte do nome científico ou popular. Se não souber, escolha \"Não identificada\": o app pede as fotos para identificação."
   },
   {
    "armazenar": "text",
    "nome": "DAP (cm)",
    "rotulo": "DAP (cm)",
    "tipo": "multinumber",
-   "ajuda": "Diâmetro do tronco a 1,30 m do chão. Use + fuste para cada tronco."
+   "maxFustes": {
+    "2": 3
+   },
+   "ajuda": "Diâmetro do tronco a 1,30 m do chão, em centímetros. Árvore com mais de um tronco abaixo de 1,30 m: use \"+ fuste\" para cada um. Arbusto: escolha os três caules mais representativos (os maiores) e meça somente esses."
   },
   {
    "armazenar": "real",
@@ -112,31 +120,48 @@
    "rotulo": "Altura total (m)",
    "tipo": "number",
    "min": 2,
-   "limiteMsg": "abaixo do critério de inclusão (altura a partir de 2 m)"
+   "limiteMsg": "abaixo do critério de inclusão (altura a partir de 2 m)",
+   "ajuda": "Do chão ao ponto mais alto da copa, em metros."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Modo de copa",
+   "rotulo": "Modo de medir a copa",
+   "tipo": "hidden",
+   "auto": "modocopa",
+   "ajuda": "Raios ou área medida, conforme a preferência de quem coletou."
   },
   {
    "armazenar": "real",
    "nome": "Raio de copa 1 (m)",
    "rotulo": "Raio de copa 1 (m)",
-   "tipo": "number"
+   "tipo": "number",
+   "ajuda": "Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).",
+   "oculto": true
   },
   {
    "armazenar": "real",
    "nome": "Raio de copa 2 (m)",
    "rotulo": "Raio de copa 2 (m)",
-   "tipo": "number"
+   "tipo": "number",
+   "ajuda": "Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).",
+   "oculto": true
   },
   {
    "armazenar": "real",
    "nome": "Raio de copa 3 (m)",
    "rotulo": "Raio de copa 3 (m)",
-   "tipo": "number"
+   "tipo": "number",
+   "ajuda": "Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).",
+   "oculto": true
   },
   {
    "armazenar": "real",
    "nome": "Raio de copa 4 (m)",
    "rotulo": "Raio de copa 4 (m)",
-   "tipo": "number"
+   "tipo": "number",
+   "ajuda": "Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).",
+   "oculto": true
   },
   {
    "armazenar": "real",
@@ -144,7 +169,49 @@
    "rotulo": "Área de copa (m²)",
    "tipo": "text",
    "calculado": true,
-   "expr": "round(3.1416 * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4) * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4), 1)"
+   "oculto": true,
+   "expr": "round(3.1416 * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4) * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4), 2)",
+   "ajuda": "Calculada pelos quatro raios: área do círculo com o raio médio."
+  },
+  {
+   "armazenar": "real",
+   "nome": "Area de copa medida (m2)",
+   "rotulo": "Área de copa medida (m²)",
+   "tipo": "number",
+   "oculto": true,
+   "ajuda": "Área da projeção da copa medida direto, com trena a laser, em metros quadrados."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Foto folha face superior",
+   "rotulo": "Foto da folha: face de cima",
+   "tipo": "photo",
+   "oculto": true,
+   "ajuda": "Uma folha inteira e madura, aberta sobre a mão ou um fundo liso, com a face de cima para a câmera. Encha a tela com a folha."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Foto folha face inferior",
+   "rotulo": "Foto da folha: face de baixo",
+   "tipo": "photo",
+   "oculto": true,
+   "ajuda": "A mesma folha virada, com a face de baixo para a câmera. Mostra pelos, nervuras e cor, que ajudam a identificar."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Foto ramo filotaxia",
+   "rotulo": "Foto do ramo (filotaxia)",
+   "tipo": "photo",
+   "oculto": true,
+   "ajuda": "Um ramo com várias folhas presas, mostrando como elas saem do ramo (alternadas, opostas ou em roseta) e se a folha é simples ou composta."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Foto tronco detalhe",
+   "rotulo": "Foto do detalhe do tronco",
+   "tipo": "photo",
+   "oculto": true,
+   "ajuda": "A casca do tronco de perto, a cerca de um palmo de distância, na altura do peito."
   },
   {
    "armazenar": "text",
@@ -160,50 +227,64 @@
      "v": "Ausente",
      "t": "Ausente"
     }
-   ]
+   ],
+   "ajuda": "Elementos a até 2 m do tronco que disputam espaço com a árvore: poste, placa, entrada de garagem, boca de lobo, hidrante, muro."
   },
   {
    "armazenar": "bool",
    "nome": "Fiação baixa isolada",
    "rotulo": "Baixa isolada",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Rede de baixa tensão em cabo único trançado (multiplexado), preto, logo abaixo da média tensão.",
+   "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
    "armazenar": "bool",
    "nome": "Fiação baixa nua",
    "rotulo": "Baixa nua",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Rede de baixa tensão com fios separados e sem capa, presos em fila vertical no poste.",
+   "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
    "armazenar": "bool",
    "nome": "Fiação média compacta",
    "rotulo": "Média compacta",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Rede de média tensão com cabos cobertos presos em espaçadores, no alto do poste.",
+   "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
    "armazenar": "bool",
    "nome": "Fiação média nua",
    "rotulo": "Média nua",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Rede de média tensão com fios sem capa, apoiados em isoladores numa cruzeta no topo do poste.",
+   "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
    "armazenar": "bool",
    "nome": "Fiação derivação",
    "rotulo": "Derivação",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Ramal que sai da rede e vai até o imóvel (entrada de energia).",
+   "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
    "armazenar": "bool",
    "nome": "Fiação serviços gerais",
    "rotulo": "Serviços gerais",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Cabos de telefone, internet e TV, presos mais baixo no poste.",
+   "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
    "armazenar": "bool",
    "nome": "Fiação ausente",
    "rotulo": "Ausente",
    "tipo": "bool",
-   "exclusivo": true
+   "exclusivo": true,
+   "ajuda": "Nenhuma fiação aérea sobre ou ao lado da copa."
   },
   {
    "armazenar": "text",
@@ -219,76 +300,96 @@
      "v": "Ausente",
      "t": "Ausente"
     }
-   ]
+   ],
+   "ajuda": "Marquise, toldo ou cobertura da fachada que encosta ou fica a menos de 1 m da copa."
   },
   {
    "armazenar": "bool",
    "nome": "Interfere pedestres",
    "rotulo": "Pedestres",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Galhos abaixo de cerca de 2,4 m sobre a calçada ou tronco que estreita a passagem."
   },
   {
    "armazenar": "bool",
    "nome": "Interfere veículos",
    "rotulo": "Veículos",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Galhos abaixo de cerca de 4,5 m sobre a pista, ou que encostam em veículos altos."
   },
   {
    "armazenar": "bool",
    "nome": "Tráfego sem interferência",
    "rotulo": "Ausente",
    "tipo": "bool",
-   "exclusivo": true
+   "exclusivo": true,
+   "ajuda": "A árvore não atrapalha pedestres nem veículos."
+  },
+  {
+   "armazenar": "real",
+   "nome": "Largura da calcada (m)",
+   "rotulo": "Largura da calçada (m)",
+   "tipo": "number",
+   "oculto": true,
+   "ajuda": "Do meio-fio até o muro ou a fachada, em metros."
   },
   {
    "armazenar": "bool",
    "nome": "Danos por podas",
    "rotulo": "Danos por podas",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Cortes mal feitos, lascas ou tocos deixados por podas anteriores."
   },
   {
    "armazenar": "bool",
    "nome": "Galhos secos, podres ou com risco de queda",
    "rotulo": "Galhos secos, podres ou com risco de queda",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Galhos mortos, ocos, rachados ou pendurados."
   },
   {
    "armazenar": "bool",
    "nome": "Poda drástica",
    "rotulo": "Poda drástica",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Copa reduzida a poucos galhos grossos (poda em \"cabeça de palito\")."
   },
   {
    "armazenar": "bool",
    "nome": "Poda de raiz",
    "rotulo": "Poda de raiz",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Raízes cortadas, por obra na calçada ou na rede."
   },
   {
    "armazenar": "bool",
    "nome": "Podas ausente",
    "rotulo": "Ausente",
    "tipo": "bool",
-   "exclusivo": true
+   "exclusivo": true,
+   "ajuda": "Nenhum sinal de poda ou dano por poda."
   },
   {
    "armazenar": "bool",
    "nome": "Lesões no tronco",
    "rotulo": "Lesões no tronco",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Feridas, casca arrancada, batidas de veículo, vandalismo."
   },
   {
    "armazenar": "bool",
    "nome": "Codominância de troncos",
    "rotulo": "Codominância de troncos",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Dois ou mais troncos de grossura parecida saindo do mesmo ponto, em V fechado."
   },
   {
    "armazenar": "bool",
    "nome": "Danos ausente",
    "rotulo": "Ausente",
    "tipo": "bool",
-   "exclusivo": true
+   "exclusivo": true,
+   "ajuda": "Tronco sem lesões nem codominância."
   },
   {
    "armazenar": "text",
@@ -308,26 +409,30 @@
      "v": "Presente (maior que 1/3)",
      "t": "Presente (maior que 1/3)"
     }
-   ]
+   ],
+   "ajuda": "Compare o tamanho do oco com o diâmetro do tronco naquele ponto."
   },
   {
    "armazenar": "bool",
    "nome": "Afloramento da raiz no canteiro",
    "rotulo": "Afloramento da raiz no canteiro",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Raízes aparentes dentro do canteiro."
   },
   {
    "armazenar": "bool",
    "nome": "Afloramento da raiz na calçada",
    "rotulo": "Afloramento da raiz na calçada",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Raízes que levantaram ou quebraram o piso da calçada."
   },
   {
    "armazenar": "bool",
    "nome": "Raízes ausente",
    "rotulo": "Ausente",
    "tipo": "bool",
-   "exclusivo": true
+   "exclusivo": true,
+   "ajuda": "Nenhuma raiz aparente."
   },
   {
    "armazenar": "text",
@@ -351,50 +456,124 @@
      "v": "Sem folhagem (poda)",
      "t": "Sem folhagem (poda)"
     }
-   ]
+   ],
+   "ajuda": "Estressada: folhas pequenas, amareladas ou copa rala para a espécie."
   },
   {
    "armazenar": "bool",
    "nome": "Fungo",
    "rotulo": "Fungo",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Corpos de fungo (orelhas, chapéus) no tronco, nos galhos ou na base."
   },
   {
    "armazenar": "bool",
    "nome": "Cupim",
    "rotulo": "Cupim",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Galerias de terra no tronco ou cupinzeiro."
   },
   {
    "armazenar": "bool",
    "nome": "Broca",
    "rotulo": "Broca",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Furos com serragem no tronco ou nos galhos."
   },
   {
    "armazenar": "bool",
    "nome": "Erva-de-passarinho",
    "rotulo": "Erva-de-passarinho",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Planta parasita presa nos galhos, com folhagem diferente da árvore."
   },
   {
    "armazenar": "bool",
    "nome": "Doença aparente",
    "rotulo": "Doença aparente",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Manchas, cancros ou exsudação (resina, seiva escorrendo)."
   },
   {
    "armazenar": "bool",
    "nome": "Praga aparente",
    "rotulo": "Praga aparente",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Insetos em quantidade: cochonilhas, lagartas, pulgões."
   },
   {
    "armazenar": "bool",
    "nome": "Fitossanidade ausente",
    "rotulo": "Ausente",
    "tipo": "bool",
-   "exclusivo": true
+   "exclusivo": true,
+   "ajuda": "Nenhum sinal de praga ou doença."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Probabilidade de falha",
+   "rotulo": "Probabilidade de falha",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "4",
+     "t": "Improvável (em 1 ano, não há risco em condições normais e não deve cair em extremos de clima)"
+    },
+    {
+     "v": "3",
+     "t": "Possível (pode falhar com clima normal, mas não em 1 ano)"
+    },
+    {
+     "v": "2",
+     "t": "Provável (pode falhar em condições normais dentro de 1 ano)"
+    },
+    {
+     "v": "1",
+     "t": "Iminente (falha já iniciou ou vai iniciar em breve, em até 1 ano, mesmo sem climas extremos)"
+    }
+   ],
+   "ajuda": "Chance de falha (queda da árvore ou de um galho) no período de 1 ano, pela avaliação visual (ISA)."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Probabilidade de impacto",
+   "rotulo": "Probabilidade de impacto",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "1",
+     "t": "Muito baixo (chance remota de atingir o alvo)"
+    },
+    {
+     "v": "2",
+     "t": "Baixo (não é provável que atinja o alvo)"
+    },
+    {
+     "v": "3",
+     "t": "Médio (50% de chance de atingir o alvo)"
+    },
+    {
+     "v": "4",
+     "t": "Alto (vai atingir o alvo - geralmente quando o alvo é fixo)"
+    }
+   ],
+   "ajuda": "Chance de a parte que pode falhar atingir um alvo (pessoas, veículos, imóveis, rede)."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Falha+Impacto",
+   "rotulo": "Falha+Impacto",
+   "tipo": "hidden",
+   "expr": " \"Probabilidade de falha\"  || '+' ||  \"Probabilidade de impacto\" ",
+   "calculado": true
+  },
+  {
+   "armazenar": "text",
+   "nome": "Matriz de Probabilidade",
+   "rotulo": "Matriz de Probabilidade",
+   "tipo": "hidden",
+   "expr": "CASE\r\nWHEN  \"Falha+Impacto\"  = '1+1' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '1+2' THEN 'Pouco provavel'\r\nWHEN  \"Falha+Impacto\"  = '1+3' THEN 'Provavel'\r\nWHEN  \"Falha+Impacto\"  = '1+4' THEN 'Muito provavel'\r\nWHEN  \"Falha+Impacto\"  = '2+1' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '2+2' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '2+3' THEN 'Pouco provavel'\r\nWHEN  \"Falha+Impacto\"  = '2+4' THEN 'Provavel'\r\nWHEN  \"Falha+Impacto\"  = '3+1' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '3+2' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '3+3' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '3+4' THEN 'Pouco provavel'\r\nWHEN  \"Falha+Impacto\"  = '4+1' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '4+2' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '4+3' THEN 'Improvavel'\r\nWHEN  \"Falha+Impacto\"  = '4+4' THEN 'Improvavel'\r\nEND",
+   "calculado": true
   },
   {
    "armazenar": "text",
@@ -403,28 +582,38 @@
    "tipo": "choice",
    "opcoes": [
     {
-     "v": "Insignificante",
-     "t": "Insignificante"
+     "v": "1",
+     "t": "Insignificante (danos materiais de baixo valor)"
     },
     {
-     "v": "Menor",
-     "t": "Menor"
+     "v": "2",
+     "t": "Menor (danos a propriedade mais difíceis de substituir ou pequena obstrução de via)"
     },
     {
-     "v": "Significativa",
-     "t": "Significativa"
+     "v": "3",
+     "t": "Significativa (lesão pessoal, danos materiais de alto valor ou interrupção moderada de trânsito)"
     },
     {
-     "v": "Severa",
-     "t": "Severa"
+     "v": "4",
+     "t": "Severa (lesão pessoal grave, hospitalização ou morte, danos materiais de alto valor e interrupção de tráfego importante)"
     }
-   ]
+   ],
+   "ajuda": "Gravidade do dano se a falha atingir o alvo."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Matriz de Prob + Conseq",
+   "rotulo": "Matriz de Prob + Conseq",
+   "tipo": "hidden",
+   "expr": " \"Matriz de Probabilidade\"  || '+' ||  \"Consequencias\" ",
+   "calculado": true
   },
   {
    "armazenar": "text",
    "nome": "Risco",
-   "rotulo": "Risco",
+   "rotulo": "Risco (calculado pela matriz da ISA)",
    "tipo": "choice",
+   "calculado": true,
    "opcoes": [
     {
      "v": "Baixo",
@@ -437,93 +626,120 @@
     {
      "v": "Alto",
      "t": "Alto"
+    },
+    {
+     "v": "Severo",
+     "t": "Severo"
     }
-   ]
+   ],
+   "expr": "CASE\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+2' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+3' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+4' THEN 'Severo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+2' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+3' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+4' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+2' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+3' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+4' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+2' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+3' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+4' THEN 'Baixo'\r\nEND",
+   "ajuda": "Calculado pelo app: probabilidade de falha com a de impacto dá a probabilidade; com as consequências dá o risco (matriz da ISA)."
   },
   {
    "armazenar": "bool",
    "nome": "Manejo remoção do indivíduo",
    "rotulo": "Remoção do indivíduo",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Supressão da árvore."
   },
   {
    "armazenar": "bool",
    "nome": "Manejo remoção do alvo",
    "rotulo": "Remoção do alvo",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Tirar ou afastar o que pode ser atingido (ex.: mudar vaga de estacionamento)."
   },
   {
    "armazenar": "bool",
    "nome": "Manejo poda",
    "rotulo": "Poda",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Poda de limpeza, levantamento ou adequação."
   },
   {
    "armazenar": "bool",
    "nome": "Manejo tutoramento",
    "rotulo": "Tutoramento",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Tutor para muda ou árvore jovem inclinada."
   },
   {
    "armazenar": "bool",
    "nome": "Manejo adubação",
    "rotulo": "Adubação",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Adubação ou correção do solo."
   },
   {
    "armazenar": "bool",
    "nome": "Manejo aumento de canteiro",
    "rotulo": "Aumento de canteiro",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Ampliar a área livre em volta do tronco."
   },
   {
    "armazenar": "bool",
    "nome": "Manejo limpeza de epífitas e parasitas",
    "rotulo": "Limpeza de epífitas e parasitas",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Retirar erva-de-passarinho e outras plantas sobre a árvore."
   },
   {
    "armazenar": "bool",
    "nome": "Manejo suporte complementar",
    "rotulo": "Suporte complementar",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Cabos ou escoras para reduzir o risco de falha."
   },
   {
    "armazenar": "bool",
    "nome": "Manejo avaliação nível 2 ou 3",
    "rotulo": "Avaliação nível 2 ou 3",
-   "tipo": "bool"
+   "tipo": "bool",
+   "ajuda": "Avaliação detalhada, com instrumentos (ex.: tomografia)."
   },
   {
    "armazenar": "bool",
    "nome": "Manejo nenhum",
    "rotulo": "Nenhum",
    "tipo": "bool",
-   "exclusivo": true
+   "exclusivo": true,
+   "ajuda": "Nenhum manejo necessário agora."
   },
   {
    "armazenar": "text",
    "nome": "Outras mitigacoes",
    "rotulo": "Outras mitigações",
-   "tipo": "textarea"
+   "tipo": "textarea",
+   "ajuda": "Outra medida, se nenhuma acima servir."
   },
   {
    "armazenar": "text",
    "nome": "Observacoes",
    "rotulo": "Observações",
-   "tipo": "textarea"
+   "tipo": "textarea",
+   "ajuda": "Qualquer informação útil que não cabe nos campos."
   },
   {
    "armazenar": "text",
    "nome": "Foto 2",
    "rotulo": "Foto 2",
-   "tipo": "photo"
+   "tipo": "photo",
+   "ajuda": "Opcional: uma característica geral da árvore (copa, tronco, raízes, conflito)."
   },
   {
    "armazenar": "text",
    "nome": "Foto 3",
    "rotulo": "Foto 3",
-   "tipo": "photo"
+   "tipo": "photo",
+   "ajuda": "Opcional: outra característica geral."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Foto 4",
+   "rotulo": "Foto 4",
+   "tipo": "photo",
+   "ajuda": "Opcional: outra característica geral."
   }
  ],
  "abas": [
@@ -566,6 +782,9 @@
      "campo": "Altura total (m)"
     },
     {
+     "campo": "Modo de copa"
+    },
+    {
      "campo": "Raio de copa 1 (m)"
     },
     {
@@ -579,6 +798,21 @@
     },
     {
      "campo": "Area de copa (m2)"
+    },
+    {
+     "campo": "Area de copa medida (m2)"
+    },
+    {
+     "campo": "Foto folha face superior"
+    },
+    {
+     "campo": "Foto folha face inferior"
+    },
+    {
+     "campo": "Foto ramo filotaxia"
+    },
+    {
+     "campo": "Foto tronco detalhe"
     }
    ]
   },
@@ -630,6 +864,9 @@
     {
      "campo": "Tráfego sem interferência",
      "grupo": "Interferência no tráfego"
+    },
+    {
+     "campo": "Largura da calcada (m)"
     }
    ]
   },
@@ -720,7 +957,22 @@
      "grupo": "Fitossanidade"
     },
     {
+     "campo": "Probabilidade de falha"
+    },
+    {
+     "campo": "Probabilidade de impacto"
+    },
+    {
+     "campo": "Falha+Impacto"
+    },
+    {
+     "campo": "Matriz de Probabilidade"
+    },
+    {
      "campo": "Consequencias"
+    },
+    {
+     "campo": "Matriz de Prob + Conseq"
     },
     {
      "campo": "Risco"
@@ -786,6 +1038,9 @@
     },
     {
      "campo": "Foto 3"
+    },
+    {
+     "campo": "Foto 4"
     }
    ]
   }
@@ -796,10 +1051,20 @@
   "Podas",
   "Danos",
   "Raízes",
-  "Fitossanidade",
-  "Manejo e mitigações"
+  "Fitossanidade"
+ ],
+ "gruposConfirmar": [
+  {
+   "grupo": "Manejo e mitigações",
+   "campo": "Manejo nenhum",
+   "pergunta": "Nenhum manejo foi marcado. Confirma que esta árvore não precisa de manejo?"
+  }
  ],
  "especies": [
+  {
+   "cientifico": "Não identificada",
+   "popular": "espécie não identificada em campo"
+  },
   {
    "cientifico": "Acrocomia aculeata",
    "popular": ""
@@ -1038,113 +1303,73 @@
    "campo": "Categoria",
    "por": {
     "1": {
-     "Foto 1": "obrig",
      "Situacao": "obrig",
      "Especie": "obrig",
      "DAP (cm)": "obrig",
      "Altura total (m)": "obrig",
-     "Raio de copa 1 (m)": "obrig",
-     "Raio de copa 2 (m)": "obrig",
-     "Raio de copa 3 (m)": "obrig",
-     "Raio de copa 4 (m)": "obrig",
-     "Qualidade da copa": "obrig",
-     "Ocos e cavidades": "obrig",
-     "Consequencias": "obrig",
-     "Risco": "obrig",
      "Conflitos no raio de 2 m": "obrig",
-     "Marquise ou toldo": "obrig"
+     "Marquise ou toldo": "obrig",
+     "Ocos e cavidades": "obrig",
+     "Qualidade da copa": "obrig",
+     "Probabilidade de falha": "obrig",
+     "Probabilidade de impacto": "obrig",
+     "Consequencias": "obrig"
     },
     "2": {
-     "Foto 1": "obrig",
      "Situacao": "obrig",
      "Especie": "obrig",
      "DAP (cm)": "obrig",
      "Altura total (m)": "obrig",
-     "Raio de copa 1 (m)": "obrig",
-     "Raio de copa 2 (m)": "obrig",
-     "Raio de copa 3 (m)": "obrig",
-     "Raio de copa 4 (m)": "obrig",
-     "Qualidade da copa": "obrig",
-     "Ocos e cavidades": "obrig",
-     "Consequencias": "obrig",
-     "Risco": "obrig",
      "Conflitos no raio de 2 m": "obrig",
-     "Marquise ou toldo": "obrig"
+     "Marquise ou toldo": "obrig",
+     "Ocos e cavidades": "obrig",
+     "Qualidade da copa": "obrig",
+     "Probabilidade de falha": "obrig",
+     "Probabilidade de impacto": "obrig",
+     "Consequencias": "obrig"
     },
     "3": {
-     "Foto 1": "obrig",
      "Situacao": "obrig",
      "Especie": "obrig",
      "DAP (cm)": "obrig",
      "Altura total (m)": "obrig",
-     "Raio de copa 1 (m)": "obrig",
-     "Raio de copa 2 (m)": "obrig",
-     "Raio de copa 3 (m)": "obrig",
-     "Raio de copa 4 (m)": "obrig",
-     "Qualidade da copa": "obrig",
+     "Conflitos no raio de 2 m": "obrig",
+     "Marquise ou toldo": "obrig",
      "Ocos e cavidades": "obrig",
-     "Consequencias": "obrig",
-     "Risco": "obrig",
-     "Conflitos no raio de 2 m": "obrig",
-     "Marquise ou toldo": "obrig"
-    },
-    "4": {
-     "Situacao": "oculto",
-     "Especie": "oculto",
-     "DAP (cm)": "oculto",
-     "Altura total (m)": "oculto",
-     "Raio de copa 1 (m)": "oculto",
-     "Raio de copa 2 (m)": "oculto",
-     "Raio de copa 3 (m)": "oculto",
-     "Raio de copa 4 (m)": "oculto",
-     "Area de copa (m2)": "oculto",
-     "Danos por podas": "oculto",
-     "Galhos secos, podres ou com risco de queda": "oculto",
-     "Poda drástica": "oculto",
-     "Poda de raiz": "oculto",
-     "Podas ausente": "oculto",
-     "Lesões no tronco": "oculto",
-     "Codominância de troncos": "oculto",
-     "Danos ausente": "oculto",
-     "Ocos e cavidades": "oculto",
-     "Afloramento da raiz no canteiro": "oculto",
-     "Afloramento da raiz na calçada": "oculto",
-     "Raízes ausente": "oculto",
-     "Qualidade da copa": "oculto",
-     "Fungo": "oculto",
-     "Cupim": "oculto",
-     "Broca": "oculto",
-     "Erva-de-passarinho": "oculto",
-     "Doença aparente": "oculto",
-     "Praga aparente": "oculto",
-     "Fitossanidade ausente": "oculto",
-     "Consequencias": "oculto",
-     "Risco": "oculto",
-     "Manejo remoção do indivíduo": "oculto",
-     "Manejo remoção do alvo": "oculto",
-     "Manejo poda": "oculto",
-     "Manejo tutoramento": "oculto",
-     "Manejo adubação": "oculto",
-     "Manejo aumento de canteiro": "oculto",
-     "Manejo limpeza de epífitas e parasitas": "oculto",
-     "Manejo suporte complementar": "oculto",
-     "Manejo avaliação nível 2 ou 3": "oculto",
-     "Manejo nenhum": "oculto",
-     "Outras mitigacoes": "oculto",
-     "Foto 1": "obrig",
-     "Conflitos no raio de 2 m": "obrig",
-     "Marquise ou toldo": "obrig"
+     "Qualidade da copa": "obrig",
+     "Probabilidade de falha": "obrig",
+     "Probabilidade de impacto": "obrig",
+     "Consequencias": "obrig"
     },
     "5": {
      "Situacao": "oculto",
      "Especie": "oculto",
      "DAP (cm)": "oculto",
      "Altura total (m)": "oculto",
+     "Modo de copa": "oculto",
      "Raio de copa 1 (m)": "oculto",
      "Raio de copa 2 (m)": "oculto",
      "Raio de copa 3 (m)": "oculto",
      "Raio de copa 4 (m)": "oculto",
      "Area de copa (m2)": "oculto",
+     "Area de copa medida (m2)": "oculto",
+     "Foto folha face superior": "oculto",
+     "Foto folha face inferior": "oculto",
+     "Foto ramo filotaxia": "oculto",
+     "Foto tronco detalhe": "oculto",
+     "Conflitos no raio de 2 m": "oculto",
+     "Fiação baixa isolada": "oculto",
+     "Fiação baixa nua": "oculto",
+     "Fiação média compacta": "oculto",
+     "Fiação média nua": "oculto",
+     "Fiação derivação": "oculto",
+     "Fiação serviços gerais": "oculto",
+     "Fiação ausente": "oculto",
+     "Marquise ou toldo": "oculto",
+     "Interfere pedestres": "oculto",
+     "Interfere veículos": "oculto",
+     "Tráfego sem interferência": "oculto",
+     "Largura da calcada (m)": "obrig",
      "Danos por podas": "oculto",
      "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
@@ -1165,7 +1390,12 @@
      "Doença aparente": "oculto",
      "Praga aparente": "oculto",
      "Fitossanidade ausente": "oculto",
+     "Probabilidade de falha": "oculto",
+     "Probabilidade de impacto": "oculto",
+     "Falha+Impacto": "oculto",
+     "Matriz de Probabilidade": "oculto",
      "Consequencias": "oculto",
+     "Matriz de Prob + Conseq": "oculto",
      "Risco": "oculto",
      "Manejo remoção do indivíduo": "oculto",
      "Manejo remoção do alvo": "oculto",
@@ -1178,9 +1408,42 @@
      "Manejo avaliação nível 2 ou 3": "oculto",
      "Manejo nenhum": "oculto",
      "Outras mitigacoes": "oculto",
-     "Foto 1": "obrig",
-     "Conflitos no raio de 2 m": "obrig",
-     "Marquise ou toldo": "obrig"
+     "Observacoes": "oculto",
+     "Foto 2": "oculto",
+     "Foto 3": "oculto",
+     "Foto 4": "oculto"
+    }
+   }
+  },
+  {
+   "campo": "Modo de copa",
+   "por": {
+    "raios": {
+     "Raio de copa 1 (m)": "obrig",
+     "Raio de copa 2 (m)": "obrig",
+     "Raio de copa 3 (m)": "obrig",
+     "Raio de copa 4 (m)": "obrig",
+     "Area de copa (m2)": "mostrar",
+     "Area de copa medida (m2)": "oculto"
+    },
+    "area": {
+     "Raio de copa 1 (m)": "oculto",
+     "Raio de copa 2 (m)": "oculto",
+     "Raio de copa 3 (m)": "oculto",
+     "Raio de copa 4 (m)": "oculto",
+     "Area de copa (m2)": "oculto",
+     "Area de copa medida (m2)": "obrig"
+    }
+   }
+  },
+  {
+   "campo": "Especie",
+   "por": {
+    "Não identificada": {
+     "Foto folha face superior": "obrig",
+     "Foto folha face inferior": "obrig",
+     "Foto ramo filotaxia": "obrig",
+     "Foto tronco detalhe": "obrig"
     }
    }
   },
@@ -1188,12 +1451,45 @@
    "campo": "Situacao",
    "por": {
     "Morta": {
-     "Especie": "opcional",
+     "Especie": "oculto",
+     "DAP (cm)": "oculto",
+     "Altura total (m)": "oculto",
+     "Modo de copa": "oculto",
      "Raio de copa 1 (m)": "oculto",
      "Raio de copa 2 (m)": "oculto",
      "Raio de copa 3 (m)": "oculto",
      "Raio de copa 4 (m)": "oculto",
      "Area de copa (m2)": "oculto",
+     "Area de copa medida (m2)": "oculto",
+     "Foto folha face superior": "oculto",
+     "Foto folha face inferior": "oculto",
+     "Foto ramo filotaxia": "oculto",
+     "Foto tronco detalhe": "oculto",
+     "Conflitos no raio de 2 m": "oculto",
+     "Fiação baixa isolada": "oculto",
+     "Fiação baixa nua": "oculto",
+     "Fiação média compacta": "oculto",
+     "Fiação média nua": "oculto",
+     "Fiação derivação": "oculto",
+     "Fiação serviços gerais": "oculto",
+     "Fiação ausente": "oculto",
+     "Marquise ou toldo": "oculto",
+     "Interfere pedestres": "oculto",
+     "Interfere veículos": "oculto",
+     "Tráfego sem interferência": "oculto",
+     "Largura da calcada (m)": "oculto",
+     "Danos por podas": "oculto",
+     "Galhos secos, podres ou com risco de queda": "oculto",
+     "Poda drástica": "oculto",
+     "Poda de raiz": "oculto",
+     "Podas ausente": "oculto",
+     "Lesões no tronco": "oculto",
+     "Codominância de troncos": "oculto",
+     "Danos ausente": "oculto",
+     "Ocos e cavidades": "oculto",
+     "Afloramento da raiz no canteiro": "oculto",
+     "Afloramento da raiz na calçada": "oculto",
+     "Raízes ausente": "oculto",
      "Qualidade da copa": "oculto",
      "Fungo": "oculto",
      "Cupim": "oculto",
@@ -1201,7 +1497,29 @@
      "Erva-de-passarinho": "oculto",
      "Doença aparente": "oculto",
      "Praga aparente": "oculto",
-     "Fitossanidade ausente": "oculto"
+     "Fitossanidade ausente": "oculto",
+     "Probabilidade de falha": "oculto",
+     "Probabilidade de impacto": "oculto",
+     "Falha+Impacto": "oculto",
+     "Matriz de Probabilidade": "oculto",
+     "Consequencias": "oculto",
+     "Matriz de Prob + Conseq": "oculto",
+     "Risco": "oculto",
+     "Manejo remoção do indivíduo": "oculto",
+     "Manejo remoção do alvo": "oculto",
+     "Manejo poda": "oculto",
+     "Manejo tutoramento": "oculto",
+     "Manejo adubação": "oculto",
+     "Manejo aumento de canteiro": "oculto",
+     "Manejo limpeza de epífitas e parasitas": "oculto",
+     "Manejo suporte complementar": "oculto",
+     "Manejo avaliação nível 2 ou 3": "oculto",
+     "Manejo nenhum": "oculto",
+     "Outras mitigacoes": "oculto",
+     "Observacoes": "oculto",
+     "Foto 2": "oculto",
+     "Foto 3": "oculto",
+     "Foto 4": "oculto"
     }
    }
   }

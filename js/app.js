@@ -184,6 +184,7 @@
     if (r === 'medicao' && pf !== 'coletor') return telaMedicao();
     if (r === 'mapa') return telaMapa();
     if (r === 'ordens') return telaOrdens();
+    if (r === 'preferencias') return telaPreferencias();
     if (r === 'os' && a) return telaOS(decodeURIComponent(a));
     if (r === 'os-nova') return telaNovaOS(a ? decodeURIComponent(a) : null);
     if (r === 'validacao' && ehCoord()) return telaValidacao();
@@ -428,6 +429,7 @@
       S.sessao.projetos.length > 1 ? it('Trocar projeto', trocarProjeto) : null,
       it('Mapa das árvores', () => ir('#mapa')),
       it('Ordens de serviço', () => ir('#ordens')),
+      S.form && S.form.campos.some((c) => c.auto === 'modocopa') ? it('Minhas preferências', () => ir('#preferencias')) : null,
       perfil() !== 'cliente' ? it('Enviar agora', () => sincronizar()) : null,
       perfil() !== 'coletor' ? it('Painel do projeto', () => ir('#painel')) : null,
       ehCoord() ? it('Validação dos registros', () => ir('#validacao')) : null,
@@ -524,6 +526,7 @@
       if (c.incremento) r.valores[c.nome] = await proximoIncremento(c.nome);
       if (c.auto === 'codigo') r.valores[c.nome] = await proximoCodigo(c.nome);
       if (c.auto === 'coletor') r.valores[c.nome] = S.sessao.usuario.nome || S.sessao.u;
+      if (c.auto === 'modocopa') r.valores[c.nome] = await prefCopa();
     }
     if (S.pos && Date.now() - S.pos.t < 20000) Object.assign(r, { lat: S.pos.lat, lon: S.pos.lon, prec: S.pos.prec });
     await Store.salvarRegistro(r);
@@ -532,6 +535,17 @@
     ir('#form/' + r.uuid);
   }
 
+  // preferências de cada login neste aparelho
+  async function prefCopa() { return (await Store.get('pref:copa:' + (S.sessao && S.sessao.u))) || 'raios'; }
+  async function telaPreferencias() {
+    const atual = await prefCopa();
+    const op = (v, t, d) => h('label', { class: 'pref-op' + (atual === v ? ' sel' : '') }, h('input', { type: 'radio', name: 'copa', value: v, checked: atual === v, onchange: async () => { await Store.set('pref:copa:' + S.sessao.u, v); toast('Preferência salva. Vale para os próximos cadastros.'); telaPreferencias(); } }), h('div', null, h('b', null, t), h('small', null, d)));
+    $app.replaceChildren(topo('Minhas preferências', S.sessao.usuario.nome || S.sessao.u, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), null),
+      h('main', null, h('div', { class: 'cartao' }, h('h3', null, 'Como medir a copa'),
+        op('raios', 'Quatro raios de copa', 'Mede quatro raios com trena; o app calcula a área.'),
+        op('area', 'Área de copa direto', 'Mede a área da projeção da copa com trena a laser e digita o valor.'),
+        h('p', { class: 'dica' }, 'Vale para as árvores que você cadastrar a partir de agora, neste aparelho. Os cadastros antigos continuam como foram feitos.'))));
+  }
   function recalcular(r) {
     for (let i = 0; i < 4; i++) for (const c of S.form.campos) if (c.calculado && c.expr) {
       try { r.valores[c.nome] = Expr.evaluate(c.expr, (k) => r.valores[k]); } catch (e) { r.valores[c.nome] = null; }
@@ -542,16 +556,19 @@
   // Regras por classe: form.regras = [{ campo, por: { valor: { nomeCampo: 'obrig' | 'opcional' | 'oculto' } } }]
   function estadoCampos(form, vals) {
     const E = {};
-    for (const c of form.campos) E[c.nome] = { obrig: !!c.obrigatorio, oculto: false };
-    // Regras aplicadas na ordem: a de baixo prevalece sobre a de cima; "oculto" sempre prevalece.
+    for (const c of form.campos) E[c.nome] = { obrig: !!c.obrigatorio && !c.oculto, oculto: !!c.oculto, regra: false };
+    // Regras aplicadas na ordem: a de baixo prevalece sobre a de cima; "oculto" por regra sempre prevalece.
+    // Campo oculto por padrão (c.oculto) só aparece quando uma regra o pede ("obrig", "opcional" ou "mostrar").
     for (const rg of form.regras || []) {
       const v = vals[rg.campo]; if (v == null || v === '') continue;
+      if (E[rg.campo] && E[rg.campo].oculto) continue; // regra de campo que não aparece não vale
       const cfg = (rg.por || {})[String(v)]; if (!cfg) continue;
       for (const [nome, est] of Object.entries(cfg)) {
-        if (!E[nome] || nome === rg.campo || E[nome].oculto) continue;
-        if (est === 'oculto') { E[nome].oculto = true; E[nome].obrig = false; }
-        else if (est === 'obrig') E[nome].obrig = true;
-        else if (est === 'opcional') E[nome].obrig = false;
+        if (!E[nome] || nome === rg.campo || E[nome].regra) continue;
+        if (est === 'oculto') { E[nome].oculto = true; E[nome].regra = true; E[nome].obrig = false; }
+        else if (est === 'obrig') { E[nome].obrig = true; E[nome].oculto = false; }
+        else if (est === 'opcional') { E[nome].obrig = false; E[nome].oculto = false; }
+        else if (est === 'mostrar') E[nome].oculto = false;
       }
     }
     return E;
@@ -588,6 +605,11 @@
       const pl = PLAUS.find(([re]) => re.test(c.nome)); const mn = c.avisoMin ?? (pl && pl[1]), mx = c.avisoMax ?? (pl && pl[2]); const un = pl ? ' ' + pl[3] : '';
       const vs = c.tipo === 'multinumber' ? String(r.valores[c.nome] || '').split(';').map((x) => paraNum(x)).filter((x) => x != null) : [r.valores[c.nome]].filter((x) => typeof x === 'number');
       for (const v of vs) { if (mx != null && v > mx) out.push(`${c.rotulo}: ${numBR(v)}${un} é muito alto (acima de ${numBR(mx)}${un}).`); else if (mn != null && v < mn) out.push(`${c.rotulo}: ${numBR(v)}${un} é muito baixo.`); }
+    }
+    for (const c of S.form.campos) if (c.maxFustes && !E[c.nome].oculto) {
+      const cat = S.form.campos.find((x) => x.nome === 'Categoria'); const lim = cat && c.maxFustes[String(r.valores[cat.nome])];
+      const n = String(r.valores[c.nome] || '').split(';').filter((x) => x.trim()).length;
+      if (lim && n > lim) out.push(`${c.rotulo}: ${n} caules medidos. Para ${String(rotuloOpcao(cat, r.valores[cat.nome])).split(' (')[0].toLowerCase()}, meça só os ${lim} caules mais representativos (os maiores).`);
     }
     const ce = campoEspecie(S.form); const e = ce && !E[ce.nome].oculto && String(r.valores[ce.nome] || '').trim();
     if (e && (S.form.especies || []).length && !S.form.especies.some((x) => norm(x.cientifico) === norm(e))) out.push(`A espécie "${e}" não está na lista do projeto. Confira a grafia.`);
@@ -720,14 +742,17 @@
       const campos = a.campos.map((x) => ({ c: form.campos.find((f) => f.nome === x.campo), grupo: x.grupo })).filter((x) => x.c && x.c.tipo !== 'hidden' && !E[x.c.nome].oculto);
       const blocos = []; let grupoAtual = null; let chips = null; let nums = null; let fotos = null;
       for (const { c, grupo } of campos) {
-        if (grupo !== grupoAtual) { grupoAtual = grupo; chips = nums = fotos = null; if (grupo) blocos.push(h('div', { class: 'grupo-tit' }, grupo)); }
+        if (grupo !== grupoAtual) { grupoAtual = grupo; chips = nums = fotos = null; if (grupo) blocos.push(h('div', { class: 'grupo-tit' }, grupo === 'Manejo e mitigações' ? grupo : grupo)); }
         if (c.tipo === 'bool' && !c.calculado) {
           nums = fotos = null;
           if (!chips) {
             const gObrig = grupo && (form.gruposObrig || []).includes(grupo);
             const faltaG = S.tentou && gObrig && gruposFaltando(form, r.valores, E).includes(grupo);
             chips = h('div', { class: 'chips' });
-            blocos.push(h('div', { class: 'campo' + (faltaG ? ' falta' : ''), 'data-grupo': grupo || '' }, grupo ? (gObrig ? h('div', { class: 'dica', style: 'margin:-6px 0 10px' }, 'Marque uma ou mais (obrigatório)') : null) : h('div', { class: 'rot' }, 'Marque o que se aplica'), chips));
+            const doGrupo = grupo ? camposDoGrupo(form, grupo).map((nm) => form.campos.find((x) => x.nome === nm)).filter((x) => x && x.ajuda && !E[x.nome].oculto) : [];
+            const [bt, box] = doGrupo.length ? caixaAjuda(doGrupo.map((x) => [x.rotulo, x.ajuda]), (doGrupo.find((x) => x.ajudaImg) || {}).ajudaImg) : [null, null];
+            const gConf = grupo && (form.gruposConfirmar || []).some((g) => g.grupo === grupo);
+            blocos.push(h('div', { class: 'campo' + (faltaG ? ' falta' : ''), 'data-grupo': grupo || '' }, grupo ? h('div', { class: 'dica', style: 'margin:-6px 0 10px' }, gObrig ? 'Marque uma ou mais (obrigatório)' : gConf ? 'Marque uma ou mais, ou "Nenhum"' : '', bt) : h('div', { class: 'rot' }, 'Marque o que se aplica'), box, chips));
           }
           const meuGrupo = grupo;
           const b = h('button', { class: 'chip' + (c.exclusivo ? ' exclusivo' : '') + (r.valores[c.nome] ? ' sel' : ''), 'data-campo': c.nome, onclick: () => {
@@ -768,7 +793,15 @@
       btProx.classList.toggle('fim', k < 0);
     }
 
-    function rotulo(c) { return h('label', { class: 'rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null, c.ajuda ? h('small', { class: 'ajuda' }, c.ajuda) : null); }
+    function caixaAjuda(textos, img) {
+      const box = h('div', { class: 'ajuda-box oculto' }, textos.map(([t, d]) => h('p', null, t ? h('b', null, t + ': ') : null, d)), img ? h('img', { src: img, alt: 'Desenho de ajuda', class: 'ajuda-img', loading: 'lazy' }) : null);
+      const bt = h('button', { type: 'button', class: 'ajuda-bt', 'aria-label': 'Ajuda', onclick: (e) => { e.preventDefault(); e.stopPropagation(); box.classList.toggle('oculto'); } }, '?');
+      return [bt, box];
+    }
+    function rotulo(c) {
+      const [bt, box] = c.ajuda ? caixaAjuda([['', c.ajuda]], c.ajudaImg) : [null, null];
+      return h('div', { class: 'rot-linha' }, h('label', { class: 'rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null, bt), box);
+    }
     function campoEl(c) {
       const box = h('div', { class: 'campo' + (S.tentou && E[c.nome].obrig && vazio(c, valorDe(r, c)) ? ' falta' : ''), 'data-campo': c.nome });
       const v = r.valores[c.nome];
@@ -926,6 +959,14 @@
       S.tentou = true;
       const f = faltando(r);
       if (f.length) { if (navigator.vibrate) navigator.vibrate(120); irPendente(0); return; }
+      // grupos em que "Nenhum" precisa de confirmação (ex.: manejo)
+      const E0 = estadoCampos(form, r.valores);
+      for (const g of form.gruposConfirmar || []) {
+        const cs = camposDoGrupo(form, g.grupo).filter((nm) => E0[nm] && !E0[nm].oculto); if (!cs.length || cs.some((nm) => r.valores[nm] === true)) continue;
+        const sim = await modal(g.grupo, h('p', null, g.pergunta), [{ texto: 'Voltar e marcar', classe: 'sec', valor: false }, { texto: 'Sim, nenhum', valor: true }]);
+        if (!sim) { const k = abas.findIndex((a) => a.campos.some((x) => x.grupo === g.grupo)); if (k >= 0) { S.aba = k; render(); const el = conteudo.querySelector(`[data-grupo="${CSS.escape(g.grupo)}"]`); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } return; }
+        r.valores[g.campo] = true; await Store.salvarRegistro(r);
+      }
       const avisos = conferirValores(r);
       if (avisos.length && !(await modal('Confira os valores', h('div', null, h('p', null, 'Estes valores estão fora do comum:'), h('ul', { class: 'lista-mud' }, avisos.map((a) => h('li', null, a)))), [{ texto: 'Corrigir', classe: 'sec', valor: false }, { texto: 'Está certo', valor: true }]))) return;
       if (r.lat == null && !(await confirmar('Sem localização', 'Esta árvore ainda não tem posição de GPS. Salvar assim mesmo?', 'Salvar sem GPS'))) return;
