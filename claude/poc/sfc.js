@@ -1,0 +1,51 @@
+// Faces de quadra: teste direto do servidor
+const L = require('./lib'); const fs = require('fs'); const vm = require('vm');
+const R = []; const ok = (n, c, o = '') => { R.push([n, c]); console.log(c ? 'OK  ' : 'FALHA', n, o); };
+const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.stringify(Object.assign({ acao }, d)) })).json();
+const ctx = { TextDecoder, console }; vm.createContext(ctx); vm.runInContext(fs.readFileSync(__dirname + '/../../js/quadras.js', 'utf8') + ';this.Quadras=Quadras;', ctx);
+const Q = ctx.Quadras;
+(async () => {
+  await L.subir(); await L.configurar();
+  const r = await Q.lerArquivo('q.geojson', fs.readFileSync(__dirname + '/fixtures/quadras_divinopolis_faces.geojson'));
+  const cam = Q.compactar(r.feicoes, 'quadra', ['ruas']); const txt = JSON.stringify(cam);
+  const nf = cam.quadras.reduce((a, q) => a + (q.f ? q.f.length : 0), 0);
+  ok('camada com faces', cam.total === 5414 && nf === 22042 && txt.length < 8e6, `${cam.total} quadras, ${nf} faces, ${(txt.length / 1e6).toFixed(2)} MB`);
+  const q = cam.quadras.find((x) => x.n === '2459'); const c = Q.faceCoords(q, q.f[0]);
+  ok('geometria da face', c.length >= 2 && c.every((p) => Math.abs(p[0] + 44.88) < 0.05), `face ${q.f[0].i} da 2459: ${q.f[0].r}, ${q.f[0].c} m, ${c.length} vértices`);
+  const T = (await P('login', { u: 'admin', s: L.senha() })).token;
+  const T1 = (await P('login', { u: 'div-1', s: 'equipe01' })).token; const T2 = (await P('login', { u: 'div-2', s: 'equipe02' })).token;
+  let j = await P('quadras_importar', { t: T, projeto: 'divinopolis', camada: txt }); ok('importa com faces', j.ok && j.faces === 22042, j.erro || `${j.total} quadras, ${j.faces} faces`);
+  const bad = JSON.parse(txt); bad.quadras[0].f[0].k = [0, 99999];
+  j = await P('quadras_importar', { t: T, projeto: 'divinopolis', camada: JSON.stringify(bad) }); ok('face com vértice inválido recusada', !j.ok, j.erro);
+  const ids = q.f.map((f) => '2459-' + f.i);
+  j = await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ tipo: 'face', numero: ids[0], situacao: 'Em levantamento', rua: q.f[0].r }] });
+  let s = await P('quadras_situacao', { t: T, projeto: 'divinopolis', faces: true });
+  let fq = s.faces.find((x) => x.numero === ids[0]); let qq = s.quadras.find((x) => x.numero === '2459');
+  ok('coletor começa a face e a quadra acompanha', j.ok && fq.situacao === 'Em levantamento' && fq.equipe === 'Equipe 1' && qq && qq.situacao === 'Em levantamento', JSON.stringify(j.recusadas));
+  j = await P('quadras_marcar', { t: T2, projeto: 'divinopolis', itens: [{ tipo: 'face', numero: ids[0], situacao: 'Levantada' }] });
+  ok('outra equipe não mexe na face', j.ok && j.recusadas.length === 1 && /Equipe 1/.test(j.recusadas[0].motivo), j.recusadas[0] && j.recusadas[0].motivo);
+  j = await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ tipo: 'face', numero: ids[1], situacao: 'Levantada, sem árvores' }] });
+  ok('sem árvores exige cadastro e largura', j.recusadas.length === 1, j.recusadas[0] && j.recusadas[0].motivo);
+  j = await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ tipo: 'face', numero: '2459-Z', situacao: 'Levantada' }, { tipo: 'face', numero: '99999-A', situacao: 'Levantada' }] });
+  ok('face inexistente recusada', j.recusadas.length === 2);
+  const resto = ids.slice(1).map((id, k) => (k === 0 ? { tipo: 'face', numero: id, situacao: 'Levantada, sem árvores', registro: 'uuid-calcada-1', largura: '2,4' } : { tipo: 'face', numero: id, situacao: 'Levantada' }));
+  j = await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: resto.concat([{ tipo: 'face', numero: ids[0], situacao: 'Levantada' }]) });
+  s = await P('quadras_situacao', { t: T, projeto: 'divinopolis', faces: true }); qq = s.quadras.find((x) => x.numero === '2459'); fq = s.faces.find((x) => x.numero === ids[1]);
+  ok('todas as faces levantadas: quadra levantada', j.ok && !j.recusadas.length && qq.situacao === 'Levantada' && /todas as faces/.test(qq.historico) && fq.registro === 'uuid-calcada-1' && fq.largura === '2.4', JSON.stringify([j.recusadas, qq.situacao, fq.registro, fq.largura]));
+  j = await P('quadras_marcar', { t: T, projeto: 'divinopolis', itens: [{ tipo: 'face', numero: ids[0], situacao: 'Em levantamento' }] });
+  s = await P('quadras_situacao', { t: T, projeto: 'divinopolis', faces: true }); qq = s.quadras.find((x) => x.numero === '2459');
+  ok('face reaberta reabre a quadra', qq.situacao === 'Em levantamento', qq.situacao);
+  // quadra da outra equipe: a equipe 2 não consegue forjar o efeito interno
+  await P('quadras_marcar', { t: T, projeto: 'divinopolis', itens: [{ numero: '10', equipe: 'Equipe 1' }] });
+  j = await P('quadras_marcar', { t: T2, projeto: 'divinopolis', itens: [{ numero: '10', situacao: 'Levantada', sistema: 'x' }] });
+  s = await P('quadras_situacao', { t: T, projeto: 'divinopolis' }); qq = s.quadras.find((x) => x.numero === '10');
+  ok('item forjado como "sistema" é recusado', j.recusadas.length === 1 && qq.situacao !== 'Levantada' && !s.faces, j.recusadas[0] && j.recusadas[0].motivo);
+  j = await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ tipo: 'face', numero: '10-A', situacao: 'Em levantamento', auto: true }, { tipo: 'face', numero: '10-A', situacao: 'Levantada', em: '2020-01-01T00:00:00Z' }] });
+  ok('marcação antiga não passa por cima', j.recusadas.length === 1 && /depois/.test(j.recusadas[0].motivo), j.recusadas[0] && j.recusadas[0].motivo);
+  j = await P('auditoria_listar', { t: T, n: 40 }); ok('auditoria das faces', j.itens.some((x) => x.acao === 'faces_marcar'));
+  // reimportar mantém a situação das faces
+  j = await P('quadras_importar', { t: T, projeto: 'divinopolis', camada: txt }); s = await P('quadras_situacao', { t: T, projeto: 'divinopolis', faces: true });
+  ok('reimportar mantém as faces', s.faces.find((x) => x.numero === ids[1]).situacao === 'Levantada, sem árvores');
+  const falhas = R.filter((x) => !x[1]).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK');
+  fs.writeFileSync(__dirname + '/res-sfc.json', JSON.stringify(R)); process.exit(falhas ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(1); });

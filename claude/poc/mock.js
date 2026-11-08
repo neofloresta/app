@@ -59,7 +59,9 @@ http.createServer((req, res) => {
     if (global.FALHAR && global.FALHAR.n > 0 && req.method === 'POST' && b.includes('"acao":"' + global.FALHAR.acao + '"')) { global.FALHAR.n--; req.socket.destroy(); return; }
     const t0 = Date.now();
     const out = req.method === 'POST' ? ctx.doPost({ postData: { contents: b } }) : ctx.doGet();
-    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(out.t); try { const a = JSON.parse(b).acao; if (Date.now() - t0 > 200) console.log('[lento]', a, Date.now() - t0, 'ms', out.t.length, 'bytes'); } catch (e) {}
+    const lat = +process.env.LATENCIA || 0; global.CHAMADAS = global.CHAMADAS || []; try { global.CHAMADAS.push([Date.now(), JSON.parse(b || '{}').acao]); } catch (e) {}
+    if (req.url.startsWith('/__chamadas')) { res.writeHead(200); const c = global.CHAMADAS; global.CHAMADAS = []; return res.end(JSON.stringify(c)); }
+    setTimeout(() => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(out.t); }, req.method === 'POST' ? lat : 0); try { const a = JSON.parse(b).acao; if (Date.now() - t0 > 200) console.log('[lento]', a, Date.now() - t0, 'ms', out.t.length, 'bytes'); } catch (e) {}
   });
 }).listen(+process.env.PORTA || 8790, () => console.log('mock ok'));
 process.on('SIGUSR2', () => { const ps = Object.values(sss).map(s=>s.sheets.map(x=>({n:x.n,d:x.d}))); fs.writeFileSync('dump.json', JSON.stringify({ps, dcim:Object.values(folders).filter(f=>f.name==='DCIM').map(f=>f.files.map(x=>x.name+':'+(x.content&&x.content.length)))},null,1)); });

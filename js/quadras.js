@@ -124,7 +124,7 @@ const Quadras = (() => {
     const crs = j.crs && j.crs.properties && String(j.crs.properties.name || ''); const ep = crs && (crs.match(/EPSG:{1,2}(\d+)/) || [])[1]; const conv = ep ? conversorEpsg(ep) : null;
     const campos = new Set(); const feicoes = [];
     for (const f of fs) {
-      const g = f.geometry; if (!g) continue; const props = {}; Object.entries(f.properties || {}).forEach(([k, v]) => { props[k] = v == null ? '' : String(v); campos.add(k); });
+      const g = f.geometry; if (!g) continue; const props = {}; Object.entries(f.properties || {}).forEach(([k, v]) => { props[k] = v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v); campos.add(k); });
       const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : null; if (!polys) continue;
       feicoes.push({ props, aneis: polys.flatMap((p) => p.map((a) => a.map((c) => (conv ? conv(c[0], c[1]) : [c[0], c[1]])))) });
     }
@@ -158,9 +158,35 @@ const Quadras = (() => {
       let b = [Infinity, Infinity, -Infinity, -Infinity]; for (const anel of a) for (let i = 0; i < anel.length; i += 2) { b = [Math.min(b[0], anel[i]), Math.min(b[1], anel[i + 1]), Math.max(b[2], anel[i]), Math.max(b[3], anel[i + 1])]; }
       const p = {}; extras.forEach((k) => { if (f.props[k] !== '' && f.props[k] != null) p[k] = String(f.props[k]).slice(0, 60); });
       if (vistos[n]) { const q = vistos[n]; q.a.push(...a); q.b = [Math.min(q.b[0], b[0]), Math.min(q.b[1], b[1]), Math.max(q.b[2], b[2]), Math.max(q.b[3], b[3])]; continue; } // mesma quadra em partes
-      const q = { n, b, a }; if (Object.keys(p).length) q.p = p; vistos[n] = q; quadras.push(q);
+      const q = { n, b, a }; if (Object.keys(p).length) q.p = p;
+      const fc = lerFaces(f.props.faces, a[0].length / 2 - 1); if (fc) q.f = fc;
+      vistos[n] = q; quadras.push(q);
     }
     return { campo, total: quadras.length, quadras };
+  }
+  // faces de quadra (campo "faces" do arquivo gerado a partir das ruas): [{i: letra, r: rua, c: metros, s: lado da rua, k: [vértice inicial, final]}]
+  function lerFaces(txt, nv) {
+    if (!txt) return null; let l; try { l = typeof txt === 'string' ? JSON.parse(txt) : txt; } catch (e) { return null; }
+    if (!Array.isArray(l)) return null; const vistas = {};
+    const out = l.filter((f) => f && /^[A-Z]{1,3}$/.test(f.i) && !vistas[f.i] && (vistas[f.i] = 1) && Array.isArray(f.k) && f.k.length === 2 && f.k.every((x) => Number.isInteger(x) && x >= 0 && x < nv))
+      .map((f) => ({ i: f.i, r: String(f.r || '').slice(0, 60), c: Math.round(+f.c || 0), s: String(f.s || '').slice(0, 12), k: f.k }));
+    return out.length ? out : null;
+  }
+  // vértices da face no contorno externo da quadra (contagem circular; início = fim dá a volta inteira)
+  function faceCoords(q, f) {
+    const a = q.a[0]; const nv = a.length / 2 - 1; const out = []; let j = f.k[0];
+    out.push([a[j * 2], a[j * 2 + 1]]);
+    do { j = (j + 1) % nv; out.push([a[j * 2], a[j * 2 + 1]]); } while (j !== f.k[1]);
+    return out;
+  }
+  function distFace(lon, lat, q, f, mx, my) {
+    const c = faceCoords(q, f); let d = Infinity;
+    for (let i = 1; i < c.length; i++) {
+      const ax = (c[i - 1][0] - lon) * mx, ay = (c[i - 1][1] - lat) * my, bx = (c[i][0] - lon) * mx, by = (c[i][1] - lat) * my;
+      const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy; const t = l2 ? Math.max(0, Math.min(1, -(ax * vx + ay * vy) / l2)) : 0;
+      d = Math.min(d, Math.hypot(ax + t * vx, ay + t * vy));
+    }
+    return d;
   }
   // ponto dentro (regra par e ímpar; buracos e partes contam juntos)
   function dentro(lon, lat, q) {
@@ -185,6 +211,17 @@ const Quadras = (() => {
         }
         return melhor;
       },
+      // faces até "raio" metros do ponto, da mais perto para a mais longe
+      faces(lon, lat, raio = 40) {
+        const mx = 111320 * Math.cos(lat * Math.PI / 180), my = 110540; const out = [];
+        const cx = Math.floor(lon / passo), cy = Math.floor(lat / passo); const vistos = new Set();
+        for (let x = cx - 1; x <= cx + 1; x++) for (let y = cy - 1; y <= cy + 1; y++) for (const i of g.get(x + ':' + y) || []) {
+          if (vistos.has(i)) continue; vistos.add(i); const q = qs[i]; if (!q.f) continue;
+          if (distancia(lon, lat, q, mx, my) > raio && !dentro(lon, lat, q)) continue;
+          for (const f of q.f) { const d = distFace(lon, lat, q, f, mx, my); if (d <= raio) out.push({ q, f, id: q.n + '-' + f.i, d }); }
+        }
+        return out.sort((a, b) => a.d - b.d);
+      },
     };
   }
   function distancia(lon, lat, q, mx, my) { // metros até a borda mais próxima
@@ -201,5 +238,5 @@ const Quadras = (() => {
     for (const a of q.a) { let s = 0; for (let i = 0, j = a.length - 2; i < a.length; j = i, i += 2) s += a[j] * a[i + 1] - a[i] * a[j + 1]; if (Math.abs(s) > area) { area = Math.abs(s); melhor = a; } }
     let x = 0, y = 0; const n = melhor.length / 2; for (let i = 0; i < melhor.length; i += 2) { x += melhor[i]; y += melhor[i + 1]; } return [y / n, x / n];
   }
-  return { lerArquivo, campoNumero, compactar, dentro, indice, centro, lerZip };
+  return { lerArquivo, campoNumero, compactar, dentro, indice, centro, lerZip, faceCoords };
 })();

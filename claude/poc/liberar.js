@@ -34,14 +34,17 @@ const suites = [
   ['ordens de serviço nas telas', 'node bos.js'],
   ['pacote de entrega, chave e restauração nas telas', 'node b8.js'],
   ['quadras nas telas', 'node bqd.js'],
+  ['servidor: faces de quadra', 'node sfc.js'],
+  ['faces de quadra nas telas', 'node bfc.js'],
   ['formulário de Divinópolis (categorias, CAP, risco, ajuda)', 'node bf5.js'],
   ['rendimento por equipe e filtro de dia no mapa', 'node brend.js'],
   ['GPS parado, códigos em dois celulares, toque no ponto', 'node b9.js'],
   ['versão e atualização', 'node bv.js'],
+  ['velocidade com servidor lento (1,5 s por consulta) e celular fraco', 'node perf.js', null, { LATENCIA: '1500', ROTULO: 'liberar' }],
 ];
-for (const [nome, cmd, rx] of suites) {
+for (const [nome, cmd, rx, env] of suites) {
   let out = ''; let erro = false;
-  try { out = execSync(cmd, { cwd: __dirname, timeout: 600000, stdio: 'pipe', maxBuffer: 64e6 }).toString(); } catch (e) { erro = true; out = String(e.stdout || '') + String(e.stderr || ''); }
+  try { out = execSync(cmd, { cwd: __dirname, timeout: 600000, stdio: 'pipe', maxBuffer: 64e6, env: Object.assign({}, process.env, env || {}) }).toString(); } catch (e) { erro = true; out = String(e.stdout || '') + String(e.stderr || ''); }
   const falhas = out.split('\n').filter((l) => /FALHOU|^ERRO |PERMITIU|texto puro: true/.test(l));
   const pag = (out.match(/ERROS DE PÁGINA (.*)/) || [])[1];
   let passou = !erro && falhas.length === 0 && (!pag || /^\[\]( \[\])?$/.test(pag.trim()));

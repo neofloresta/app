@@ -1,6 +1,6 @@
 // Neofloresta Inventário
 (() => {
-  const VERSAO = '2.4.0';
+  const VERSAO = '2.5.0';
   const TERMO_VERSAO = '2026-11';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -156,17 +156,28 @@
     if (!p) { if (S.sessao.usuario.perfil === 'admin') { S.projeto = null; S.form = null; return; } throw new Error('Nenhum projeto liberado para este usuário.'); }
     S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
     S.form = await carregarForm(p.formulario);
-    await Promise.race([sincronizarSequencia(), new Promise((r) => setTimeout(r, 8000))]);
-    await Promise.race([garantirFaixa(), new Promise((r) => setTimeout(r, 8000))]);
+    // a numeração dos códigos se prepara em segundo plano: a tela abre na hora
+    S.prepCodigos = (async () => { await Promise.race([sincronizarSequencia(), new Promise((r) => setTimeout(r, 8000))]); await Promise.race([garantirFaixa(), new Promise((r) => setTimeout(r, 8000))]); })();
   }
-  async function carregarForm(id, forcarCache) {
+  // O formulário guardado no aparelho abre na hora; a versão do servidor é conferida em segundo plano
+  // e passa a valer quando não houver cadastro aberto.
+  async function carregarForm(id, forcarCache, fresco) {
     const chave = 'form:' + id;
+    const local = await Store.get(chave);
+    if (local && !forcarCache && !fresco && !Api.demo) { if (navigator.onLine && !(S.formsEm && Date.now() - S.formsEm < 300000)) atualizarFormFundo(id, local); return local; }
     if (!forcarCache && navigator.onLine) {
       try { const f = await Api.b.formulario(id); if (f) { await Store.set(chave, f); return f; } } catch (e) { console.warn(e); }
     }
-    const f = await Store.get(chave);
-    if (!f) throw new Error('Formulário indisponível sem internet. Conecte e tente de novo.');
-    return f;
+    if (!local) throw new Error('Formulário indisponível sem internet. Conecte e tente de novo.');
+    return local;
+  }
+  async function atualizarFormFundo(id, local) {
+    try {
+      const f = await Api.b.formulario(id); if (!f || JSON.stringify(f) === JSON.stringify(local)) return;
+      await Store.set('form:' + id, f);
+      const aplicar = () => { if (S.projeto && S.projeto.formulario === id && !S.reg) { S.form = f; return true; } return false; };
+      if (!aplicar()) { const t = setInterval(() => { if (aplicar()) clearInterval(t); }, 2000); }
+    } catch (e) { /* sem conexão: segue com o do aparelho */ }
   }
 
   function rota() {
@@ -213,6 +224,7 @@
         if (!r.token) S.sessao.s = senha; // servidor antigo ou demonstração: sem sessão, guarda a senha como antes
         Api.credenciais(credDe(S.sessao)); S.expirada = false;
         await Store.set('sessao', S.sessao);
+        for (const [fid, f] of Object.entries(r.formularios || {})) if (f && Array.isArray(f.campos)) { await Store.set('form:' + fid, f); S.formsEm = Date.now(); }
         if (r.usuario.perfil === 'cliente') await abrirProjetoCliente(S.sessao.projetoAtual); else { await abrirProjeto(S.sessao.projetoAtual); Gps.iniciar(); }
         ir(r.usuario.perfil === 'cliente' ? '#painel' : '#inicio'); rota();
       } catch (e) {
@@ -375,7 +387,15 @@
       const d = await carregarOS(false); if (!document.body.contains(el)) return;
       const f = d.ordens.filter((o) => ehMinhaOS(o) && ['Aberta', 'Em execução'].includes(o.status)); const at = f.filter(atrasada).length;
       let qd = null;
-      try { const cam = await carregarQuadras(); if (cam) { const r = resumoQd(cam, await carregarSitQd(false)); const x = r.eq[minhaEquipe()]; if (x) qd = h('button', { class: 'faixa-os faixa-qd', onclick: () => { S.qdModo = 'eq'; ir('#mapa'); } }, h('b', null, `Quadras da sua equipe: ${fmtN(x.Levantada)} de ${fmtN(x.total)} levantadas`), h('span', null, `${fmtN(x['Em levantamento'])} em levantamento. Toque para ver no mapa`)); } } catch (e) { /* sem quadras */ }
+      try {
+        const cam = await carregarQuadras();
+        if (cam) {
+          const sit = await carregarSitQd(false); const r = resumoQd(cam, sit); const x = r.eq[minhaEquipe()]; const fe = resumoFaces(cam, sit).eq[minhaEquipe()];
+          const kmF = fe ? ` Calçada levantada: ${fmtKm(fe.m)}.` : '';
+          if (x) qd = h('button', { class: 'faixa-os faixa-qd', onclick: () => { S.qdModo = 'eq'; ir('#mapa'); } }, h('b', null, `Quadras da sua equipe: ${fmtN(x.Levantada)} de ${fmtN(x.total)} levantadas`), h('span', null, `${fmtN(x['Em levantamento'])} em levantamento.${kmF} Toque para ver no mapa`));
+          else if (fe) qd = h('button', { class: 'faixa-os faixa-qd', onclick: () => { S.qdModo = 'eq'; ir('#mapa'); } }, h('b', null, `Faces da sua equipe: ${fmtN(fe.n)} levantadas`), h('span', null, `${kmF.trim()} Toque para ver no mapa`));
+        }
+      } catch (e) { /* sem quadras */ }
       if (!document.body.contains(el)) return;
       el.replaceChildren(qd, f.length ? h('button', { class: 'faixa-os', onclick: () => { S.filtroOS = 'fazer'; ir('#ordens'); } }, h('b', null, `${f.length} ${f.length > 1 ? 'ordens' : 'ordem'} de serviço para a sua equipe`), h('span', null, at ? `${at} atrasada${at > 1 ? 's' : ''}. Toque para ver` : 'Toque para ver e registrar a execução')) : '');
     } catch (e) { /* sem ordens */ }
@@ -483,7 +503,9 @@
   // com o mesmo usuário nunca repetem código, mesmo sem internet. Sem faixa (servidor antigo ou nunca conectou): sequência local.
   async function proximoCodigo(campo) {
     const pre = prefixoEquipe(); const chave = `seq:${S.projeto.id}:${pre}`; const kf = `faixa:${S.projeto.id}:${pre}`;
-    const faixas = ((await Store.get(kf)) || []).filter((f) => f[0] <= f[1]);
+    let faixas = ((await Store.get(kf)) || []).filter((f) => f[0] <= f[1]);
+    // aparelho novo: espera a numeração do servidor ficar pronta para não repetir código
+    if (!faixas.length && S.prepCodigos) { await S.prepCodigos; faixas = ((await Store.get(kf)) || []).filter((f) => f[0] <= f[1]); }
     let n;
     if (faixas.length) { n = faixas[0][0]++; await Store.set(kf, faixas.filter((f) => f[0] <= f[1])); }
     else n = (await maxLocal(campo, pre)) + 1;
@@ -513,7 +535,8 @@
     } catch (e) { /* sem conexão: usa o que tem no aparelho */ }
   }
 
-  async function novoRegistro() {
+  async function novoRegistro(ex) {
+    if (!ex || !ex.faceId) ex = null; // chamado pelo botão: recebe o clique
     const r = {
       uuid: uuid(), projeto: S.projeto.id, equipe: S.projeto.equipe || '', usuario: S.sessao.u,
       criado_em: agoraISO(), atualizado_em: agoraISO(), status: 'rascunho', valores: {}, fotos: {},
@@ -530,6 +553,7 @@
       // (registros antigos sem modo de copa recebem a preferência ao abrir: ver telaForm)
     }
     if (S.pos && Date.now() - S.pos.t < 20000) Object.assign(r, { lat: S.pos.lat, lon: S.pos.lon, prec: S.pos.prec });
+    if (ex) { r.faceId = ex.faceId; r.faceRua = ex.faceRua; r.faceTxt = ex.faceTxt; r.valores[ex.cat[0]] = ex.cat[1]; }
     await Store.salvarRegistro(r);
     Gps.agora();
     S.aba = 0; S.tentou = false;
@@ -669,7 +693,9 @@
     const vizinha = (i, passo) => { for (let k = i + passo; k >= 0 && k < abas.length; k += passo) if (abaVisivel(abas[k])) return k; return -1; };
     const btAnt = h('button', { class: 'btn sec quad', onclick: () => irAba(vizinha(S.aba, -1)), 'aria-label': 'Etapa anterior' }, ico('esq'));
     const btProx = h('button', { class: 'btn prox', onclick: () => { const k = vizinha(S.aba, 1); if (k >= 0) irAba(k); else concluir(); } });
-    $app.replaceChildren(topo(r.status === 'rascunho' && !r.mexido ? 'Nova árvore' : (codigoDe(form, r.valores) || 'Árvore'), S.projeto.nome, voltar, gpsBtn), barraAbas, conteudo, h('footer', { class: 'rodape' }, btAnt, btProx));
+    $app.replaceChildren(...[topo(r.faceId && r.status === 'rascunho' ? 'Calçada sem árvores' : r.status === 'rascunho' && !r.mexido ? 'Nova árvore' : (codigoDe(form, r.valores) || 'Árvore'), S.projeto.nome, voltar, gpsBtn), barraAbas,
+      r.faceId ? h('div', { class: 'faixa-face' }, h('b', null, 'Face sem árvores: ' + (r.faceTxt || r.faceId)), h('span', null, 'Tire a foto da calçada inteira, no sentido do comprimento, e meça a largura. Ao concluir, a face fica como levantada sem árvores.')) : null,
+      conteudo, h('footer', { class: 'rodape' }, btAnt, btProx)].filter(Boolean));
 
     const calcEls = new Map();
     function estadoAba(a) {
@@ -816,6 +842,7 @@
           const longas = c.opcoes.some((o) => o.t.length > 24) || c.opcoes.length > 6;
           const grade = h('div', { class: 'opcoes' + (longas ? ' longas' : '') });
           for (const o of c.opcoes) {
+            if (S.qdTemFaces === S.projeto.id && !r.faceId && String(v) !== String(o.v) && /categoria/i.test(norm(c.nome)) && /cal[cç]ada/i.test(o.t)) continue; // calçada sem árvores é marcada pela face, no mapa
             const m = o.t.match(/^([^(]+?)\s*\((.+)\)\s*$/);
             const b = h('button', { class: 'op' + (String(v) === String(o.v) ? ' sel' : ''), onclick: async () => {
               const novo = String(r.valores[c.nome]) === String(o.v) ? null : o.v;
@@ -997,7 +1024,7 @@
       r.status = 'pendente'; r.gpsAuto = false; r.atualizado_em = agoraISO(); delete r.erroSync;
       await Store.salvarRegistro(r);
       Gps.ouvintes.delete(ouvinte); S.reg = null;
-      toast('Árvore salva.'); ir('#inicio'); quadraAutomatica(r).finally(() => sincronizar(true));
+      toast('Árvore salva.'); ir('#inicio'); sincronizar(true); quadraAutomatica(r);
     }
     // registro já concluído que foi alterado: guarda quem mudou o quê e quando
     function diferencas() {
@@ -1075,9 +1102,10 @@
     const selQd = h('select', { class: 'entrada oculto' }, h('option', { value: 'sit' }, 'Quadras por situação'), h('option', { value: 'eq' }, 'Quadras por equipe'), h('option', { value: '' }, 'Sem quadras'));
     if (S.qdModo != null) selQd.value = S.qdModo;
     const conta = h('small', { class: 'mapa-conta' });
+    const pintarConta = () => { conta.textContent = conta.textContent.replace(/ · Carregando quadras\.\.\./, '') + (conta.dataset.qd ? ' · ' + conta.dataset.qd : ''); };
     const barra = h('div', { class: 'mapa-filtros' }, busca, h('div', { class: 'mapa-sel' }, selEq, selDia, diaIn, selRisco, selBairro, selCor, selQd), conta);
     const barraSel = h('div', { class: 'qd-selecao oculto' });
-    $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: centrar }, 'Minha posição')), barra, div, barraSel));
+    $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, h('button', { class: 'gps', onclick: () => verCidade() }, 'Ver a cidade'), h('button', { class: 'gps', onclick: centrar }, 'Minha posição'))), barra, div, barraSel));
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
     const render = L.canvas({ padding: 0.3, tolerance: 8 });
     const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21 }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
@@ -1095,16 +1123,49 @@
     let qdDados = null, qdSit = new Map(), selecao = null;
     const corQd = (q) => { const s = qdSit.get(q.n) || {}; if (selQd.value === 'eq') return s.equipe ? corEq(s.equipe) : '#9AA9B0'; return COR_QD[s.situacao || 'A levantar']; };
     const qdLayers = new Map();
+    // faces de quadra: linhas sobre o contorno da quadra, por cima dela e por baixo dos pontos
+    const fcLayers = new Map(); let selTipo = 'qd'; const ZOOM_FACES = 16;
+    const fcSit = () => qdSit.faces || new Map();
+    const estiloFc = (id) => {
+      const s = fcSit().get(id) || {}; const st = s.situacao || 'A levantar'; const sel = selecao && selTipo === 'fc' && selecao.has(id);
+      const cor = sel ? '#0D47A1' : selQd.value === 'eq' ? (s.equipe ? corEq(s.equipe) : COR_FC['A levantar']) : COR_FC[st];
+      const forte = sel || (selQd.value === 'eq' ? !!s.equipe : st !== 'A levantar');
+      return { color: cor, weight: sel ? 8 : forte ? 6 : 3, opacity: forte ? 0.95 : 0.6, dashArray: st === 'Levantada, sem árvores' && !sel && selQd.value !== 'eq' ? '10 6' : null, lineCap: 'butt' };
+    };
     const estiloQd = (q) => { const sel = selecao && selecao.has(q.n); const cor = corQd(q); const s = qdSit.get(q.n) || {}; const forte = selQd.value === 'eq' ? !!s.equipe : (s.situacao && s.situacao !== 'A levantar'); return { color: sel ? '#0D47A1' : cor, weight: sel ? 3 : 1, fillColor: sel ? '#1E88E5' : cor, fillOpacity: sel ? 0.45 : forte ? 0.38 : 0.12 }; };
-    function desenharQuadras() {
-      qdCamada.clearLayers(); qdLayers.clear();
-      if (qdDados && selQd.value) for (const q of qdDados.quadras) {
-        const ly = L.polygon(q.a.map((a) => { const r = []; for (let i = 0; i < a.length; i += 2) r.push([a[i + 1], a[i]]); return r; }), Object.assign({ renderer: render }, estiloQd(q))).on('click', (e) => { L.DomEvent.stop(e); clicarQuadra(q, e.latlng); }).addTo(qdCamada);
-        qdLayers.set(q.n, ly);
+    // só as quadras perto da área visível ficam desenhadas: arrastar e dar zoom continuam leves com milhares de quadras
+    function sincQdVista() {
+      if (!qdDados || !selQd.value) { if (qdLayers.size) { qdCamada.clearLayers(); qdLayers.clear(); } return; }
+      const b = mapa.getBounds().pad(0.4); const W = b.getWest(), E = b.getEast(), Sl = b.getSouth(), N = b.getNorth();
+      const quer = new Set();
+      for (const q of qdDados.quadras) if (!(q.b[2] < W || q.b[0] > E || q.b[3] < Sl || q.b[1] > N)) quer.add(q.n);
+      for (const [n, ly] of qdLayers) if (!quer.has(n)) { qdCamada.removeLayer(ly); qdLayers.delete(n); }
+      const comFaces = mapa.getZoom() >= ZOOM_FACES;
+      for (const [id, ly] of fcLayers) if (!comFaces || !quer.has(id.slice(0, id.lastIndexOf('-')))) { qdCamada.removeLayer(ly); fcLayers.delete(id); }
+      let novasF = 0;
+      for (const q of qdDados.quadras) {
+        if (!quer.has(q.n)) continue;
+        if (!qdLayers.has(q.n)) {
+          const ly = L.polygon(q.a.map((a) => { const r = []; for (let i = 0; i < a.length; i += 2) r.push([a[i + 1], a[i]]); return r; }), Object.assign({ renderer: render }, estiloQd(q))).on('click', (e) => { L.DomEvent.stop(e); clicarQuadra(q, e.latlng); }).addTo(qdCamada);
+          ly.bringToBack(); qdLayers.set(q.n, ly); // quadra sempre por baixo dos pontos: o toque no ponto tem prioridade
+        }
+        if (comFaces && q.f) for (const f of q.f) {
+          const id = q.n + '-' + f.i; if (fcLayers.has(id)) continue;
+          const ly = L.polyline(Quadras.faceCoords(q, f).map((c) => [c[1], c[0]]), Object.assign({ renderer: render }, estiloFc(id))).on('click', (e) => { L.DomEvent.stop(e); clicarFace(q, f, e.latlng); }).addTo(qdCamada);
+          ly.bringToBack(); fcLayers.set(id, ly); novasF++;
+        }
       }
+      if (novasF) for (const ly of qdLayers.values()) ly.bringToBack(); // ordem: quadras, faces, pontos
+    }
+    let qdPorN = null;
+    function desenharQuadras() {
+      if (qdDados && (!qdPorN || qdPorN.d !== qdDados)) qdPorN = { d: qdDados, m: new Map(qdDados.quadras.map((q) => [q.n, q])) };
+      sincQdVista();
+      for (const [n, ly] of qdLayers) { const q = qdPorN.m.get(n); if (q) ly.setStyle(estiloQd(q)); }
+      for (const [id, ly] of fcLayers) ly.setStyle(estiloFc(id));
       pintarRotulos();
     }
-    const restilizar = (ns) => { for (const n of ns) { const ly = qdLayers.get(n); const q = qdDados && qdDados.quadras.find((x) => x.n === n); if (ly && q) ly.setStyle(estiloQd(q)); } };
+    const restilizar = (ns) => { for (const n of ns) { if (fcLayers.has(n)) { fcLayers.get(n).setStyle(estiloFc(n)); continue; } const ly = qdLayers.get(n); const q = qdPorN && qdPorN.m.get(n); if (ly && q) ly.setStyle(estiloQd(q)); } };
     window.addEventListener('quadras-atualizadas', async function f() { if (!document.body.contains(div)) return window.removeEventListener('quadras-atualizadas', f); qdSit = await carregarSitQd(false); desenhar(false); });
     // escolher por área: arrastar um retângulo sobre o mapa
     let porArea = false, ini = null, ret = null;
@@ -1113,7 +1174,9 @@
     div.addEventListener('pointermove', (e) => { if (!porArea || !ini) return; const b = L.latLngBounds(ini, ptLL(e)); if (ret) ret.setBounds(b); else ret = L.rectangle(b, { color: '#0D47A1', weight: 2, dashArray: '6 4', fillOpacity: 0.08, interactive: false }).addTo(mapa); e.preventDefault(); e.stopPropagation(); }, true);
     div.addEventListener('pointerup', (e) => {
       if (!porArea || !ini) return; const b = L.latLngBounds(ini, ptLL(e)); ini = null; if (ret) { ret.remove(); ret = null; }
-      const novas = qdDados.quadras.filter((q) => { const c = Quadras.centro(q); return b.contains(c); }).map((q) => q.n);
+      const novas = selTipo === 'fc'
+        ? qdDados.quadras.filter((q) => q.f && b.intersects(L.latLngBounds([q.b[1], q.b[0]], [q.b[3], q.b[2]]))).flatMap((q) => q.f.filter((f) => { const c = Quadras.faceCoords(q, f); const m = c[Math.floor(c.length / 2)]; return b.contains([m[1], m[0]]); }).map((f) => q.n + '-' + f.i))
+        : qdDados.quadras.filter((q) => { const c = Quadras.centro(q); return b.contains(c); }).map((q) => q.n);
       novas.forEach((n) => selecao.add(n)); porArea = false; mapa.dragging.enable(); restilizar(novas); pintarSelecao(); e.preventDefault(); e.stopPropagation();
     }, true);
     function pintarRotulos() {
@@ -1121,11 +1184,13 @@
       const b = mapa.getBounds(); let n = 0;
       for (const q of qdDados.quadras) { if (q.b[2] < b.getWest() || q.b[0] > b.getEast() || q.b[3] < b.getSouth() || q.b[1] > b.getNorth()) continue; if (++n > 400) break; L.marker(Quadras.centro(q), { interactive: false, keyboard: false, icon: L.divIcon({ className: 'qd-rot', html: h('span', null, q.n), iconSize: null }) }).addTo(rotulos); }
     }
-    mapa.on('moveend zoomend', pintarRotulos); window.__app.mapa = mapa;
+    let zAnt = mapa.getZoom();
+    mapa.on('moveend zoomend', () => { sincQdVista(); pintarRotulos(); const z = mapa.getZoom(); if ((z >= ZOOM_FACES) !== (zAnt >= ZOOM_FACES)) legenda(); zAnt = z; }); window.__app.mapa = mapa;
     const podeMarcarQd = (s) => ehCoord() || (perfil() === 'coletor' && (!s.equipe || s.equipe === minhaEquipe()));
     function clicarQuadra(q, ll) {
-      if (selecao) { if (selecao.has(q.n)) selecao.delete(q.n); else selecao.add(q.n); pintarSelecao(); restilizar([q.n]); return; }
+      if (selecao) { if (selTipo !== 'qd') return toast('Toque nas linhas das faces para escolher.'); if (selecao.has(q.n)) selecao.delete(q.n); else selecao.add(q.n); pintarSelecao(); restilizar([q.n]); return; }
       const s = qdSit.get(q.n) || { situacao: 'A levantar', equipe: '' }; const st = s.situacao || 'A levantar';
+      const fFeitas = q.f ? q.f.filter((f) => FACE_FEITA.includes((fcSit().get(q.n + '-' + f.i) || {}).situacao)).length : 0;
       const arv = pts.filter((o) => Quadras.dentro(o.lon, o.lat, q)).length;
       const marcar = async (itens) => { try { const r = await marcarQuadras(itens); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Quadra atualizada.'); qdSit = await carregarSitQd(!r.fila); mapa.closePopup(); desenhar(false); } catch (e) { toast(e.message, 5000); } };
       const eqIn = h('input', { class: 'entrada', value: s.equipe || '', list: 'qd-equipes', placeholder: 'Ex.: Equipe 1' });
@@ -1133,32 +1198,60 @@
         q.p ? Object.entries(q.p).map(([k, v]) => h('small', null, (/^ruas?$/i.test(k) ? '' : k + ': ') + v)) : null,
         h('div', null, h('span', { class: 'os-st', style: `background:${COR_QD[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', s.equipe ? s.equipe : 'sem equipe'),
         h('small', null, `${pl(arv, 'árvore cadastrada', 'árvores cadastradas')} dentro dela` + (s.marcada_por ? ` · marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` : '')),
+        q.f ? h('small', null, `Faces: ${fFeitas} de ${q.f.length} levantadas.` + (mapa.getZoom() < ZOOM_FACES ? ' Aproxime o mapa para ver e marcar cada face.' : ' Toque na linha de uma face para marcar.')) : null,
         perfil() === 'coletor' && !s.equipe ? h('button', { class: 'btn peq', onclick: () => marcar([{ numero: q.n, situacao: st === 'A levantar' ? 'Em levantamento' : st }]) }, 'Assumir esta quadra para a minha equipe') : null,
         podeMarcarQd(s) ? h('div', { class: 'chips qd-chips' }, SIT_QD.map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: q.n, situacao: x }]) }, x))) : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn, h('datalist', { id: 'qd-equipes' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e }))), h('button', { class: 'btn sec peq', onclick: () => marcar([{ numero: q.n, equipe: eqIn.value.trim() }]) }, 'Definir equipe')) : null,
-        ehCoord() ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selecao = new Set([q.n]); pintarSelecao(); restilizar([q.n]); } }, 'Escolher várias quadras') : null);
+        ehCoord() ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'qd'; selecao = new Set([q.n]); pintarSelecao(); restilizar([q.n]); } }, 'Escolher várias quadras') : null);
+      L.popup({ maxWidth: 300 }).setLatLng(ll).setContent(pop).openOn(mapa);
+    }
+    const podeMarcarFc = (s) => ehCoord() || (perfil() === 'coletor' && (!s.equipe || s.equipe === minhaEquipe()));
+    function clicarFace(q, f, ll) {
+      const id = q.n + '-' + f.i;
+      if (selecao) { if (selTipo !== 'fc') return toast('Toque nas quadras para escolher.'); if (selecao.has(id)) selecao.delete(id); else selecao.add(id); pintarSelecao(); restilizar([id]); return; }
+      const s = fcSit().get(id) || { situacao: 'A levantar', equipe: '' }; const st = s.situacao || 'A levantar';
+      const lado = f.s ? qdDados.quadras.flatMap((x) => (x.f || []).filter((y) => y.s === f.s).map((y) => ({ id: x.n + '-' + y.i, c: y.c }))) : [];
+      const mLado = lado.reduce((a, x) => a + x.c, 0);
+      const marcar = async (itens) => { try { const r = await marcarQuadras(itens.map((i) => Object.assign({ tipo: 'face', rua: f.r }, i))); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Face atualizada.'); qdSit = await carregarSitQd(!r.fila); mapa.closePopup(); desenhar(false); } catch (e) { toast(e.message, 5000); } };
+      const eqIn = h('input', { class: 'entrada', value: s.equipe || '', list: 'fc-equipes', placeholder: 'Ex.: Equipe 1' });
+      const pode = podeMarcarFc(s) && perfil() !== 'cliente';
+      const pop = h('div', { class: 'ficha qd-ficha' }, h('b', null, `Face ${f.i} da quadra ${q.n}`), h('small', null, `${f.r} · ${fmtN(f.c)} m`),
+        h('div', null, h('span', { class: 'os-st', style: `background:${COR_FC[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', s.equipe ? s.equipe : 'sem equipe'),
+        s.marcada_por ? h('small', null, `marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` + (s.largura ? ` · calçada com ${numBR(+s.largura)} m de largura` : '')) : null,
+        pode ? h('div', { class: 'chips qd-chips' }, SIT_FC.filter((x) => x !== 'Levantada, sem árvores').map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: id, situacao: x }]) }, x))) : null,
+        pode ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); iniciarCalcadaFace(q, f); } }, st === 'Levantada, sem árvores' ? 'Refazer o cadastro da calçada sem árvores' : 'Levantada, sem árvores (foto e largura)') : null,
+        lado.length > 1 && (pode || ehCoord()) ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'fc'; selecao = new Set(lado.map((x) => x.id)); pintarSelecao(); restilizar([...selecao]); } }, `Escolher o lado todo da rua (${lado.length} faces, ${fmtM(mLado)})`) : null,
+        ehCoord() ? h('div', { class: 'qd-eq' }, eqIn, h('datalist', { id: 'fc-equipes' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e }))), h('button', { class: 'btn sec peq', onclick: () => marcar([{ numero: id, equipe: eqIn.value.trim() }]) }, 'Definir equipe')) : null,
+        pode ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'fc'; selecao = new Set([id]); pintarSelecao(); restilizar([id]); } }, 'Escolher várias faces') : null);
       L.popup({ maxWidth: 300 }).setLatLng(ll).setContent(pop).openOn(mapa);
     }
     function pintarSelecao() {
       barraSel.classList.toggle('oculto', !selecao); if (!selecao) return;
-      const eqIn = h('input', { class: 'entrada', list: 'qd-equipes2', placeholder: 'Equipe' });
-      const sitSel = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Situação...'), SIT_QD.map((x) => h('option', { value: x }, x)));
+      const fc = selTipo === 'fc'; const eqIn = h('input', { class: 'entrada' + (ehCoord() ? '' : ' oculto'), list: 'qd-equipes2', placeholder: 'Equipe' });
+      const sitSel = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Situação...'), (fc ? SIT_FC.filter((x) => x !== 'Levantada, sem árvores') : SIT_QD).map((x) => h('option', { value: x }, x)));
+      const ruaDe = (id) => { const k = id.lastIndexOf('-'); const q = qdPorN && qdPorN.m.get(id.slice(0, k)); const f = q && q.f && q.f.find((y) => y.i === id.slice(k + 1)); return f ? f.r : ''; };
       const aplicar = async () => {
-        if (!selecao.size) return toast('Toque nas quadras para escolher.');
-        const it = [...selecao].map((n) => { const o = { numero: n }; if (eqIn.value.trim() === 'Sem equipe') o.equipe = ''; else if (eqIn.value.trim()) o.equipe = eqIn.value.trim(); if (sitSel.value) o.situacao = sitSel.value; return o; });
+        if (!selecao.size) return toast(fc ? 'Toque nas faces para escolher.' : 'Toque nas quadras para escolher.');
+        const it = [...selecao].map((n) => { const o = fc ? { tipo: 'face', numero: n, rua: ruaDe(n) } : { numero: n }; if (eqIn.value.trim() === 'Sem equipe') o.equipe = ''; else if (eqIn.value.trim()) o.equipe = eqIn.value.trim(); if (sitSel.value) o.situacao = sitSel.value; return o; });
         if (!it.some((o) => o.equipe != null || o.situacao)) return toast('Escolha a equipe ou a situação.');
-        try { const r = await marcarQuadras(it); toast(`${pl(r.alteradas, 'quadra atualizada', 'quadras atualizadas')}.` + (r.recusadas && r.recusadas.length ? ` ${r.recusadas.length} não aceita(s).` : ''), 4000); qdSit = await carregarSitQd(!r.fila); selecao = null; pintarSelecao(); desenhar(false); } catch (e) { toast(e.message, 5000); }
+        try { const r = await marcarQuadras(it); toast(fc ? `${pl(r.alteradas, 'item atualizado', 'itens atualizados')}.` : `${pl(r.alteradas, 'quadra atualizada', 'quadras atualizadas')}.` + (r.recusadas && r.recusadas.length ? ` ${r.recusadas.length} não aceita(s).` : ''), 4000); qdSit = await carregarSitQd(!r.fila); selecao = null; pintarSelecao(); desenhar(false); } catch (e) { toast(e.message, 5000); }
       };
-      barraSel.replaceChildren(h('b', null, `${pl(selecao.size, 'quadra escolhida', 'quadras escolhidas')}. Toque nas quadras ou escolha uma área.`),
+      const mSel = fc ? [...selecao].reduce((a, id) => { const k = id.lastIndexOf('-'); const q = qdPorN && qdPorN.m.get(id.slice(0, k)); const f = q && q.f && q.f.find((y) => y.i === id.slice(k + 1)); return a + (f ? f.c : 0); }, 0) : 0;
+      barraSel.replaceChildren(h('b', null, fc ? `${pl(selecao.size, 'face escolhida', 'faces escolhidas')} (${fmtM(mSel)}). Toque nas faces ou escolha uma área.` : `${pl(selecao.size, 'quadra escolhida', 'quadras escolhidas')}. Toque nas quadras ou escolha uma área.`),
         h('div', { class: 'qd-sel-linha' }, h('button', { class: 'btn sec peq', onclick: () => { porArea = true; mapa.dragging.disable(); toast('Arraste o dedo sobre o mapa para marcar a área.', 3000); } }, 'Escolher por área'), selecao.size > 1 ? h('button', { class: 'btn sec peq', onclick: () => { const v = [...selecao]; selecao = new Set(); restilizar(v); pintarSelecao(); } }, 'Limpar escolha') : null),
         h('div', { class: 'qd-sel-linha' }, eqIn, h('datalist', { id: 'qd-equipes2' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e })), h('option', { value: 'Sem equipe' })), sitSel,
           h('button', { class: 'btn peq', onclick: aplicar }, 'Aplicar'), h('button', { class: 'btn sec peq', onclick: () => { const v = [...selecao]; selecao = null; porArea = false; mapa.dragging.enable(); pintarSelecao(); restilizar(v); } }, 'Sair')));
     }
     const carregarQdMapa = async () => {
       try {
-        qdDados = await carregarQuadras(); if (!qdDados || !document.body.contains(div)) return;
-        qdSit = await carregarSitQd(false); for (const s of qdSit.values()) if (s.equipe) corEq(s.equipe);
+        conta.dataset.qd = 'Carregando quadras...'; pintarConta();
+        qdDados = await carregarQuadras(); delete conta.dataset.qd; if (!qdDados || !document.body.contains(div)) { pintarConta(); return; }
+        // primeiro com a situação guardada no aparelho, depois com a do servidor
+        qdSit = await carregarSitQd(false, true); for (const s of qdSit.values()) if (s.equipe) corEq(s.equipe);
         selQd.classList.remove('oculto'); preencherEquipes(); desenhar(false);
+        if (!pts.length && !S.pos) verCidade();
+        const nova = await carregarSitQd(false); if (!document.body.contains(div)) return;
+        qdSit = nova; for (const s of qdSit.values()) if (s.equipe) corEq(s.equipe); preencherEquipes(); desenhar(false);
       } catch (e) { /* sem quadras */ }
     };
     const camada = L.layerGroup().addTo(mapa);
@@ -1178,7 +1271,7 @@
       }
       if (porOS && osPorArv) for (const o of osSoltas) L.circleMarker([+o.latitude, +o.longitude], { renderer: render, radius: 8, color: '#13262B', weight: 2, fillColor: COR_OS[o.status], fillOpacity: 0.95 }).on('click', () => ir('#os/' + encodeURIComponent(o.id))).addTo(camada);
       const rq = qdDados && selQd.value ? resumoQd(qdDados, qdSit) : null;
-      conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos` + (rq ? ` · ${fmtN(rq.por.Levantada)} de ${fmtN(rq.tot)} quadras levantadas` : '') + (porOS && osPorArv ? ` · ${[...osPorArv.values()].filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length + osSoltas.filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length} com ordem em aberto` : '');
+      conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos` + (rq ? ` · ${fmtN(rq.por.Levantada)} de ${fmtN(rq.tot)} quadras levantadas` : '') + (porOS && osPorArv ? ` · ${[...osPorArv.values()].filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length + osSoltas.filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length} com ordem em aberto` : '') + (conta.dataset.qd ? ' · ' + conta.dataset.qd : '');
       legenda();
       if (ajustar && vis.length) {
         if (vis.length === 1) { mapa.setView([vis[0].lat, vis[0].lon], 19); ficha(vis[0]); }
@@ -1200,7 +1293,9 @@
       leg = L.control({ position: 'bottomleft' });
       const itens = selCor.value === 'os' ? [...Object.entries(COR_OS), ['Sem ordem', '#C9D3D6']] : selCor.value === 'risco' ? Object.entries(corRisco) : equipes.map((e) => [e, corEq(e)]);
       const itQd = qdDados && selQd.value ? (selQd.value === 'eq' ? [...new Set([...qdSit.values()].map((s) => s.equipe).filter(Boolean))].sort().map((e) => [e, corEq(e)]).concat([['Sem equipe', '#9AA9B0']]) : Object.entries(COR_QD)) : [];
-      leg.onAdd = () => h('div', { class: 'mapa-leg' }, itens.map(([t, c]) => h('div', null, h('span', { style: `background:${c}` }), t)), itQd.length ? [h('b', { class: 'leg-tit' }, 'Quadras'), itQd.map(([t, c]) => h('div', null, h('span', { class: 'leg-qd', style: `background:${c}` }), t))] : null);
+      const itFc = qdDados && selQd.value === 'sit' && fcLayers.size ? Object.entries(COR_FC).filter(([t]) => t !== 'A levantar') : [];
+      leg.onAdd = () => h('div', { class: 'mapa-leg' }, itens.map(([t, c]) => h('div', null, h('span', { style: `background:${c}` }), t)), itQd.length ? [h('b', { class: 'leg-tit' }, 'Quadras'), itQd.map(([t, c]) => h('div', null, h('span', { class: 'leg-qd', style: `background:${c}` }), t))] : null,
+        itFc.length ? [h('b', { class: 'leg-tit' }, 'Faces'), itFc.map(([t, c]) => h('div', null, h('span', { class: 'leg-fc', style: `background:${c}` }), t))] : null);
       leg.addTo(mapa);
     }
     let tBusca = null;
@@ -1225,16 +1320,30 @@
     const aplicarFiltroPainel = () => { if (!S.mapaFiltro) return; if (S.mapaFiltro.equipe) selEq.value = S.mapaFiltro.equipe; selDia.value = S.mapaFiltro.dia || ''; };
     preencherEquipes(); aplicarFiltroPainel(); desenhar(true); carregarQdMapa();
     if (!Api.demo && navigator.onLine) {
-      conta.textContent = 'Carregando pontos...';
+      conta.textContent = 'Carregando pontos...'; pintarConta();
       try {
         const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link', 'bairro_aprox', 'criado_em'].map((x) => x || '');
+        // abre com os pontos da última consulta e troca pelos do servidor quando chegarem
+        const addLinhas = (ls) => { for (const l of ls) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6], cat: l[7], foto: l[8], bairro: l[9] || '', dia: l[10] ? diaLocal(l[10]) : '', local: false }); };
+        const kc = 'mapapts:' + S.projeto.id + ':' + (S.sessao ? S.sessao.u : '');
+        const antes = await Store.get(kc);
+        if (antes && antes.campos === campos.join('|') && document.body.contains(div)) { addLinhas(antes.linhas); preencherEquipes(); aplicarFiltroPainel(); desenhar(true); conta.textContent += ' · atualizando...'; }
         const m = await Api.b.mapa(S.projeto.id, campos);
-        for (const l of m.linhas) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6], cat: l[7], foto: l[8], bairro: l[9] || '', dia: l[10] ? diaLocal(l[10]) : '', local: false });
+        Store.set(kc, { campos: campos.join('|'), linhas: m.linhas });
         if (!document.body.contains(div)) return;
-        preencherEquipes(); aplicarFiltroPainel(); S.mapaFiltro = null; desenhar(true);
+        const usouAntes = antes && antes.campos === campos.join('|');
+        if (usouAntes) for (let i = pts.length - 1; i >= 0; i--) if (!pts[i].local) { vistos.delete(pts[i].uid); pts.splice(i, 1); }
+        addLinhas(m.linhas);
+        preencherEquipes(); aplicarFiltroPainel(); S.mapaFiltro = null; desenhar(!usouAntes);
       } catch (e) { conta.textContent = ''; toast('Não foi possível carregar os pontos das outras equipes.'); }
     }
     let eu = null;
+    // enquadra a cidade do projeto: a camada de quadras ou, sem ela, todos os pontos
+    function verCidade() {
+      if (qdDados && qdDados.quadras.length) { let b = [Infinity, Infinity, -Infinity, -Infinity]; for (const q of qdDados.quadras) b = [Math.min(b[0], q.b[0]), Math.min(b[1], q.b[1]), Math.max(b[2], q.b[2]), Math.max(b[3], q.b[3])]; return mapa.fitBounds([[b[1], b[0]], [b[3], b[2]]], { padding: [10, 10] }); }
+      if (pts.length) return mapa.fitBounds(L.latLngBounds(pts.map((o) => [o.lat, o.lon])), { padding: [30, 30], maxZoom: 17 });
+      toast('Este projeto ainda não tem quadras nem pontos no mapa.');
+    }
     function centrar() { if (!S.pos) return toast('GPS ainda sem sinal.'); mapa.setView([S.pos.lat, S.pos.lon], 19); }
     const ouv = (p) => { if (!p || !document.body.contains(div)) return; if (!eu) eu = L.circleMarker([p.lat, p.lon], { renderer: render, interactive: false, radius: 8, color: '#fff', weight: 3, fillColor: '#1E88E5', fillOpacity: 1 }).addTo(mapa); else eu.setLatLng([p.lat, p.lon]); };
     Gps.ouvintes.add(ouv); if (S.pos) ouv(S.pos);
@@ -1252,6 +1361,8 @@
       h('main', { style: 'padding-bottom:0' }, h('div', { class: 'subabas' }, it('exportar', 'Exportar'), it('importar', 'Importar'), it('projetos', 'Projetos'), it('usuarios', 'Usuários'), it('formularios', 'Formulários'), it('seguranca', 'Segurança')),
         S.projeto ? h('div', { class: 'linha-btn', style: 'margin:8px 0 0' }, h('button', { class: 'btn sec peq', onclick: () => ir('#painel') }, 'Painel'), h('button', { class: 'btn sec peq', onclick: () => ir('#validacao') }, 'Validação'), h('button', { class: 'btn sec peq', onclick: () => ir('#mapa') }, 'Mapa')) : null), corpo].filter(Boolean));
     corpo.style.paddingTop = '0';
+    // as listas das outras abas vêm em segundo plano: trocar de aba fica instantâneo
+    if (!Api.demo && navigator.onLine) { Api.b.usuariosListar().catch(() => {}); Api.b.projetosListar().catch(() => {}); Api.b.formulariosListar().catch(() => {}); }
     try {
       if (sub === 'exportar') await adminExportar(corpo);
       else if (sub === 'projetos') await adminProjetos(corpo);
@@ -1291,6 +1402,8 @@
       const art = h('input', { class: 'entrada', value: p.art || '', placeholder: 'nº da ART' });
       const tos = h('textarea', { class: 'entrada', rows: 4, placeholder: 'Um por linha. Vazio usa a lista padrão: ' + TIPOS_OS_PADRAO.join(', ') }); tos.value = String(p.tipos_os || '').split(/[;\n]+/).filter(Boolean).join('\n');
       const cve = h('select', { class: 'entrada' }, h('option', { value: 'validados', selected: p.cliente_ve !== 'todos' }, 'Só registros validados'), h('option', { value: 'todos', selected: p.cliente_ve === 'todos' }, 'Todos, inclusive aguardando validação'));
+      const num = (v, ph) => h('input', { class: 'entrada', inputmode: 'decimal', value: v || '', placeholder: ph });
+      const fGps = num(p.face_gps, '10'), fDist = num(p.face_dist, '15'), fFolga = num(p.face_folga, '8');
       const ok = await modal(novo ? 'Novo projeto' : 'Editar projeto', h('div', null,
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Identificador (sem espaços)'), id), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), nome),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Formulário'), fo), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Sistema de coordenadas da exportação'), ep),
@@ -1300,12 +1413,18 @@
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Responsável técnico (sai no relatório)'), rt),
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Registro profissional'), reg), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'ART'), art)),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'O cliente vê no portal'), cve),
-        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Tipos de serviço das ordens de serviço'), tos)),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Tipos de serviço das ordens de serviço'), tos),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Faces de quadra: começo automático pelo GPS'),
+          h('div', { class: 'grade3' }, h('div', null, h('small', null, 'Erro máximo do GPS (m)'), fGps), h('div', null, h('small', null, 'Distância até a face (m)'), fDist), h('div', null, h('small', null, 'Folga para a 2ª face (m)'), fFolga)),
+          h('div', { class: 'dica' }, 'Ao salvar uma árvore, a face da calçada passa a "em levantamento" sozinha só quando o erro do GPS é até o máximo, a face está mais perto que a distância e nenhuma outra face está a menos da folga. Em branco vale 10, 15 e 8.'))),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
+      const nOk = (x, a, b) => { const v = +String(x.value).replace(',', '.'); return x.value.trim() === '' ? '' : v >= a && v <= b ? String(v) : null; };
       if (!ok) return;
       const pid = Q2F.slug(id.value || nome.value); if (!pid || !nome.value.trim()) return toast('Preencha identificador e nome.');
       if (novo && projetos.some((x) => x.id === pid)) return toast('Já existe projeto com esse identificador.');
-      try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value, responsavel: rt.value.trim(), registro_profissional: reg.value.trim(), art: art.value.trim(), tipos_os: tos.value.split('\n').map((x) => x.trim()).filter(Boolean).join('; ') })); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
+      const fg = nOk(fGps, 1, 50), fd = nOk(fDist, 1, 50), ff = nOk(fFolga, 0, 50);
+      if (fg == null || fd == null || ff == null) return toast('Faces de quadra: use números entre 1 e 50 metros (folga de 0 a 50).', 5000);
+      try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value, face_gps: fg, face_dist: fd, face_folga: ff, responsavel: rt.value.trim(), registro_profissional: reg.value.trim(), art: art.value.trim(), tipos_os: tos.value.split('\n').map((x) => x.trim()).filter(Boolean).join('; ') })); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
     }
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Projetos'),
       h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Projeto'), h('th', null, 'Formulário'), h('th', null, '')),
@@ -1383,7 +1502,7 @@
       } catch (e) { msg.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
     }
     async function exemplo() {
-      try { for (const arq of ['divinopolis-inventario', 'seade-risco']) { const f = await (await fetch(`forms/${arq}.json`)).json(); const q = await fetch(`forms/${arq}.qml`).then((r) => (r.ok ? r.text() : null)).catch(() => null); await Api.b.formularioSalvar(f, q); } toast('Formulários instalados.'); if (S.form) S.form = await carregarForm(S.form.id); telaAdmin('formularios'); } catch (e) { toast(e.message, 5000); }
+      try { for (const arq of ['divinopolis-inventario', 'seade-risco']) { const f = await (await fetch(`forms/${arq}.json`)).json(); const q = await fetch(`forms/${arq}.qml`).then((r) => (r.ok ? r.text() : null)).catch(() => null); await Api.b.formularioSalvar(f, q); } toast('Formulários instalados.'); if (S.form) S.form = await carregarForm(S.form.id, false, true); telaAdmin('formularios'); } catch (e) { toast(e.message, 5000); }
     }
     async function editar(id) { const form = await Api.b.formulario(id); S.revisao = { form: JSON.parse(JSON.stringify(form)), qml: null, novo: false }; ir('#admin/revisao'); }
     corpo.replaceChildren(
@@ -1462,7 +1581,7 @@
       f.nome = nome.value.trim() || f.nome; if (R.novo) f.id = Q2F.slug(id.value || f.nome);
       f.especies = esp.value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { const [c, p] = l.split(';').map((x) => (x || '').trim()); return { cientifico: c, popular: p || '' }; });
       f.versao = (f.versao || 0) + 1; delete f.avisos;
-      try { await Api.b.formularioSalvar(f, R.qml); toast('Formulário salvo.'); S.revisao = null; if (S.form && S.form.id === f.id) S.form = await carregarForm(f.id); ir('#admin/formularios'); } catch (e) { toast(e.message, 5000); }
+      try { await Api.b.formularioSalvar(f, R.qml); toast('Formulário salvo.'); S.revisao = null; if (S.form && S.form.id === f.id) S.form = await carregarForm(f.id, false, true); ir('#admin/formularios'); } catch (e) { toast(e.message, 5000); }
     }
     corpo.replaceChildren(
       h('div', { class: 'cartao' }, h('h3', null, 'Revisar formulário'),
@@ -1625,10 +1744,21 @@
   }
   const kpi = (rot, val, sub, cls) => h('div', { class: 'kpi ' + (cls || '') }, h('small', null, rot), h('b', null, val), sub ? h('span', null, sub) : null);
 
+  // o painel abre com os números da última consulta e se atualiza sozinho em segundo plano
   async function dadosPainel(forcar) {
-    const chave = S.projeto.id;
-    if (!forcar && S.painel && S.painel.id === chave && Date.now() - S.painel.t < 120000) return S.painel.d;
-    const d = await Api.b.painel(chave); S.painel = { id: chave, t: Date.now(), d }; return d;
+    const chave = S.projeto.id; const k = 'painel:' + chave + ':' + (S.sessao ? S.sessao.u : '');
+    if (!forcar) {
+      const c = S.painel && S.painel.id === chave ? S.painel : await Store.get(k);
+      if (c && c.d && c.id === chave) {
+        S.painel = c;
+        if (Date.now() - c.t > 120000 && !S.painelBusca && navigator.onLine) {
+          S.painelBusca = true;
+          Api.b.painel(chave).then(async (d) => { S.painel = { id: chave, t: Date.now(), d }; await Store.set(k, S.painel); if (document.querySelector('main.painel') && S.projeto && S.projeto.id === chave) telaPainel(false); }).catch(() => {}).finally(() => { S.painelBusca = false; });
+        }
+        return c.d;
+      }
+    }
+    const d = await Api.b.painel(chave); S.painel = { id: chave, t: Date.now(), d }; await Store.set(k, S.painel); return d;
   }
   function analisarPainel(d, form) {
     const cRisco = form.campos.find((c) => c.tipo === 'choice' && /^risco$/i.test(norm(c.nome)));
@@ -2268,6 +2398,11 @@
   // ---------- Quadras ----------
   // Camada de quadras do projeto (polígonos com número) e situação de cada uma: a levantar, em levantamento, levantada.
   const SIT_QD = ['A levantar', 'Em levantamento', 'Levantada'];
+  const SIT_FC = ['A levantar', 'Em levantamento', 'Levantada', 'Levantada, sem árvores'];
+  const FACE_FEITA = ['Levantada', 'Levantada, sem árvores'];
+  const fmtKm = (m) => (m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km';
+  const fmtM = (m) => (m >= 1000 ? fmtKm(m) : fmtN(Math.round(m)) + ' m');
+  const COR_FC = { 'A levantar': '#78909C', 'Em levantamento': '#F2A900', Levantada: '#2E7D32', 'Levantada, sem árvores': '#00838F' };
   const COR_QD = { 'A levantar': '#9AA9B0', 'Em levantamento': '#F2A900', Levantada: '#2E7D32' };
   const minhaEquipe = () => (S.projeto && S.projeto.equipe) || (S.sessao && S.sessao.usuario && S.sessao.usuario.equipe) || '';
   async function carregarQuadras() {
@@ -2275,28 +2410,48 @@
     if (!Api.demo && navigator.onLine && !S.expirada && (!S.qdEm || S.qdEm.p !== S.projeto.id || Date.now() - S.qdEm.t > 600000)) {
       try {
         const j = await Api.b.quadrasCamada(S.projeto.id, c && c.versao); S.qdEm = { p: S.projeto.id, t: Date.now() };
-        if (j.semCamada) { c = null; await Store.del(k); } else if (!j.igual) { c = { versao: j.versao, camada: JSON.parse(j.camada) }; await Store.set(k, c); }
+        if (j.semCamada) { c = null; await Store.del(k); Store.set('qdtemfaces:' + S.projeto.id, false); S.qdTemFaces = null; } else if (!j.igual) { c = { versao: j.versao, camada: JSON.parse(j.camada) }; await Store.set(k, c); }
       } catch (e) { /* sem conexão ou servidor antigo: fica a cópia do aparelho */ }
     }
     if (Api.demo && !c) { const d = await Api.b.quadrasCamada(S.projeto.id); if (d && d.camada) c = { versao: d.versao, camada: JSON.parse(d.camada) }; }
     if (!c) return null;
-    if (!S.qdIdx || S.qdIdx.v !== c.versao || S.qdIdx.p !== S.projeto.id) S.qdIdx = { p: S.projeto.id, v: c.versao, idx: Quadras.indice(c.camada.quadras) };
+    if (!S.qdIdx || S.qdIdx.v !== c.versao || S.qdIdx.p !== S.projeto.id) {
+      S.qdIdx = { p: S.projeto.id, v: c.versao, idx: Quadras.indice(c.camada.quadras), porN: new Map(c.camada.quadras.map((q) => [q.n, q])) };
+      const tem = c.camada.quadras.some((q) => q.f && q.f.length); S.qdTemFaces = tem ? S.projeto.id : null; Store.set('qdtemfaces:' + S.projeto.id, tem);
+    }
     return c.camada;
   }
   async function filaTodaQd() { return (await Store.get('qdfila')) || []; }
   async function mexerFilaQd(fn) { const toda = await filaTodaQd(); const u = S.sessao && S.sessao.u; const minha = toda.filter((x) => x.usuario === u); const n = (await fn(minha)) || minha; await Store.set('qdfila', [...toda.filter((x) => x.usuario !== u), ...n]); }
   async function nFilaQd() { const u = S.sessao && S.sessao.u; return (await filaTodaQd()).filter((x) => x.usuario === u && !x.recusado).length; }
-  async function carregarSitQd(forcar) {
+  async function carregarSitQd(forcar, soLocal) {
     const k = 'qdsit:' + S.projeto.id; const c = (await Store.get(k)) || { quadras: [] };
-    if (navigator.onLine && !S.expirada && (forcar || !S.qdSitEm || S.qdSitEm.p !== S.projeto.id || Date.now() - S.qdSitEm.t > 60000)) {
-      try { c.quadras = await Api.b.quadrasSituacao(S.projeto.id); await Store.set(k, c); S.qdSitEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { /* sem conexão */ }
+    if (!soLocal && navigator.onLine && !S.expirada && (forcar || !S.qdSitEm || S.qdSitEm.p !== S.projeto.id || Date.now() - S.qdSitEm.t > 60000)) {
+      try { const r = await Api.b.quadrasSituacao(S.projeto.id); c.quadras = r.quadras; c.faces = r.faces || []; await Store.set(k, c); S.qdSitEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { /* sem conexão */ }
     }
     const m = new Map(c.quadras.map((q) => [q.numero, Object.assign({}, q)]));
+    m.faces = new Map((c.faces || []).map((f) => [f.numero, Object.assign({}, f)]));
     const u = S.sessao && S.sessao.u;
     for (const it of (await filaTodaQd()).filter((x) => x.projeto === S.projeto.id && x.usuario === u && !x.recusado)) for (const i of it.itens) {
+      if (i.tipo === 'face') {
+        const f = m.faces.get(i.numero) || { numero: i.numero, situacao: 'A levantar', equipe: '' };
+        if (i.auto && f.situacao !== 'A levantar') continue;
+        if (i.situacao) { f.situacao = i.situacao; if (i.largura != null) f.largura = String(i.largura).replace(',', '.'); }
+        if (i.equipe != null) f.equipe = i.equipe; else if (!f.equipe && perfil() === 'coletor') f.equipe = minhaEquipe();
+        f.__pend = true; m.faces.set(i.numero, f); continue;
+      }
       const q = m.get(i.numero) || { numero: i.numero, situacao: 'A levantar', equipe: '' };
       if (i.situacao) q.situacao = i.situacao; if (i.equipe != null) q.equipe = i.equipe; else if (!q.equipe && perfil() === 'coletor') q.equipe = minhaEquipe();
       q.__pend = true; m.set(i.numero, q);
+    }
+    if (S.qdIdx && S.qdIdx.p === S.projeto.id) {
+      const pendQ = new Set([...m.faces.values()].filter((f) => f.__pend).map((f) => f.numero.slice(0, f.numero.lastIndexOf('-'))));
+      for (const n of pendQ) {
+        const q = S.qdIdx.porN && S.qdIdx.porN.get(n); if (!q || !q.f) continue;
+        const st = q.f.map((f) => (m.faces.get(n + '-' + f.i) || {}).situacao || 'A levantar'); const x = m.get(n) || { numero: n, situacao: 'A levantar', equipe: '' };
+        const nova = st.every((v) => FACE_FEITA.includes(v)) ? 'Levantada' : st.some((v) => v !== 'A levantar') ? 'Em levantamento' : null;
+        if (nova && x.situacao !== nova) { x.situacao = nova; x.__pend = true; m.set(n, x); }
+      }
     }
     return m;
   }
@@ -2323,29 +2478,66 @@
     else if (ok && !silencioso) toast('Marcações de quadra enviadas.');
   }
   // ao salvar uma árvore numa quadra ainda "a levantar", ela passa a "em levantamento"
+  // e a face da calçada começa sozinha quando o GPS deixa claro qual é (erro pequeno, face perto e nenhuma outra quase tão perto)
   async function quadraAutomatica(r) {
     try {
-      if (!['coletor', 'revisor', 'admin'].includes(perfil()) || r.lat == null || r.lat === '') return;
+      if (!['coletor', 'revisor', 'admin'].includes(perfil())) return;
       const cam = await carregarQuadras(); if (!cam) return;
-      const q = S.qdIdx.idx.achar(+r.lon, +r.lat); if (!q) return;
-      const sit = (await carregarSitQd(false)).get(q.n) || { situacao: 'A levantar', equipe: '' };
-      if (sit.situacao !== 'A levantar' || (perfil() === 'coletor' && sit.equipe && sit.equipe !== minhaEquipe())) return;
-      await marcarQuadras([{ numero: q.n, situacao: 'Em levantamento', auto: true }]);
+      const sit = await carregarSitQd(false); const fs = sit.faces || new Map(); const itens = [];
+      const daOutra = (s) => perfil() === 'coletor' && s.equipe && s.equipe !== minhaEquipe();
+      if (r.faceId) {
+        const cl = S.form.campos.find((c) => /largura/i.test(c.nome));
+        const res = await marcarQuadras([{ tipo: 'face', numero: r.faceId, situacao: 'Levantada, sem árvores', registro: r.uuid, largura: cl ? r.valores[cl.nome] : null, rua: r.faceRua || '' }]);
+        if (res.recusadas && res.recusadas.length) toast('A face não foi marcada: ' + res.recusadas[0].motivo, 6000);
+        return;
+      }
+      if (r.lat == null || r.lat === '') return;
+      const q = S.qdIdx.idx.achar(+r.lon, +r.lat);
+      if (q) { const s = sit.get(q.n) || { situacao: 'A levantar', equipe: '' }; if (s.situacao === 'A levantar' && !daOutra(s)) itens.push({ numero: q.n, situacao: 'Em levantamento', auto: true }); }
+      const P = S.projeto; const gps = +P.face_gps || 10, dist = +P.face_dist || 15, folga = +P.face_folga || 8;
+      if (r.posManual || (r.prec != null && +r.prec <= gps)) {
+        const fc = S.qdIdx.idx.faces(+r.lon, +r.lat, dist + folga);
+        if (fc.length && fc[0].d < dist && (!fc[1] || fc[1].d - fc[0].d >= folga)) {
+          const s = fs.get(fc[0].id) || { situacao: 'A levantar', equipe: '' };
+          if (s.situacao === 'A levantar' && !daOutra(s)) itens.push({ tipo: 'face', numero: fc[0].id, situacao: 'Em levantamento', auto: true, rua: fc[0].f.r });
+        }
+      }
+      if (itens.length) await marcarQuadras(itens);
     } catch (e) { /* não atrapalha a coleta */ }
+  }
+  // "Levantada, sem árvores": abre o cadastro de calçada (foto de auditoria e largura) ligado à face
+  async function iniciarCalcadaFace(q, f) {
+    const cat = S.form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
+    const op = cat && cat.opcoes.find((o) => /cal[cç]ada/i.test(o.t));
+    if (!op) return toast('O formulário deste projeto não tem a categoria calçada sem árvores.', 5000);
+    await novoRegistro({ faceId: q.n + '-' + f.i, faceRua: f.r, faceTxt: `face ${f.i} da quadra ${q.n} (${f.r})`, cat: [cat.nome, op.v] });
   }
   function resumoQd(cam, sit) {
     const tot = cam ? cam.quadras.length : 0; const por = { 'A levantar': 0, 'Em levantamento': 0, Levantada: 0 }; const eq = {};
     if (cam) for (const q of cam.quadras) { const s = sit.get(q.n) || {}; const st = s.situacao || 'A levantar'; por[st]++; if (s.equipe) { eq[s.equipe] = eq[s.equipe] || { total: 0, Levantada: 0, 'Em levantamento': 0 }; eq[s.equipe].total++; if (st !== 'A levantar') eq[s.equipe][st]++; } }
     return { tot, por, eq };
   }
+  function resumoFaces(cam, sit) {
+    const fs = sit.faces || new Map(); const o = { n: 0, mTot: 0, mFeito: 0, mSem: 0, eq: {} };
+    for (const q of cam.quadras) for (const f of q.f || []) {
+      o.n++; o.mTot += f.c; const s = fs.get(q.n + '-' + f.i); if (!s || !FACE_FEITA.includes(s.situacao)) continue;
+      o.mFeito += f.c; if (s.situacao === 'Levantada, sem árvores') o.mSem += f.c;
+      if (s.equipe) { const e = o.eq[s.equipe] = o.eq[s.equipe] || { n: 0, m: 0 }; e.n++; e.m += f.c; }
+    }
+    return o;
+  }
   async function pintarPainelQd(corpo) {
     let cam; try { cam = await carregarQuadras(); } catch (e) { return; } if (!cam || !document.body.contains(corpo)) return;
-    const r = resumoQd(cam, await carregarSitQd(false));
+    const sit = await carregarSitQd(false); const r = resumoQd(cam, sit); const F = resumoFaces(cam, sit);
+    const km = fmtKm;
+    for (const e of Object.keys(F.eq)) if (!r.eq[e]) r.eq[e] = { total: 0, Levantada: 0, 'Em levantamento': 0 };
     const sec = h('section', { class: 'painel-os' }, h('h2', { class: 'painel-tit' }, 'Andamento por quadras'),
-      h('div', { class: 'kpis' }, kpi('Quadras levantadas', fmtN(r.por.Levantada), `de ${fmtN(r.tot)} (${fmtP(r.tot ? r.por.Levantada / r.tot : 0)})`), kpi('Em levantamento', fmtN(r.por['Em levantamento']), ''), kpi('A levantar', fmtN(r.por['A levantar']), '')),
+      h('div', { class: 'kpis' }, kpi('Quadras levantadas', fmtN(r.por.Levantada), `de ${fmtN(r.tot)} (${fmtP(r.tot ? r.por.Levantada / r.tot : 0)})`), kpi('Em levantamento', fmtN(r.por['Em levantamento']), ''), kpi('A levantar', fmtN(r.por['A levantar']), ''),
+        F.n ? kpi('Calçada levantada', km(F.mFeito), `de ${km(F.mTot)} (${fmtP(F.mTot ? F.mFeito / F.mTot : 0)}) · ${km(F.mSem)} sem árvores`) : null),
       h('div', { class: 'prog-qd' }, h('div', { style: `width:${(r.por.Levantada / Math.max(1, r.tot)) * 100}%;background:${COR_QD.Levantada}` }), h('div', { style: `width:${(r.por['Em levantamento'] / Math.max(1, r.tot)) * 100}%;background:${COR_QD['Em levantamento']}` })),
-      Object.keys(r.eq).length ? h('div', { class: 'cartao tab-rolagem' }, h('h3', null, 'Por equipe'), h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Equipe'), h('th', null, 'Quadras atribuídas'), h('th', null, 'Levantadas'), h('th', null, 'Em levantamento'), h('th', null, 'Andamento')),
-        Object.entries(r.eq).sort((a, b) => a[0].localeCompare(b[0], 'pt')).map(([e, x]) => h('tr', null, h('td', null, e), h('td', null, fmtN(x.total)), h('td', null, fmtN(x.Levantada)), h('td', null, fmtN(x['Em levantamento'])), h('td', null, fmtP(x.Levantada / x.total)))))) : null,
+      Object.keys(r.eq).length ? h('div', { class: 'cartao tab-rolagem' }, h('h3', null, 'Por equipe'), h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Equipe'), h('th', null, 'Quadras atribuídas'), h('th', null, 'Levantadas'), h('th', null, 'Em levantamento'), h('th', null, 'Andamento'), F.n ? h('th', null, 'Faces levantadas') : null, F.n ? h('th', null, 'Calçada levantada') : null),
+        Object.entries(r.eq).sort((a, b) => a[0].localeCompare(b[0], 'pt')).map(([e, x]) => h('tr', null, h('td', null, e), h('td', null, fmtN(x.total)), h('td', null, fmtN(x.Levantada)), h('td', null, fmtN(x['Em levantamento'])), h('td', null, x.total ? fmtP(x.Levantada / x.total) : ''),
+          F.n ? h('td', null, fmtN((F.eq[e] || {}).n || 0)) : null, F.n ? h('td', null, km((F.eq[e] || {}).m || 0)) : null)))) : null,
       h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: () => { S.qdModo = 'sit'; ir('#mapa'); } }, 'Ver quadras no mapa')));
     const bt = corpo.querySelector('.botoes-painel'); if (bt) corpo.insertBefore(sec, bt); else corpo.append(sec);
   }
@@ -2358,16 +2550,16 @@
       try {
         lido = await Quadras.lerArquivo(f.name, await f.arrayBuffer()); const sug = Quadras.campoNumero(lido.campos, lido.feicoes);
         selN.replaceChildren(lido.campos.map((c) => h('option', { value: c, selected: c === sug }, `${c} (ex.: ${String(lido.feicoes[0].props[c] ?? '').slice(0, 30)})`)));
-        info.replaceChildren(h('div', { class: 'info' }, `${fmtN(lido.feicoes.length)} polígonos encontrados.` + (lido.semPrj ? ' O arquivo não tem .prj: as coordenadas foram lidas como graus.' : '')));
+        info.replaceChildren(h('div', { class: 'info' }, `${fmtN(lido.feicoes.length)} polígonos encontrados` + (lido.campos.includes('faces') ? ', com as faces de quadra.' : '.') + (lido.semPrj ? ' O arquivo não tem .prj: as coordenadas foram lidas como graus.' : '')));
       } catch (e) { info.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
     });
     const ok = await modal('Camada de quadras: ' + p.nome, h('div', null,
       h('p', { class: 'dica' }, 'Shapefile compactado (.zip com .shp, .dbf e .prj), GeoPackage, KML ou GeoJSON, em SIRGAS 2000 (graus ou UTM). Importar de novo substitui a camada; a situação das quadras com o mesmo número continua valendo.'),
       arq, info, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Campo com o número da quadra'), selN)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Importar', valor: true }]);
     if (!ok) return; if (!lido) return toast('Escolha um arquivo válido.');
-    const extras = lido.campos.filter((c) => c !== selN.value && !/^(fid|ogc_fid|objectid|shape_(area|leng|length)|geom)$/i.test(c)).slice(0, 4);
+    const extras = lido.campos.filter((c) => c !== selN.value && !/^(fid|ogc_fid|objectid|shape_(area|leng|length)|geom|faces)$/i.test(c)).slice(0, 4);
     const cam = Quadras.compactar(lido.feicoes, selN.value, extras);
-    try { toast('Enviando a camada...', 4000); const r = await Api.b.quadrasImportar(p.id, JSON.stringify(cam)); S.qdEm = null; S.qdIdx = null; toast(`Camada importada: ${fmtN(r.total)} quadras.`, 4000); } catch (e) { toast(e.message, 6000); }
+    try { toast('Enviando a camada...', 4000); const r = await Api.b.quadrasImportar(p.id, JSON.stringify(cam)); S.qdEm = null; S.qdIdx = null; toast(`Camada importada: ${fmtN(r.total)} quadras` + (r.faces ? ` e ${fmtN(r.faces)} faces de quadra.` : '.'), 5000); } catch (e) { toast(e.message, 6000); }
   }
 
   // ---------- Exportação (coordenação e cliente) ----------
@@ -2418,9 +2610,14 @@
         const abas = [{ nome: 'Registros', cols, linhas: leg.map((l) => Object.fromEntries(cols.map((c) => [c, l[c]]))) }];
         if (camQd) {
           try {
-            const sq = new Map((await Api.b.quadrasSituacao(p.id)).map((q) => [q.numero, q])); const nArv = {}; linhas.forEach((l) => { if (l.quadra) nArv[l.quadra] = (nArv[l.quadra] || 0) + 1; });
+            const sitR = await Api.b.quadrasSituacao(p.id); const sq = new Map(sitR.quadras.map((q) => [q.numero, q])); const nArv = {}; linhas.forEach((l) => { if (l.quadra) nArv[l.quadra] = (nArv[l.quadra] || 0) + 1; });
             const extrasQ = [...new Set(camQd.quadras.flatMap((q) => Object.keys(q.p || {})))];
             abas.push({ nome: 'Quadras', cols: ['Quadra', ...extrasQ, 'Equipe', 'Situação', 'Marcada por', 'Marcada em', 'Registros neste arquivo'], linhas: camQd.quadras.map((q) => { const s = sq.get(q.n) || {}; const d = s.marcada_em ? new Date(s.marcada_em) : null; return Object.assign({ Quadra: /^\d+$/.test(q.n) ? +q.n : q.n }, Object.fromEntries(extrasQ.map((k) => [k, (q.p || {})[k] || ''])), { Equipe: s.equipe || '', 'Situação': s.situacao || 'A levantar', 'Marcada por': s.marcada_por || '', 'Marcada em': d && !isNaN(d) ? d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '', 'Registros neste arquivo': nArv[q.n] || 0 }); }) });
+            if (camQd.quadras.some((q) => q.f)) { // faces de quadra: uma linha por face
+              const sf = new Map(sitR.faces.map((f) => [f.numero, f])); const lin = [];
+              for (const q of camQd.quadras) for (const f of q.f || []) { const x = sf.get(q.n + '-' + f.i) || {}; const d = x.marcada_em ? new Date(x.marcada_em) : null; lin.push({ Face: q.n + '-' + f.i, Quadra: /^\d+$/.test(q.n) ? +q.n : q.n, Rua: f.r, 'Comprimento (m)': f.c, Equipe: x.equipe || '', 'Situação': x.situacao || 'A levantar', 'Marcada por': x.marcada_por || '', 'Marcada em': d && !isNaN(d) ? d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '', 'Largura da calçada (m)': x.largura ? +x.largura : '', 'Registro da calçada': x.registro || '' }); }
+              abas.push({ nome: 'Faces de quadra', cols: ['Face', 'Quadra', 'Rua', 'Comprimento (m)', 'Equipe', 'Situação', 'Marcada por', 'Marcada em', 'Largura da calçada (m)', 'Registro da calçada'], linhas: lin });
+            }
           } catch (e) { /* segue sem a aba */ }
         }
         try {

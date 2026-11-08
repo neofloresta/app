@@ -1,14 +1,12 @@
 {
- "versao": "2.4.0",
- "data": "2026-11-07",
+ "versao": "2.5.0",
+ "data": "2026-11-08",
  "notas": [
-  "Formulário de Divinópolis revisado: cada categoria mostra só o que vale para ela; árvore morta e calçada sem árvores ficam com poucos campos",
-  "CAP em centímetros no lugar do DAP, com no máximo 3 caules",
-  "Risco calculado pela matriz da ISA, com as cores de baixo a severo",
-  "Espécie não identificada pede 4 fotos para identificação",
-  "Ajuda (?) em todos os campos e desenho dos tipos de fiação",
-  "Preferência de cada usuário: medir a copa por 4 raios ou pela área direto",
-  "Botão para a equipe assumir uma quadra sem equipe",
-  "Rendimento de cada equipe no painel (hoje, média por dia de campo, melhor dia) e filtro por dia no mapa"
+  "App mais rápido: abre na hora com o que está no celular e atualiza em segundo plano; mapa leve com milhares de quadras",
+  "Faces de quadra: cada lado da quadra com o nome da rua e o comprimento, colorido pela situação no mapa",
+  "A face da calçada começa sozinha quando o GPS deixa claro qual é; marcar levantada ou levantada sem árvores (foto e largura)",
+  "Escolher o lado todo de uma rua de uma vez; a quadra fica levantada quando todas as faces estão",
+  "Quilômetros de calçada levantados por equipe no painel e na planilha de exportação",
+  "Botão Ver a cidade no mapa e aviso enquanto as quadras carregam"
  ]
 }

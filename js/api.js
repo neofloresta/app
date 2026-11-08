@@ -18,7 +18,20 @@ const Api = (() => {
   }
 
   function paraMapa(linhas, campos) { return { cab: campos, linhas: linhas.map((l) => campos.map((c) => l[c] ?? '')) }; }
+  // listas da coordenação: a resposta vale por 1 minuto (trocar de aba fica instantâneo); qualquer gravação limpa
+  const MEMO_LEITURA = ['usuarios_listar', 'projetos_listar', 'formularios_listar'];
+  const LEITURAS = ['sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', ...MEMO_LEITURA];
+  let memo = new Map();
   async function chamar(acao, dados, semCred) {
+    if (LEITURAS.indexOf(acao) < 0) memo = new Map();
+    if (MEMO_LEITURA.indexOf(acao) >= 0) {
+      const k = acao + JSON.stringify(dados || {}); const m = memo.get(k);
+      if (m && Date.now() - m.t < 60000) return m.p;
+      const pr = chamar1(acao, dados, semCred); memo.set(k, { t: Date.now(), p: pr }); pr.catch(() => memo.delete(k)); return pr;
+    }
+    return chamar1(acao, dados, semCred);
+  }
+  async function chamar1(acao, dados, semCred) {
     const id = semCred ? {} : cred && cred.t ? { t: cred.t } : { u: cred && cred.u, s: cred && cred.s };
     const corpo = JSON.stringify(Object.assign({ acao }, id, dados || {}));
     let resp;
@@ -100,7 +113,7 @@ const Api = (() => {
     async usuarioRemover(login) { const b = await this.base(); b.usuarios = b.usuarios.filter((x) => x.login !== login); await Store.set('demo:base', b); },
     async formulariosListar() { const b = await this.base(); return Object.values(b.formularios).map((f) => ({ id: f.id, nome: f.nome, campos: f.campos.length, versao: f.versao || '' })); },
     async quadrasCamada() { return { semCamada: true }; },
-    async quadrasSituacao() { return []; },
+    async quadrasSituacao() { return { quadras: [], faces: [] }; },
     async quadrasMarcar() { throw new Error('Quadras não disponíveis na demonstração.'); },
     async quadrasImportar() { throw new Error('Quadras não disponíveis na demonstração.'); },
     // ordens de serviço no modo demonstração (mesmas regras do servidor, guardadas no aparelho)
@@ -141,7 +154,7 @@ const Api = (() => {
 
   // ---------- Servidor Google ----------
   const Remoto = {
-    async login(u, s, aparelho) { const j = await chamar('login', { u, s, aparelho }, true); return { token: j.token || '', versaoScript: j.versaoScript || '1', usuario: j.usuario, projetos: j.projetos }; },
+    async login(u, s, aparelho) { const j = await chamar('login', { u, s, aparelho }, true); return { token: j.token || '', versaoScript: j.versaoScript || '1', usuario: j.usuario, projetos: j.projetos, formularios: j.formularios || {} }; },
     async sessao() { const j = await chamar('sessao'); return { usuario: j.usuario, projetos: j.projetos, versaoScript: j.versaoScript }; },
     async sair() { if (cred && cred.t) await chamar('sair').catch(() => {}); },
     async aceitarTermo(versao) { return chamar('aceitar_termo', { versao }); },
@@ -197,7 +210,7 @@ const Api = (() => {
     async chavesListar() { return (await chamar('chaves_listar')).chaves; },
     async quadrasImportar(projeto, camada) { return chamar('quadras_importar', { projeto, camada }); },
     async quadrasCamada(projeto, versao) { return chamar('quadras_camada', { projeto, versao: versao || '' }); },
-    async quadrasSituacao(projeto) { return (await chamar('quadras_situacao', { projeto })).quadras; },
+    async quadrasSituacao(projeto) { const j = await chamar('quadras_situacao', { projeto, faces: true }); return { quadras: j.quadras || [], faces: j.faces || [] }; },
     async quadrasMarcar(projeto, itens) { return chamar('quadras_marcar', { projeto, itens }); },
     async chaveCriar(nome, projeto) { return chamar('chave_criar', { nome, projeto }); },
     async chaveRevogar(id) { return chamar('chave_revogar', { id }); },

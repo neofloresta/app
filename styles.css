@@ -211,6 +211,8 @@ textarea.entrada { min-height: 96px; resize: vertical; }
 .tab input[type=text], .tab select { width: 100%; border: 1px solid var(--linha); border-radius: 8px; padding: 7px; font-size: 14px; background: var(--sup); }
 .rev-aba { font-weight: 700; color: var(--teal); background: var(--tint); }
 .grade2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grade3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.grade3 small { display: block; min-height: 2.4em; color: #546E7A; }
 @media (max-width: 520px) { .grade2 { grid-template-columns: 1fr; } }
 
 /* ---------- 2.0: validação, ficha, painel, relatório ---------- */
@@ -381,6 +383,9 @@ input[type=file]::file-selector-button { border: 0; border-radius: 10px; backgro
 .tela-mapa { position: relative; }
 .leg-tit { display: block; margin-top: 6px; font-size: 12px; }
 .mapa-leg .leg-qd { border-radius: 2px; }
+.mapa-leg .leg-fc { width: 14px; height: 4px; border-radius: 0; vertical-align: middle; }
+.faixa-face { margin: 8px 12px 0; padding: 10px 12px; border-left: 4px solid #00838F; background: #E6F4F5; border-radius: 6px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.faixa-face span { color: #37474F; }
 .faixa-qd { border-left-color: #2E7D32; background: #EEF6EE; }
 .prog-qd { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #E3E8EA; margin: 4px 0 12px; }
 .tab-rolagem { overflow-x: auto; }

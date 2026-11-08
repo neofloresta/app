@@ -11,9 +11,9 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.3';
+const VERSAO_SCRIPT = '2.5';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em'];
-const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os'];
+const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
 const COLS_CHAVES = ['id', 'nome', 'projeto', 'hash', 'criada_por', 'criada_em', 'ativa'];
@@ -49,7 +49,7 @@ function configurar() {
     r2.setValues([COLS_USUARIOS.map((c) => ({ login: 'admin', senha: senha, nome: 'Coordenação', perfil: 'admin', projeto: '*', equipe: 'Coordenação', codigo: 'CO', ativo: 'sim', criado_em: new Date().toISOString() })[c] || '')]);
     u.setFrozenRows(1);
     const p = base.insertSheet('Projetos'); p.appendRow(COLS_PROJETOS); p.setFrozenRows(1);
-    PROPS.setProperty('BASE_ID', base.getId());
+    PROPS.setProperty('BASE_ID', base.getId()); invalidarTabela('Usuarios'); invalidarTabela('Projetos');
     Logger.log('Pronto. Usuário: admin  Senha: ' + senha + '  (troque pelo app em Coordenação > Equipes e usuários)');
     Logger.log('Pasta no Drive: ' + pasta.getUrl());
   } else {
@@ -63,9 +63,10 @@ function configurar() {
 }
 
 // ---------- Entrada ----------
-function doGet() { return json({ ok: true, app: 'Neofloresta Inventário', versao: VERSAO_SCRIPT, configurado: !!PROPS.getProperty('BASE_ID') }); }
+function doGet() { BASE_ABERTA = null; TABS = {}; return json({ ok: true, app: 'Neofloresta Inventário', versao: VERSAO_SCRIPT, configurado: !!PROPS.getProperty('BASE_ID') }); }
 
 function doPost(e) {
+  BASE_ABERTA = null; TABS = {};
   let d = {};
   try {
     d = JSON.parse(e.postData.contents);
@@ -74,7 +75,10 @@ function doPost(e) {
       const usr = autenticarSenha(d.u, d.s);
       const token = d.semSessao ? '' : criarSessao(usr.login, d.aparelho);
       auditar(usr.login, 'login', '', d.aparelho || '');
-      return json({ ok: true, versaoScript: VERSAO_SCRIPT, token: token, expira_em: token ? new Date(Date.now() + SESSAO_DIAS * 864e5).toISOString() : '', usuario: publico(usr), projetos: projetosDoUsuario(usr) });
+      const prjs = projetosDoUsuario(usr); const forms = {};
+      // os formulários vão junto no login: o app abre sem esperar outra consulta
+      prjs.slice(0, 5).forEach((p) => { if (p.formulario && !forms[p.formulario]) try { forms[p.formulario] = lerFormulario(p.formulario); } catch (er) { /* app busca depois */ } });
+      return json({ ok: true, versaoScript: VERSAO_SCRIPT, token: token, expira_em: token ? new Date(Date.now() + SESSAO_DIAS * 864e5).toISOString() : '', usuario: publico(usr), projetos: prjs, formularios: forms });
     }
     const usr = d.chave_api ? autenticarChave(d.chave_api, d.acao) : d.t ? autenticarSessao(d.t) : autenticarSenha(d.u, d.s, true);
     if (ACOES_ESCRITA.indexOf(d.acao) >= 0 && !usr.termo_aceito_em && usr.perfil !== 'admin') throw new Error('Aceite o termo de uso e privacidade no app antes de enviar dados (atualize o app e entre de novo).');
@@ -101,7 +105,7 @@ function doPost(e) {
       case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
       case 'quadras_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarQuadras(d.projeto, d.camada, usr)));
       case 'quadras_camada': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaQuadras(d.projeto, d.versao)));
-      case 'quadras_situacao': exigeProjeto(d.projeto); return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(publicoOS) });
+      case 'quadras_situacao': exigeProjeto(d.projeto); return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(publicoOS), faces: d.faces ? lerSitFaces(d.projeto).map(publicoOS) : undefined });
       case 'quadras_marcar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, marcarQuadras(d.projeto, d.itens, usr)));
       case 'os_listar': exigeProjeto(d.projeto); return json({ ok: true, ordens: listarOS(d.projeto, usr), tipos: tiposOS(d.projeto) });
       case 'os_salvar': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarOS(d.projeto, d.os || {}, usr)));
@@ -135,11 +139,17 @@ function doPost(e) {
 function json(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
 // ---------- Base (usuários e projetos) ----------
+// Velocidade: a planilha base abre uma vez por chamada, e as tabelas de usuários e projetos ficam
+// 5 minutos no cache do servidor (qualquer gravação pelo app limpa na hora).
+let BASE_ABERTA = null, TABS = {};
+const TABS_CACHE = ['Usuarios', 'Projetos'];
 function base() {
+  if (BASE_ABERTA) return BASE_ABERTA;
   const id = PROPS.getProperty('BASE_ID');
   if (!id) throw new Error('Servidor não configurado. Rode a função configurar no Apps Script.');
-  return SpreadsheetApp.openById(id);
+  BASE_ABERTA = SpreadsheetApp.openById(id); return BASE_ABERTA;
 }
+function invalidarTabela(nome) { delete TABS[nome]; if (TABS_CACHE.indexOf(nome) >= 0) try { CacheService.getScriptCache().remove('tab:' + nome); } catch (e) { /* segue */ } }
 function garantirAba(nome, cols) {
   const b = base(); let sh = b.getSheetByName(nome);
   if (!sh) { sh = b.insertSheet(nome); sh.appendRow(cols); sh.setFrozenRows(1); }
@@ -149,13 +159,20 @@ function garantirColunas(nome, cols) {
   const sh = base().getSheetByName(nome);
   const cab = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String);
   const faltam = cols.filter((c) => cab.indexOf(c) < 0);
-  if (faltam.length) sh.getRange(1, cab.filter(String).length + 1, 1, faltam.length).setValues([faltam]);
+  if (faltam.length) { sh.getRange(1, cab.filter(String).length + 1, 1, faltam.length).setValues([faltam]); invalidarTabela(nome); }
 }
-function tabela(nome) {
+function tabela(nome, fresco) {
+  const copia = (t) => t.map((o) => Object.assign({}, o));
+  if (!fresco && TABS[nome]) return copia(TABS[nome]);
+  const emCache = TABS_CACHE.indexOf(nome) >= 0;
+  if (!fresco && emCache) { try { const c = CacheService.getScriptCache().get('tab:' + nome); if (c) { TABS[nome] = JSON.parse(c); return copia(TABS[nome]); } } catch (e) { /* lê da planilha */ } }
   const sh = base().getSheetByName(nome); if (!sh || sh.getLastRow() < 1) return [];
   const v = sh.getDataRange().getValues();
   const cab = v.shift();
-  return v.filter((l) => l[0] !== '').map((l) => { const o = {}; cab.forEach((c, i) => { if (c !== '') o[c] = texto(l[i]); }); return o; });
+  const t = v.filter((l) => l[0] !== '').map((l) => { const o = {}; cab.forEach((c, i) => { if (c !== '') o[c] = texto(l[i]); }); return o; });
+  TABS[nome] = t;
+  if (emCache) try { CacheService.getScriptCache().put('tab:' + nome, JSON.stringify(t), 300); } catch (e) { /* grande demais: sem cache */ }
+  return copia(t);
 }
 // valor da célula como texto limpo (sem apóstrofo inicial nem espaços)
 function texto(v) { return v instanceof Date ? v.toISOString() : String(v).replace(/^'/, '').trim(); }
@@ -169,10 +186,12 @@ function salvarLinha(nome, cols, chave, obj) {
   const linha = cab.map((c, i) => (obj[c] == null ? (atual ? texto(atual[i]) : '') : String(obj[c])));
   const rg = sh.getRange(r, 1, 1, linha.length);
   rg.setNumberFormats([linha.map(() => '@')]); rg.setValues([linha]);
+  invalidarTabela(nome);
 }
 function removerLinha(nome, chave, valor) {
   const sh = base().getSheetByName(nome); const v = sh.getDataRange().getValues(); const ic = v[0].indexOf(chave);
   for (let i = v.length - 1; i >= 1; i--) if (texto(v[i][ic]).toLowerCase() === String(valor).toLowerCase()) sh.deleteRow(i + 1);
+  invalidarTabela(nome);
 }
 
 // ---------- Senhas, sessões e perfis ----------
@@ -188,8 +207,8 @@ function comProjetos(u) {
   u.projetos = u.projeto === '*' ? [] : String(u.projeto || '').split(',').map((s) => s.trim()).filter(String);
   return u;
 }
-function buscarUsuario(login) {
-  return tabela('Usuarios').find((x) => x.login.toLowerCase() === String(login || '').trim().toLowerCase());
+function buscarUsuario(login, fresco) {
+  return tabela('Usuarios', fresco).find((x) => x.login.toLowerCase() === String(login || '').trim().toLowerCase());
 }
 function atualizarUsuario(login, campos) { const u = buscarUsuario(login); if (!u) throw new Error('Usuário não encontrado.'); salvarLinha('Usuarios', COLS_USUARIOS, 'login', Object.assign({ login: u.login }, campos)); }
 
@@ -198,7 +217,7 @@ function autenticarSenha(login, senha, legado) {
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
     garantirColunas('Usuarios', COLS_USUARIOS);
-    const u = buscarUsuario(login);
+    const u = buscarUsuario(login, true); // senha e bloqueio sempre conferidos na planilha (vale a troca de senha feita direto nela)
     const erro = 'Usuário ou senha incorretos.';
     if (!u) throw new Error(erro);
     if (u.bloqueado_ate && new Date(u.bloqueado_ate) > new Date()) throw new Error(`Usuário bloqueado por ${MAX_TENTATIVAS} senhas erradas. Tente de novo depois das ${Utilities.formatDate(new Date(u.bloqueado_ate), FUSO, 'HH:mm')} ou peça desbloqueio à coordenação.`);
@@ -298,7 +317,7 @@ function paraAdmin(u) {
 }
 function projetosDoUsuario(u) {
   return tabela('Projetos').filter((p) => u.perfil === 'admin' || u.projetos.indexOf(p.id) >= 0)
-    .map((p) => ({ id: p.id, nome: p.nome, formulario: p.formulario, epsg: p.epsg, prefixo: p.prefixo, contratante: p.contratante || '', contrato: p.contrato || '', municipio: p.municipio || '', meta: +p.meta || 0, responsavel: p.responsavel || '', registro_profissional: p.registro_profissional || '', art: p.art || '', equipe: u.equipe, equipeCodigo: u.codigo || '' }));
+    .map((p) => ({ id: p.id, nome: p.nome, formulario: p.formulario, epsg: p.epsg, prefixo: p.prefixo, contratante: p.contratante || '', contrato: p.contrato || '', municipio: p.municipio || '', meta: +p.meta || 0, responsavel: p.responsavel || '', registro_profissional: p.registro_profissional || '', art: p.art || '', face_gps: +p.face_gps || 0, face_dist: +p.face_dist || 0, face_folga: +p.face_folga || 0, equipe: u.equipe, equipeCodigo: u.codigo || '' }));
 }
 function comLinks(p) {
   const o = Object.assign({}, p);
@@ -346,10 +365,15 @@ function gravarArquivoForm(nome, txt, mime) {
   const it = pastaForms().getFilesByName(nome);
   if (it.hasNext()) it.next().setContent(txt); else pastaForms().createFile(nome, txt, mime);
 }
-function lerFormulario(id) { const t = lerArquivoForm(id + '.json'); if (!t) throw new Error('Formulário não encontrado: ' + id); return JSON.parse(t); }
+function lerFormulario(id) {
+  const cache = CacheService.getScriptCache(); let t = null;
+  try { t = cache.get('form:' + id); } catch (e) { /* lê do Drive */ }
+  if (!t) { t = lerArquivoForm(id + '.json'); if (t) try { cache.put('form:' + id, t, 21600); } catch (e) { /* grande demais */ } }
+  if (!t) throw new Error('Formulário não encontrado: ' + id); return JSON.parse(t);
+}
 function salvarFormulario(f, qml) {
   if (!f || !f.id || !Array.isArray(f.campos)) throw new Error('Formulário inválido.');
-  gravarArquivoForm(f.id + '.json', JSON.stringify(f), 'application/json');
+  gravarArquivoForm(f.id + '.json', JSON.stringify(f), 'application/json'); try { CacheService.getScriptCache().remove('form:' + f.id); } catch (e) { /* segue */ }
   if (qml) gravarArquivoForm(f.id + '.qml', qml, 'text/xml');
 }
 function listarFormularios() {
@@ -847,38 +871,57 @@ function importarQuadras(projetoId, camada, usr) {
   let j; try { j = JSON.parse(txt); } catch (e) { throw new Error('Camada inválida.'); }
   if (!j || !Array.isArray(j.quadras) || !j.quadras.length) throw new Error('A camada não tem quadras.');
   if (j.quadras.length > 50000) throw new Error('Mais de 50 mil quadras: divida a camada por região.');
-  const nums = {};
+  const nums = {}; let nFaces = 0;
   j.quadras.forEach((q) => {
     if (!q || typeof q.n !== 'string' || !Array.isArray(q.b) || q.b.length !== 4 || !Array.isArray(q.a) || !q.a.length) throw new Error('Quadra com formato inválido.');
     q.n = q.n.slice(0, 40); if (nums[q.n]) throw new Error('Número de quadra repetido: ' + q.n); nums[q.n] = 1;
     if (!q.b.every((x) => typeof x === 'number' && isFinite(x)) || q.b[1] < -34 || q.b[3] > 6 || q.b[0] < -74 || q.b[2] > -28) throw new Error('Quadra ' + q.n + ' fora do Brasil ou com coordenada inválida.');
     q.a.forEach((a) => { if (!Array.isArray(a) || a.length < 6 || a.length > 20000 || !a.every((x) => typeof x === 'number' && isFinite(x))) throw new Error('Polígono inválido na quadra ' + q.n + '.'); });
     if (q.p) Object.keys(q.p).forEach((k) => { q.p[k] = String(q.p[k]).slice(0, 60); });
+    if (q.f != null) {
+      const nv = q.a[0].length / 2 - 1; const letras = {};
+      if (!Array.isArray(q.f) || q.f.length > 80) throw new Error('Faces inválidas na quadra ' + q.n + '.');
+      q.f = q.f.map((f) => {
+        if (!f || !/^[A-Z]{1,3}$/.test(f.i) || letras[f.i] || !Array.isArray(f.k) || f.k.length !== 2 || !f.k.every((x) => Number.isInteger(x) && x >= 0 && x < nv)) throw new Error('Face inválida na quadra ' + q.n + '.');
+        letras[f.i] = 1; nFaces++;
+        return { i: f.i, r: String(f.r || '').slice(0, 60), c: Math.max(0, Math.min(100000, Math.round(+f.c || 0))), s: String(f.s || '').slice(0, 12), k: f.k };
+      });
+      if (!q.f.length) delete q.f;
+    }
   });
   const p = projeto(projetoId); const pasta = DriveApp.getFolderById(p.pasta_id);
   const ant = infoQuadras(projetoId);
   const limpo = JSON.stringify({ campo: String(j.campo || '').slice(0, 40), total: j.quadras.length, quadras: j.quadras });
   const arq = pasta.createFile('Quadras - ' + p.nome + '.json', limpo, 'application/json');
   if (ant && ant.id) try { DriveApp.getFileById(ant.id).setTrashed(true); } catch (e) { /* já removido */ }
-  const info = { id: arq.getId(), em: new Date().toISOString(), total: j.quadras.length, campo: String(j.campo || '').slice(0, 40) };
+  const info = { id: arq.getId(), em: new Date().toISOString(), total: j.quadras.length, faces: nFaces, campo: String(j.campo || '').slice(0, 40) };
   PROPS.setProperty('QD_' + projetoId, JSON.stringify(info));
-  try { CacheService.getScriptCache().put('qdnums:' + projetoId, Object.keys(nums).join('\n'), 21600); } catch (e) { /* grande demais */ }
+  guardarIndiceCamada(projetoId, j.quadras);
   auditar(usr.login, 'quadras_importar', projetoId, info.total + ' quadras');
-  return { total: info.total, versao: info.em };
+  return { total: info.total, faces: nFaces, versao: info.em };
 }
 function camadaQuadras(projetoId, versao) {
   const info = infoQuadras(projetoId); if (!info) return { semCamada: true };
   if (versao && versao === info.em) return { igual: true, versao: info.em };
   return { versao: info.em, total: info.total, camada: DriveApp.getFileById(info.id).getBlob().getDataAsString() };
 }
-function numerosQuadras(projetoId) {
-  const cache = CacheService.getScriptCache(); const c = cache.get('qdnums:' + projetoId);
-  if (c != null) return new Set(c.split('\n'));
-  const info = infoQuadras(projetoId); if (!info) throw new Error('Este projeto ainda não tem camada de quadras.');
-  const ns = JSON.parse(DriveApp.getFileById(info.id).getBlob().getDataAsString()).quadras.map((q) => q.n);
-  try { cache.put('qdnums:' + projetoId, ns.join('\n'), 21600); } catch (e) { /* grande demais */ }
-  return new Set(ns);
+// índice da camada no cache do servidor: número de cada quadra e as letras das suas faces ("12\tA,B,C")
+function guardarIndiceCamada(projetoId, quadras) {
+  const txt = quadras.map((q) => q.n + '\t' + (q.f || []).map((f) => f.i).join(',')).join('\n');
+  try { CacheService.getScriptCache().put('qdidx:' + projetoId, txt, 21600); } catch (e) { /* grande demais: lê o arquivo quando precisar */ }
+  return txt;
 }
+function indiceCamada(projetoId) {
+  let txt = CacheService.getScriptCache().get('qdidx:' + projetoId);
+  if (txt == null) {
+    const info = infoQuadras(projetoId); if (!info) throw new Error('Este projeto ainda não tem camada de quadras.');
+    txt = guardarIndiceCamada(projetoId, JSON.parse(DriveApp.getFileById(info.id).getBlob().getDataAsString()).quadras);
+  }
+  const nums = new Set(); const faces = {};
+  txt.split('\n').forEach((l) => { const t = l.split('\t'); nums.add(t[0]); faces[t[0]] = t[1] ? t[1].split(',') : []; });
+  return { nums, faces };
+}
+function numerosQuadras(projetoId) { return indiceCamada(projetoId).nums; }
 function abaQuadras(projetoId) {
   const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Quadras');
   if (!sh) { sh = ss.insertSheet('Quadras'); sh.appendRow(COLS_QUADRAS); sh.setFrozenRows(1); }
@@ -886,13 +929,82 @@ function abaQuadras(projetoId) {
   return sh;
 }
 function lerSitQuadras(projetoId) { return lerOS(abaQuadras(projetoId)); }
+const COLS_FACES = ['numero', 'quadra', 'rua', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'largura', 'registro', 'obs', 'historico', 'atualizado_em'];
+const SITUACOES_FACE = ['A levantar', 'Em levantamento', 'Levantada', 'Levantada, sem árvores'];
+const FACE_FEITA = ['Levantada', 'Levantada, sem árvores'];
+function abaFaces(projetoId) {
+  const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Faces');
+  if (!sh) { sh = ss.insertSheet('Faces'); sh.appendRow(COLS_FACES); sh.setFrozenRows(1); }
+  if (!sh.getLastRow()) sh.appendRow(COLS_FACES);
+  return sh;
+}
+function lerSitFaces(projetoId) { return lerOS(abaFaces(projetoId)); }
+// Marca quadras e faces (itens com tipo "face", número "quadra-letra"). Ao mexer numa face, a quadra acompanha:
+// todas as faces levantadas deixam a quadra levantada; uma face começada deixa a quadra em levantamento.
 function marcarQuadras(projetoId, itens, usr) {
   if (!Array.isArray(itens) || !itens.length) throw new Error('Nenhuma quadra informada.');
   const coord = usr.perfil === 'admin' || usr.perfil === 'revisor';
-  if (itens.length > (coord ? 5000 : 200)) throw new Error('Quadras demais de uma vez.');
-  const nums = numerosQuadras(projetoId);
+  if (itens.length > (coord ? 5000 : 300)) throw new Error('Quadras demais de uma vez.');
+  const idx = indiceCamada(projetoId);
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
+    const itF = itens.filter((it) => it && it.tipo === 'face'); const itQ = itens.filter((it) => !(it && it.tipo === 'face')).map((it) => { const o = Object.assign({}, it); delete o.sistema; delete o.soDe; return o; }); // 'sistema' só vale para o efeito interno das faces
+    let rf = { alteradas: 0, recusadas: [], quadras: [] };
+    if (itF.length) rf = marcarFacesSemTrava(projetoId, itF, usr, coord, idx);
+    const rq = itQ.length || rf.quadras.length ? marcarQuadrasSemTrava(projetoId, itQ.concat(rf.quadras), usr, coord, idx.nums) : { alteradas: 0, recusadas: [] };
+    return { alteradas: rf.alteradas + rq.alteradas, recusadas: rf.recusadas.concat(rq.recusadas) };
+  } finally { lock.releaseLock(); }
+}
+function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
+  const sh = abaFaces(projetoId); const todas = lerOS(sh); const por = {}; todas.forEach((f) => { por[f.numero] = f; });
+  const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const mudou = []; const recusadas = []; const qds = {};
+  itens.forEach((it) => {
+    const id = String(it.numero || '').slice(0, 45); const cut = id.lastIndexOf('-'); const qn = id.slice(0, cut), letra = id.slice(cut + 1);
+    if (cut < 1 || !idx.faces[qn] || idx.faces[qn].indexOf(letra) < 0) { recusadas.push({ numero: id, motivo: 'Face não existe na camada.' }); return; }
+    const f = por[id] || { numero: id, quadra: qn, situacao: 'A levantar', equipe: '' };
+    if (it.rua != null) f.rua = String(it.rua).slice(0, 60);
+    if (it.situacao != null && SITUACOES_FACE.indexOf(it.situacao) < 0) { recusadas.push({ numero: id, motivo: 'Situação inválida.' }); return; }
+    if (it.situacao === 'Levantada, sem árvores') {
+      const lg = +String(it.largura == null ? '' : it.largura).replace(',', '.');
+      if (!it.registro || !(lg > 0 && lg < 100)) { recusadas.push({ numero: id, motivo: 'Face sem árvores precisa da foto e da largura da calçada (cadastro de calçada).' }); return; }
+    }
+    if (!coord) {
+      if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
+      if (f.equipe && f.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Face da ' + f.equipe + '.' }); return; }
+      if (!f.equipe && it.situacao != null) f.equipe = usr.equipe;
+    } else if (it.equipe != null) f.equipe = String(it.equipe).slice(0, 60);
+    if (it.auto && (f.situacao || 'A levantar') !== 'A levantar') return;
+    if (it.situacao != null && it.em && f.marcada_em && new Date(it.em) < new Date(f.marcada_em)) { recusadas.push({ numero: id, motivo: 'A face foi marcada depois por ' + f.marcada_por + ' (' + f.situacao.toLowerCase() + ').' }); return; }
+    const txt = [];
+    if (it.situacao != null && (it.situacao !== f.situacao || (it.situacao === 'Levantada, sem árvores' && it.registro !== f.registro))) {
+      f.situacao = it.situacao; f.marcada_por = usr.login; f.marcada_em = dataAparelho(it.em); txt.push(it.situacao.toLowerCase());
+      if (it.situacao === 'Levantada, sem árvores') { f.registro = String(it.registro).slice(0, 60); f.largura = String(+String(it.largura).replace(',', '.')); } else { f.registro = ''; f.largura = ''; }
+    }
+    if (coord && it.equipe != null) txt.push('equipe ' + (f.equipe || 'nenhuma'));
+    if (it.obs != null) f.obs = String(it.obs).slice(0, 300);
+    if (!txt.length && it.obs == null) return;
+    f.historico = [f.historico, carimboHist(usr, txt.join(', ') || 'observação', it.situacao != null ? f.marcada_em : null)].filter(Boolean).join(' | ').slice(-3000);
+    f.atualizado_em = new Date().toISOString();
+    if (!por[id]) { por[id] = f; todas.push(f); }
+    mudou.push(id); if (it.situacao != null) qds[qn] = 1;
+  });
+  if (mudou.length) {
+    const linhas = todas.map((f) => cab.map((c) => seguro(f[c] == null ? '' : String(f[c]))));
+    const rg = sh.getRange(2, 1, linhas.length, cab.length); rg.setNumberFormat('@'); rg.setValues(linhas);
+    auditar(usr.login, 'faces_marcar', projetoId, mudou.length + ' face(s): ' + mudou.slice(0, 20).join(', '));
+  }
+  // a quadra acompanha as faces
+  const quadras = Object.keys(qds).map((qn) => {
+    const st = idx.faces[qn].map((l) => (por[qn + '-' + l] || {}).situacao || 'A levantar');
+    if (st.every((x) => FACE_FEITA.indexOf(x) >= 0)) return { numero: qn, situacao: 'Levantada', sistema: 'todas as faces levantadas' };
+    if (st.some((x) => x !== 'A levantar')) return { numero: qn, situacao: 'Em levantamento', sistema: 'face em levantamento' };
+    return null; // nenhuma face começada: a quadra fica como está
+  }).filter(Boolean);
+  return { alteradas: mudou.length, recusadas, quadras };
+}
+function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums) {
+  {
     const sh = abaQuadras(projetoId); const todas = lerOS(sh); const por = {}; todas.forEach((q) => { por[q.numero] = q; });
     const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
     const mudou = []; const recusadas = [];
@@ -901,6 +1013,13 @@ function marcarQuadras(projetoId, itens, usr) {
       if (!nums.has(n)) { recusadas.push({ numero: n, motivo: 'Quadra não existe na camada.' }); return; }
       const q = por[n] || { numero: n, situacao: 'A levantar', equipe: '' };
       if (it.situacao != null && SITUACOES_QUADRA.indexOf(it.situacao) < 0) { recusadas.push({ numero: n, motivo: 'Situação inválida.' }); return; }
+      if (it.sistema) { // efeito das faces: não muda a equipe nem é recusado pela equipe da quadra
+        const atual = q.situacao || 'A levantar';
+        if (atual === it.situacao || (it.soDe && atual !== it.soDe)) return;
+        q.situacao = it.situacao; q.marcada_por = usr.login; q.marcada_em = new Date().toISOString();
+        q.historico = [q.historico, carimboHist(usr, it.situacao.toLowerCase() + ' (' + it.sistema + ')', q.marcada_em)].filter(Boolean).join(' | ').slice(-5000);
+        q.atualizado_em = q.marcada_em; if (!por[n]) { por[n] = q; todas.push(q); } mudou.push(n); return;
+      }
       if (!coord) {
         if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
         if (q.equipe && q.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Quadra da ' + q.equipe + '.' }); return; }
@@ -924,7 +1043,7 @@ function marcarQuadras(projetoId, itens, usr) {
       auditar(usr.login, 'quadras_marcar', projetoId, mudou.length + ' quadra(s): ' + mudou.slice(0, 20).join(', '));
     }
     return { alteradas: mudou.length, recusadas };
-  } finally { lock.releaseLock(); }
+  }
 }
 
 // ---------- Chaves de integração (outros sistemas, só leitura) ----------
