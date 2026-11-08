@@ -883,6 +883,8 @@ function marcarQuadras(projetoId, itens, usr) {
         if (q.equipe && q.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Quadra da ' + q.equipe + '.' }); return; }
         if (!q.equipe) q.equipe = usr.equipe;
       } else if (it.equipe != null) q.equipe = String(it.equipe).slice(0, 60);
+      if (it.auto && (q.situacao || 'A levantar') !== 'A levantar') return; // automática ao salvar árvore: só vale para quadra ainda a levantar
+      if (it.situacao != null && it.em && q.marcada_em && new Date(it.em) < new Date(q.marcada_em)) { recusadas.push({ numero: n, motivo: 'A quadra foi marcada depois por ' + q.marcada_por + ' (' + q.situacao.toLowerCase() + ').' }); return; }
       const txt = [];
       if (it.situacao != null && it.situacao !== q.situacao) { q.situacao = it.situacao; q.marcada_por = usr.login; q.marcada_em = dataAparelho(it.em); txt.push(it.situacao.toLowerCase()); }
       if (coord && it.equipe != null) txt.push('equipe ' + (q.equipe || 'nenhuma'));

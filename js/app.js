@@ -1002,7 +1002,7 @@
     const mapa = L.map(div, { preferCanvas: true, maxZoom: 21 }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
     if (S.fundo == null) S.fundo = (await Store.get('fundo')) || 'ruas';
     camadasFundo(mapa, false);
-    const render = L.canvas({ padding: 0.3 });
+    const render = L.canvas({ padding: 0.3, tolerance: 8 });
     const cores = ['#00546E', '#CD834C', '#6A1B9A', '#2E7D32', '#C62828', '#12A6C8'];
     const corRisco = { Baixo: COR_RISCO.Baixo, 'Médio': COR_RISCO['Médio'], Alto: COR_RISCO.Alto };
     const equipes = []; const corEq = (e) => { if (!equipes.includes(e)) equipes.push(e); return cores[equipes.indexOf(e) % cores.length]; };
@@ -1014,15 +1014,28 @@
     const qdCamada = L.layerGroup().addTo(mapa); const rotulos = L.layerGroup().addTo(mapa);
     let qdDados = null, qdSit = new Map(), selecao = null;
     const corQd = (q) => { const s = qdSit.get(q.n) || {}; if (selQd.value === 'eq') return s.equipe ? corEq(s.equipe) : '#9AA9B0'; return COR_QD[s.situacao || 'A levantar']; };
+    const qdLayers = new Map();
+    const estiloQd = (q) => { const sel = selecao && selecao.has(q.n); const cor = corQd(q); const s = qdSit.get(q.n) || {}; const forte = selQd.value === 'eq' ? !!s.equipe : (s.situacao && s.situacao !== 'A levantar'); return { color: sel ? '#0D47A1' : cor, weight: sel ? 3 : 1, fillColor: sel ? '#1E88E5' : cor, fillOpacity: sel ? 0.45 : forte ? 0.38 : 0.12 }; };
     function desenharQuadras() {
-      qdCamada.clearLayers();
+      qdCamada.clearLayers(); qdLayers.clear();
       if (qdDados && selQd.value) for (const q of qdDados.quadras) {
-        const sel = selecao && selecao.has(q.n); const cor = corQd(q); const s = qdSit.get(q.n) || {};
-        const forte = selQd.value === 'eq' ? !!s.equipe : (s.situacao && s.situacao !== 'A levantar');
-        L.polygon(q.a.map((a) => { const r = []; for (let i = 0; i < a.length; i += 2) r.push([a[i + 1], a[i]]); return r; }), { renderer: render, color: sel ? '#0D47A1' : cor, weight: sel ? 3 : 1, fillColor: sel ? '#1E88E5' : cor, fillOpacity: sel ? 0.45 : forte ? 0.38 : 0.12 }).on('click', (e) => { L.DomEvent.stop(e); clicarQuadra(q, e.latlng); }).addTo(qdCamada);
+        const ly = L.polygon(q.a.map((a) => { const r = []; for (let i = 0; i < a.length; i += 2) r.push([a[i + 1], a[i]]); return r; }), Object.assign({ renderer: render }, estiloQd(q))).on('click', (e) => { L.DomEvent.stop(e); clicarQuadra(q, e.latlng); }).addTo(qdCamada);
+        qdLayers.set(q.n, ly);
       }
       pintarRotulos();
     }
+    const restilizar = (ns) => { for (const n of ns) { const ly = qdLayers.get(n); const q = qdDados && qdDados.quadras.find((x) => x.n === n); if (ly && q) ly.setStyle(estiloQd(q)); } };
+    window.addEventListener('quadras-atualizadas', async function f() { if (!document.body.contains(div)) return window.removeEventListener('quadras-atualizadas', f); qdSit = await carregarSitQd(false); desenhar(false); });
+    // escolher por área: arrastar um retângulo sobre o mapa
+    let porArea = false, ini = null, ret = null;
+    const ptLL = (e) => mapa.mouseEventToLatLng(e);
+    div.addEventListener('pointerdown', (e) => { if (!porArea) return; ini = ptLL(e); e.preventDefault(); e.stopPropagation(); }, true);
+    div.addEventListener('pointermove', (e) => { if (!porArea || !ini) return; const b = L.latLngBounds(ini, ptLL(e)); if (ret) ret.setBounds(b); else ret = L.rectangle(b, { color: '#0D47A1', weight: 2, dashArray: '6 4', fillOpacity: 0.08, interactive: false }).addTo(mapa); e.preventDefault(); e.stopPropagation(); }, true);
+    div.addEventListener('pointerup', (e) => {
+      if (!porArea || !ini) return; const b = L.latLngBounds(ini, ptLL(e)); ini = null; if (ret) { ret.remove(); ret = null; }
+      const novas = qdDados.quadras.filter((q) => { const c = Quadras.centro(q); return b.contains(c); }).map((q) => q.n);
+      novas.forEach((n) => selecao.add(n)); porArea = false; mapa.dragging.enable(); restilizar(novas); pintarSelecao(); e.preventDefault(); e.stopPropagation();
+    }, true);
     function pintarRotulos() {
       rotulos.clearLayers(); if (!qdDados || !selQd.value || mapa.getZoom() < 17) return;
       const b = mapa.getBounds(); let n = 0;
@@ -1031,7 +1044,7 @@
     mapa.on('moveend zoomend', pintarRotulos); window.__app.mapa = mapa;
     const podeMarcarQd = (s) => ehCoord() || (perfil() === 'coletor' && (!s.equipe || s.equipe === minhaEquipe()));
     function clicarQuadra(q, ll) {
-      if (selecao) { if (selecao.has(q.n)) selecao.delete(q.n); else selecao.add(q.n); pintarSelecao(); desenhar(false); return; }
+      if (selecao) { if (selecao.has(q.n)) selecao.delete(q.n); else selecao.add(q.n); pintarSelecao(); restilizar([q.n]); return; }
       const s = qdSit.get(q.n) || { situacao: 'A levantar', equipe: '' }; const st = s.situacao || 'A levantar';
       const arv = pts.filter((o) => Quadras.dentro(o.lon, o.lat, q)).length;
       const marcar = async (itens) => { try { const r = await marcarQuadras(itens); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Quadra atualizada.'); qdSit = await carregarSitQd(!r.fila); mapa.closePopup(); desenhar(false); } catch (e) { toast(e.message, 5000); } };
@@ -1042,7 +1055,7 @@
         h('small', null, `${pl(arv, 'árvore cadastrada', 'árvores cadastradas')} dentro dela` + (s.marcada_por ? ` · marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` : '')),
         podeMarcarQd(s) ? h('div', { class: 'chips qd-chips' }, SIT_QD.map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: q.n, situacao: x }]) }, x))) : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn, h('datalist', { id: 'qd-equipes' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e }))), h('button', { class: 'btn sec peq', onclick: () => marcar([{ numero: q.n, equipe: eqIn.value.trim() }]) }, 'Definir equipe')) : null,
-        ehCoord() ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selecao = new Set([q.n]); pintarSelecao(); desenhar(false); } }, 'Escolher várias quadras') : null);
+        ehCoord() ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selecao = new Set([q.n]); pintarSelecao(); restilizar([q.n]); } }, 'Escolher várias quadras') : null);
       L.popup({ maxWidth: 300 }).setLatLng(ll).setContent(pop).openOn(mapa);
     }
     function pintarSelecao() {
@@ -1051,13 +1064,14 @@
       const sitSel = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Situação...'), SIT_QD.map((x) => h('option', { value: x }, x)));
       const aplicar = async () => {
         if (!selecao.size) return toast('Toque nas quadras para escolher.');
-        const it = [...selecao].map((n) => { const o = { numero: n }; if (eqIn.value.trim() || eqIn.dataset.limpar) o.equipe = eqIn.value.trim(); if (sitSel.value) o.situacao = sitSel.value; return o; });
+        const it = [...selecao].map((n) => { const o = { numero: n }; if (eqIn.value.trim() === 'Sem equipe') o.equipe = ''; else if (eqIn.value.trim()) o.equipe = eqIn.value.trim(); if (sitSel.value) o.situacao = sitSel.value; return o; });
         if (!it.some((o) => o.equipe != null || o.situacao)) return toast('Escolha a equipe ou a situação.');
         try { const r = await marcarQuadras(it); toast(`${pl(r.alteradas, 'quadra atualizada', 'quadras atualizadas')}.` + (r.recusadas && r.recusadas.length ? ` ${r.recusadas.length} não aceita(s).` : ''), 4000); qdSit = await carregarSitQd(!r.fila); selecao = null; pintarSelecao(); desenhar(false); } catch (e) { toast(e.message, 5000); }
       };
-      barraSel.replaceChildren(h('b', null, `${pl(selecao.size, 'quadra escolhida', 'quadras escolhidas')}. Toque nas quadras para escolher mais.`),
-        h('div', { class: 'qd-sel-linha' }, eqIn, h('datalist', { id: 'qd-equipes2' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e }))), sitSel,
-          h('button', { class: 'btn peq', onclick: aplicar }, 'Aplicar'), h('button', { class: 'btn sec peq', onclick: () => { selecao = null; pintarSelecao(); desenhar(false); } }, 'Sair')));
+      barraSel.replaceChildren(h('b', null, `${pl(selecao.size, 'quadra escolhida', 'quadras escolhidas')}. Toque nas quadras ou escolha uma área.`),
+        h('div', { class: 'qd-sel-linha' }, h('button', { class: 'btn sec peq', onclick: () => { porArea = true; mapa.dragging.disable(); toast('Arraste o dedo sobre o mapa para marcar a área.', 3000); } }, 'Escolher por área'), selecao.size > 1 ? h('button', { class: 'btn sec peq', onclick: () => { const v = [...selecao]; selecao = new Set(); restilizar(v); pintarSelecao(); } }, 'Limpar escolha') : null),
+        h('div', { class: 'qd-sel-linha' }, eqIn, h('datalist', { id: 'qd-equipes2' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e })), h('option', { value: 'Sem equipe' })), sitSel,
+          h('button', { class: 'btn peq', onclick: aplicar }, 'Aplicar'), h('button', { class: 'btn sec peq', onclick: () => { const v = [...selecao]; selecao = null; porArea = false; mapa.dragging.enable(); pintarSelecao(); restilizar(v); } }, 'Sair')));
     }
     const carregarQdMapa = async () => {
       try {
@@ -2201,7 +2215,7 @@
         await mexerFilaQd((f) => { const x = f.find((y) => y.chave === it.chave); if (x) { x.erro = e.message; x.recusado = true; } }); rec.push({ numero: '', motivo: e.message });
       }
     }
-    S.qdSitEm = null;
+    S.qdSitEm = null; if (ok || rec.length) window.dispatchEvent(new Event('quadras-atualizadas'));
     if (rec.length) toast(`Quadras: ${rec.length} marcação(ões) não aceita(s). ${rec[0].numero ? 'Quadra ' + rec[0].numero + ': ' : ''}${rec[0].motivo}`, 6000);
     else if (ok && !silencioso) toast('Marcações de quadra enviadas.');
   }
@@ -2213,7 +2227,7 @@
       const q = S.qdIdx.idx.achar(+r.lon, +r.lat); if (!q) return;
       const sit = (await carregarSitQd(false)).get(q.n) || { situacao: 'A levantar', equipe: '' };
       if (sit.situacao !== 'A levantar' || (perfil() === 'coletor' && sit.equipe && sit.equipe !== minhaEquipe())) return;
-      await marcarQuadras([{ numero: q.n, situacao: 'Em levantamento' }]);
+      await marcarQuadras([{ numero: q.n, situacao: 'Em levantamento', auto: true }]);
     } catch (e) { /* não atrapalha a coleta */ }
   }
   function resumoQd(cam, sit) {
@@ -2227,7 +2241,7 @@
     const sec = h('section', { class: 'painel-os' }, h('h2', { class: 'painel-tit' }, 'Andamento por quadras'),
       h('div', { class: 'kpis' }, kpi('Quadras levantadas', fmtN(r.por.Levantada), `de ${fmtN(r.tot)} (${fmtP(r.tot ? r.por.Levantada / r.tot : 0)})`), kpi('Em levantamento', fmtN(r.por['Em levantamento']), ''), kpi('A levantar', fmtN(r.por['A levantar']), '')),
       h('div', { class: 'prog-qd' }, h('div', { style: `width:${(r.por.Levantada / Math.max(1, r.tot)) * 100}%;background:${COR_QD.Levantada}` }), h('div', { style: `width:${(r.por['Em levantamento'] / Math.max(1, r.tot)) * 100}%;background:${COR_QD['Em levantamento']}` })),
-      Object.keys(r.eq).length ? h('div', { class: 'cartao' }, h('h3', null, 'Por equipe'), h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Equipe'), h('th', null, 'Quadras atribuídas'), h('th', null, 'Levantadas'), h('th', null, 'Em levantamento'), h('th', null, 'Andamento')),
+      Object.keys(r.eq).length ? h('div', { class: 'cartao tab-rolagem' }, h('h3', null, 'Por equipe'), h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Equipe'), h('th', null, 'Quadras atribuídas'), h('th', null, 'Levantadas'), h('th', null, 'Em levantamento'), h('th', null, 'Andamento')),
         Object.entries(r.eq).sort((a, b) => a[0].localeCompare(b[0], 'pt')).map(([e, x]) => h('tr', null, h('td', null, e), h('td', null, fmtN(x.total)), h('td', null, fmtN(x.Levantada)), h('td', null, fmtN(x['Em levantamento'])), h('td', null, fmtP(x.Levantada / x.total)))))) : null,
       h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: () => { S.qdModo = 'sit'; ir('#mapa'); } }, 'Ver quadras no mapa')));
     const bt = corpo.querySelector('.botoes-painel'); if (bt) corpo.insertBefore(sec, bt); else corpo.append(sec);

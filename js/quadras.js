@@ -173,7 +173,28 @@ const Quadras = (() => {
   function indice(qs, passo = 0.002) {
     const g = new Map(); const k = (x, y) => Math.floor(x / passo) + ':' + Math.floor(y / passo);
     qs.forEach((q, i) => { for (let x = Math.floor(q.b[0] / passo); x <= Math.floor(q.b[2] / passo); x++) for (let y = Math.floor(q.b[1] / passo); y <= Math.floor(q.b[3] / passo); y++) { const c = x + ':' + y; if (!g.has(c)) g.set(c, []); g.get(c).push(i); } });
-    return { achar(lon, lat) { const l = g.get(k(lon, lat)); if (!l) return null; for (const i of l) if (dentro(lon, lat, qs[i])) return qs[i]; return null; } };
+    // dentro da quadra; se não estiver (árvore de calçada), a quadra mais próxima até tol metros
+    return {
+      achar(lon, lat, tol = 12) {
+        const l = g.get(k(lon, lat)); if (l) for (const i of l) if (dentro(lon, lat, qs[i])) return qs[i];
+        if (!tol) return null;
+        const mx = 111320 * Math.cos(lat * Math.PI / 180), my = 110540; let melhor = null, dmin = tol;
+        const cx = Math.floor(lon / passo), cy = Math.floor(lat / passo); const vistos = new Set();
+        for (let x = cx - 1; x <= cx + 1; x++) for (let y = cy - 1; y <= cy + 1; y++) for (const i of g.get(x + ':' + y) || []) {
+          if (vistos.has(i)) continue; vistos.add(i); const d = distancia(lon, lat, qs[i], mx, my); if (d < dmin) { dmin = d; melhor = qs[i]; }
+        }
+        return melhor;
+      },
+    };
+  }
+  function distancia(lon, lat, q, mx, my) { // metros até a borda mais próxima
+    let d = Infinity;
+    for (const a of q.a) for (let i = 0, j = a.length - 2; i < a.length; j = i, i += 2) {
+      const ax = (a[j] - lon) * mx, ay = (a[j + 1] - lat) * my, bx = (a[i] - lon) * mx, by = (a[i + 1] - lat) * my;
+      const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy; const t = l2 ? Math.max(0, Math.min(1, -(ax * vx + ay * vy) / l2)) : 0;
+      d = Math.min(d, Math.hypot(ax + t * vx, ay + t * vy));
+    }
+    return d;
   }
   function centro(q) { // centro da maior parte, para o número
     let melhor = q.a[0], area = 0;

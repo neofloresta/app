@@ -72,6 +72,15 @@ const tocar = async (p, lat, lon) => { const xy = await p.evaluate(([a, b]) => {
   await pa.selectOption('select:has(option:text("Quadras por equipe"))', 'eq'); await pa.waitForTimeout(800);
   await pa.screenshot({ path: 'qd-mapa-equipes.png' });
   ok('Q.9', /3 quadras escolhidas/.test(barra) && [q4, q5, perto[6]].every((q) => s[q.n] && s[q.n].equipe === 'Equipe 2'), `barra: "${barra}"; as 3 ficaram com a Equipe 2`);
+  // 4b. escolher por área (arrastar um retângulo)
+  await pa.evaluate(([a, c]) => { window.__app.mapa.setView([a, c], 17, { animate: false }); }, centro(perto[20])); await pa.waitForTimeout(800);
+  await tocar(pa, ...centro(perto[20])); await pa.click('.qd-ficha button:has-text("Escolher várias")'); await pa.click('.qd-selecao button:has-text("Escolher por área")');
+  await pa.evaluate(([a, c]) => { window.__app.mapa.setView([a, c], 17, { animate: false }); }, centro(perto[20])); await pa.waitForTimeout(800);
+  const box = await pa.locator('#mapa').boundingBox(); await pa.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.3); await pa.mouse.down(); await pa.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 8 }); await pa.mouse.up(); await pa.waitForTimeout(500);
+  const nArea = +(await pa.locator('.qd-selecao b').innerText()).match(/(\d+)/)[1];
+  await pa.fill('.qd-selecao input', 'Equipe 3'); await pa.click('.qd-selecao button:has-text("Aplicar")'); await pa.waitForTimeout(1500); s = await sit(T);
+  const eq3 = Object.values(s).filter((q) => q.equipe === 'Equipe 3').length;
+  ok('Q.12', nArea >= 6 && eq3 >= nArea - 1, `arrastando uma área: ${nArea} quadras escolhidas de uma vez; ${eq3} ficaram com a Equipe 3`);
   // 5. painel
   await pa.goto(L.WEB + '#painel'); await pa.waitForSelector('text=Andamento por quadras', { timeout: 15000 }).catch(() => null);
   const pn = await pa.locator('.painel-os:has-text("Andamento por quadras")').innerText().catch(() => '');

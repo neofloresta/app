@@ -383,3 +383,5 @@ input[type=file]::file-selector-button { border: 0; border-radius: 10px; backgro
 .mapa-leg .leg-qd { border-radius: 2px; }
 .faixa-qd { border-left-color: #2E7D32; background: #EEF6EE; }
 .prog-qd { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #E3E8EA; margin: 4px 0 12px; }
+.tab-rolagem { overflow-x: auto; }
+@media (max-width: 420px) { .qd-selecao { padding: 8px; gap: 6px; } .qd-selecao b { font-size: 13px; } }
