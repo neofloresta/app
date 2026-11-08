@@ -5,7 +5,7 @@ const chamadas = async () => (await (await fetch(L.MOCK + '__chamadas')).json())
 const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.stringify(Object.assign({ acao }, d)) })).json();
 (async () => {
   await L.subir(); await L.configurar(); await L.semear(+process.env.N || 3000);
-  const ctxq = { TextDecoder, console }; vm.createContext(ctxq); vm.runInContext(fs.readFileSync(__dirname + '/../../js/quadras.js', 'utf8') + ';this.Quadras=Quadras;', ctxq);
+  const ctxq = { TextDecoder, console }; vm.createContext(ctxq); vm.runInContext(fs.readFileSync(L.APP + '/js/quadras.js', 'utf8') + ';this.Quadras=Quadras;', ctxq);
   const gj = JSON.parse(fs.readFileSync(__dirname + '/fixtures/' + (process.env.CAMADA || 'quadras_divinopolis.geojson'), 'utf8'));
   const feicoes = gj.features.map((f) => ({ props: Object.fromEntries(Object.entries(f.properties).map(([k, v]) => [k, typeof v === 'object' ? JSON.stringify(v) : String(v)])), aneis: f.geometry.type === 'Polygon' ? f.geometry.coordinates : f.geometry.coordinates.flat() }));
   const cam = ctxq.Quadras.compactar(feicoes, 'quadra', ['ruas']);

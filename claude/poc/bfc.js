@@ -4,7 +4,7 @@ const { chromium } = require('playwright'); const L = require('./lib'); const A 
 const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
 const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.stringify(Object.assign({ acao }, d)) })).json();
 const sync = (p) => p.evaluate(() => window.__app.sincronizar(true));
-const ctx = { TextDecoder, console }; vm.createContext(ctx); vm.runInContext(fs.readFileSync(__dirname + '/../../js/quadras.js', 'utf8') + ';this.Quadras=Quadras;', ctx); const Q = ctx.Quadras;
+const ctx = { TextDecoder, console }; vm.createContext(ctx); vm.runInContext(fs.readFileSync(L.APP + '/js/quadras.js', 'utf8') + ';this.Quadras=Quadras;', ctx); const Q = ctx.Quadras;
 const ARQ = __dirname + '/fixtures/quadras_divinopolis_faces.geojson';
 // ponto no meio da face (pelo comprimento), um pouco para dentro da quadra
 const meio = (q, f, dentro = 0) => {

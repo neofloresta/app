@@ -956,7 +956,9 @@ function marcarQuadras(projetoId, itens, usr) {
   } finally { lock.releaseLock(); }
 }
 function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
-  const sh = abaFaces(projetoId); const todas = lerOS(sh); const por = {}; todas.forEach((f) => { por[f.numero] = f; });
+  const sh = abaFaces(projetoId); const por = {}; const todas = [];
+  const v0 = sh.getDataRange().getValues(); const cab0 = v0.shift().map(String);
+  v0.forEach((l, i) => { if (l[0] === '') return; const o = { __linha: i + 2 }; cab0.forEach((c, k) => { if (c) o[c] = texto(l[k]); }); todas.push(o); por[o.numero] = o; }); // linha real na planilha, mesmo com linhas em branco no meio
   const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   const mudou = []; const recusadas = []; const qds = {};
   itens.forEach((it) => {
@@ -990,8 +992,14 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     mudou.push(id); if (it.situacao != null) qds[qn] = 1;
   });
   if (mudou.length) {
-    const linhas = todas.map((f) => cab.map((c) => seguro(f[c] == null ? '' : String(f[c]))));
-    const rg = sh.getRange(2, 1, linhas.length, cab.length); rg.setNumberFormat('@'); rg.setValues(linhas);
+    // a aba de faces pode chegar a dezenas de milhares de linhas: grava só as linhas que mudaram
+    const linha = (f) => cab.map((c) => seguro(f[c] == null ? '' : String(f[c])));
+    const velhas = [], novas = []; [...new Set(mudou)].forEach((id) => (por[id].__linha ? velhas : novas).push(por[id]));
+    if (velhas.length > 80) { const ult = sh.getLastRow(); if (ult > 1) sh.getRange(2, 1, ult - 1, sh.getLastColumn()).clearContent(); const rg = sh.getRange(2, 1, todas.length, cab.length); rg.setNumberFormat('@'); rg.setValues(todas.map(linha)); }
+    else {
+      velhas.forEach((f) => { const rg = sh.getRange(f.__linha, 1, 1, cab.length); rg.setNumberFormat('@'); rg.setValues([linha(f)]); });
+      if (novas.length) { const rg = sh.getRange(sh.getLastRow() + 1, 1, novas.length, cab.length); rg.setNumberFormat('@'); rg.setValues(novas.map(linha)); }
+    }
     auditar(usr.login, 'faces_marcar', projetoId, mudou.length + ' face(s): ' + mudou.slice(0, 20).join(', '));
   }
   // a quadra acompanha as faces

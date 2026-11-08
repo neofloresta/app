@@ -2,7 +2,7 @@
 const L = require('./lib'); const fs = require('fs'); const vm = require('vm');
 const R = []; const ok = (n, c, o = '') => { R.push([n, c]); console.log(c ? 'OK  ' : 'FALHA', n, o); };
 const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.stringify(Object.assign({ acao }, d)) })).json();
-const ctx = { TextDecoder, console }; vm.createContext(ctx); vm.runInContext(fs.readFileSync(__dirname + '/../../js/quadras.js', 'utf8') + ';this.Quadras=Quadras;', ctx);
+const ctx = { TextDecoder, console }; vm.createContext(ctx); vm.runInContext(fs.readFileSync(L.APP + '/js/quadras.js', 'utf8') + ';this.Quadras=Quadras;', ctx);
 const Q = ctx.Quadras;
 (async () => {
   await L.subir(); await L.configurar();
