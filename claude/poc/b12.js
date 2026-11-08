@@ -30,17 +30,16 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
   ok('1.2', f.length >= 10 && rasc === 1 && !!barra && marcado > 0, `não salvou; voltou direto ao primeiro campo que falta (cursor em "${foco}"), ${marcado} campo(s) em vermelho na etapa e barra no topo: "${barra}"; ${f.length} pendências`);
 
   // 1.3 morta
-  await A.aba(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Morta'); await p.waitForTimeout(150);
+  await A.aba(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Morta'); await p.waitForTimeout(500); if (await p.locator('.folha button:has-text("Trocar")').count()) await p.click('.folha button:has-text("Trocar")'); await p.waitForTimeout(200);
   const raioVisivel = await A.campo(p, 'Raio de copa 1 (m)').count();
   await A.concluir(p); f = await A.faltas(p);
   ok('1.3', raioVisivel === 0 && !f.includes('Especie') && !f.some((x) => /Raio|Qualidade/.test(x)), `raios ocultos=${raioVisivel === 0}; espécie opcional=${!f.some((x) => /Esp/.test(x))}`);
   await A.excluir(p);
 
   // 1.4 local de plantio / calçada
-  await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Local de novo plantio'); await p.waitForTimeout(150);
-  const abas = await p.locator('.prog .seg').count(); await A.concluir(p); f = await A.faltas(p);
-  await A.op(p, 'Categoria', 'Calçada sem árvores'); await p.waitForTimeout(100); const abas2 = await p.locator('.prog .seg').count();
-  ok('1.4', !f.some((x) => /Esp|DAP|Altura/.test(x)) && f.some((x) => /Foto 1/.test(x)), `abas visíveis plantio=${abas}, calçada=${abas2}; pede ${f.join(', ')}`);
+  await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Calçada sem árvores'); await p.waitForTimeout(150);
+  const abas2 = await p.locator('.prog .seg').count(); await A.concluir(p); f = await A.faltas(p);
+  ok('1.4', !f.some((x) => /Esp|CAP|Altura/.test(x)) && f.some((x) => /Foto geral/.test(x)) && f.some((x) => /Largura/.test(x)), `calçada sem árvores: ${abas2} etapas; pede ${f.join(', ')}`);
   await A.excluir(p);
 
   // 1.5 critério de inclusão 2 m

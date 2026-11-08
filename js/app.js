@@ -782,8 +782,8 @@
         chips = nums = fotos = null; blocos.push(campoEl(c));
         if (camposRegra.has(c.nome)) {
           const rg = (form.regras || []).find((x) => x.campo === c.nome); const cfg = rg && rg.por[String(r.valores[c.nome])];
-          const nOc = cfg ? Object.values(cfg).filter((x) => x === 'oculto').length : 0;
-          if (nOc) blocos.push(h('div', { class: 'nota' }, `${nOc} campos não se aplicam e foram ocultados.`));
+          const nEt = abas.filter((x) => !abaVisivel(x)).length;
+          if (cfg && nEt) blocos.push(h('div', { class: 'nota' }, `${pl(nEt, 'etapa não se aplica', 'etapas não se aplicam')} e ${nEt > 1 ? 'foram ocultadas' : 'foi ocultada'}.`));
         }
       }
       conteudo.replaceChildren(...blocos);
@@ -817,7 +817,7 @@
               const novo = String(r.valores[c.nome]) === String(o.v) ? null : o.v;
               if (camposRegra.has(c.nome) && novo != null) {
                 const E2 = estadoCampos(form, Object.assign({}, r.valores, { [c.nome]: novo }));
-                const perde = form.campos.filter((k) => E2[k.nome].oculto && !E[k.nome].oculto && k.tipo !== 'bool' && !k.calculado && !vazio(k, valorDe(r, k)));
+                const perde = form.campos.filter((k) => E2[k.nome].oculto && !E[k.nome].oculto && k.tipo !== 'bool' && k.tipo !== 'hidden' && !k.auto && !k.calculado && !vazio(k, valorDe(r, k)));
                 if (perde.length && !(await confirmar('Trocar ' + c.rotulo.toLowerCase(), `Com "${o.t.replace(/\s*\(.*\)/, '')}" estes campos já preenchidos deixam de valer: ${perde.map((k) => k.rotulo).join(', ')}. Continuar?`, 'Trocar'))) return;
               }
               grade.querySelectorAll('.op').forEach((x) => x.classList.remove('sel')); if (novo != null) b.classList.add('sel'); mudar(c, novo);
@@ -1056,6 +1056,8 @@
     const selEq = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todas as equipes'));
     const selRisco = cRisco ? h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todos os riscos'), cRisco.opcoes.map((o) => h('option', { value: o.v }, 'Risco ' + o.t.toLowerCase()))) : null;
     const selBairro = h('select', { class: 'entrada oculto' }, h('option', { value: '' }, 'Todos os bairros'));
+    const selDia = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todos os dias'), h('option', { value: 'hoje' }, 'Hoje'), h('option', { value: 'ontem' }, 'Ontem'), h('option', { value: '7' }, 'Últimos 7 dias'), h('option', { value: 'outro' }, 'Escolher o dia...'));
+    const diaIn = h('input', { type: 'date', class: 'entrada oculto' });
     const selCor = h('select', { class: 'entrada' }, h('option', { value: 'equipe' }, 'Cor por equipe'), cRisco ? h('option', { value: 'risco' }, 'Cor por risco') : null, h('option', { value: 'os' }, 'Cor por ordem de serviço'));
     if (S.corMapa) { selCor.value = S.corMapa; S.corMapa = null; }
     let osPorArv = null; const osSoltas = []; const ORD_OS = ['Em execução', 'Aberta', 'Solicitada', 'Concluída', 'Cancelada'];
@@ -1066,7 +1068,7 @@
     const selQd = h('select', { class: 'entrada oculto' }, h('option', { value: 'sit' }, 'Quadras por situação'), h('option', { value: 'eq' }, 'Quadras por equipe'), h('option', { value: '' }, 'Sem quadras'));
     if (S.qdModo != null) selQd.value = S.qdModo;
     const conta = h('small', { class: 'mapa-conta' });
-    const barra = h('div', { class: 'mapa-filtros' }, busca, h('div', { class: 'mapa-sel' }, selEq, selRisco, selBairro, selCor, selQd), conta);
+    const barra = h('div', { class: 'mapa-filtros' }, busca, h('div', { class: 'mapa-sel' }, selEq, selDia, diaIn, selRisco, selBairro, selCor, selQd), conta);
     const barraSel = h('div', { class: 'qd-selecao oculto' });
     $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: centrar }, 'Minha posição')), barra, div, barraSel));
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
@@ -1080,7 +1082,7 @@
     // pontos: os do aparelho primeiro (podem ter edição ainda não enviada), depois os do servidor
     const pts = []; const vistos = new Set();
     const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
-    if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, bairro: r.bairro || '', cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', foto: '', local: true });
+    if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, bairro: r.bairro || '', dia: diaLocal(r.criado_em), cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', foto: '', local: true });
     // quadras: desenhadas antes dos pontos, no mesmo canvas, para o toque no ponto ter prioridade
     const qdCamada = L.layerGroup().addTo(mapa); const rotulos = L.layerGroup().addTo(mapa);
     let qdDados = null, qdSit = new Map(), selecao = null;
@@ -1159,7 +1161,9 @@
       const q = norm(busca.value).trim(), eq = selEq.value, rk = selRisco ? selRisco.value : '', porRisco = selCor.value === 'risco';
       const ba = selBairro.value; const porOS = selCor.value === 'os';
       if (porOS && !osPorArv) { carregarOSMapa().then(() => desenhar(false)); }
-      const vis = pts.filter((o) => (!q || o.chave.includes(q)) && (!eq || o.equipe === eq) && (!rk || String(o.risco) === rk) && (!ba || o.bairro === ba));
+      const hojeD = diaLocal(agoraISO()); const ontemD = diaLocal(new Date(Date.now() - 864e5).toISOString()); const d7 = diaLocal(new Date(Date.now() - 6 * 864e5).toISOString());
+      const dv = selDia.value; const okDia = (o) => { if (!dv) return true; const x = o.dia || ''; if (!x) return false; if (dv === 'hoje') return x === hojeD; if (dv === 'ontem') return x === ontemD; if (dv === '7') return x >= d7; if (dv === 'outro') return !diaIn.value || x === diaIn.value; return true; };
+      const vis = pts.filter((o) => (!q || o.chave.includes(q)) && (!eq || o.equipe === eq) && (!rk || String(o.risco) === rk) && (!ba || o.bairro === ba) && okDia(o));
       for (const o of vis) {
         const os = porOS && osPorArv ? osPorArv.get(o.uid) : null;
         const fill = porOS ? (os ? COR_OS[os.status] : '#C9D3D6') : porRisco ? corRisco[o.risco] || '#8A969C' : corEq(o.equipe || '-');
@@ -1207,18 +1211,20 @@
       } catch (er) { toast('Não foi possível buscar o endereço.'); }
     });
     [selEq, selRisco, selBairro, selCor].filter(Boolean).forEach((x) => x.addEventListener('change', () => desenhar(x !== selCor)));
+    selDia.addEventListener('change', () => { diaIn.classList.toggle('oculto', selDia.value !== 'outro'); desenhar(true); }); diaIn.addEventListener('change', () => desenhar(true));
     selQd.addEventListener('change', () => { S.qdModo = selQd.value; desenhar(false); });
     const preencherBairros = () => { const bs = [...new Set(pts.map((o) => o.bairro).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt')); const at = selBairro.value; selBairro.replaceChildren(h('option', { value: '' }, 'Todos os bairros'), bs.map((b) => h('option', { value: b, selected: b === at }, b))); selBairro.classList.toggle('oculto', !bs.length); };
     const preencherEquipes = () => { preencherBairros(); const atual = selEq.value; selEq.replaceChildren(h('option', { value: '' }, 'Todas as equipes'), ...equipes.filter((e) => e !== '-').map((e) => h('option', { value: e, selected: e === atual }, e))); };
-    preencherEquipes(); desenhar(true); carregarQdMapa();
+    const aplicarFiltroPainel = () => { if (!S.mapaFiltro) return; if (S.mapaFiltro.equipe) selEq.value = S.mapaFiltro.equipe; selDia.value = S.mapaFiltro.dia || ''; };
+    preencherEquipes(); aplicarFiltroPainel(); desenhar(true); carregarQdMapa();
     if (!Api.demo && navigator.onLine) {
       conta.textContent = 'Carregando pontos...';
       try {
-        const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link', 'bairro_aprox'].map((x) => x || '');
+        const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link', 'bairro_aprox', 'criado_em'].map((x) => x || '');
         const m = await Api.b.mapa(S.projeto.id, campos);
-        for (const l of m.linhas) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6], cat: l[7], foto: l[8], bairro: l[9] || '', local: false });
+        for (const l of m.linhas) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6], cat: l[7], foto: l[8], bairro: l[9] || '', dia: l[10] ? diaLocal(l[10]) : '', local: false });
         if (!document.body.contains(div)) return;
-        preencherEquipes(); desenhar(true);
+        preencherEquipes(); aplicarFiltroPainel(); S.mapaFiltro = null; desenhar(true);
       } catch (e) { conta.textContent = ''; toast('Não foi possível carregar os pontos das outras equipes.'); }
     }
     let eu = null;
@@ -1670,13 +1676,30 @@
         A.cat.length ? h('div', { class: 'cartao' }, h('h3', null, 'Categoria'), barras(A.cat)) : null,
         A.risco.length ? h('div', { class: 'cartao' }, h('h3', null, 'Classe de risco'), barras(A.risco)) : null,
         h('div', { class: 'cartao' }, h('h3', null, 'Espécies mais comuns'), barras(A.esp.slice(0, 12), { total: A.nEsp })),
-        d.classesDap.length ? h('div', { class: 'cartao' }, h('h3', null, 'Classes de DAP'), barras(d.classesDap.map((c) => ({ rot: c.ate ? `${c.de} a ${c.ate} cm` : `${c.de} cm ou mais`, n: c.n })))) : null,
+        d.classesDap.length ? h('div', { class: 'cartao' }, h('h3', null, S.form && S.form.campos.some((c) => c.tipo === 'multinumber' && /cap/i.test(c.nome)) ? 'Classes de DAP (calculado do CAP)' : 'Classes de DAP'), barras(d.classesDap.map((c) => ({ rot: c.ate ? `${c.de} a ${c.ate} cm` : `${c.de} cm ou mais`, n: c.n })))) : null,
         A.manejo.length ? h('div', { class: 'cartao' }, h('h3', null, 'Manejo recomendado'), barras(A.manejo.filter((x) => x.n), { total: A.ind, cor: CORES[1] })) : null,
         A.ocorr.length ? h('div', { class: 'cartao' }, h('h3', null, 'Ocorrências observadas'), barras(A.ocorr, { total: A.ind, cor: CORES[2] })) : null,
         perfil() !== 'cliente' ? h('div', { class: 'cartao' }, h('h3', null, 'Por equipe'), barras(equipes.map((e, k) => ({ rot: e, n: d.equipes[e], cor: CORES[k % CORES.length] })))) : null),
+      perfil() !== 'cliente' && equipes.length ? rendimentoEquipes(d, equipes) : null,
       h('div', { class: 'linha-btn botoes-painel', style: 'margin:6px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#relatorio') }, 'Relatório para imprimir ou PDF'), h('button', { class: 'btn sec', onclick: () => ir('#medicao') }, 'Boletim de medição'), h('button', { class: 'btn sec', onclick: () => ir('#mapa') }, 'Ver no mapa'),
         perfil() === 'cliente' ? h('button', { class: 'btn sec', onclick: () => exportarCliente() }, 'Baixar dados') : null));
     pintarPainelOS(corpo); pintarPainelQd(corpo);
+  }
+  // rendimento de cada equipe (dupla): total, hoje, média por dia de campo e melhor dia
+  function rendimentoEquipes(d, equipes) {
+    const hoje = diaLocal(agoraISO()); const dias = Object.keys(d.porDia || {}).sort(); const ult7 = dias.slice(-7);
+    const lin = equipes.map((e) => {
+      const porDia = dias.map((x) => [x, (d.porDia[x] || {})[e] || 0]).filter(([, n]) => n);
+      const tot = porDia.reduce((a, [, n]) => a + n, 0); const melhor = porDia.reduce((m, x) => (x[1] > m[1] ? x : m), ['', 0]);
+      const n7 = ult7.map((x) => (d.porDia[x] || {})[e] || 0).filter((n) => n); const media = n7.length ? n7.reduce((a, b) => a + b, 0) / n7.length : 0;
+      return { e, tot, hoje: (d.porDia[hoje] || {})[e] || 0, diasCampo: porDia.length, media, melhor };
+    }).sort((a, b) => b.media - a.media);
+    const dBR = (x) => (x ? x.split('-').reverse().slice(0, 2).join('/') : '');
+    return h('div', { class: 'cartao tab-rolagem' }, h('h3', null, 'Rendimento por equipe'),
+      h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Equipe'), h('th', null, 'Hoje'), h('th', null, 'Média por dia de campo (últimos 7)'), h('th', null, 'Dias de campo'), h('th', null, 'Melhor dia'), h('th', null, 'Total'), h('th', null, '')),
+        lin.map((x) => h('tr', null, h('td', null, x.e), h('td', null, fmtN(x.hoje)), h('td', null, fmtN(Math.round(x.media * 10) / 10)), h('td', null, fmtN(x.diasCampo)), h('td', null, x.melhor[1] ? `${fmtN(x.melhor[1])} em ${dBR(x.melhor[0])}` : ''), h('td', null, fmtN(x.tot)),
+          h('td', null, h('button', { class: 'btn sec peq', onclick: () => { S.mapaFiltro = { equipe: x.e, dia: 'hoje' }; ir('#mapa'); } }, 'Pontos de hoje'), ' ', h('button', { class: 'btn sec peq', onclick: () => { S.mapaFiltro = { equipe: x.e, dia: '' }; ir('#mapa'); } }, 'Todos'))))),
+      h('p', { class: 'dica' }, 'Dia de campo é o dia em que a equipe cadastrou pelo menos um ponto. No mapa dá para filtrar por equipe e por dia.'));
   }
   function resumoOS(ordens) {
     const ativos = ordens.filter((o) => !o.__pend || o.numero);
