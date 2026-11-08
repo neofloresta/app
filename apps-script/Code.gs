@@ -11,13 +11,13 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.2';
+const VERSAO_SCRIPT = '2.3';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em'];
 const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
 const COLS_CHAVES = ['id', 'nome', 'projeto', 'hash', 'criada_por', 'criada_em', 'ativa'];
-const ACOES_INTEGRACAO = ['listar', 'mapa', 'painel', 'os_listar', 'formulario', 'sessao'];
+const ACOES_INTEGRACAO = ['listar', 'mapa', 'painel', 'os_listar', 'formulario', 'sessao', 'quadras_camada', 'quadras_situacao'];
 const PERFIS = ['admin', 'revisor', 'coletor', 'cliente'];
 // Colunas que só o servidor escreve (validação). Um envio do aparelho nunca as apaga.
 const COLS_SISTEMA = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'numero_unico', 'servidor_em'];
@@ -29,7 +29,7 @@ const BLOQUEIO_MIN = 15;
 const FUSO = 'America/Sao_Paulo';
 const ITERACOES = 1000;
 const SENHA_MIN = 8;
-const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento'];
+const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar'];
 // texto que começaria uma fórmula na planilha vira texto puro
 function seguro(v) { v = v == null ? '' : String(v); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
 function hashToken(t) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'sessao|' + t, Utilities.Charset.UTF_8)); }
@@ -98,6 +98,10 @@ function doPost(e) {
       case 'foto_ver': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, verFoto(d.projeto, d.id, usr)));
       case 'situacao_meus': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, itens: situacaoMeus(d.projeto, usr) });
       case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
+      case 'quadras_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarQuadras(d.projeto, d.camada, usr)));
+      case 'quadras_camada': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaQuadras(d.projeto, d.versao)));
+      case 'quadras_situacao': exigeProjeto(d.projeto); return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(publicoOS) });
+      case 'quadras_marcar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, marcarQuadras(d.projeto, d.itens, usr)));
       case 'os_listar': exigeProjeto(d.projeto); return json({ ok: true, ordens: listarOS(d.projeto, usr), tipos: tiposOS(d.projeto) });
       case 'os_salvar': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarOS(d.projeto, d.os || {}, usr)));
       case 'os_andamento': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, andamentoOS(d.projeto, d.id, d.etapa, d.dados || {}, usr)));
@@ -809,6 +813,95 @@ function andamentoOS(projetoId, id, etapa, d, usr) {
 }
 
 
+
+// ---------- Quadras ----------
+// A camada (polígonos e números) fica num arquivo no Drive do projeto; a situação de cada quadra fica na aba "Quadras".
+const COLS_QUADRAS = ['numero', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'obs', 'historico', 'atualizado_em'];
+const SITUACOES_QUADRA = ['A levantar', 'Em levantamento', 'Levantada'];
+function infoQuadras(projetoId) { try { return JSON.parse(PROPS.getProperty('QD_' + projetoId) || 'null'); } catch (e) { return null; } }
+function importarQuadras(projetoId, camada, usr) {
+  const txt = String(camada || ''); if (txt.length > 15e6) throw new Error('Camada grande demais (limite de 15 MB). Simplifique os polígonos antes de importar.');
+  let j; try { j = JSON.parse(txt); } catch (e) { throw new Error('Camada inválida.'); }
+  if (!j || !Array.isArray(j.quadras) || !j.quadras.length) throw new Error('A camada não tem quadras.');
+  if (j.quadras.length > 50000) throw new Error('Mais de 50 mil quadras: divida a camada por região.');
+  const nums = {};
+  j.quadras.forEach((q) => {
+    if (!q || typeof q.n !== 'string' || !Array.isArray(q.b) || q.b.length !== 4 || !Array.isArray(q.a) || !q.a.length) throw new Error('Quadra com formato inválido.');
+    q.n = q.n.slice(0, 40); if (nums[q.n]) throw new Error('Número de quadra repetido: ' + q.n); nums[q.n] = 1;
+    if (!q.b.every((x) => typeof x === 'number' && isFinite(x)) || q.b[1] < -34 || q.b[3] > 6 || q.b[0] < -74 || q.b[2] > -28) throw new Error('Quadra ' + q.n + ' fora do Brasil ou com coordenada inválida.');
+    q.a.forEach((a) => { if (!Array.isArray(a) || a.length < 6 || a.length > 20000 || !a.every((x) => typeof x === 'number' && isFinite(x))) throw new Error('Polígono inválido na quadra ' + q.n + '.'); });
+    if (q.p) Object.keys(q.p).forEach((k) => { q.p[k] = String(q.p[k]).slice(0, 60); });
+  });
+  const p = projeto(projetoId); const pasta = DriveApp.getFolderById(p.pasta_id);
+  const ant = infoQuadras(projetoId);
+  const limpo = JSON.stringify({ campo: String(j.campo || '').slice(0, 40), total: j.quadras.length, quadras: j.quadras });
+  const arq = pasta.createFile('Quadras - ' + p.nome + '.json', limpo, 'application/json');
+  if (ant && ant.id) try { DriveApp.getFileById(ant.id).setTrashed(true); } catch (e) { /* já removido */ }
+  const info = { id: arq.getId(), em: new Date().toISOString(), total: j.quadras.length, campo: String(j.campo || '').slice(0, 40) };
+  PROPS.setProperty('QD_' + projetoId, JSON.stringify(info));
+  try { CacheService.getScriptCache().put('qdnums:' + projetoId, Object.keys(nums).join('\n'), 21600); } catch (e) { /* grande demais */ }
+  auditar(usr.login, 'quadras_importar', projetoId, info.total + ' quadras');
+  return { total: info.total, versao: info.em };
+}
+function camadaQuadras(projetoId, versao) {
+  const info = infoQuadras(projetoId); if (!info) return { semCamada: true };
+  if (versao && versao === info.em) return { igual: true, versao: info.em };
+  return { versao: info.em, total: info.total, camada: DriveApp.getFileById(info.id).getBlob().getDataAsString() };
+}
+function numerosQuadras(projetoId) {
+  const cache = CacheService.getScriptCache(); const c = cache.get('qdnums:' + projetoId);
+  if (c != null) return new Set(c.split('\n'));
+  const info = infoQuadras(projetoId); if (!info) throw new Error('Este projeto ainda não tem camada de quadras.');
+  const ns = JSON.parse(DriveApp.getFileById(info.id).getBlob().getDataAsString()).quadras.map((q) => q.n);
+  try { cache.put('qdnums:' + projetoId, ns.join('\n'), 21600); } catch (e) { /* grande demais */ }
+  return new Set(ns);
+}
+function abaQuadras(projetoId) {
+  const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Quadras');
+  if (!sh) { sh = ss.insertSheet('Quadras'); sh.appendRow(COLS_QUADRAS); sh.setFrozenRows(1); }
+  if (!sh.getLastRow()) sh.appendRow(COLS_QUADRAS);
+  return sh;
+}
+function lerSitQuadras(projetoId) { return lerOS(abaQuadras(projetoId)); }
+function marcarQuadras(projetoId, itens, usr) {
+  if (!Array.isArray(itens) || !itens.length) throw new Error('Nenhuma quadra informada.');
+  const coord = usr.perfil === 'admin' || usr.perfil === 'revisor';
+  if (itens.length > (coord ? 5000 : 200)) throw new Error('Quadras demais de uma vez.');
+  const nums = numerosQuadras(projetoId);
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = abaQuadras(projetoId); const todas = lerOS(sh); const por = {}; todas.forEach((q) => { por[q.numero] = q; });
+    const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+    const mudou = []; const recusadas = [];
+    itens.forEach((it) => {
+      const n = String(it && it.numero || '').slice(0, 40);
+      if (!nums.has(n)) { recusadas.push({ numero: n, motivo: 'Quadra não existe na camada.' }); return; }
+      const q = por[n] || { numero: n, situacao: 'A levantar', equipe: '' };
+      if (it.situacao != null && SITUACOES_QUADRA.indexOf(it.situacao) < 0) { recusadas.push({ numero: n, motivo: 'Situação inválida.' }); return; }
+      if (!coord) {
+        if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
+        if (q.equipe && q.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Quadra da ' + q.equipe + '.' }); return; }
+        if (!q.equipe) q.equipe = usr.equipe;
+      } else if (it.equipe != null) q.equipe = String(it.equipe).slice(0, 60);
+      const txt = [];
+      if (it.situacao != null && it.situacao !== q.situacao) { q.situacao = it.situacao; q.marcada_por = usr.login; q.marcada_em = dataAparelho(it.em); txt.push(it.situacao.toLowerCase()); }
+      if (coord && it.equipe != null) txt.push('equipe ' + (q.equipe || 'nenhuma'));
+      if (it.obs != null) q.obs = String(it.obs).slice(0, 300);
+      if (!txt.length && it.obs == null) return;
+      q.historico = [q.historico, carimboHist(usr, txt.join(', ') || 'observação', it.situacao != null ? q.marcada_em : null)].filter(Boolean).join(' | ').slice(-5000);
+      q.atualizado_em = new Date().toISOString();
+      if (!por[n]) { por[n] = q; todas.push(q); }
+      mudou.push(n);
+    });
+    if (mudou.length) {
+      const linhas = todas.map((q) => cab.map((c) => seguro(q[c] == null ? '' : String(q[c]))));
+      const rg = sh.getRange(2, 1, linhas.length, cab.length); rg.setNumberFormat('@'); rg.setValues(linhas);
+      auditar(usr.login, 'quadras_marcar', projetoId, mudou.length + ' quadra(s): ' + mudou.slice(0, 20).join(', '));
+    }
+    return { alteradas: mudou.length, recusadas };
+  } finally { lock.releaseLock(); }
+}
+
 // ---------- Chaves de integração (outros sistemas, só leitura) ----------
 // A chave aparece uma vez para a coordenação; no servidor fica só o resumo criptográfico.
 function hashChave(k) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'chave|' + k, Utilities.Charset.UTF_8)); }
@@ -853,7 +946,7 @@ function restaurarCopia(projetoId, arquivoId, usr) {
     const antes = DriveApp.getFileById(p.planilha_id).makeCopy(p.nome + ' - antes da restauração ' + agora, pastaBackup());
     const origem = SpreadsheetApp.openById(arquivoId); const destino = SpreadsheetApp.openById(p.planilha_id);
     const res = {};
-    ['Registros', 'Ordens'].forEach((nome) => {
+    ['Registros', 'Ordens', 'Quadras'].forEach((nome) => {
       const de = origem.getSheetByName(nome); let para = destino.getSheetByName(nome);
       if (!de && !para) return;
       if (!para) para = destino.insertSheet(nome);

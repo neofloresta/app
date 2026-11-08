@@ -1,10 +1,10 @@
 {
- "versao": "2.2.0",
- "data": "2026-11-05",
+ "versao": "2.3.0",
+ "data": "2026-11-07",
  "notas": [
-  "Ordens de serviço: poda, supressão, plantio e outros, abertas da ficha da árvore, com equipe, prazo, foto de antes e depois e histórico",
-  "Pedido de serviço pelo cliente e pela equipe, aprovado pela coordenação",
-  "Ordens no mapa, no painel, no relatório, no boletim de medição e no Excel",
-  "Pacote final de entrega, chave de integração para outros sistemas e restauração de cópia de segurança"
+  "Camada de quadras no mapa, com o número de cada quadra",
+  "Marcar quadra como em levantamento ou levantada, também sem internet; ao salvar uma árvore, a quadra passa a em levantamento",
+  "A coordenação distribui quadras por equipe, uma a uma ou várias de uma vez, e o mapa pinta por situação ou por equipe",
+  "Andamento por quadras no painel e na tela inicial da equipe"
  ]
 }

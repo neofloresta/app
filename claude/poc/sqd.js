@@ -1,0 +1,36 @@
+// Quadras: teste direto do servidor
+const L = require('./lib'); const fs = require('fs'); const vm = require('vm');
+const R = []; const ok = (n, c, o = '') => { R.push([n, c]); console.log(c ? 'OK  ' : 'FALHA', n, o); };
+const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.stringify(Object.assign({ acao }, d)) })).json();
+const ctx = { TextDecoder, console }; vm.createContext(ctx); vm.runInContext(fs.readFileSync(__dirname + '/../../js/quadras.js', 'utf8') + ';this.Quadras=Quadras;', ctx);
+const Q = ctx.Quadras;
+(async () => {
+  await L.subir(); await L.configurar();
+  const gj = JSON.parse(fs.readFileSync(__dirname + '/fixtures/quadras_divinopolis.geojson', 'utf8'));
+  const feicoes = gj.features.map((f) => ({ props: Object.fromEntries(Object.entries(f.properties).map(([k, v]) => [k, String(v)])), aneis: f.geometry.type === 'Polygon' ? f.geometry.coordinates : f.geometry.coordinates.flat() }));
+  const cam = Q.compactar(feicoes, 'quadra', ['ruas']); const txt = JSON.stringify(cam);
+  ok('camada real compacta', cam.total === 5414 && txt.length < 4e6, `${cam.total} quadras, ${(txt.length / 1e6).toFixed(2)} MB`);
+  const T = (await P('login', { u: 'admin', s: L.senha() })).token;
+  const T1 = (await P('login', { u: 'div-1', s: 'equipe01' })).token; const T2 = (await P('login', { u: 'div-2', s: 'equipe02' })).token;
+  let j = await P('quadras_camada', { t: T1, projeto: 'divinopolis' }); ok('sem camada ainda', j.ok && j.semCamada);
+  j = await P('quadras_importar', { t: T1, projeto: 'divinopolis', camada: txt }); ok('equipe não importa camada', !j.ok, j.erro);
+  const t0 = Date.now(); j = await P('quadras_importar', { t: T, projeto: 'divinopolis', camada: txt }); ok('coordenação importa', j.ok && j.total === 5414, (j.erro || '') + ` ${Date.now() - t0} ms`);
+  const v = j.versao;
+  j = await P('quadras_importar', { t: T, projeto: 'divinopolis', camada: JSON.stringify({ quadras: [{ n: '1', b: [0, 0, 1, 1], a: [[0, 0, 1, 0, 1, 1]] }] }) }); ok('quadra fora do Brasil recusada', !j.ok, j.erro);
+  j = await P('quadras_importar', { t: T, projeto: 'divinopolis', camada: JSON.stringify({ quadras: [cam.quadras[0], cam.quadras[0]] }) }); ok('número repetido recusado', !j.ok, j.erro);
+  j = await P('quadras_camada', { t: T1, projeto: 'divinopolis' }); ok('equipe baixa a camada', j.ok && JSON.parse(j.camada).total === 5414);
+  j = await P('quadras_camada', { t: T1, projeto: 'divinopolis', versao: v }); ok('mesma versão não baixa de novo', j.ok && j.igual && !j.camada);
+  j = await P('quadras_marcar', { t: T, projeto: 'divinopolis', itens: ['10', '11', '12', '13'].map((n) => ({ numero: n, equipe: 'Equipe 1' })).concat([{ numero: '20', equipe: 'Equipe 2' }]) }); ok('coordenação distribui quadras por equipe', j.ok && j.alteradas === 5, j.erro);
+  j = await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ numero: '10', situacao: 'Levantada' }, { numero: '11', situacao: 'Em levantamento' }] }); ok('equipe marca as suas', j.ok && j.alteradas === 2 && !j.recusadas.length, j.erro);
+  j = await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ numero: '20', situacao: 'Levantada' }] }); ok('equipe não marca quadra de outra equipe', j.ok && j.alteradas === 0 && /Equipe 2/.test(j.recusadas[0].motivo), JSON.stringify(j.recusadas));
+  j = await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ numero: '99', situacao: 'Em levantamento' }] }); ok('quadra sem equipe passa a ser da equipe que marcou', j.ok && j.alteradas === 1);
+  j = await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ numero: '12', equipe: 'Equipe 2' }] }); ok('equipe não troca equipe', j.ok && j.alteradas === 0);
+  j = await P('quadras_marcar', { t: T1, projeto: 'divinopolis', itens: [{ numero: '99999', situacao: 'Levantada' }, { numero: '13', situacao: 'Pronta' }] }); ok('quadra inexistente e situação inválida recusadas', j.ok && j.recusadas.length === 2);
+  j = await P('quadras_marcar', { t: T2, projeto: 'divinopolis', itens: [{ numero: '=HYPERLINK("x")', situacao: 'Levantada' }] }); ok('número com fórmula recusado', j.ok && j.alteradas === 0);
+  j = await P('quadras_situacao', { t: T2, projeto: 'divinopolis' }); const m = Object.fromEntries(j.quadras.map((q) => [q.numero, q]));
+  ok('situação lida por todos', j.ok && m['10'].situacao === 'Levantada' && m['10'].marcada_por === 'div-1' && m['99'].equipe === 'Equipe 1' && m['20'].situacao === 'A levantar', JSON.stringify(m['10']).slice(0, 160));
+  j = await P('quadras_marcar', { t: T, projeto: 'divinopolis', itens: Array.from({ length: 3000 }, (_, i) => ({ numero: String(i + 1000), equipe: 'Equipe ' + (1 + (i % 3)) })) }); ok('distribuir 3 mil quadras de uma vez', j.ok && j.alteradas === 3000, j.erro);
+  j = await P('quadras_importar', { t: T, projeto: 'divinopolis', camada: txt }); j = await P('quadras_situacao', { t: T, projeto: 'divinopolis' }); ok('reimportar mantém a situação', j.quadras.find((q) => q.numero === '10').situacao === 'Levantada');
+  j = await P('auditoria_listar', { t: T, n: 30 }); ok('auditoria', j.itens.some((x) => x.acao === 'quadras_importar') && j.itens.some((x) => x.acao === 'quadras_marcar'));
+  const f = R.filter((x) => !x[1]).length; console.log(`\n${f} falha(s) de ${R.length}`); process.exit(0);
+})().catch((e) => { console.error('ERRO', e); process.exit(1); });

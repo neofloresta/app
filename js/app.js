@@ -1,6 +1,6 @@
 // Neofloresta Inventário
 (() => {
-  const VERSAO = '2.2.0';
+  const VERSAO = '2.3.0';
   const TERMO_VERSAO = '2026-11';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -249,7 +249,7 @@
   async function pendentes() { return (await Store.todosRegistros()).filter((r) => r.status === 'pendente' && !r.__base); }
   async function atualizarSync() {
     const el = $sync(); if (!el) return;
-    const n = (await pendentes()).length + (await nFilaOS());
+    const n = (await pendentes()).length + (await nFilaOS()) + (await nFilaQd());
     el.className = 'sync' + (!navigator.onLine ? ' off' : n ? ' pend' : '');
     if (S.expirada) { el.className = 'sync pend'; el.textContent = 'Entrar de novo'; return; }
     el.textContent = S.sincronizando ? 'Enviando...' : !navigator.onLine ? (n ? `Sem rede · ${n}` : 'Sem rede') : n ? `${n} a enviar` : (Api.demo ? 'Demonstração' : 'Tudo enviado');
@@ -259,7 +259,7 @@
     if (S.sincronizando || !S.sessao || S.expirada || perfil() === 'cliente') return;
     if (!navigator.onLine) { if (!silencioso) toast('Sem internet. Os dados ficam guardados e serão enviados depois.'); return atualizarSync(); }
     S.sincronizando = true; // marcado antes de qualquer espera: nunca roda duas vezes ao mesmo tempo
-    try { await enviarPendentes(silencioso); if (!S.expirada) await enviarFilaOS(silencioso); } finally { S.sincronizando = false; await atualizarSync(); }
+    try { await enviarPendentes(silencioso); if (!S.expirada) await enviarFilaOS(silencioso); if (!S.expirada) await enviarFilaQd(silencioso); } finally { S.sincronizando = false; await atualizarSync(); }
     if (S.expirada) return;
     await atualizarSituacao();
     if (location.hash === '' || location.hash === '#inicio') listarRegistros();
@@ -369,7 +369,10 @@
     try {
       const d = await carregarOS(false); if (!document.body.contains(el)) return;
       const f = d.ordens.filter((o) => ehMinhaOS(o) && ['Aberta', 'Em execução'].includes(o.status)); const at = f.filter(atrasada).length;
-      el.replaceChildren(f.length ? h('button', { class: 'faixa-os', onclick: () => { S.filtroOS = 'fazer'; ir('#ordens'); } }, h('b', null, `${f.length} ${f.length > 1 ? 'ordens' : 'ordem'} de serviço para a sua equipe`), h('span', null, at ? `${at} atrasada${at > 1 ? 's' : ''}. Toque para ver` : 'Toque para ver e registrar a execução')) : '');
+      let qd = null;
+      try { const cam = await carregarQuadras(); if (cam) { const r = resumoQd(cam, await carregarSitQd(false)); const x = r.eq[minhaEquipe()]; if (x) qd = h('button', { class: 'faixa-os faixa-qd', onclick: () => { S.qdModo = 'eq'; ir('#mapa'); } }, h('b', null, `Quadras da sua equipe: ${fmtN(x.Levantada)} de ${fmtN(x.total)} levantadas`), h('span', null, `${fmtN(x['Em levantamento'])} em levantamento. Toque para ver no mapa`)); } } catch (e) { /* sem quadras */ }
+      if (!document.body.contains(el)) return;
+      el.replaceChildren(qd, f.length ? h('button', { class: 'faixa-os', onclick: () => { S.filtroOS = 'fazer'; ir('#ordens'); } }, h('b', null, `${f.length} ${f.length > 1 ? 'ordens' : 'ordem'} de serviço para a sua equipe`), h('span', null, at ? `${at} atrasada${at > 1 ? 's' : ''}. Toque para ver` : 'Toque para ver e registrar a execução')) : '');
     } catch (e) { /* sem ordens */ }
   }
   const urls = new Map();
@@ -917,7 +920,7 @@
       r.status = 'pendente'; r.gpsAuto = false; r.atualizado_em = agoraISO(); delete r.erroSync;
       await Store.salvarRegistro(r);
       Gps.ouvintes.delete(ouvinte); S.reg = null;
-      toast('Árvore salva.'); ir('#inicio'); sincronizar(true);
+      toast('Árvore salva.'); ir('#inicio'); quadraAutomatica(r).finally(() => sincronizar(true));
     }
     // registro já concluído que foi alterado: guarda quem mudou o quê e quando
     function diferencas() {
@@ -990,9 +993,12 @@
       if (osPorArv) return; osPorArv = new Map();
       try { const d = await carregarOS(false); for (const o of d.ordens) { if (!o.registro_uuid) { if (o.latitude !== '' && !isNaN(+o.latitude)) osSoltas.push(o); continue; } const a = osPorArv.get(o.registro_uuid); if (!a || ORD_OS.indexOf(o.status) < ORD_OS.indexOf(a.status)) osPorArv.set(o.registro_uuid, o); } } catch (e) { /* sem ordens */ }
     };
+    const selQd = h('select', { class: 'entrada oculto' }, h('option', { value: 'sit' }, 'Quadras por situação'), h('option', { value: 'eq' }, 'Quadras por equipe'), h('option', { value: '' }, 'Sem quadras'));
+    if (S.qdModo != null) selQd.value = S.qdModo;
     const conta = h('small', { class: 'mapa-conta' });
-    const barra = h('div', { class: 'mapa-filtros' }, busca, h('div', { class: 'mapa-sel' }, selEq, selRisco, selBairro, selCor), conta);
-    $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: centrar }, 'Minha posição')), barra, div));
+    const barra = h('div', { class: 'mapa-filtros' }, busca, h('div', { class: 'mapa-sel' }, selEq, selRisco, selBairro, selCor, selQd), conta);
+    const barraSel = h('div', { class: 'qd-selecao oculto' });
+    $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: centrar }, 'Minha posição')), barra, div, barraSel));
     const mapa = L.map(div, { preferCanvas: true, maxZoom: 21 }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
     if (S.fundo == null) S.fundo = (await Store.get('fundo')) || 'ruas';
     camadasFundo(mapa, false);
@@ -1004,9 +1010,66 @@
     const pts = []; const vistos = new Set();
     const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
     if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, bairro: r.bairro || '', cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', foto: '', local: true });
+    // quadras: desenhadas antes dos pontos, no mesmo canvas, para o toque no ponto ter prioridade
+    const qdCamada = L.layerGroup().addTo(mapa); const rotulos = L.layerGroup().addTo(mapa);
+    let qdDados = null, qdSit = new Map(), selecao = null;
+    const corQd = (q) => { const s = qdSit.get(q.n) || {}; if (selQd.value === 'eq') return s.equipe ? corEq(s.equipe) : '#9AA9B0'; return COR_QD[s.situacao || 'A levantar']; };
+    function desenharQuadras() {
+      qdCamada.clearLayers();
+      if (qdDados && selQd.value) for (const q of qdDados.quadras) {
+        const sel = selecao && selecao.has(q.n); const cor = corQd(q); const s = qdSit.get(q.n) || {};
+        const forte = selQd.value === 'eq' ? !!s.equipe : (s.situacao && s.situacao !== 'A levantar');
+        L.polygon(q.a.map((a) => { const r = []; for (let i = 0; i < a.length; i += 2) r.push([a[i + 1], a[i]]); return r; }), { renderer: render, color: sel ? '#0D47A1' : cor, weight: sel ? 3 : 1, fillColor: sel ? '#1E88E5' : cor, fillOpacity: sel ? 0.45 : forte ? 0.38 : 0.12 }).on('click', (e) => { L.DomEvent.stop(e); clicarQuadra(q, e.latlng); }).addTo(qdCamada);
+      }
+      pintarRotulos();
+    }
+    function pintarRotulos() {
+      rotulos.clearLayers(); if (!qdDados || !selQd.value || mapa.getZoom() < 17) return;
+      const b = mapa.getBounds(); let n = 0;
+      for (const q of qdDados.quadras) { if (q.b[2] < b.getWest() || q.b[0] > b.getEast() || q.b[3] < b.getSouth() || q.b[1] > b.getNorth()) continue; if (++n > 400) break; L.marker(Quadras.centro(q), { interactive: false, keyboard: false, icon: L.divIcon({ className: 'qd-rot', html: h('span', null, q.n), iconSize: null }) }).addTo(rotulos); }
+    }
+    mapa.on('moveend zoomend', pintarRotulos); window.__app.mapa = mapa;
+    const podeMarcarQd = (s) => ehCoord() || (perfil() === 'coletor' && (!s.equipe || s.equipe === minhaEquipe()));
+    function clicarQuadra(q, ll) {
+      if (selecao) { if (selecao.has(q.n)) selecao.delete(q.n); else selecao.add(q.n); pintarSelecao(); desenhar(false); return; }
+      const s = qdSit.get(q.n) || { situacao: 'A levantar', equipe: '' }; const st = s.situacao || 'A levantar';
+      const arv = pts.filter((o) => Quadras.dentro(o.lon, o.lat, q)).length;
+      const marcar = async (itens) => { try { const r = await marcarQuadras(itens); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Quadra atualizada.'); qdSit = await carregarSitQd(!r.fila); mapa.closePopup(); desenhar(false); } catch (e) { toast(e.message, 5000); } };
+      const eqIn = h('input', { class: 'entrada', value: s.equipe || '', list: 'qd-equipes', placeholder: 'Ex.: Equipe 1' });
+      const pop = h('div', { class: 'ficha qd-ficha' }, h('b', null, 'Quadra ' + q.n),
+        q.p ? Object.entries(q.p).map(([k, v]) => h('small', null, (/^ruas?$/i.test(k) ? '' : k + ': ') + v)) : null,
+        h('div', null, h('span', { class: 'os-st', style: `background:${COR_QD[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', s.equipe ? s.equipe : 'sem equipe'),
+        h('small', null, `${pl(arv, 'árvore cadastrada', 'árvores cadastradas')} dentro dela` + (s.marcada_por ? ` · marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` : '')),
+        podeMarcarQd(s) ? h('div', { class: 'chips qd-chips' }, SIT_QD.map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: q.n, situacao: x }]) }, x))) : null,
+        ehCoord() ? h('div', { class: 'qd-eq' }, eqIn, h('datalist', { id: 'qd-equipes' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e }))), h('button', { class: 'btn sec peq', onclick: () => marcar([{ numero: q.n, equipe: eqIn.value.trim() }]) }, 'Definir equipe')) : null,
+        ehCoord() ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selecao = new Set([q.n]); pintarSelecao(); desenhar(false); } }, 'Escolher várias quadras') : null);
+      L.popup({ maxWidth: 300 }).setLatLng(ll).setContent(pop).openOn(mapa);
+    }
+    function pintarSelecao() {
+      barraSel.classList.toggle('oculto', !selecao); if (!selecao) return;
+      const eqIn = h('input', { class: 'entrada', list: 'qd-equipes2', placeholder: 'Equipe' });
+      const sitSel = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Situação...'), SIT_QD.map((x) => h('option', { value: x }, x)));
+      const aplicar = async () => {
+        if (!selecao.size) return toast('Toque nas quadras para escolher.');
+        const it = [...selecao].map((n) => { const o = { numero: n }; if (eqIn.value.trim() || eqIn.dataset.limpar) o.equipe = eqIn.value.trim(); if (sitSel.value) o.situacao = sitSel.value; return o; });
+        if (!it.some((o) => o.equipe != null || o.situacao)) return toast('Escolha a equipe ou a situação.');
+        try { const r = await marcarQuadras(it); toast(`${pl(r.alteradas, 'quadra atualizada', 'quadras atualizadas')}.` + (r.recusadas && r.recusadas.length ? ` ${r.recusadas.length} não aceita(s).` : ''), 4000); qdSit = await carregarSitQd(!r.fila); selecao = null; pintarSelecao(); desenhar(false); } catch (e) { toast(e.message, 5000); }
+      };
+      barraSel.replaceChildren(h('b', null, `${pl(selecao.size, 'quadra escolhida', 'quadras escolhidas')}. Toque nas quadras para escolher mais.`),
+        h('div', { class: 'qd-sel-linha' }, eqIn, h('datalist', { id: 'qd-equipes2' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e }))), sitSel,
+          h('button', { class: 'btn peq', onclick: aplicar }, 'Aplicar'), h('button', { class: 'btn sec peq', onclick: () => { selecao = null; pintarSelecao(); desenhar(false); } }, 'Sair')));
+    }
+    const carregarQdMapa = async () => {
+      try {
+        qdDados = await carregarQuadras(); if (!qdDados || !document.body.contains(div)) return;
+        qdSit = await carregarSitQd(false); for (const s of qdSit.values()) if (s.equipe) corEq(s.equipe);
+        selQd.classList.remove('oculto'); preencherEquipes(); desenhar(false);
+      } catch (e) { /* sem quadras */ }
+    };
     const camada = L.layerGroup().addTo(mapa);
     function desenhar(ajustar) {
-      camada.clearLayers(); mapa.closePopup();
+      desenharQuadras();
+      camada.clearLayers(); if (!selecao) mapa.closePopup();
       const q = norm(busca.value).trim(), eq = selEq.value, rk = selRisco ? selRisco.value : '', porRisco = selCor.value === 'risco';
       const ba = selBairro.value; const porOS = selCor.value === 'os';
       if (porOS && !osPorArv) { carregarOSMapa().then(() => desenhar(false)); }
@@ -1017,7 +1080,8 @@
         L.circleMarker([o.lat, o.lon], { renderer: render, radius: vis.length > 2000 ? 4 : 6, color: '#fff', weight: 1.5, fillColor: fill, fillOpacity: 0.95 }).on('click', (e) => ficha(o, e.latlng)).addTo(camada);
       }
       if (porOS && osPorArv) for (const o of osSoltas) L.circleMarker([+o.latitude, +o.longitude], { renderer: render, radius: 8, color: '#13262B', weight: 2, fillColor: COR_OS[o.status], fillOpacity: 0.95 }).on('click', () => ir('#os/' + encodeURIComponent(o.id))).addTo(camada);
-      conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos` + (porOS && osPorArv ? ` · ${[...osPorArv.values()].filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length + osSoltas.filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length} com ordem em aberto` : '');
+      const rq = qdDados && selQd.value ? resumoQd(qdDados, qdSit) : null;
+      conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos` + (rq ? ` · ${fmtN(rq.por.Levantada)} de ${fmtN(rq.tot)} quadras levantadas` : '') + (porOS && osPorArv ? ` · ${[...osPorArv.values()].filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length + osSoltas.filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length} com ordem em aberto` : '');
       legenda();
       if (ajustar && vis.length) {
         if (vis.length === 1) { mapa.setView([vis[0].lat, vis[0].lon], 19); ficha(vis[0]); }
@@ -1038,7 +1102,8 @@
       if (leg) leg.remove();
       leg = L.control({ position: 'bottomleft' });
       const itens = selCor.value === 'os' ? [...Object.entries(COR_OS), ['Sem ordem', '#C9D3D6']] : selCor.value === 'risco' ? Object.entries(corRisco) : equipes.map((e) => [e, corEq(e)]);
-      leg.onAdd = () => h('div', { class: 'mapa-leg' }, itens.map(([t, c]) => h('div', null, h('span', { style: `background:${c}` }), t)));
+      const itQd = qdDados && selQd.value ? (selQd.value === 'eq' ? [...new Set([...qdSit.values()].map((s) => s.equipe).filter(Boolean))].sort().map((e) => [e, corEq(e)]).concat([['Sem equipe', '#9AA9B0']]) : Object.entries(COR_QD)) : [];
+      leg.onAdd = () => h('div', { class: 'mapa-leg' }, itens.map(([t, c]) => h('div', null, h('span', { style: `background:${c}` }), t)), itQd.length ? [h('b', { class: 'leg-tit' }, 'Quadras'), itQd.map(([t, c]) => h('div', null, h('span', { class: 'leg-qd', style: `background:${c}` }), t))] : null);
       leg.addTo(mapa);
     }
     let tBusca = null;
@@ -1056,9 +1121,10 @@
       } catch (er) { toast('Não foi possível buscar o endereço.'); }
     });
     [selEq, selRisco, selBairro, selCor].filter(Boolean).forEach((x) => x.addEventListener('change', () => desenhar(x !== selCor)));
+    selQd.addEventListener('change', () => { S.qdModo = selQd.value; desenhar(false); });
     const preencherBairros = () => { const bs = [...new Set(pts.map((o) => o.bairro).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt')); const at = selBairro.value; selBairro.replaceChildren(h('option', { value: '' }, 'Todos os bairros'), bs.map((b) => h('option', { value: b, selected: b === at }, b))); selBairro.classList.toggle('oculto', !bs.length); };
     const preencherEquipes = () => { preencherBairros(); const atual = selEq.value; selEq.replaceChildren(h('option', { value: '' }, 'Todas as equipes'), ...equipes.filter((e) => e !== '-').map((e) => h('option', { value: e, selected: e === atual }, e))); };
-    preencherEquipes(); desenhar(true);
+    preencherEquipes(); desenhar(true); carregarQdMapa();
     if (!Api.demo && navigator.onLine) {
       conta.textContent = 'Carregando pontos...';
       try {
@@ -1071,7 +1137,7 @@
     }
     let eu = null;
     function centrar() { if (!S.pos) return toast('GPS ainda sem sinal.'); mapa.setView([S.pos.lat, S.pos.lon], 19); }
-    const ouv = (p) => { if (!p || !document.body.contains(div)) return; if (!eu) eu = L.circleMarker([p.lat, p.lon], { radius: 8, color: '#fff', weight: 3, fillColor: '#1E88E5', fillOpacity: 1 }).addTo(mapa); else eu.setLatLng([p.lat, p.lon]); };
+    const ouv = (p) => { if (!p || !document.body.contains(div)) return; if (!eu) eu = L.circleMarker([p.lat, p.lon], { renderer: render, interactive: false, radius: 8, color: '#fff', weight: 3, fillColor: '#1E88E5', fillOpacity: 1 }).addTo(mapa); else eu.setLatLng([p.lat, p.lon]); };
     Gps.ouvintes.add(ouv); if (S.pos) ouv(S.pos);
     if (!pts.length) { if (S.pos) centrar(); else mapa.setView([-15.8, -47.9], 4); }
   }
@@ -1145,7 +1211,7 @@
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Projetos'),
       h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Projeto'), h('th', null, 'Formulário'), h('th', null, '')),
         projetos.map((p) => h('tr', null, h('td', null, h('b', null, p.nome), h('br'), h('small', null, [p.id, p.municipio, p.meta ? 'meta ' + fmtN(+p.meta) : ''].filter(Boolean).join(' · '))), h('td', null, (forms.find((f) => f.id === p.formulario) || {}).nome || p.formulario),
-          h('td', null, h('button', { class: 'btn sec peq', onclick: () => editar(p) }, 'Editar'))))),
+          h('td', null, h('button', { class: 'btn sec peq', onclick: () => editar(p) }, 'Editar'), Api.demo ? null : h('button', { class: 'btn sec peq', style: 'margin-left:6px', onclick: () => importarQuadrasTela(p) }, 'Quadras'))))),
       h('button', { class: 'btn', style: 'margin-top:12px', onclick: () => editar(null) }, '+ Novo projeto'),
       h('p', { class: 'dica' }, Api.demo ? '' : 'Cada projeto novo ganha uma pasta no Drive com a planilha e a subpasta DCIM das fotos.')));
   }
@@ -1524,7 +1590,7 @@
         perfil() !== 'cliente' ? h('div', { class: 'cartao' }, h('h3', null, 'Por equipe'), barras(equipes.map((e, k) => ({ rot: e, n: d.equipes[e], cor: CORES[k % CORES.length] })))) : null),
       h('div', { class: 'linha-btn botoes-painel', style: 'margin:6px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#relatorio') }, 'Relatório para imprimir ou PDF'), h('button', { class: 'btn sec', onclick: () => ir('#medicao') }, 'Boletim de medição'), h('button', { class: 'btn sec', onclick: () => ir('#mapa') }, 'Ver no mapa'),
         perfil() === 'cliente' ? h('button', { class: 'btn sec', onclick: () => exportarCliente() }, 'Baixar dados') : null));
-    pintarPainelOS(corpo);
+    pintarPainelOS(corpo); pintarPainelQd(corpo);
   }
   function resumoOS(ordens) {
     const ativos = ordens.filter((o) => !o.__pend || o.numero);
@@ -2082,6 +2148,111 @@
     return box;
   }
 
+  // ---------- Quadras ----------
+  // Camada de quadras do projeto (polígonos com número) e situação de cada uma: a levantar, em levantamento, levantada.
+  const SIT_QD = ['A levantar', 'Em levantamento', 'Levantada'];
+  const COR_QD = { 'A levantar': '#9AA9B0', 'Em levantamento': '#F2A900', Levantada: '#2E7D32' };
+  const minhaEquipe = () => (S.projeto && S.projeto.equipe) || (S.sessao && S.sessao.usuario && S.sessao.usuario.equipe) || '';
+  async function carregarQuadras() {
+    const k = 'qd:' + S.projeto.id; let c = await Store.get(k);
+    if (!Api.demo && navigator.onLine && !S.expirada && (!S.qdEm || S.qdEm.p !== S.projeto.id || Date.now() - S.qdEm.t > 600000)) {
+      try {
+        const j = await Api.b.quadrasCamada(S.projeto.id, c && c.versao); S.qdEm = { p: S.projeto.id, t: Date.now() };
+        if (j.semCamada) { c = null; await Store.del(k); } else if (!j.igual) { c = { versao: j.versao, camada: JSON.parse(j.camada) }; await Store.set(k, c); }
+      } catch (e) { /* sem conexão ou servidor antigo: fica a cópia do aparelho */ }
+    }
+    if (Api.demo && !c) { const d = await Api.b.quadrasCamada(S.projeto.id); if (d && d.camada) c = { versao: d.versao, camada: JSON.parse(d.camada) }; }
+    if (!c) return null;
+    if (!S.qdIdx || S.qdIdx.v !== c.versao || S.qdIdx.p !== S.projeto.id) S.qdIdx = { p: S.projeto.id, v: c.versao, idx: Quadras.indice(c.camada.quadras) };
+    return c.camada;
+  }
+  async function filaTodaQd() { return (await Store.get('qdfila')) || []; }
+  async function mexerFilaQd(fn) { const toda = await filaTodaQd(); const u = S.sessao && S.sessao.u; const minha = toda.filter((x) => x.usuario === u); const n = (await fn(minha)) || minha; await Store.set('qdfila', [...toda.filter((x) => x.usuario !== u), ...n]); }
+  async function nFilaQd() { const u = S.sessao && S.sessao.u; return (await filaTodaQd()).filter((x) => x.usuario === u && !x.recusado).length; }
+  async function carregarSitQd(forcar) {
+    const k = 'qdsit:' + S.projeto.id; const c = (await Store.get(k)) || { quadras: [] };
+    if (navigator.onLine && !S.expirada && (forcar || !S.qdSitEm || S.qdSitEm.p !== S.projeto.id || Date.now() - S.qdSitEm.t > 60000)) {
+      try { c.quadras = await Api.b.quadrasSituacao(S.projeto.id); await Store.set(k, c); S.qdSitEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { /* sem conexão */ }
+    }
+    const m = new Map(c.quadras.map((q) => [q.numero, Object.assign({}, q)]));
+    const u = S.sessao && S.sessao.u;
+    for (const it of (await filaTodaQd()).filter((x) => x.projeto === S.projeto.id && x.usuario === u && !x.recusado)) for (const i of it.itens) {
+      const q = m.get(i.numero) || { numero: i.numero, situacao: 'A levantar', equipe: '' };
+      if (i.situacao) q.situacao = i.situacao; if (i.equipe != null) q.equipe = i.equipe; else if (!q.equipe && perfil() === 'coletor') q.equipe = minhaEquipe();
+      q.__pend = true; m.set(i.numero, q);
+    }
+    return m;
+  }
+  // marca na hora; sem internet guarda no aparelho
+  async function marcarQuadras(itens) {
+    const item = { chave: uuid(), usuario: S.sessao.u, projeto: S.projeto.id, itens: itens.map((i) => Object.assign({ em: agoraISO() }, i)) };
+    if (navigator.onLine && !S.expirada) {
+      try { const r = await Api.b.quadrasMarcar(item.projeto, item.itens); S.qdSitEm = null; return r; } catch (e) { if (!/Sem conexão|Servidor respondeu 5/i.test(e.message)) throw e; }
+    }
+    await mexerFilaQd((f) => { f.push(item); }); atualizarSync();
+    return { fila: true, alteradas: itens.length, recusadas: [] };
+  }
+  async function enviarFilaQd(silencioso) {
+    const u = S.sessao && S.sessao.u; const fila = (await filaTodaQd()).filter((x) => x.usuario === u && !x.recusado); if (!fila.length) return;
+    let ok = 0, rec = [];
+    for (const it of fila) {
+      try { const r = await Api.b.quadrasMarcar(it.projeto, it.itens); rec = rec.concat(r.recusadas || []); await mexerFilaQd((f) => f.filter((y) => y.chave !== it.chave)); ok++; } catch (e) {
+        if (e.sessao) break; if (/Sem conexão|Servidor respondeu 5/i.test(e.message)) break;
+        await mexerFilaQd((f) => { const x = f.find((y) => y.chave === it.chave); if (x) { x.erro = e.message; x.recusado = true; } }); rec.push({ numero: '', motivo: e.message });
+      }
+    }
+    S.qdSitEm = null;
+    if (rec.length) toast(`Quadras: ${rec.length} marcação(ões) não aceita(s). ${rec[0].numero ? 'Quadra ' + rec[0].numero + ': ' : ''}${rec[0].motivo}`, 6000);
+    else if (ok && !silencioso) toast('Marcações de quadra enviadas.');
+  }
+  // ao salvar uma árvore numa quadra ainda "a levantar", ela passa a "em levantamento"
+  async function quadraAutomatica(r) {
+    try {
+      if (!['coletor', 'revisor', 'admin'].includes(perfil()) || r.lat == null || r.lat === '') return;
+      const cam = await carregarQuadras(); if (!cam) return;
+      const q = S.qdIdx.idx.achar(+r.lon, +r.lat); if (!q) return;
+      const sit = (await carregarSitQd(false)).get(q.n) || { situacao: 'A levantar', equipe: '' };
+      if (sit.situacao !== 'A levantar' || (perfil() === 'coletor' && sit.equipe && sit.equipe !== minhaEquipe())) return;
+      await marcarQuadras([{ numero: q.n, situacao: 'Em levantamento' }]);
+    } catch (e) { /* não atrapalha a coleta */ }
+  }
+  function resumoQd(cam, sit) {
+    const tot = cam ? cam.quadras.length : 0; const por = { 'A levantar': 0, 'Em levantamento': 0, Levantada: 0 }; const eq = {};
+    if (cam) for (const q of cam.quadras) { const s = sit.get(q.n) || {}; const st = s.situacao || 'A levantar'; por[st]++; if (s.equipe) { eq[s.equipe] = eq[s.equipe] || { total: 0, Levantada: 0, 'Em levantamento': 0 }; eq[s.equipe].total++; if (st !== 'A levantar') eq[s.equipe][st]++; } }
+    return { tot, por, eq };
+  }
+  async function pintarPainelQd(corpo) {
+    let cam; try { cam = await carregarQuadras(); } catch (e) { return; } if (!cam || !document.body.contains(corpo)) return;
+    const r = resumoQd(cam, await carregarSitQd(false));
+    const sec = h('section', { class: 'painel-os' }, h('h2', { class: 'painel-tit' }, 'Andamento por quadras'),
+      h('div', { class: 'kpis' }, kpi('Quadras levantadas', fmtN(r.por.Levantada), `de ${fmtN(r.tot)} (${fmtP(r.tot ? r.por.Levantada / r.tot : 0)})`), kpi('Em levantamento', fmtN(r.por['Em levantamento']), ''), kpi('A levantar', fmtN(r.por['A levantar']), '')),
+      h('div', { class: 'prog-qd' }, h('div', { style: `width:${(r.por.Levantada / Math.max(1, r.tot)) * 100}%;background:${COR_QD.Levantada}` }), h('div', { style: `width:${(r.por['Em levantamento'] / Math.max(1, r.tot)) * 100}%;background:${COR_QD['Em levantamento']}` })),
+      Object.keys(r.eq).length ? h('div', { class: 'cartao' }, h('h3', null, 'Por equipe'), h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Equipe'), h('th', null, 'Quadras atribuídas'), h('th', null, 'Levantadas'), h('th', null, 'Em levantamento'), h('th', null, 'Andamento')),
+        Object.entries(r.eq).sort((a, b) => a[0].localeCompare(b[0], 'pt')).map(([e, x]) => h('tr', null, h('td', null, e), h('td', null, fmtN(x.total)), h('td', null, fmtN(x.Levantada)), h('td', null, fmtN(x['Em levantamento'])), h('td', null, fmtP(x.Levantada / x.total)))))) : null,
+      h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: () => { S.qdModo = 'sit'; ir('#mapa'); } }, 'Ver quadras no mapa')));
+    const bt = corpo.querySelector('.botoes-painel'); if (bt) corpo.insertBefore(sec, bt); else corpo.append(sec);
+  }
+  // importação da camada (coordenação > projetos)
+  async function importarQuadrasTela(p) {
+    const arq = h('input', { type: 'file', accept: '.zip,.gpkg,.kml,.geojson,.json', class: 'entrada' });
+    const info = h('div'); const selN = h('select', { class: 'entrada' }); let lido = null;
+    arq.addEventListener('change', async () => {
+      const f = arq.files && arq.files[0]; if (!f) return; lido = null; info.replaceChildren(h('div', { class: 'info' }, 'Lendo o arquivo...'));
+      try {
+        lido = await Quadras.lerArquivo(f.name, await f.arrayBuffer()); const sug = Quadras.campoNumero(lido.campos, lido.feicoes);
+        selN.replaceChildren(lido.campos.map((c) => h('option', { value: c, selected: c === sug }, `${c} (ex.: ${String(lido.feicoes[0].props[c] ?? '').slice(0, 30)})`)));
+        info.replaceChildren(h('div', { class: 'info' }, `${fmtN(lido.feicoes.length)} polígonos encontrados.` + (lido.semPrj ? ' O arquivo não tem .prj: as coordenadas foram lidas como graus.' : '')));
+      } catch (e) { info.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
+    });
+    const ok = await modal('Camada de quadras: ' + p.nome, h('div', null,
+      h('p', { class: 'dica' }, 'Shapefile compactado (.zip com .shp, .dbf e .prj), GeoPackage, KML ou GeoJSON, em SIRGAS 2000 (graus ou UTM). Importar de novo substitui a camada; a situação das quadras com o mesmo número continua valendo.'),
+      arq, info, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Campo com o número da quadra'), selN)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Importar', valor: true }]);
+    if (!ok) return; if (!lido) return toast('Escolha um arquivo válido.');
+    const extras = lido.campos.filter((c) => c !== selN.value && !/^(fid|ogc_fid|objectid|shape_(area|leng|length)|geom)$/i.test(c)).slice(0, 4);
+    const cam = Quadras.compactar(lido.feicoes, selN.value, extras);
+    try { toast('Enviando a camada...', 4000); const r = await Api.b.quadrasImportar(p.id, JSON.stringify(cam)); S.qdEm = null; S.qdIdx = null; toast(`Camada importada: ${fmtN(r.total)} quadras.`, 4000); } catch (e) { toast(e.message, 6000); }
+  }
+
   // ---------- Exportação (coordenação e cliente) ----------
   const FORMATOS = [['gpkg', 'GeoPackage (QGIS)'], ['xlsx', 'Excel (.xlsx)'], ['shp', 'Shapefile (.zip)'], ['csv', 'CSV'], ['kml', 'Google Earth (.kml)']];
   async function exportarDados(p, formato, filtro, status, saida) {
@@ -2100,9 +2271,11 @@
       linhas.sort((a, b) => (+a.numero_unico) - (+b.numero_unico));
       const cDap = form.campos.find((c) => c.tipo === 'multinumber' && /dap/i.test(c.nome));
       if (cDap) linhas.forEach((l) => { const v = Indicadores.valorNum(l[cDap.nome], true); l.dap_equivalente_cm = v == null ? '' : Math.round(v * 10) / 10; });
+      let camQd = null; // número da quadra de cada ponto, quando o projeto tem camada de quadras
+      try { const qj = await Api.b.quadrasCamada(p.id); if (qj && qj.camada) { camQd = JSON.parse(qj.camada); const ix = Quadras.indice(camQd.quadras); linhas.forEach((l) => { const q = l.longitude !== '' && isFinite(+l.longitude) && +l.longitude ? ix.achar(+l.longitude, +l.latitude) : null; l.quadra = q ? q.n : ''; }); } } catch (e) { /* sem camada */ }
       const cc = campoCodigo(form), ce = campoEspecie(form);
       const dia = new Date().toISOString().slice(0, 10); const base = `${p.id}_${dia}${filtro === 'validados' ? '_validados' : ''}`;
-      const ordem = ['numero_unico', ...form.campos.flatMap((c) => (c.tipo === 'photo' ? [c.nome, c.nome + ' link'] : [c.nome])), 'dap_equivalente_cm', 'latitude', 'longitude', 'precisao_gps_m', 'endereco_aprox', 'bairro_aprox', 'equipe', 'usuario', 'criado_em', 'concluido_em', 'atualizado_em', 'validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'historico', 'uuid'];
+      const ordem = ['numero_unico', ...form.campos.flatMap((c) => (c.tipo === 'photo' ? [c.nome, c.nome + ' link'] : [c.nome])), 'dap_equivalente_cm', 'latitude', 'longitude', 'precisao_gps_m', 'endereco_aprox', 'bairro_aprox', 'quadra', 'equipe', 'usuario', 'criado_em', 'concluido_em', 'atualizado_em', 'validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'historico', 'uuid'];
       const todas = [...new Set(linhas.flatMap((l) => Object.keys(l)))].filter((c) => !c.startsWith('__'));
       const cols = [...ordem.filter((c) => todas.includes(c)), ...todas.filter((c) => !ordem.includes(c) && !['projeto', 'servidor_em'].includes(c))];
       // planilhas com rótulos legíveis e opções por extenso
@@ -2119,12 +2292,19 @@
         const unid = (c) => { const m = String(c.rotulo + ' ' + c.nome).match(/\((cm|m|m2|m²|%|graus)\)/i); return m ? m[1].replace('m2', 'm²') : ''; };
         const dic = [...form.campos.map((c) => ({ Campo: c.nome, 'Nome no app': c.rotulo, Unidade: unid(c), Descrição: c.ajuda || '', Tipo: { choice: 'Lista de opções', bool: 'Sim ou não', number: 'Número', multinumber: 'Números por fuste', species: 'Espécie', photo: 'Foto', text: 'Texto', textarea: 'Texto longo', datetime: 'Data e hora', date: 'Data' }[c.tipo] || c.tipo, Opções: (c.opcoes || []).map((o) => `${o.v} = ${o.t}`).join('; ') })),
           ...[['numero_unico', 'Número único do registro no projeto, dado pelo servidor no primeiro envio', ''], ['dap_equivalente_cm', 'DAP equivalente: raiz da soma dos quadrados dos DAP de cada fuste', 'cm'], ['latitude', 'Latitude em graus decimais, SIRGAS 2000', 'graus'], ['longitude', 'Longitude em graus decimais, SIRGAS 2000', 'graus'], ['precisao_gps_m', 'Erro estimado do GPS do aparelho no momento do registro', 'm'],
-            ['endereco_aprox', 'Endereço aproximado obtido do mapa (OpenStreetMap) pela coordenada', ''], ['bairro_aprox', 'Bairro aproximado obtido do mapa (OpenStreetMap)', ''], ['equipe', 'Equipe que coletou', ''], ['criado_em', 'Data e hora da coleta', ''], ['concluido_em', 'Data e hora em que a equipe concluiu o registro', ''],
+            ['endereco_aprox', 'Endereço aproximado obtido do mapa (OpenStreetMap) pela coordenada', ''], ['bairro_aprox', 'Bairro aproximado obtido do mapa (OpenStreetMap)', ''], ['quadra', 'Número da quadra onde está o ponto, pela camada de quadras do projeto', ''], ['equipe', 'Equipe que coletou', ''], ['criado_em', 'Data e hora da coleta', ''], ['concluido_em', 'Data e hora em que a equipe concluiu o registro', ''],
             ['validacao', 'Situação da validação técnica (Pendente, Validado, Devolvido, Corrigido, Descartado)', ''], ['validado_por', 'Quem fez a última avaliação', ''], ['validado_em', 'Data e hora da última avaliação', ''], ['validacao_hist', 'Histórico de todas as avaliações do registro', ''], ['historico', 'Histórico de alterações feitas depois de concluído', ''], ['uuid', 'Identificador interno do registro', '']]
             .map(([c, d, u]) => ({ Campo: c, 'Nome no app': '', Unidade: u, Descrição: d, Tipo: '', Opções: '' }))];
         const meta = [['Projeto', p.nome], ['Contratante', p.contratante || ''], ['Contrato', p.contrato || ''], ['Município', p.municipio || ''], ['Responsável técnico', [p.responsavel, p.registro_profissional, p.art ? 'ART ' + p.art : ''].filter(Boolean).join(' · ')],
           ['Registros neste arquivo', String(linhas.length)], ['Filtro', filtro === 'validados' ? 'Somente registros validados' : 'Todos os registros, exceto descartados'], ['Sistema de referência das coordenadas', 'SIRGAS 2000, geográficas (EPSG:4674)'], ['Formulário', `${form.nome} (versão ${form.versao || 1})`], ['Gerado em', new Date().toLocaleString('pt-BR')], ['Gerado por', `${S.sessao.usuario.nome || S.sessao.u} no Neofloresta Inventário ${VERSAO}`]].map(([k, v]) => ({ Item: k, Valor: v }));
         const abas = [{ nome: 'Registros', cols, linhas: leg.map((l) => Object.fromEntries(cols.map((c) => [c, l[c]]))) }];
+        if (camQd) {
+          try {
+            const sq = new Map((await Api.b.quadrasSituacao(p.id)).map((q) => [q.numero, q])); const nArv = {}; linhas.forEach((l) => { if (l.quadra) nArv[l.quadra] = (nArv[l.quadra] || 0) + 1; });
+            const extrasQ = [...new Set(camQd.quadras.flatMap((q) => Object.keys(q.p || {})))];
+            abas.push({ nome: 'Quadras', cols: ['Quadra', ...extrasQ, 'Equipe', 'Situação', 'Marcada por', 'Marcada em', 'Registros neste arquivo'], linhas: camQd.quadras.map((q) => { const s = sq.get(q.n) || {}; const d = s.marcada_em ? new Date(s.marcada_em) : null; return Object.assign({ Quadra: /^\d+$/.test(q.n) ? +q.n : q.n }, Object.fromEntries(extrasQ.map((k) => [k, (q.p || {})[k] || ''])), { Equipe: s.equipe || '', 'Situação': s.situacao || 'A levantar', 'Marcada por': s.marcada_por || '', 'Marcada em': d && !isNaN(d) ? d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '', 'Registros neste arquivo': nArv[q.n] || 0 }); }) });
+          } catch (e) { /* segue sem a aba */ }
+        }
         try {
           const os = (await Api.b.osListar(p.id)).ordens || [];
           if (os.length) {

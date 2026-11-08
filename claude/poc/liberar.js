@@ -15,7 +15,7 @@ const notas = JSON.parse(ler('version.json')).notas || [];
 ok('notas da versão preenchidas', notas.length > 0, notas.join(' / ').slice(0, 120));
 
 // 2. sintaxe
-for (const f of ['js/app.js', 'js/api.js', 'js/store.js', 'js/gpkg.js', 'js/arquivos.js', 'js/indicadores.js', 'js/utm.js', 'sw.js']) {
+for (const f of ['js/app.js', 'js/api.js', 'js/store.js', 'js/gpkg.js', 'js/arquivos.js', 'js/indicadores.js', 'js/utm.js', 'js/quadras.js', 'sw.js']) {
   if (!fs.existsSync(path.join(APP, f))) continue;
   try { execSync(`node --check ${path.join(APP, f)}`, { stdio: 'pipe' }); ok('sintaxe ' + f, true, 'ok'); } catch (e) { ok('sintaxe ' + f, false, String(e.stderr).slice(0, 200)); }
 }
@@ -25,6 +25,7 @@ const suites = [
   ['servidor', 'node srv.js', /(\d+) falha\(s\) de (\d+)/],
   ['servidor: ordens de serviço', 'node sos.js', /(\d+) falha\(s\) de (\d+)/],
   ['servidor: chave de integração e restauração', 'node skr.js', /(\d+) falha\(s\) de (\d+)/],
+  ['servidor: quadras', 'node sqd.js', /(\d+) falha\(s\) de (\d+)/],
   ['coleta e envio', 'node b12.js'],
   ['coordenação, cliente, exportação', 'node b47.js 3000'],
   ['mapa 5 mil', 'node b3.js 5000'],
@@ -32,6 +33,7 @@ const suites = [
   ['permissões', 'node b7.js'],
   ['ordens de serviço nas telas', 'node bos.js'],
   ['pacote de entrega, chave e restauração nas telas', 'node b8.js'],
+  ['quadras nas telas', 'node bqd.js'],
   ['versão e atualização', 'node bv.js'],
 ];
 for (const [nome, cmd, rx] of suites) {

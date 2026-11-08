@@ -98,6 +98,10 @@ const Api = (() => {
     async usuarioSalvar(u) { const b = await this.base(); const i = b.usuarios.findIndex((x) => x.login === u.login); if (i >= 0) { if (!u.senha) delete u.senha; b.usuarios[i] = Object.assign(b.usuarios[i], u); } else b.usuarios.push(u); await Store.set('demo:base', b); },
     async usuarioRemover(login) { const b = await this.base(); b.usuarios = b.usuarios.filter((x) => x.login !== login); await Store.set('demo:base', b); },
     async formulariosListar() { const b = await this.base(); return Object.values(b.formularios).map((f) => ({ id: f.id, nome: f.nome, campos: f.campos.length, versao: f.versao || '' })); },
+    async quadrasCamada() { return { semCamada: true }; },
+    async quadrasSituacao() { return []; },
+    async quadrasMarcar() { throw new Error('Quadras não disponíveis na demonstração.'); },
+    async quadrasImportar() { throw new Error('Quadras não disponíveis na demonstração.'); },
     // ordens de serviço no modo demonstração (mesmas regras do servidor, guardadas no aparelho)
     async osListar(projeto) {
       const b = await this.base(); const u = b.usuarios.find((x) => x.login === (cred && cred.u)) || {};
@@ -188,6 +192,10 @@ const Api = (() => {
     async formularioSalvar(form, qml) { return chamar('formulario_salvar', { formulario: form, qml: qml || '' }); },
     async osListar(projeto) { const j = await chamar('os_listar', { projeto }); return { ordens: j.ordens, tipos: j.tipos }; },
     async chavesListar() { return (await chamar('chaves_listar')).chaves; },
+    async quadrasImportar(projeto, camada) { return chamar('quadras_importar', { projeto, camada }); },
+    async quadrasCamada(projeto, versao) { return chamar('quadras_camada', { projeto, versao: versao || '' }); },
+    async quadrasSituacao(projeto) { return (await chamar('quadras_situacao', { projeto })).quadras; },
+    async quadrasMarcar(projeto, itens) { return chamar('quadras_marcar', { projeto, itens }); },
     async chaveCriar(nome, projeto) { return chamar('chave_criar', { nome, projeto }); },
     async chaveRevogar(id) { return chamar('chave_revogar', { id }); },
     async backupListar(projeto) { return (await chamar('backup_listar', { projeto })).copias; },
