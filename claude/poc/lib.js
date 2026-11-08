@@ -9,12 +9,14 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 let senhaAdmin = null;
 
 async function subir() {
-  try { execSync('pkill -f "^node mock.js"'); } catch (e) {}
-  try { execSync('pkill -f "http.server 8765"'); } catch (e) {}
+  // derruba só o servidor desta pasta (outros testes podem estar rodando em outras portas)
+  try { execSync(`pkill -f "http.server ${new URL(WEB).port}"`); } catch (e) {}
+  try { process.kill(+fs.readFileSync(path.join(__dirname, 'mock.pid'), 'utf8')); } catch (e) {}
+  try { execSync(`fuser -k ${new URL(MOCK).port}/tcp`, { stdio: 'ignore' }); } catch (e) {}
   await espera(300);
   const web = spawn('python3', ['-m', 'http.server', '8765'], { cwd: APP, stdio: 'ignore', detached: true }); web.unref();
   const log = fs.openSync(path.join(__dirname, 'mock.log'), 'w');
-  const m = spawn('node', ['mock.js', GS], { cwd: __dirname, stdio: ['ignore', log, log], detached: true }); m.unref();
+  const m = spawn('node', ['mock.js', GS], { cwd: __dirname, stdio: ['ignore', log, log], detached: true, env: Object.assign({}, process.env, { PORTA: new URL(MOCK).port }) }); m.unref(); fs.writeFileSync(path.join(__dirname, 'mock.pid'), String(m.pid));
   for (let i = 0; i < 50; i++) { await espera(150); try { await fetch(MOCK); await fetch(WEB); break; } catch (e) {} }
   senhaAdmin = fs.readFileSync(path.join(__dirname, 'senha.txt'), 'utf8').trim();
   return senhaAdmin;

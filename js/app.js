@@ -257,7 +257,7 @@
     const pend = (await Store.todosRegistros()).filter((r) => r.status === 'pendente').length + (S.sessao ? await nFilaOS() : 0);
     if (!semPerguntar && pend && !(await confirmar('Sair', `Há ${pend} registro(s) ou atualização(ões) de ordem de serviço ainda não enviados. Eles continuam guardados neste aparelho e serão enviados no próximo acesso.`, 'Sair mesmo assim'))) return;
     try { await Api.b.sair(); } catch (e) { /* sem conexão: a sessão expira sozinha */ }
-    S.ultimoUsuario = S.sessao && S.sessao.u; S.sessao = null; S.projeto = null; S.linhas = {}; await Store.del('sessao'); location.hash = ''; telaLogin();
+    S.ultimoUsuario = S.sessao && S.sessao.u; S.sessao = null; S.projeto = null; S.linhas = {}; S.painel = null; S.qdSitEm = null; S.qdEm = null; S.formsEm = null; await Store.del('sessao'); location.hash = ''; telaLogin();
   }
 
   // ---------- Sincronização ----------
@@ -1205,7 +1205,8 @@
         ehCoord() ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'qd'; selecao = new Set([q.n]); pintarSelecao(); restilizar([q.n]); } }, 'Escolher várias quadras') : null);
       L.popup({ maxWidth: 300 }).setLatLng(ll).setContent(pop).openOn(mapa);
     }
-    const podeMarcarFc = (s) => ehCoord() || (perfil() === 'coletor' && (!s.equipe || s.equipe === minhaEquipe()));
+    // face sem equipe segue a equipe da quadra; a coordenação pode passar a face para outra equipe
+    const podeMarcarFc = (s, q) => ehCoord() || (perfil() === 'coletor' && (s.equipe ? s.equipe === minhaEquipe() : !((qdSit.get(q.n) || {}).equipe) || (qdSit.get(q.n) || {}).equipe === minhaEquipe()));
     function clicarFace(q, f, ll) {
       const id = q.n + '-' + f.i;
       if (selecao) { if (selTipo !== 'fc') return toast('Toque nas quadras para escolher.'); if (selecao.has(id)) selecao.delete(id); else selecao.add(id); pintarSelecao(); restilizar([id]); return; }
@@ -1214,9 +1215,9 @@
       const mLado = lado.reduce((a, x) => a + x.c, 0);
       const marcar = async (itens) => { try { const r = await marcarQuadras(itens.map((i) => Object.assign({ tipo: 'face', rua: f.r }, i))); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Face atualizada.'); qdSit = await carregarSitQd(!r.fila); mapa.closePopup(); desenhar(false); } catch (e) { toast(e.message, 5000); } };
       const eqIn = h('input', { class: 'entrada', value: s.equipe || '', list: 'fc-equipes', placeholder: 'Ex.: Equipe 1' });
-      const pode = podeMarcarFc(s) && perfil() !== 'cliente';
+      const pode = podeMarcarFc(s, q) && perfil() !== 'cliente';
       const pop = h('div', { class: 'ficha qd-ficha' }, h('b', null, `Face ${f.i} da quadra ${q.n}`), h('small', null, `${f.r} · ${fmtN(f.c)} m`),
-        h('div', null, h('span', { class: 'os-st', style: `background:${COR_FC[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', s.equipe ? s.equipe : 'sem equipe'),
+        h('div', null, h('span', { class: 'os-st', style: `background:${COR_FC[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', s.equipe ? s.equipe : (qdSit.get(q.n) || {}).equipe ? 'quadra da ' + qdSit.get(q.n).equipe : 'sem equipe'),
         s.marcada_por ? h('small', null, `marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` + (s.largura ? ` · calçada com ${numBR(+s.largura)} m de largura` : '')) : null,
         pode ? h('div', { class: 'chips qd-chips' }, SIT_FC.filter((x) => x !== 'Levantada, sem árvores').map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: id, situacao: x }]) }, x))) : null,
         pode ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); iniciarCalcadaFace(q, f); } }, st === 'Levantada, sem árvores' ? 'Refazer o cadastro da calçada sem árvores' : 'Levantada, sem árvores (foto e largura)') : null,
@@ -1249,12 +1250,18 @@
         // primeiro com a situação guardada no aparelho, depois com a do servidor
         qdSit = await carregarSitQd(false, true); for (const s of qdSit.values()) if (s.equipe) corEq(s.equipe);
         selQd.classList.remove('oculto'); preencherEquipes(); desenhar(false);
-        if (!pts.length && !S.pos) verCidade();
+        // com a camada do projeto, o mapa abre na cidade: na posição do GPS se a pessoa está nela, senão a cidade inteira
+        porCidade = true;
+        if (!semFiltro() || mexeu) { /* filtro do painel ou mapa já mexido: fica como está */ }
+        else if (S.pos && limitesCidade().pad(0.05).contains([S.pos.lat, S.pos.lon])) mapa.setView([S.pos.lat, S.pos.lon], 18);
+        else verCidade();
         const nova = await carregarSitQd(false); if (!document.body.contains(div)) return;
         qdSit = nova; for (const s of qdSit.values()) if (s.equipe) corEq(s.equipe); preencherEquipes(); desenhar(false);
       } catch (e) { /* sem quadras */ }
     };
     const camada = L.layerGroup().addTo(mapa);
+    let porCidade = false, mexeu = false; mapa.on('dragstart', () => { mexeu = true; });
+    const semFiltro = () => !busca.value.trim() && !selEq.value && !selDia.value && !(selRisco && selRisco.value) && !selBairro.value;
     function desenhar(ajustar) {
       desenharQuadras();
       camada.clearLayers(); if (!selecao) mapa.closePopup();
@@ -1273,7 +1280,7 @@
       const rq = qdDados && selQd.value ? resumoQd(qdDados, qdSit) : null;
       conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos` + (rq ? ` · ${fmtN(rq.por.Levantada)} de ${fmtN(rq.tot)} quadras levantadas` : '') + (porOS && osPorArv ? ` · ${[...osPorArv.values()].filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length + osSoltas.filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length} com ordem em aberto` : '') + (conta.dataset.qd ? ' · ' + conta.dataset.qd : '');
       legenda();
-      if (ajustar && vis.length) {
+      if (ajustar && vis.length && !(porCidade && semFiltro())) {
         if (vis.length === 1) { mapa.setView([vis[0].lat, vis[0].lon], 19); ficha(vis[0]); }
         else mapa.fitBounds(L.latLngBounds(vis.map((o) => [o.lat, o.lon])), { padding: [30, 30], maxZoom: 19 });
       }
@@ -1338,9 +1345,10 @@
       } catch (e) { conta.textContent = ''; toast('Não foi possível carregar os pontos das outras equipes.'); }
     }
     let eu = null;
+    function limitesCidade() { let b = [Infinity, Infinity, -Infinity, -Infinity]; for (const q of qdDados.quadras) b = [Math.min(b[0], q.b[0]), Math.min(b[1], q.b[1]), Math.max(b[2], q.b[2]), Math.max(b[3], q.b[3])]; return L.latLngBounds([b[1], b[0]], [b[3], b[2]]); }
     // enquadra a cidade do projeto: a camada de quadras ou, sem ela, todos os pontos
     function verCidade() {
-      if (qdDados && qdDados.quadras.length) { let b = [Infinity, Infinity, -Infinity, -Infinity]; for (const q of qdDados.quadras) b = [Math.min(b[0], q.b[0]), Math.min(b[1], q.b[1]), Math.max(b[2], q.b[2]), Math.max(b[3], q.b[3])]; return mapa.fitBounds([[b[1], b[0]], [b[3], b[2]]], { padding: [10, 10] }); }
+      if (qdDados && qdDados.quadras.length) return mapa.fitBounds(limitesCidade(), { padding: [10, 10] });
       if (pts.length) return mapa.fitBounds(L.latLngBounds(pts.map((o) => [o.lat, o.lon])), { padding: [30, 30], maxZoom: 17 });
       toast('Este projeto ainda não tem quadras nem pontos no mapa.');
     }
@@ -1748,17 +1756,18 @@
   async function dadosPainel(forcar) {
     const chave = S.projeto.id; const k = 'painel:' + chave + ':' + (S.sessao ? S.sessao.u : '');
     if (!forcar) {
-      const c = S.painel && S.painel.id === chave ? S.painel : await Store.get(k);
-      if (c && c.d && c.id === chave) {
+      const eu = S.sessao ? S.sessao.u : '';
+      const c = S.painel && S.painel.id === chave && S.painel.u === eu ? S.painel : await Store.get(k);
+      if (c && c.d && c.id === chave && c.u === eu) { // painel é por usuário: outro login no mesmo aparelho não vê o do anterior
         S.painel = c;
         if (Date.now() - c.t > 120000 && !S.painelBusca && navigator.onLine) {
           S.painelBusca = true;
-          Api.b.painel(chave).then(async (d) => { S.painel = { id: chave, t: Date.now(), d }; await Store.set(k, S.painel); if (document.querySelector('main.painel') && S.projeto && S.projeto.id === chave) telaPainel(false); }).catch(() => {}).finally(() => { S.painelBusca = false; });
+          Api.b.painel(chave).then(async (d) => { if (!S.sessao || S.sessao.u !== eu) return; S.painel = { id: chave, u: eu, t: Date.now(), d }; await Store.set(k, S.painel); if (document.querySelector('main.painel') && S.projeto && S.projeto.id === chave) telaPainel(false); }).catch(() => {}).finally(() => { S.painelBusca = false; });
         }
         return c.d;
       }
     }
-    const d = await Api.b.painel(chave); S.painel = { id: chave, t: Date.now(), d }; await Store.set(k, S.painel); return d;
+    const d = await Api.b.painel(chave); S.painel = { id: chave, u: S.sessao ? S.sessao.u : '', t: Date.now(), d }; await Store.set(k, S.painel); return d;
   }
   function analisarPainel(d, form) {
     const cRisco = form.campos.find((c) => c.tipo === 'choice' && /^risco$/i.test(norm(c.nome)));
@@ -1820,7 +1829,7 @@
       perfil() !== 'cliente' && equipes.length ? rendimentoEquipes(d, equipes) : null,
       h('div', { class: 'linha-btn botoes-painel', style: 'margin:6px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#relatorio') }, 'Relatório para imprimir ou PDF'), h('button', { class: 'btn sec', onclick: () => ir('#medicao') }, 'Boletim de medição'), h('button', { class: 'btn sec', onclick: () => ir('#mapa') }, 'Ver no mapa'),
         perfil() === 'cliente' ? h('button', { class: 'btn sec', onclick: () => exportarCliente() }, 'Baixar dados') : null));
-    pintarPainelOS(corpo); pintarPainelQd(corpo);
+    pintarPainelOS(corpo); pintarPainelQd(corpo, forcar);
   }
   // rendimento de cada equipe (dupla): total, hoje, média por dia de campo e melhor dia
   function rendimentoEquipes(d, equipes) {
@@ -2499,7 +2508,7 @@
         const fc = S.qdIdx.idx.faces(+r.lon, +r.lat, dist + folga);
         if (fc.length && fc[0].d < dist && (!fc[1] || fc[1].d - fc[0].d >= folga)) {
           const s = fs.get(fc[0].id) || { situacao: 'A levantar', equipe: '' };
-          if (s.situacao === 'A levantar' && !daOutra(s)) itens.push({ tipo: 'face', numero: fc[0].id, situacao: 'Em levantamento', auto: true, rua: fc[0].f.r });
+          if (s.situacao === 'A levantar' && !daOutra(s) && !(!s.equipe && daOutra(sit.get(fc[0].q.n) || {}))) itens.push({ tipo: 'face', numero: fc[0].id, situacao: 'Em levantamento', auto: true, rua: fc[0].f.r });
         }
       }
       if (itens.length) await marcarQuadras(itens);
@@ -2522,13 +2531,13 @@
     for (const q of cam.quadras) for (const f of q.f || []) {
       o.n++; o.mTot += f.c; const s = fs.get(q.n + '-' + f.i); if (!s || !FACE_FEITA.includes(s.situacao)) continue;
       o.mFeito += f.c; if (s.situacao === 'Levantada, sem árvores') o.mSem += f.c;
-      if (s.equipe) { const e = o.eq[s.equipe] = o.eq[s.equipe] || { n: 0, m: 0 }; e.n++; e.m += f.c; }
+      const en = s.equipe || 'Sem equipe'; const e = o.eq[en] = o.eq[en] || { n: 0, m: 0 }; e.n++; e.m += f.c; // marcadas pela coordenação sem equipe também aparecem na tabela
     }
     return o;
   }
-  async function pintarPainelQd(corpo) {
+  async function pintarPainelQd(corpo, forcar) {
     let cam; try { cam = await carregarQuadras(); } catch (e) { return; } if (!cam || !document.body.contains(corpo)) return;
-    const sit = await carregarSitQd(false); const r = resumoQd(cam, sit); const F = resumoFaces(cam, sit);
+    const sit = await carregarSitQd(!!forcar); const r = resumoQd(cam, sit); const F = resumoFaces(cam, sit);
     const km = fmtKm;
     for (const e of Object.keys(F.eq)) if (!r.eq[e]) r.eq[e] = { total: 0, Levantada: 0, 'Em levantamento': 0 };
     const sec = h('section', { class: 'painel-os' }, h('h2', { class: 'painel-tit' }, 'Andamento por quadras'),
@@ -2610,12 +2619,13 @@
         const abas = [{ nome: 'Registros', cols, linhas: leg.map((l) => Object.fromEntries(cols.map((c) => [c, l[c]]))) }];
         if (camQd) {
           try {
+            const dtQ = (v) => { const d = v ? new Date(v) : null; if (!d || isNaN(d)) return ''; let t; try { t = d.toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }); } catch (e) { t = d.toISOString().replace('T', ' '); } return { __data: Math.round((Date.parse(t.slice(0, 19).replace(' ', 'T') + 'Z') / 864e5 + 25569) * 1e6) / 1e6 }; }; // data de verdade no Excel (filtra por período)
             const sitR = await Api.b.quadrasSituacao(p.id); const sq = new Map(sitR.quadras.map((q) => [q.numero, q])); const nArv = {}; linhas.forEach((l) => { if (l.quadra) nArv[l.quadra] = (nArv[l.quadra] || 0) + 1; });
             const extrasQ = [...new Set(camQd.quadras.flatMap((q) => Object.keys(q.p || {})))];
-            abas.push({ nome: 'Quadras', cols: ['Quadra', ...extrasQ, 'Equipe', 'Situação', 'Marcada por', 'Marcada em', 'Registros neste arquivo'], linhas: camQd.quadras.map((q) => { const s = sq.get(q.n) || {}; const d = s.marcada_em ? new Date(s.marcada_em) : null; return Object.assign({ Quadra: /^\d+$/.test(q.n) ? +q.n : q.n }, Object.fromEntries(extrasQ.map((k) => [k, (q.p || {})[k] || ''])), { Equipe: s.equipe || '', 'Situação': s.situacao || 'A levantar', 'Marcada por': s.marcada_por || '', 'Marcada em': d && !isNaN(d) ? d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '', 'Registros neste arquivo': nArv[q.n] || 0 }); }) });
+            abas.push({ nome: 'Quadras', cols: ['Quadra', ...extrasQ, 'Equipe', 'Situação', 'Marcada por', 'Marcada em', 'Registros neste arquivo'], linhas: camQd.quadras.map((q) => { const s = sq.get(q.n) || {}; const d = s.marcada_em ? new Date(s.marcada_em) : null; return Object.assign({ Quadra: /^\d+$/.test(q.n) ? +q.n : q.n }, Object.fromEntries(extrasQ.map((k) => [k, (q.p || {})[k] || ''])), { Equipe: s.equipe || '', 'Situação': s.situacao || 'A levantar', 'Marcada por': s.marcada_por || '', 'Marcada em': dtQ(s.marcada_em), 'Registros neste arquivo': nArv[q.n] || 0 }); }) });
             if (camQd.quadras.some((q) => q.f)) { // faces de quadra: uma linha por face
               const sf = new Map(sitR.faces.map((f) => [f.numero, f])); const lin = [];
-              for (const q of camQd.quadras) for (const f of q.f || []) { const x = sf.get(q.n + '-' + f.i) || {}; const d = x.marcada_em ? new Date(x.marcada_em) : null; lin.push({ Face: q.n + '-' + f.i, Quadra: /^\d+$/.test(q.n) ? +q.n : q.n, Rua: f.r, 'Comprimento (m)': f.c, Equipe: x.equipe || '', 'Situação': x.situacao || 'A levantar', 'Marcada por': x.marcada_por || '', 'Marcada em': d && !isNaN(d) ? d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '', 'Largura da calçada (m)': x.largura ? +x.largura : '', 'Registro da calçada': x.registro || '' }); }
+              for (const q of camQd.quadras) for (const f of q.f || []) { const x = sf.get(q.n + '-' + f.i) || {}; const d = x.marcada_em ? new Date(x.marcada_em) : null; lin.push({ Face: q.n + '-' + f.i, Quadra: /^\d+$/.test(q.n) ? +q.n : q.n, Rua: f.r, 'Comprimento (m)': f.c, Equipe: x.equipe || '', 'Situação': x.situacao || 'A levantar', 'Marcada por': x.marcada_por || '', 'Marcada em': dtQ(x.marcada_em), 'Largura da calçada (m)': x.largura ? +x.largura : '', 'Registro da calçada': x.registro || '' }); }
               abas.push({ nome: 'Faces de quadra', cols: ['Face', 'Quadra', 'Rua', 'Comprimento (m)', 'Equipe', 'Situação', 'Marcada por', 'Marcada em', 'Largura da calçada (m)', 'Registro da calçada'], linhas: lin });
             }
           } catch (e) { /* segue sem a aba */ }
@@ -2907,6 +2917,6 @@
     return new Promise((res) => cv.toBlob(res, 'image/jpeg', q));
   }
 
-  window.__app = { S, Store, sincronizar };
+  window.__app = { S, Store, sincronizar, proximoCodigo, marcarQuadras }; // usados pelos testes de estresse
   iniciar().catch((e) => { $app.replaceChildren(h('div', { class: 'login' }, h('div', { class: 'aviso' }, 'Erro ao iniciar: ' + e.message), h('button', { class: 'btn', onclick: () => sair(true) }, 'Voltar ao login'))); });
 })();

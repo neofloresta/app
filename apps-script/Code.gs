@@ -140,7 +140,7 @@ function json(o) { return ContentService.createTextOutput(JSON.stringify(o)).set
 
 // ---------- Base (usuários e projetos) ----------
 // Velocidade: a planilha base abre uma vez por chamada, e as tabelas de usuários e projetos ficam
-// 5 minutos no cache do servidor (qualquer gravação pelo app limpa na hora).
+// 1 minuto no cache do servidor (qualquer gravação pelo app limpa na hora; edição direto na planilha vale em até 1 minuto).
 let BASE_ABERTA = null, TABS = {};
 const TABS_CACHE = ['Usuarios', 'Projetos'];
 function base() {
@@ -171,7 +171,7 @@ function tabela(nome, fresco) {
   const cab = v.shift();
   const t = v.filter((l) => l[0] !== '').map((l) => { const o = {}; cab.forEach((c, i) => { if (c !== '') o[c] = texto(l[i]); }); return o; });
   TABS[nome] = t;
-  if (emCache) try { CacheService.getScriptCache().put('tab:' + nome, JSON.stringify(t), 300); } catch (e) { /* grande demais: sem cache */ }
+  if (emCache) try { CacheService.getScriptCache().put('tab:' + nome, JSON.stringify(t), 60); } catch (e) { /* grande demais: sem cache */ }
   return copia(t);
 }
 // valor da célula como texto limpo (sem apóstrofo inicial nem espaços)
@@ -871,10 +871,10 @@ function importarQuadras(projetoId, camada, usr) {
   let j; try { j = JSON.parse(txt); } catch (e) { throw new Error('Camada inválida.'); }
   if (!j || !Array.isArray(j.quadras) || !j.quadras.length) throw new Error('A camada não tem quadras.');
   if (j.quadras.length > 50000) throw new Error('Mais de 50 mil quadras: divida a camada por região.');
-  const nums = {}; let nFaces = 0;
+  const nums = Object.create(null); let nFaces = 0;
   j.quadras.forEach((q) => {
     if (!q || typeof q.n !== 'string' || !Array.isArray(q.b) || q.b.length !== 4 || !Array.isArray(q.a) || !q.a.length) throw new Error('Quadra com formato inválido.');
-    q.n = q.n.slice(0, 40); if (nums[q.n]) throw new Error('Número de quadra repetido: ' + q.n); nums[q.n] = 1;
+    q.n = q.n.replace(/[\t\r\n]+/g, ' ').trim().slice(0, 40); if (!q.n) throw new Error('Quadra sem número.'); if (nums[q.n]) throw new Error('Número de quadra repetido: ' + q.n); nums[q.n] = 1;
     if (!q.b.every((x) => typeof x === 'number' && isFinite(x)) || q.b[1] < -34 || q.b[3] > 6 || q.b[0] < -74 || q.b[2] > -28) throw new Error('Quadra ' + q.n + ' fora do Brasil ou com coordenada inválida.');
     q.a.forEach((a) => { if (!Array.isArray(a) || a.length < 6 || a.length > 20000 || !a.every((x) => typeof x === 'number' && isFinite(x))) throw new Error('Polígono inválido na quadra ' + q.n + '.'); });
     if (q.p) Object.keys(q.p).forEach((k) => { q.p[k] = String(q.p[k]).slice(0, 60); });
@@ -917,7 +917,7 @@ function indiceCamada(projetoId) {
     const info = infoQuadras(projetoId); if (!info) throw new Error('Este projeto ainda não tem camada de quadras.');
     txt = guardarIndiceCamada(projetoId, JSON.parse(DriveApp.getFileById(info.id).getBlob().getDataAsString()).quadras);
   }
-  const nums = new Set(); const faces = {};
+  const nums = new Set(); const faces = Object.create(null);
   txt.split('\n').forEach((l) => { const t = l.split('\t'); nums.add(t[0]); faces[t[0]] = t[1] ? t[1].split(',') : []; });
   return { nums, faces };
 }
@@ -956,6 +956,7 @@ function marcarQuadras(projetoId, itens, usr) {
   } finally { lock.releaseLock(); }
 }
 function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
+  const eqQuadra = {}; lerSitQuadras(projetoId).forEach((q) => { if (q.equipe) eqQuadra[q.numero] = q.equipe; });
   const sh = abaFaces(projetoId); const por = {}; const todas = [];
   const v0 = sh.getDataRange().getValues(); const cab0 = v0.shift().map(String);
   v0.forEach((l, i) => { if (l[0] === '') return; const o = { __linha: i + 2 }; cab0.forEach((c, k) => { if (c) o[c] = texto(l[k]); }); todas.push(o); por[o.numero] = o; }); // linha real na planilha, mesmo com linhas em branco no meio
@@ -963,19 +964,21 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
   const mudou = []; const recusadas = []; const qds = {};
   itens.forEach((it) => {
     const id = String(it.numero || '').slice(0, 45); const cut = id.lastIndexOf('-'); const qn = id.slice(0, cut), letra = id.slice(cut + 1);
-    if (cut < 1 || !idx.faces[qn] || idx.faces[qn].indexOf(letra) < 0) { recusadas.push({ numero: id, motivo: 'Face não existe na camada.' }); return; }
-    const f = por[id] || { numero: id, quadra: qn, situacao: 'A levantar', equipe: '' };
-    if (it.rua != null) f.rua = String(it.rua).slice(0, 60);
+    if (cut < 1 || !Array.isArray(idx.faces[qn]) || idx.faces[qn].indexOf(letra) < 0) { recusadas.push({ numero: id, motivo: 'Face não existe na camada.' }); return; }
+    const f0 = por[id]; const f = Object.assign({}, f0 || { numero: id, quadra: qn, situacao: 'A levantar', equipe: '' }); // cópia: item recusado não muda nada
     if (it.situacao != null && SITUACOES_FACE.indexOf(it.situacao) < 0) { recusadas.push({ numero: id, motivo: 'Situação inválida.' }); return; }
     if (it.situacao === 'Levantada, sem árvores') {
-      const lg = +String(it.largura == null ? '' : it.largura).replace(',', '.');
-      if (!it.registro || !(lg > 0 && lg < 100)) { recusadas.push({ numero: id, motivo: 'Face sem árvores precisa da foto e da largura da calçada (cadastro de calçada).' }); return; }
+      const lt = String(it.largura == null ? '' : it.largura).trim(); const lg = +lt.replace(',', '.');
+      if (!/^[0-9a-f-]{8,60}$/i.test(String(it.registro || '')) || !/^\d{1,2}([.,]\d{1,2})?$/.test(lt) || !(lg > 0)) { recusadas.push({ numero: id, motivo: 'Face sem árvores precisa da foto e da largura da calçada (cadastro de calçada).' }); return; }
     }
     if (!coord) {
       if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
       if (f.equipe && f.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Face da ' + f.equipe + '.' }); return; }
+      // face ainda sem equipe numa quadra de outra equipe: só a coordenação passa a face para outra equipe
+      if (!f.equipe && eqQuadra[qn] && eqQuadra[qn] !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Quadra da ' + eqQuadra[qn] + '.' }); return; }
       if (!f.equipe && it.situacao != null) f.equipe = usr.equipe;
     } else if (it.equipe != null) f.equipe = String(it.equipe).slice(0, 60);
+    if (it.rua != null) f.rua = String(it.rua).slice(0, 60);
     if (it.auto && (f.situacao || 'A levantar') !== 'A levantar') return;
     if (it.situacao != null && it.em && f.marcada_em && new Date(it.em) < new Date(f.marcada_em)) { recusadas.push({ numero: id, motivo: 'A face foi marcada depois por ' + f.marcada_por + ' (' + f.situacao.toLowerCase() + ').' }); return; }
     const txt = [];
@@ -988,7 +991,7 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     if (!txt.length && it.obs == null) return;
     f.historico = [f.historico, carimboHist(usr, txt.join(', ') || 'observação', it.situacao != null ? f.marcada_em : null)].filter(Boolean).join(' | ').slice(-3000);
     f.atualizado_em = new Date().toISOString();
-    if (!por[id]) { por[id] = f; todas.push(f); }
+    if (f0) Object.assign(f0, f); else { por[id] = f; todas.push(f); }
     mudou.push(id); if (it.situacao != null) qds[qn] = 1;
   });
   if (mudou.length) {
@@ -1007,7 +1010,7 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     const st = idx.faces[qn].map((l) => (por[qn + '-' + l] || {}).situacao || 'A levantar');
     if (st.every((x) => FACE_FEITA.indexOf(x) >= 0)) return { numero: qn, situacao: 'Levantada', sistema: 'todas as faces levantadas' };
     if (st.some((x) => x !== 'A levantar')) return { numero: qn, situacao: 'Em levantamento', sistema: 'face em levantamento' };
-    return null; // nenhuma face começada: a quadra fica como está
+    return { numero: qn, situacao: 'A levantar', sistema: 'nenhuma face levantada', soDe: 'Levantada' }; // só desfaz quadra levantada; em levantamento fica como está
   }).filter(Boolean);
   return { alteradas: mudou.length, recusadas, quadras };
 }
@@ -1019,14 +1022,15 @@ function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums) {
     itens.forEach((it) => {
       const n = String(it && it.numero || '').slice(0, 40);
       if (!nums.has(n)) { recusadas.push({ numero: n, motivo: 'Quadra não existe na camada.' }); return; }
-      const q = por[n] || { numero: n, situacao: 'A levantar', equipe: '' };
+      const q0 = por[n]; const q = Object.assign({}, q0 || { numero: n, situacao: 'A levantar', equipe: '' }); // cópia: item recusado não muda nada
       if (it.situacao != null && SITUACOES_QUADRA.indexOf(it.situacao) < 0) { recusadas.push({ numero: n, motivo: 'Situação inválida.' }); return; }
       if (it.sistema) { // efeito das faces: não muda a equipe nem é recusado pela equipe da quadra
         const atual = q.situacao || 'A levantar';
         if (atual === it.situacao || (it.soDe && atual !== it.soDe)) return;
         q.situacao = it.situacao; q.marcada_por = usr.login; q.marcada_em = new Date().toISOString();
+        if (!q.equipe && !coord && usr.equipe) q.equipe = usr.equipe; // quadra feita pelas faces fica com a equipe que fez
         q.historico = [q.historico, carimboHist(usr, it.situacao.toLowerCase() + ' (' + it.sistema + ')', q.marcada_em)].filter(Boolean).join(' | ').slice(-5000);
-        q.atualizado_em = q.marcada_em; if (!por[n]) { por[n] = q; todas.push(q); } mudou.push(n); return;
+        q.atualizado_em = q.marcada_em; if (q0) Object.assign(q0, q); else { por[n] = q; todas.push(q); } mudou.push(n); return;
       }
       if (!coord) {
         if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
@@ -1042,7 +1046,7 @@ function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums) {
       if (!txt.length && it.obs == null) return;
       q.historico = [q.historico, carimboHist(usr, txt.join(', ') || 'observação', it.situacao != null ? q.marcada_em : null)].filter(Boolean).join(' | ').slice(-5000);
       q.atualizado_em = new Date().toISOString();
-      if (!por[n]) { por[n] = q; todas.push(q); }
+      if (q0) Object.assign(q0, q); else { por[n] = q; todas.push(q); }
       mudou.push(n);
     });
     if (mudou.length) {
