@@ -5,7 +5,7 @@ const Gpkg = (() => {
 
   const EXTRAS = [
     ['equipe', 'TEXT'], ['usuario', 'TEXT'], ['criado_em', 'DATETIME'], ['concluido_em', 'DATETIME'], ['atualizado_em', 'DATETIME'],
-    ['latitude', 'REAL'], ['longitude', 'REAL'], ['precisao_gps_m', 'REAL'], ['uuid', 'TEXT'], ['numero_unico', 'INTEGER'], ['cap_equivalente_cm', 'REAL'], ['dap_equivalente_cm', 'REAL'], ['endereco_aprox', 'TEXT'], ['bairro_aprox', 'TEXT'], ['quadra', 'TEXT'], ['validacao', 'TEXT'], ['validado_por', 'TEXT'], ['validado_em', 'DATETIME'], ['validacao_hist', 'TEXT'], ['historico', 'TEXT'],
+    ['latitude', 'REAL'], ['longitude', 'REAL'], ['precisao_gps_m', 'REAL'], ['uuid', 'TEXT'], ['numero_unico', 'INTEGER'], ['cap_equivalente_cm', 'REAL'], ['dap_equivalente_cm', 'REAL'], ['area_copa_m2', 'REAL'], ['endereco_aprox', 'TEXT'], ['bairro_aprox', 'TEXT'], ['quadra', 'TEXT'], ['validacao', 'TEXT'], ['validado_por', 'TEXT'], ['validado_em', 'DATETIME'], ['validacao_hist', 'TEXT'], ['historico', 'TEXT'],
   ];
 
   function tipoSql(c) {

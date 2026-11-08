@@ -394,3 +394,4 @@ input[type=file]::file-selector-button { border: 0; border-radius: 10px; backgro
 .ajuda-img { display: block; width: 100%; max-width: 520px; margin-top: 8px; border-radius: 8px; background: #fff; }
 .pref-op { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--linha); border-radius: 12px; margin-bottom: 10px; cursor: pointer; }
 .pref-op.sel { border-color: var(--teal, #00546E); background: #EEF5F7; } .pref-op small { display: block; color: var(--suave); margin-top: 2px; }
+.fuste-bloco { display: flex; flex-direction: column; }

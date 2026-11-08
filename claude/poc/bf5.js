@@ -55,6 +55,11 @@ const visiveis = async (p) => { const out = []; for (const a of ['Identificaçã
   await p.goto(L.WEB + '#inicio'); await p.waitForSelector('button.nova'); await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Árvore'); await A.aba(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva');
   const temArea = await A.campo(p, 'Area de copa medida (m2)').count(); const temRaio = await A.campo(p, 'Raio de copa 1 (m)').count();
   ok('F.9', temArea === 1 && temRaio === 0, `com a preferência "área direto": campo de área ${temArea}, raios ${temRaio}`);
+  // 11. CAP com letra ou vírgula dobrada bloqueia
+  await A.campo(p, 'CAP (cm)').locator('input').first().fill('1o2'); await p.waitForTimeout(200);
+  const avisoCap = await A.campo(p, 'CAP (cm)').locator('.aviso-campo:not(.oculto)').count();
+  await A.concluir(p); f = await A.faltas(p);
+  ok('F.11', avisoCap === 1 && f.some((x) => /CAP \(cm\): número inválido no caule 1/.test(x)), `aviso na hora=${avisoCap}; ao concluir: ${f.filter((x) => /CAP/.test(x)).join(', ')}`);
   ok('F.10', !p.erros.length, 'erros: ' + JSON.stringify(p.erros));
   fs.writeFileSync('res-bf5.json', JSON.stringify(R, null, 1)); await b.close(); process.exit(0);
 })().catch((e) => { console.error('ERRO', e); process.exit(1); });
