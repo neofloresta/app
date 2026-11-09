@@ -415,9 +415,9 @@
         const res = await Api.b.registro(r.projeto, Api.achatar(r, form));
         const atual = await Store.registro(uid);
         if (atual && atual.atualizado_em === r.atualizado_em && !atual.__base) {
-          atual.status = 'enviado'; delete atual.erroSync; delete atual.conferido;
+          atual.status = 'enviado'; delete atual.erroSync; delete atual.conferido; delete atual.conferenciaFalhou; delete atual.tentConf;
           if (res && res.validacao) atual.validacao = res.validacao;
-          if (res && res.ignorado) { atual.conflito = 'A coordenação alterou este registro depois desta versão. A versão do aparelho não foi aplicada.'; aviso = atual.conflito; } else delete atual.conflito;
+          if (res && res.ignorado && !(soFotos && res.soLinks)) { atual.conflito = 'A coordenação alterou este registro depois desta versão. A versão do aparelho não foi aplicada.'; aviso = atual.conflito; } else delete atual.conflito;
           await Store.salvarRegistro(atual);
         }
         ok++;
@@ -710,7 +710,10 @@
 
   async function novoRegistro(ex) {
     if (!ex || !ex.faceId) ex = null; // chamado pelo botão: recebe o clique
-    if (S.abrindoNova && Date.now() - S.abrindoNova < 60000) return; S.abrindoNova = Date.now(); // toque duplo não cria dois rascunhos
+    if (S.abrindoNova && Date.now() - S.abrindoNova < 60000) return toast('Abrindo o cadastro...'); S.abrindoNova = Date.now(); // toque duplo não cria dois rascunhos
+    try { return await novoRegistro2(ex); } finally { S.abrindoNova = false; }
+  }
+  async function novoRegistro2(ex) {
     const r = {
       uuid: uuid(), projeto: S.projeto.id, equipe: S.projeto.equipe || '', usuario: S.sessao.u,
       criado_em: agoraISO(), atualizado_em: agoraISO(), status: 'rascunho', valores: {}, fotos: {},
@@ -758,7 +761,7 @@
     async carregar() { this.est = this.liberado() ? (await Store.get(this.chave())) : null; if (this.est && this.est.dia !== diaLocal(agoraISO())) { await this.encerrar(true); } if (this.est && this.est.ativo) this.ligar(); },
     async comecar() {
       // turno anterior ainda não enviado (sem rede) vai para a fila antes de começar outro: nada é gravado por cima
-      if (this.est && this.est.env < this.est.pts.length) { const k = this.chave() + ':fila'; const f = (await Store.get(k)) || []; this.est.ativo = false; f.push(this.est); await Store.set(k, f); }
+      if (this.est && this.est.pts.length > this.est.env) { const k = this.chave() + ':fila'; const f = (await Store.get(k)) || []; this.est.ativo = false; f.push(this.est); await Store.set(k, f); }
       this.est = { ativo: true, dia: diaLocal(agoraISO()), inicio: agoraISO(), pts: [], env: 0, id: uuid().slice(0, 8) }; await Store.set(this.chave(), this.est); this.ligar(); pintarTurno(); toast('Turno começou. O trajeto fica ligado enquanto o app estiver aberto.', 4000); },
     ligar() { Gps.ouvintes.add(this.ouv); ligarGps(); this.pedirTela(); document.addEventListener('visibilitychange', this.vis); },
     vis: () => { if (document.visibilityState === 'visible' && Turno.est && Turno.est.ativo) Turno.pedirTela(); },
@@ -780,7 +783,7 @@
       while (fila.length) { if (!(await this.enviarEst(fila[0]))) { await Store.set(kf, fila); return; } fila.shift(); await Store.set(kf, fila); }
       const e = this.est; if (!e) return;
       await this.enviarEst(e, true);
-      if (!e.ativo && e.env >= e.pts.length) { await Store.del(this.chave()); this.est = null; }
+      if (this.est === e && !e.ativo && e.env >= e.pts.length) { await Store.del(this.chave()); this.est = null; } // se começou outro turno no meio do envio, não mexe nele
     },
     // manda os pontos que faltam de um turno em trechos de até 400; devolve true quando não sobra nada a enviar
     async enviarEst(e, atual) {
@@ -788,7 +791,7 @@
         const de = Math.max(0, e.env - 1); const fatia = e.pts.slice(de, de + 400); if (fatia.length < 2 && !(!e.ativo && fatia.length)) break;
         const trecho = Object.assign({ id: S.sessao.u + '-' + e.dia + '-' + e.id + '-' + e.env, dia: e.dia, inicio: new Date(fatia[0][0]).toISOString(), fim: new Date(fatia[fatia.length - 1][0]).toISOString(), pontos: Poly.enc(fatia.map((x) => [x[1], x[2]])), n: fatia.length }, resumoTrajeto(fatia));
         try { await Api.b.trajetoSalvar(S.projeto.id, trecho); } catch (er) { return false; }
-        e.env = de + fatia.length; if (atual) await Store.set(this.chave(), e);
+        e.env = de + fatia.length; if (atual && this.est === e) await Store.set(this.chave(), e);
       }
       return e.env >= e.pts.length || e.ativo;
     },
@@ -840,11 +843,11 @@
         Store.salvarRegistro(r);
         num.className = 'mp-num ' + (m.prec <= META ? 'bom' : m.prec <= 10 ? 'medio' : 'ruim'); num.textContent = '±' + numBR(m.prec) + ' m';
         st.textContent = manual ? 'Ponto marcado.' : 'Ponto marcado ✓'; btAgora.disabled = true;
-        setTimeout(() => { if (!sair.feito && document.body.contains(veu)) sair(true); }, 700);
+        setTimeout(() => { if (!sair.feito) sair(true); }, 700);
       }
       function sair(v) { if (sair.feito) return; sair.feito = true; clearInterval(tm); Gps.ouvintes.delete(ouv); window.removeEventListener('hashchange', aoSair); veu.remove(); fim(v !== false); }
       // Voltar do Android (ou qualquer troca de tela) cancela a marcação: nada fica lendo GPS nem abre o cadastro depois
-      const aoSair = () => { if (!pronto) { pronto = true; sair(false); } };
+      const aoSair = () => { const marcado = pronto; pronto = true; sair(marcado); }; // marcado e saiu logo: o ponto vale; ainda marcando: cancela
       window.addEventListener('hashchange', aoSair);
       Gps.ouvintes.add(ouv); ligarGps();
       if (S.gpsNegado) { st.textContent = 'O GPS está bloqueado para o app.'; btSem.classList.remove('oculto'); }
@@ -1636,7 +1639,7 @@
       const eqIn = escolhaEquipe(s.equipe || '');
       const pop = h('div', { class: 'ficha qd-ficha' }, h('b', null, 'Quadra ' + q.n),
         q.p ? Object.entries(q.p).map(([k, v]) => h('small', null, (/^ruas?$/i.test(k) ? '' : k + ': ') + v)) : null,
-        h('div', null, h('span', { class: 'os-st', style: `background:${COR_QD[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', s.equipe ? s.equipe : 'sem equipe'),
+        h('div', null, h('span', { class: 'os-st', style: `background:${COR_QD[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', perfil() === 'cliente' ? '' : s.equipe ? s.equipe : 'sem equipe'),
         h('small', null, `${pl(arv, 'árvore cadastrada', 'árvores cadastradas')} dentro dela` + (s.marcada_por ? ` · marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` : '')),
         q.f ? h('small', null, `Faces: ${fFeitas} de ${q.f.length} levantadas.` + (mapa.getZoom() < ZOOM_FACES ? '' : ' Toque na linha de uma face para marcar.')) : null,
         q.f && mapa.getZoom() < ZOOM_FACES ? h('button', { class: 'btn sec peq', onclick: () => { fecharFicha(); mapa.setView(Quadras.centro(q), 18); } }, 'Aproximar para marcar faces') : null,
@@ -1681,7 +1684,7 @@
         pode && st !== 'A levantar' ? h('button', { class: 'btn sec peq acao', onclick: () => marcar([{ numero: id, situacao: 'A levantar' }]) }, 'Voltar para A levantar') : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn.el, h('button', { class: 'btn sec peq', onclick: () => { const v = eqIn.valor(); if (v == null) return toast('Escolha a equipe.'); marcar([{ numero: id, equipe: v }]); } }, 'Definir equipe')) : null].filter(Boolean);
       const pop = h('div', { class: 'ficha qd-ficha' }, h('b', null, `Face ${f.i} da quadra ${q.n}`), h('small', null, `${f.r} · ${fmtN(f.c)} m`),
-        h('div', null, h('span', { class: 'os-st', style: `background:${COR_FC[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', s.equipe ? s.equipe : eqDaQuadra(q) ? 'quadra da ' + eqDaQuadra(q) : 'sem equipe'),
+        h('div', null, h('span', { class: 'os-st', style: `background:${COR_FC[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', perfil() === 'cliente' ? '' : s.equipe ? s.equipe : eqDaQuadra(q) ? 'quadra da ' + eqDaQuadra(q) : 'sem equipe'),
         s.marcada_por ? h('small', null, `marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}`) : null,
         pode && !FACE_FEITA.includes(st) ? h('button', { class: 'btn cheio acao', onclick: () => marcar([{ numero: id, situacao: 'Levantada' }]) }, ico('check'), 'Marcar como levantada') : null,
         pode && st === 'A levantar' ? h('button', { class: 'btn sec cheio acao', onclick: () => marcar([{ numero: id, situacao: 'Em levantamento' }]) }, 'Em levantamento') : null,
@@ -2297,7 +2300,7 @@
     const mudou = !!(S.sessao && S.sessao.usuario.termo_aceito_em);
     const btn = h('button', { class: 'btn cheio', onclick: async () => {
       btn.disabled = true;
-      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch(async (e) => { if (/desconhecida/i.test(e.message)) return; if (!navigator.onLine || /fetch|network|rede|Failed/i.test(e.message)) { await Store.set('termoPend:' + S.sessao.u, TERMO_VERSAO); return; } throw e; }); Object.assign(S.sessao.usuario, { termo_aceito_em: agoraISO(), termo_versao: TERMO_VERSAO }); S.termoLocal = TERMO_VERSAO; await Store.set('sessao', S.sessao); await Store.set('termo:' + S.sessao.u, S.sessao.usuario.termo_aceito_em); await Store.set('termoV:' + S.sessao.u, TERMO_VERSAO); rota(); if (perfil() !== 'cliente') ligarGps(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
+      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch(async (e) => { if (/desconhecida/i.test(e.message)) return; if (!navigator.onLine || e.rede || /fetch|network|rede|Failed|Sem conex/i.test(e.message)) { await Store.set('termoPend:' + S.sessao.u, TERMO_VERSAO); return; } throw e; }); Object.assign(S.sessao.usuario, { termo_aceito_em: agoraISO(), termo_versao: TERMO_VERSAO }); S.termoLocal = TERMO_VERSAO; await Store.set('sessao', S.sessao); await Store.set('termo:' + S.sessao.u, S.sessao.usuario.termo_aceito_em); await Store.set('termoV:' + S.sessao.u, TERMO_VERSAO); rota(); if (perfil() !== 'cliente') ligarGps(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
     } }, 'Li e aceito');
     $app.replaceChildren(topo('Termo de uso e privacidade', mudou ? 'O termo mudou: leia e aceite de novo' : 'Leia antes de começar', null, null), h('main', null,
       mudou ? h('div', { class: 'info' }, 'Atualizamos o termo de uso e privacidade. Seus registros continuam guardados; é só ler e aceitar para seguir.') : null,
@@ -2938,7 +2941,7 @@
     return h('button', { class: 'os-item' + (atrasada(o) ? ' atrasada' : ''), onclick: () => ir('#os/' + encodeURIComponent(o.id)) },
       h('div', { class: 'os-l1' }, h('b', null, numOS(o)), h('span', null, o.tipo), etiquetaOS(o)),
       h('div', { class: 'os-l2' }, local, o.especie ? h('i', null, ' · ' + o.especie) : null, o.bairro ? ' · ' + o.bairro : ''),
-      h('small', { class: 'os-l3' }, ['Prioridade ' + String(o.prioridade || 'Média').toLowerCase(), o.prazo ? 'prazo ' + o.prazo.split('-').reverse().join('/') : '', o.responsavel || 'sem equipe definida'].filter(Boolean).join(' · '), atrasada(o) ? h('b', { class: 'os-atraso' }, ' · Atrasada') : null),
+      h('small', { class: 'os-l3' }, ['Prioridade ' + String(o.prioridade || 'Média').toLowerCase(), o.prazo ? 'prazo ' + o.prazo.split('-').reverse().join('/') : '', perfil() === 'cliente' ? '' : o.responsavel || 'sem equipe definida'].filter(Boolean).join(' · '), atrasada(o) ? h('b', { class: 'os-atraso' }, ' · Atrasada') : null),
       o.__erro ? h('small', { class: 'motivo' }, 'Não enviado: ' + o.__erro) : null);
   }
   const ordenarOS = (a, b) => (atrasada(b) - atrasada(a)) || (PRIOR_OS.indexOf(a.prioridade || 'Média') - PRIOR_OS.indexOf(b.prioridade || 'Média')) || String(a.prazo || '9').localeCompare(String(b.prazo || '9')) || ((+b.numero || 1e9) - (+a.numero || 1e9));
@@ -3044,7 +3047,7 @@
     $app.replaceChildren(topo(numOS(o), o.tipo, h('button', { class: 'ic', onclick: () => ir('#ordens'), 'aria-label': 'Voltar' }, ico('voltar')), null),
       h('main', null,
         h('div', { class: 'cartao os-cab', style: `border-left:6px solid ${COR_OS[o.status] || '#8A969C'}` }, h('div', { class: 'os-l1' }, h('b', null, o.tipo), etiquetaOS(o)),
-          h('div', { class: 'os-dados' }, linha('Prioridade', o.prioridade), linha('Prazo', o.prazo ? o.prazo.split('-').reverse().join('/') + (atrasada(o) ? ' (atrasada)' : '') : ''), linha('Equipe responsável', o.responsavel || 'A definir'),
+          h('div', { class: 'os-dados' }, linha('Prioridade', o.prioridade), linha('Prazo', o.prazo ? o.prazo.split('-').reverse().join('/') + (atrasada(o) ? ' (atrasada)' : '') : ''), perfil() === 'cliente' ? null : linha('Equipe responsável', o.responsavel || 'A definir'),
             linha('Pedido por', o.solicitada_por ? `${o.solicitada_por} em ${dataAno(o.solicitada_em)}` : ''), linha('Aberta por', o.aberta_por ? `${o.aberta_por} em ${dataAno(o.aberta_em)}` : ''),
             linha('Iniciada', o.iniciada_em ? `${dataAno(o.iniciada_em)} por ${o.iniciada_por}` : ''), linha('Concluída', o.concluida_em ? `${dataAno(o.concluida_em)} por ${o.concluida_por}` + (o.prazo && o.status === 'Concluída' && diaLocal(o.concluida_em) > o.prazo ? ' (depois do prazo)' : '') : ''),
             o.status === 'Cancelada' ? linha('Cancelada', `${dataAno(o.cancelada_em)} por ${o.cancelada_por}`) : null,
@@ -3061,7 +3064,7 @@
             : h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Foto de antes'), fa), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Foto de depois'), fd)),
           ativo ? h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Observação da execução'), obs) : o.execucao_obs ? h('p', null, o.execucao_obs) : null,
           ativo ? h('div', { class: 'linha-btn' }, o.status === 'Aberta' ? h('button', { class: 'btn sec', onclick: () => exec('iniciar') }, 'Iniciar serviço') : null, h('button', { class: 'btn', onclick: () => exec('concluir') }, 'Concluir serviço')) : null,
-          !ativo && ['Aberta', 'Em execução'].includes(o.status) && !podeExecutar(o) ? h('p', { class: 'dica' }, o.responsavel ? `A execução é registrada pela ${o.responsavel}.` : 'A coordenação ainda vai definir a equipe.') : null,
+          !ativo && ['Aberta', 'Em execução'].includes(o.status) && !podeExecutar(o) && perfil() !== 'cliente' ? h('p', { class: 'dica' }, o.responsavel ? `A execução é registrada pela ${o.responsavel}.` : 'A coordenação ainda vai definir a equipe.') : null,
           o.status === 'Solicitada' ? h('p', { class: 'dica' }, 'Pedido aguardando aprovação da coordenação.') : null),
         hist.length ? h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Histórico'), hist.map((x) => h('p', { class: 'hist' }, x))) : null,
         ehCoord() && !o.__pend ? h('div', { class: 'linha-btn quebra', style: 'margin:8px 0 30px' },

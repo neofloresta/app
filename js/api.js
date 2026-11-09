@@ -35,7 +35,7 @@ const Api = (() => {
     const id = semCred ? {} : cred && cred.t ? { t: cred.t } : { u: cred && cred.u, s: cred && cred.s };
     const corpo = JSON.stringify(Object.assign({ acao }, id, dados || {}));
     let resp;
-    try { resp = await fetch(url, { method: 'POST', body: corpo, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow' }); } catch (e) { throw new Error('Sem conexão com o servidor. Confira a internet.'); }
+    try { resp = await fetch(url, { method: 'POST', body: corpo, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow' }); } catch (e) { throw Object.assign(new Error('Sem conexão com o servidor. Confira a internet.'), { rede: true }); }
     if (!resp.ok) throw new Error('Servidor respondeu ' + resp.status);
     const j = await resp.json();
     if (!j.ok) { const e = new Error(j.erro || 'Erro no servidor'); e.sessao = !!j.sessao; if (e.sessao && aoExpirar) aoExpirar(e); throw e; }

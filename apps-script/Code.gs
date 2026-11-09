@@ -519,17 +519,17 @@ function salvarRegistro(projetoId, linha, usr) {
       const atual = linhaObj(cab, sh.getRange(r, 1, 1, cab.length).getValues()[0]);
       // foto que subiu depois (esperou o Wi-Fi): o link entra na coluna vazia mesmo com o registro travado ou validado
       const soLinks = cab.filter((c) => / link$/.test(c) && !atual[c] && linha[c]);
-      const gravarLinks = () => { soLinks.forEach((c) => { sh.getRange(r, cab.indexOf(c) + 1).setNumberFormat('@').setValue(String(linha[c])); const b = c.replace(/ link$/, ''); const ib = cab.indexOf(b); if (ib >= 0 && !atual[b] && linha[b]) sh.getRange(r, ib + 1).setNumberFormat('@').setValue(String(linha[b])); }); return { atualizado: true, soLinks: soLinks.length }; };
+      const gravarLinks = (motivo) => { soLinks.forEach((c) => { sh.getRange(r, cab.indexOf(c) + 1).setNumberFormat('@').setValue(String(linha[c])); const b = c.replace(/ link$/, ''); const ib = cab.indexOf(b); if (ib >= 0 && !atual[b] && linha[b]) sh.getRange(r, ib + 1).setNumberFormat('@').setValue(String(linha[b])); }); return { atualizado: true, soLinks: soLinks.length, ignorado: motivo }; }; // diz o que não foi aplicado: o app só avisa se havia edição
       const mesmoDono = !atual.usuario || String(atual.usuario).toLowerCase() === usr.login.toLowerCase();
-      if (usr.perfil === 'coletor' && atual.atualizado_em && linha.atualizado_em && String(atual.atualizado_em) > String(linha.atualizado_em)) return soLinks.length && mesmoDono ? gravarLinks() : { ignorado: 'versao_antiga' };
+      if (usr.perfil === 'coletor' && atual.atualizado_em && linha.atualizado_em && String(atual.atualizado_em) > String(linha.atualizado_em)) return soLinks.length && mesmoDono ? gravarLinks('versao_antiga') : { ignorado: 'versao_antiga' };
       if (usr.perfil === 'coletor') {
         linha.concluido_em = atual.concluido_em || linha.concluido_em; linha.criado_em = atual.criado_em || linha.criado_em; linha.usuario = atual.usuario || usr.login;
         if (!mesmoDono) throw new Error('Este registro é de outra equipe. Só a coordenação pode alterá-lo.');
         const v = String(atual.validacao || '');
-        if (v === 'Validado') { if (soLinks.length) return gravarLinks(); throw new Error('Registro já validado pela coordenação. Para alterar, peça à coordenação.'); }
+        if (v === 'Validado') { if (soLinks.length) return gravarLinks('validado'); throw new Error('Registro já validado pela coordenação. Para alterar, peça à coordenação.'); }
         const conc = atual.concluido_em || atual.criado_em;
         const mesmoDia = dia(conc) === dia(linha.atualizado_em) && (Date.now() - new Date(conc).getTime()) < 4 * 864e5;
-        if (v !== 'Devolvido' && !mesmoDia) { if (soLinks.length) return gravarLinks(); throw new Error('Registro travado: a equipe só altera no mesmo dia em que concluiu. Peça à coordenação.'); }
+        if (v !== 'Devolvido' && !mesmoDia) { if (soLinks.length) return gravarLinks('travado'); throw new Error('Registro travado: a equipe só altera no mesmo dia em que concluiu. Peça à coordenação.'); }
         if (v === 'Devolvido') linha.validacao = 'Corrigido';
       }
       const valores = cab.map((c) => (c in linha ? celula(linha[c]) : celula(atual[c])));
@@ -576,7 +576,8 @@ function validar(projetoId, itens, usr) {
     const quando = Utilities.formatDate(new Date(), FUSO, 'dd/MM/yyyy HH:mm');
     for (const it of itens) {
       if (estados.indexOf(it.estado) < 0) throw new Error('Situação inválida: ' + it.estado);
-      const desfazer = it.desfazer && typeof it.desfazer === 'object'; // "Desfazer": volta exatamente ao que estava (motivo, quem e quando)
+      const kd = pos[String(it.uuid)]; const recente = kd != null && texto(col.validado_por[kd][0]) === (usr.nome || usr.login) && Date.now() - new Date(texto(col.validado_em[kd][0])).getTime() < 30 * 60000;
+      const desfazer = it.desfazer && typeof it.desfazer === 'object' && recente; // só desfaz a própria decisão dos últimos 30 minutos // "Desfazer": volta exatamente ao que estava (motivo, quem e quando)
       if (it.estado === 'Devolvido' && !desfazer && !String(it.obs || '').trim()) throw new Error('Informe o motivo da devolução.');
       const k = pos[String(it.uuid)]; if (k == null) continue;
       const obs = seguro(String(it.obs || '').slice(0, 500));

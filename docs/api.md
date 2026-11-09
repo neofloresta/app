@@ -57,11 +57,11 @@ Resposta: `{"ok": true, "linhas": [...], "proximo": 4000}`. Repita com `de` = `p
 
 ## Campos de cada ordem de serviço
 
-`id`, `numero` (sequência única do projeto), `registro_uuid` e `codigo_arvore` (quando ligada a uma árvore), `especie`, `latitude`, `longitude`, `endereco`, `bairro`, `tipo`, `prioridade` (Urgente, Alta, Média, Baixa), `descricao`, `status` (Solicitada, Aberta, Em execução, Concluída, Cancelada), `prazo` (AAAA-MM-DD), `responsavel` (equipe), quem e quando em cada etapa (`solicitada_*`, `aberta_*`, `iniciada_*`, `concluida_*`, `cancelada_*`), `foto_antes` e `foto_depois` (links no Drive), `execucao_obs`, `motivo`, `historico`.
+`id`, `numero` (sequência única do projeto), `registro_uuid` e `codigo_arvore` (quando ligada a uma árvore), `especie`, `latitude`, `longitude`, `endereco`, `bairro`, `tipo`, `prioridade` (Urgente, Alta, Média, Baixa), `descricao`, `status` (Solicitada, Aberta, Em execução, Concluída, Cancelada), `prazo` (AAAA-MM-DD), quando cada etapa aconteceu (`solicitada_em`, `aberta_em`, `iniciada_em`, `concluida_em`, `cancelada_em`), `foto_antes` e `foto_depois` (links no Drive), `execucao_obs`, `motivo`. Desde a versão 2.6, a chave de integração (como o cliente) não recebe os dados internos das equipes: `responsavel`, quem fez cada etapa (`*_por`) e `historico`.
 
 ## Campos fixos de cada registro
 
-`uuid`, `projeto`, `equipe`, `usuario`, `criado_em`, `atualizado_em` (data e hora ISO 8601, UTC), `latitude`, `longitude` (graus decimais, SIRGAS 2000), `precisao_gps_m`, `historico` (alterações feitas depois de concluído). Os demais campos seguem o formulário do projeto; cada foto tem uma coluna com o nome do arquivo e outra com o link no Drive.
+`uuid`, `projeto`, `criado_em`, `atualizado_em` (data e hora ISO 8601, UTC), `latitude`, `longitude` (graus decimais, SIRGAS 2000), `precisao_gps_m`. Desde a versão 2.6, a chave de integração (como o cliente) não recebe os dados internos das equipes: `equipe`, `usuario`, o campo de coletor do formulário, `validado_por`, `historico` e `validacao_hist`. Os demais campos seguem o formulário do projeto; cada foto tem uma coluna com o nome do arquivo e outra com o link no Drive.
 
 ## Limites conhecidos
 
