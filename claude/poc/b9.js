@@ -35,18 +35,12 @@ async function enviar(p) { for (let i = 0; i < 60; i++) { if (!(await pend(p))) 
     await A.arvoreCompleta(p, { fotos: 1 }); await enviar(p);
     await ctx.setGeolocation({ latitude: -20.1438, longitude: -44.8912, accuracy: 4 }); // equipe a ~45 m da árvore
     await p.evaluate(() => { location.hash = '#mapa'; }); await p.waitForTimeout(2500);
-    // sem acesso ao objeto do mapa: toca no centro do ponto desenhado procurando o pixel da cor da equipe
-    const box = await p.locator('.leaflet-container').boundingBox();
-    const leg = await p.locator('.mapa-leg').boundingBox().catch(() => null); const limiteY = leg ? leg.y - box.y - 4 : box.height;
-    const shot = await p.screenshot({ clip: box });
-    const { PNG } = (() => { try { return require('pngjs'); } catch (e) { return {}; } })();
-    let alvo = null;
-    if (PNG) { const img = PNG.sync.read(shot); const sx = img.width / box.width;
-      const cor = (i, r, g, bl) => Math.abs(img.data[i] - r) < 18 && Math.abs(img.data[i + 1] - g) < 18 && Math.abs(img.data[i + 2] - bl) < 18;
-      for (let y = 0; y < Math.min(img.height, limiteY * sx) && !alvo; y += 2) for (let x = 0; x < img.width; x += 2) { const i = (y * img.width + x) * 4; if (cor(i, 0x00, 0x54, 0x6E) || cor(i, 0xCD, 0x83, 0x4C)) { alvo = { x: box.x + x / sx, y: box.y + y / sx + 4 }; break; } } }
+    // toca no centro de um ponto desenhado (fora dos botões e da legenda)
+    const alvo = await p.evaluate(() => { const m = window.__app.mapa; const r = m.getContainer().getBoundingClientRect(); const bts = document.querySelector('.mapa-bts'); const rb = bts ? bts.getBoundingClientRect() : null; const leg = document.querySelector('.mapa-leg'); const rl = leg ? leg.getBoundingClientRect() : null; let a = null;
+      m.eachLayer((l) => { if (a || !l.__o) return; const pt = m.latLngToContainerPoint(l.getLatLng()); const x = r.left + pt.x, y = r.top + pt.y; const fora = (q) => !q || x < q.left - 10 || x > q.right + 10 || y < q.top - 10 || y > q.bottom + 10; if (pt.x > 20 && pt.y > 20 && pt.x < r.width - 20 && pt.y < r.height - 20 && fora(rb) && fora(rl)) a = { x, y }; }); return a; });
     if (alvo) { await p.mouse.click(alvo.x, alvo.y); await p.waitForTimeout(700); }
     if (process.env.FOTO_B9) await p.screenshot({ path: process.env.FOTO_B9 });
-    const ficha = await p.locator('.leaflet-popup .ficha').count();
+    const ficha = await p.locator('.leaflet-popup .ficha, .mapa-folha .ficha').count();
     log('Toque no ponto do mapa', !!alvo && ficha > 0, alvo ? (ficha ? 'ficha abriu' : 'tocou no ponto e a ficha não abriu') : 'ponto não encontrado na tela');
     await ctx.close();
   }

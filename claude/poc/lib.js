@@ -18,7 +18,7 @@ async function subir() {
   const log = fs.openSync(path.join(__dirname, 'mock-' + new URL(MOCK).port + '.log'), 'w');
   const m = spawn('node', ['mock.js', GS], { cwd: __dirname, stdio: ['ignore', log, log], detached: true, env: Object.assign({}, process.env, { PORTA: new URL(MOCK).port }) }); m.unref(); fs.writeFileSync(path.join(__dirname, 'mock-' + new URL(MOCK).port + '.pid'), String(m.pid));
   for (let i = 0; i < 50; i++) { await espera(150); try { await fetch(MOCK); await fetch(WEB); break; } catch (e) {} }
-  senhaAdmin = fs.readFileSync(path.join(__dirname, 'senha.txt'), 'utf8').trim();
+  const arqS = path.join(__dirname, 'senha-' + new URL(MOCK).port + '.txt'); for (let i = 0; i < 40 && !fs.existsSync(arqS); i++) await espera(100); senhaAdmin = fs.readFileSync(fs.existsSync(arqS) ? arqS : path.join(__dirname, 'senha.txt'), 'utf8').trim();
   return senhaAdmin;
 }
 async function post(acao, dados, u = 'admin', s = senhaAdmin) {

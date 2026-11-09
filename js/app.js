@@ -60,6 +60,8 @@
   const confirmar = (titulo, texto, ok = 'Confirmar', classe = '') => modal(titulo, h('p', null, texto), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: ok, classe, valor: true }]);
   function baixar(nome, dados, tipo) { const b = dados instanceof Blob ? dados : new Blob([dados], { type: tipo }); const a = h('a', { href: URL.createObjectURL(b), download: nome }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
   const ICONES = {
+    alvo: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+    cidade: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', selecionar: '<path d="M5 5h4M15 5h4M5 19h4M15 19h4M5 5v4M19 5v4M5 15v4M19 15v4"/><path d="M10 12l2 2 3-4"/>', fechar: '<path d="M6 6l12 12M18 6L6 18"/>',
     ajuda: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>', voltar: '<path d="M15 5l-7 7 7 7"/>', mapa: '<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>',
     busca: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>', camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', mais: '<path d="M12 5v14M5 12h14"/>',
@@ -1334,6 +1336,9 @@
     const cRisco = form.campos.find((c) => c.tipo === 'choice' && /^risco$/i.test(norm(c.nome)));
     const cCat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
     const cFoto = form.campos.find((c) => c.tipo === 'photo');
+    const cArea = form.campos.find((c) => /^area de copa \(m2\)$/i.test(norm(c.nome))) || form.campos.find((c) => /area de copa/i.test(norm(c.nome)));
+    const opCalc = cCat && cCat.opcoes.find((o) => /cal[cç]ada/i.test(o.t)); // calçada sem árvores aparece só como a linha tracejada da face
+    const raioCopa = (a) => { const v = +String(a == null ? '' : a).replace(',', '.'); return v > 0 ? Math.sqrt(v / Math.PI) : 0; };
     const rotOp = (c, v) => { if (!c || v == null || v === '') return ''; const o = c.opcoes.find((x) => String(x.v) === String(v)); return o ? o.t : String(v); };
     // filtros
     const busca = h('input', { class: 'entrada', placeholder: 'Código ou espécie', autocapitalize: 'none' });
@@ -1356,15 +1361,35 @@
     const pintarConta = () => { conta.textContent = conta.textContent.replace(/ · Carregando quadras\.\.\./, '') + (conta.dataset.qd ? ' · ' + conta.dataset.qd : ''); };
     // em tela baixa os filtros ficam recolhidos num botão, para sobrar mapa
     const selBox = h('div', { class: 'mapa-sel' }, selEq, selDia, diaIn, selRisco, selBairro, selCor, selQd);
-    const baixa = window.innerHeight < 760; if (S.filtrosAbertos == null) S.filtrosAbertos = !baixa;
-    const btFiltros = h('button', { class: 'btn sec peq bt-filtros' + (baixa ? '' : ' oculto'), onclick: () => { S.filtrosAbertos = !S.filtrosAbertos; selBox.classList.toggle('oculto', !S.filtrosAbertos); btFiltros.textContent = S.filtrosAbertos ? 'Esconder filtros' : 'Filtros'; setTimeout(() => mapa.invalidateSize(), 50); } }, S.filtrosAbertos ? 'Esconder filtros' : 'Filtros');
+    const celular = window.innerWidth < 900 || (window.matchMedia && matchMedia('(pointer: coarse)').matches);
+    const baixa = celular || window.innerHeight < 760; if (S.filtrosAbertos == null) S.filtrosAbertos = !baixa;
+    const nFiltros = () => [selEq.value, selDia.value, selRisco && selRisco.value, selBairro.value, soAlto ? '1' : ''].filter(Boolean).length;
+    const rotFiltros = () => (S.filtrosAbertos ? 'Esconder filtros' : 'Filtros' + (nFiltros() ? ` (${nFiltros()})` : ''));
+    const btFiltros = h('button', { class: 'btn sec peq bt-filtros' + (baixa ? '' : ' oculto'), onclick: () => { S.filtrosAbertos = !S.filtrosAbertos; selBox.classList.toggle('oculto', !S.filtrosAbertos); btFiltros.textContent = rotFiltros(); setTimeout(() => mapa.invalidateSize(), 50); } }, '');
+    // atalhos de um toque para os filtros mais usados
+    let soAlto = false;
+    const chipR = (txt, ativo, fn) => h('button', { class: 'chip-rapido' + (ativo() ? ' sel' : ''), 'aria-pressed': ativo() ? 'true' : 'false', onclick: (e) => { fn(); pintarChips(); desenhar(true); } }, txt);
+    const chipsR = h('div', { class: 'chips-rapidos' });
+    function pintarChips() {
+      chipsR.replaceChildren(chipR('Hoje', () => selDia.value === 'hoje', () => { selDia.value = selDia.value === 'hoje' ? '' : 'hoje'; diaIn.classList.add('oculto'); }),
+        perfil() === 'coletor' && minhaEquipe() ? chipR('Minha equipe', () => selEq.value === minhaEquipe(), () => { selEq.value = selEq.value === minhaEquipe() ? '' : minhaEquipe(); }) : null,
+        cRisco ? chipR('Risco alto', () => soAlto, () => { soAlto = !soAlto; if (soAlto) { selCor.value = 'risco'; if (selRisco) selRisco.value = ''; } }) : null);
+      btFiltros.textContent = rotFiltros();
+    }
     if (!S.filtrosAbertos) selBox.classList.add('oculto');
-    const barra = h('div', { class: 'mapa-filtros' }, h('div', { class: 'mapa-busca' }, busca, btFiltros), selBox, conta, faixaOff);
+    const buscaRes = h('div', { class: 'busca-res oculto', role: 'listbox' });
+    const barra = h('div', { class: 'mapa-filtros' }, h('div', { class: 'mapa-busca' }, busca, btFiltros), buscaRes, chipsR, selBox, conta, faixaOff);
     const barraSel = h('div', { class: 'qd-selecao oculto' });
-    $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, h('button', { class: 'gps', onclick: () => verCidade() }, 'Ver a cidade'), h('button', { class: 'gps', onclick: centrar }, 'Minha posição'))), barra, div, barraSel));
+    // botões grandes embaixo, à direita (alcance do polegar): minha posição, ver a cidade e selecionar
+    const btEu = h('button', { class: 'mapa-bt grande', onclick: () => centrar(), 'aria-label': 'Minha posição', title: 'Minha posição' }, ico('alvo'), h('span', { class: 'so-leitor' }, 'Minha posição'));
+    const btCidade = h('button', { class: 'mapa-bt', onclick: () => verCidade(), 'aria-label': 'Ver a cidade', title: 'Ver a cidade' }, ico('cidade'), h('span', { class: 'so-leitor' }, 'Ver a cidade'));
+    const btSel = h('button', { class: 'mapa-bt pilula oculto', onclick: () => iniciarSelecao(), 'aria-label': 'Selecionar quadras ou faces' }, ico('selecionar'), 'Selecionar');
+    const bts = h('div', { class: 'mapa-bts' }, btSel, btCidade, btEu);
+    const telaM = h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, ajudaBt('mapa'))), barra, div, bts, barraSel);
+    $app.replaceChildren(telaM);
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
     const render = L.canvas({ padding: 0.3, tolerance: 8 });
-    const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21, fadeAnimation: false }) // sem animação: a ficha que fecha não recebe mais toque.setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
+    const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21, fadeAnimation: false, zoomControl: !celular }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4); // fadeAnimation desligada: a ficha que fecha não recebe mais toque
     if (S.fundo == null) S.fundo = (await Store.get('fundo')) || 'ruas';
     camadasFundo(mapa, false);
     const cores = ['#00546E', '#CD834C', '#6A1B9A', '#2E7D32', '#C62828', '#12A6C8'];
@@ -1372,23 +1397,27 @@
     const equipes = []; const corEq = (e) => { if (!equipes.includes(e)) equipes.push(e); return cores[equipes.indexOf(e) % cores.length]; };
     // pontos: os do aparelho primeiro (podem ter edição ainda não enviada), depois os do servidor
     const pts = []; const vistos = new Set();
-    const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
-    if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, bairro: r.bairro || '', dia: diaLocal(r.criado_em), cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', foto: '', local: true });
+    const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; if (opCalc && String(o.cat) === String(opCalc.v)) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
+    if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, bairro: r.bairro || '', dia: diaLocal(r.criado_em), cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', rm: raioCopa(cArea ? r.valores[cArea.nome] : 0), foto: '', local: true });
     // quadras: desenhadas antes dos pontos, no mesmo canvas, para o toque no ponto ter prioridade
     const qdCamada = L.layerGroup().addTo(mapa); const rotulos = L.layerGroup().addTo(mapa);
     let qdDados = null, qdSit = new Map(), selecao = null;
     const corQd = (q) => { const s = qdSit.get(q.n) || {}; if (selQd.value === 'eq') return s.equipe ? corEq(s.equipe) : '#9AA9B0'; return COR_QD[s.situacao || 'A levantar']; };
     const qdLayers = new Map();
     // faces de quadra: linhas sobre o contorno da quadra, por cima dela e por baixo dos pontos
-    const fcLayers = new Map(); let selTipo = 'qd'; const ZOOM_FACES = 16;
+    const fcLayers = new Map(); let selTipo = 'qd'; const ZOOM_FACES = 16; let fcAberta = null;
     const fcSit = () => qdSit.faces || new Map();
     const estiloFc = (id) => {
       const s = fcSit().get(id) || {}; const st = s.situacao || 'A levantar'; const sel = selecao && selTipo === 'fc' && selecao.has(id);
-      const cor = sel ? '#0D47A1' : selQd.value === 'eq' ? (s.equipe ? corEq(s.equipe) : COR_FC['A levantar']) : COR_FC[st];
-      const forte = sel || (selQd.value === 'eq' ? !!s.equipe : st !== 'A levantar');
-      return { color: cor, weight: sel ? 8 : forte ? 6 : 3, opacity: forte ? 0.95 : 0.6, dashArray: st === 'Levantada, sem árvores' && !sel && selQd.value !== 'eq' ? '10 6' : null, lineCap: 'butt' };
+      const aberta = fcAberta === id;
+      const cor = aberta ? '#1565C0' : sel ? '#6A1B9A' : selQd.value === 'eq' ? (s.equipe ? corEq(s.equipe) : COR_FC['A levantar']) : COR_FC[st];
+      const forte = aberta || sel || (selQd.value === 'eq' ? !!s.equipe : st !== 'A levantar');
+      return { color: cor, weight: aberta ? 10 : sel ? 8 : forte ? 6 : 3, opacity: forte ? 0.95 : 0.6, dashArray: st === 'Levantada, sem árvores' && !sel && !aberta && selQd.value !== 'eq' ? '10 6' : null, lineCap: 'butt' };
     };
-    const estiloQd = (q) => { const sel = selecao && selecao.has(q.n); const cor = corQd(q); const s = qdSit.get(q.n) || {}; const forte = selQd.value === 'eq' ? !!s.equipe : (s.situacao && s.situacao !== 'A levantar'); return { color: sel ? '#0D47A1' : cor, weight: sel ? 3 : 1, fillColor: sel ? '#1E88E5' : cor, fillOpacity: sel ? 0.45 : forte ? 0.38 : 0.12 }; };
+    // de perto (zoom 16 ou mais) a quadra fica só com o contorno e o número: quem conta a história são as faces; de longe, preenchida pela situação
+    const estiloQd = (q) => { const sel = selecao && selecao.has(q.n); const cor = corQd(q); const s = qdSit.get(q.n) || {}; const forte = selQd.value === 'eq' ? !!s.equipe : (s.situacao && s.situacao !== 'A levantar'); const perto = mapa.getZoom() >= ZOOM_FACES && q.f;
+      if (sel) return { color: '#6A1B9A', weight: 3, fillColor: '#9C4DCC', fillOpacity: 0.4 };
+      return perto ? { color: '#8A9BA2', weight: 1, fillColor: cor, fillOpacity: 0.04 } : { color: cor, weight: 1, fillColor: cor, fillOpacity: forte ? 0.45 : 0.14 }; };
     // só as quadras perto da área visível ficam desenhadas: arrastar e dar zoom continuam leves com milhares de quadras
     function sincQdVista() {
       if (!qdDados || !selQd.value) { if (qdLayers.size) { qdCamada.clearLayers(); qdLayers.clear(); } return; }
@@ -1402,12 +1431,12 @@
       for (const q of qdDados.quadras) {
         if (!quer.has(q.n)) continue;
         if (!qdLayers.has(q.n)) {
-          const ly = L.polygon(q.a.map((a) => { const r = []; for (let i = 0; i < a.length; i += 2) r.push([a[i + 1], a[i]]); return r; }), Object.assign({ renderer: render }, estiloQd(q))).on('click', (e) => { L.DomEvent.stop(e); clicarQuadra(q, e.latlng); }).addTo(qdCamada);
+          const ly = L.polygon(q.a.map((a) => { const r = []; for (let i = 0; i < a.length; i += 2) r.push([a[i + 1], a[i]]); return r; }), Object.assign({ renderer: render }, estiloQd(q))).on('click', (e) => { L.DomEvent.stop(e); tocarMapa(e.latlng, q); }).addTo(qdCamada);
           ly.bringToBack(); qdLayers.set(q.n, ly); // quadra sempre por baixo dos pontos: o toque no ponto tem prioridade
         }
         if (comFaces && q.f) for (const f of q.f) {
           const id = q.n + '-' + f.i; if (fcLayers.has(id)) continue;
-          const ly = L.polyline(Quadras.faceCoords(q, f).map((c) => [c[1], c[0]]), Object.assign({ renderer: render }, estiloFc(id))).on('click', (e) => { L.DomEvent.stop(e); clicarFace(q, f, e.latlng); }).addTo(qdCamada);
+          const ly = L.polyline(Quadras.faceCoords(q, f).map((c) => [c[1], c[0]]), Object.assign({ renderer: render }, estiloFc(id))).on('click', (e) => { L.DomEvent.stop(e); tocarMapa(e.latlng, null, { q, f }); }).addTo(qdCamada);
           ly.bringToBack(); fcLayers.set(id, ly); novasF++;
         }
       }
@@ -1427,7 +1456,7 @@
     let porArea = false, ini = null, ret = null;
     const ptLL = (e) => mapa.mouseEventToLatLng(e);
     div.addEventListener('pointerdown', (e) => { if (!porArea) return; ini = ptLL(e); e.preventDefault(); e.stopPropagation(); }, true);
-    div.addEventListener('pointermove', (e) => { if (!porArea || !ini) return; const b = L.latLngBounds(ini, ptLL(e)); if (ret) ret.setBounds(b); else ret = L.rectangle(b, { color: '#0D47A1', weight: 2, dashArray: '6 4', fillOpacity: 0.08, interactive: false }).addTo(mapa); e.preventDefault(); e.stopPropagation(); }, true);
+    div.addEventListener('pointermove', (e) => { if (!porArea || !ini) return; const b = L.latLngBounds(ini, ptLL(e)); if (ret) ret.setBounds(b); else ret = L.rectangle(b, { color: '#6A1B9A', weight: 2, dashArray: '6 4', fillOpacity: 0.08, interactive: false }).addTo(mapa); e.preventDefault(); e.stopPropagation(); }, true);
     div.addEventListener('pointerup', (e) => {
       if (!porArea || !ini) return; const b = L.latLngBounds(ini, ptLL(e)); ini = null; if (ret) { ret.remove(); ret = null; }
       const novas = selTipo === 'fc'
@@ -1436,30 +1465,92 @@
       novas.forEach((n) => selecao.add(n)); porArea = false; mapa.dragging.enable(); restilizar(novas); pintarSelecao(); e.preventDefault(); e.stopPropagation();
     }, true);
     function pintarRotulos() {
-      rotulos.clearLayers(); if (!qdDados || !selQd.value || mapa.getZoom() < 17) return;
+      rotulos.clearLayers(); if (!qdDados || !selQd.value || mapa.getZoom() < ZOOM_FACES) return;
       const b = mapa.getBounds(); let n = 0;
       for (const q of qdDados.quadras) { if (q.b[2] < b.getWest() || q.b[0] > b.getEast() || q.b[3] < b.getSouth() || q.b[1] > b.getNorth()) continue; if (++n > 400) break; L.marker(Quadras.centro(q), { interactive: false, keyboard: false, icon: L.divIcon({ className: 'qd-rot', html: h('span', null, q.n), iconSize: null }) }).addTo(rotulos); }
     }
     let zAnt = mapa.getZoom();
-    mapa.on('moveend zoomend', () => setTimeout(() => { if (!document.body.contains(div)) return; sincQdVista(); pintarRotulos(); const z = mapa.getZoom(); if ((z >= ZOOM_FACES) !== (zAnt >= ZOOM_FACES)) legenda(); zAnt = z; }, 0)); window.__app.mapa = mapa;
+    mapa.on('moveend zoomend', () => setTimeout(() => { if (!document.body.contains(div)) return; sincQdVista(); pintarRotulos(); const z = mapa.getZoom(); if ((z >= ZOOM_FACES) !== (zAnt >= ZOOM_FACES)) { legenda(); desenharQuadras(); } if (z !== zAnt) ajustarRaios(); zAnt = z; }, 0)); window.__app.mapa = mapa;
     const podeMarcarQd = (s) => ehCoord() || (perfil() === 'coletor' && (!s.equipe || s.equipe === minhaEquipe()));
+    // ---- ficha: no celular sobe de baixo (folha) e o mapa se desloca para o item continuar à vista; no computador, balão ----
+    let folha = null, aoFecharFicha = null;
+    function fecharFicha() { if (folha) { folha.remove(); folha = null; telaM.classList.remove('com-folha'); } const f = aoFecharFicha; aoFecharFicha = null; if (f) f(); }
+    const fecharOrig = mapa.closePopup.bind(mapa); mapa.closePopup = (...a) => { fecharFicha(); return fecharOrig(...a); };
+    function abrirFicha(conteudo, ll, aoFechar) {
+      fecharFicha(); fecharOrig(); aoFecharFicha = aoFechar || null;
+      if (!celular) { L.popup({ maxWidth: 320 }).setLatLng(ll).setContent(conteudo).openOn(mapa); mapa.once('popupclose', () => { const f = aoFecharFicha; aoFecharFicha = null; if (f) f(); }); return; }
+      folha = h('div', { class: 'mapa-folha', role: 'dialog' }, h('div', { class: 'mf-alca', 'aria-hidden': 'true' }), h('button', { class: 'mf-fechar', 'aria-label': 'Fechar', onclick: () => fecharFicha() }, ico('fechar')), conteudo);
+      telaM.append(folha); telaM.classList.add('com-folha');
+      // mapa se desloca para o item ficar acima da folha
+      requestAnimationFrame(() => { if (!folha) return; const alt = folha.getBoundingClientRect().height; const tam = mapa.getSize(); const pt = mapa.latLngToContainerPoint(ll); const lim = tam.y - alt - 30; if (pt.y > lim || pt.y < 30) mapa.panBy([0, pt.y - Math.max(60, lim / 2)], { animate: true }); });
+    }
+    const fichaAberta = () => !!folha;
+    mapa.on('click', (e) => { if (fichaAberta()) return fecharFicha(); if (!selecao) tocarMapa(e.latlng, null); });
+    // distância (em pixels na tela) do toque até cada face perto dele
+    function facesPerto(ll) {
+      if (!qdDados || mapa.getZoom() < ZOOM_FACES) return [];
+      const pt = mapa.latLngToContainerPoint(ll); const a = mapa.containerPointToLatLng([pt.x - 40, pt.y + 40]), b = mapa.containerPointToLatLng([pt.x + 40, pt.y - 40]);
+      const out = [];
+      for (const q of qdDados.quadras) {
+        if (!q.f || q.b[2] < a.lng || q.b[0] > b.lng || q.b[3] < a.lat || q.b[1] > b.lat) continue;
+        for (const f of q.f) {
+          const cs = Quadras.faceCoords(q, f).map((c) => mapa.latLngToContainerPoint([c[1], c[0]])); let d = Infinity;
+          for (let i = 1; i < cs.length; i++) { const p1 = cs[i - 1], p2 = cs[i]; const dx = p2.x - p1.x, dy = p2.y - p1.y; const l2 = dx * dx + dy * dy; let t = l2 ? ((pt.x - p1.x) * dx + (pt.y - p1.y) * dy) / l2 : 0; t = Math.max(0, Math.min(1, t)); d = Math.min(d, Math.hypot(pt.x - (p1.x + t * dx), pt.y - (p1.y + t * dy))); }
+          if (d <= 24) out.push({ q, f, id: q.n + '-' + f.i, d });
+        }
+      }
+      return out.sort((x, y) => x.d - y.d);
+    }
+    // toque no mapa: a face mais próxima em 24 px; se duas calçadas estão quase à mesma distância, pergunta qual
+    async function tocarMapa(ll, qd, direta) {
+      if (fichaAberta()) return fecharFicha(); // com a ficha aberta, o primeiro toque só fecha
+      if (selecao) { if (direta && selTipo === 'fc') return clicarFace(direta.q, direta.f, ll); if (qd && selTipo === 'qd') return clicarQuadra(qd, ll); const c0 = facesPerto(ll)[0]; if (c0 && selTipo === 'fc') return clicarFace(c0.q, c0.f, ll); return; }
+      const c = facesPerto(ll);
+      if (c.length) {
+        const outra = c.find((x) => x.id !== c[0].id);
+        if (outra && outra.d - c[0].d < 8) {
+          const nome = (x) => `Face ${x.f.i} da quadra ${x.q.n} · ${x.f.r}`;
+          const v = await modal('Qual calçada?', h('p', { class: 'dica' }, 'O toque ficou entre duas faces. Escolha a calçada:'), [{ texto: nome(c[0]), valor: 0 }, { texto: nome(outra), valor: 1 }, { texto: 'Cancelar', classe: 'sec', valor: null }]);
+          if (v == null) return; const x = v ? outra : c[0]; return clicarFace(x.q, x.f, ll);
+        }
+        return clicarFace(c[0].q, c[0].f, ll);
+      }
+      if (direta) return clicarFace(direta.q, direta.f, ll);
+      if (qd) clicarQuadra(qd, ll);
+    }
     function clicarQuadra(q, ll) {
       if (selecao) { if (selTipo !== 'qd') return toast('Toque nas linhas das faces para escolher.'); if (selecao.has(q.n)) selecao.delete(q.n); else selecao.add(q.n); pintarSelecao(); restilizar([q.n]); return; }
       const s = qdSit.get(q.n) || { situacao: 'A levantar', equipe: '' }; const st = s.situacao || 'A levantar';
       const fFeitas = q.f ? q.f.filter((f) => FACE_FEITA.includes((fcSit().get(q.n + '-' + f.i) || {}).situacao)).length : 0;
       const arv = pts.filter((o) => Quadras.dentro(o.lon, o.lat, q)).length;
       const marcar = async (itens) => { try { const r = await marcarQuadras(itens); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Quadra atualizada.'); qdSit = await carregarSitQd(!r.fila); mapa.closePopup(); desenhar(false); } catch (e) { toast(e.message, 5000); } };
-      const eqIn = h('input', { class: 'entrada', value: s.equipe || '', list: 'qd-equipes', placeholder: 'Ex.: Equipe 1' });
+      const eqIn = escolhaEquipe(s.equipe || '');
       const pop = h('div', { class: 'ficha qd-ficha' }, h('b', null, 'Quadra ' + q.n),
         q.p ? Object.entries(q.p).map(([k, v]) => h('small', null, (/^ruas?$/i.test(k) ? '' : k + ': ') + v)) : null,
         h('div', null, h('span', { class: 'os-st', style: `background:${COR_QD[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', s.equipe ? s.equipe : 'sem equipe'),
         h('small', null, `${pl(arv, 'árvore cadastrada', 'árvores cadastradas')} dentro dela` + (s.marcada_por ? ` · marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` : '')),
-        q.f ? h('small', null, `Faces: ${fFeitas} de ${q.f.length} levantadas.` + (mapa.getZoom() < ZOOM_FACES ? ' Aproxime o mapa para ver e marcar cada face.' : ' Toque na linha de uma face para marcar.')) : null,
+        q.f ? h('small', null, `Faces: ${fFeitas} de ${q.f.length} levantadas.` + (mapa.getZoom() < ZOOM_FACES ? '' : ' Toque na linha de uma face para marcar.')) : null,
+        q.f && mapa.getZoom() < ZOOM_FACES ? h('button', { class: 'btn sec peq', onclick: () => { fecharFicha(); mapa.setView(Quadras.centro(q), 18); } }, 'Aproximar para marcar faces') : null,
         perfil() === 'coletor' && !s.equipe ? h('button', { class: 'btn peq', onclick: () => marcar([{ numero: q.n, situacao: st === 'A levantar' ? 'Em levantamento' : st }]) }, 'Assumir esta quadra para a minha equipe') : null,
         podeMarcarQd(s) ? h('div', { class: 'chips qd-chips' }, SIT_QD.map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: q.n, situacao: x }]) }, x))) : null,
-        ehCoord() ? h('div', { class: 'qd-eq' }, eqIn, h('datalist', { id: 'qd-equipes' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e }))), h('button', { class: 'btn sec peq', onclick: () => marcar([{ numero: q.n, equipe: eqIn.value.trim() }]) }, 'Definir equipe')) : null,
+        ehCoord() ? h('div', { class: 'qd-eq' }, eqIn.el, h('button', { class: 'btn sec peq', onclick: () => { const v = eqIn.valor(); if (v == null) return toast('Escolha a equipe.'); marcar([{ numero: q.n, equipe: v }]); } }, 'Definir equipe')) : null,
         ehCoord() ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'qd'; selecao = new Set([q.n]); pintarSelecao(); restilizar([q.n]); } }, 'Escolher várias quadras') : null);
-      L.popup({ maxWidth: 300 }).setLatLng(ll).setContent(pop).openOn(mapa);
+      abrirFicha(pop, ll);
+    }
+    // equipe escolhida numa lista fechada (evita "Equipe 1" e "equipe1" virarem duas); "Outra equipe..." abre o campo
+    function escolhaEquipe(atual, comVazio) {
+      const conhecidas = [...new Set([...equipes, ...[...qdSit.values()].map((x) => x.equipe), ...[...fcSit().values()].map((x) => x.equipe)].filter((e) => e && e !== '-'))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true }));
+      const sel = h('select', { class: 'entrada sel-eq', 'aria-label': 'Equipe' }, comVazio ? h('option', { value: '__' }, 'Equipe...') : null, conhecidas.map((e) => h('option', { value: e, selected: e === atual }, e)), h('option', { value: '', selected: !atual && !comVazio }, 'Sem equipe'), h('option', { value: '__outra' }, 'Outra equipe...'));
+      const txt = h('input', { class: 'entrada oculto eq-outra', placeholder: 'Nome da equipe (ex.: Equipe 4)' });
+      sel.addEventListener('change', () => { txt.classList.toggle('oculto', sel.value !== '__outra'); if (sel.value === '__outra') txt.focus(); });
+      return { el: h('span', { class: 'eq-escolha' }, sel, txt), valor: () => (sel.value === '__outra' ? (txt.value.trim() || null) : sel.value === '__' ? null : sel.value) };
+    }
+    function iniciarSelecao() {
+      if (!qdDados) return toast('Este projeto ainda não tem a camada de quadras.');
+      const temFaces = qdDados.quadras.some((q) => q.f);
+      const escolher = (t) => { fecharFicha(); selTipo = t; selecao = new Set(); if (t === 'fc' && mapa.getZoom() < ZOOM_FACES) mapa.setZoom(17); pintarSelecao(); };
+      if (!temFaces) return escolher('qd');
+      modal('Selecionar', h('p', { class: 'dica' }, 'Depois toque em cada uma ou escolha uma área do mapa.'), [{ texto: 'Faces (calçadas)', valor: 'fc' }, { texto: 'Quadras inteiras', valor: 'qd', classe: 'sec' }, { texto: 'Cancelar', valor: null, classe: 'sec' }]).then((t) => t && escolher(t));
     }
     // face sem equipe segue a equipe da quadra; a coordenação pode passar a face para outra equipe
     const eqDaQuadra = (q) => { const x = qdSit.get(q.n) || {}; return x.equipe && x.atribuida !== 'nao' ? x.equipe : ''; };
@@ -1471,21 +1562,28 @@
       const lado = f.s ? qdDados.quadras.flatMap((x) => (x.f || []).filter((y) => y.s === f.s).map((y) => ({ id: x.n + '-' + y.i, c: y.c }))) : [];
       const mLado = lado.reduce((a, x) => a + x.c, 0);
       const marcar = async (itens) => { try { const r = await marcarQuadras(itens.map((i) => Object.assign({ tipo: 'face', rua: f.r }, i))); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Face atualizada.'); qdSit = await carregarSitQd(!r.fila); mapa.closePopup(); desenhar(false); } catch (e) { toast(e.message, 5000); } };
-      const eqIn = h('input', { class: 'entrada', value: s.equipe || '', list: 'fc-equipes', placeholder: 'Ex.: Equipe 1' });
+      const eqIn = escolhaEquipe(s.equipe || '');
       const pode = podeMarcarFc(s, q) && perfil() !== 'cliente';
+      const vaiSel = (ids) => { mapa.closePopup(); selTipo = 'fc'; selecao = new Set(ids); pintarSelecao(); restilizar([...selecao]); };
+      const mais = [
+        lado.length > 1 && (pode || ehCoord()) ? h('button', { class: 'btn sec peq', onclick: () => vaiSel(lado.map((x) => x.id)) }, `Escolher o lado todo da rua (${lado.length} faces, ${fmtM(mLado)})`) : null,
+        pode ? h('button', { class: 'btn sec peq', onclick: () => vaiSel([id]) }, 'Escolher várias faces') : null,
+        pode && st === 'Levantada' ? h('button', { class: 'btn sec peq acao', onclick: () => marcar([{ numero: id, situacao: 'Em levantamento' }]) }, 'Voltar para Em levantamento') : null,
+        pode && st !== 'A levantar' ? h('button', { class: 'btn sec peq acao', onclick: () => marcar([{ numero: id, situacao: 'A levantar' }]) }, 'Voltar para A levantar') : null,
+        ehCoord() ? h('div', { class: 'qd-eq' }, eqIn.el, h('button', { class: 'btn sec peq', onclick: () => { const v = eqIn.valor(); if (v == null) return toast('Escolha a equipe.'); marcar([{ numero: id, equipe: v }]); } }, 'Definir equipe')) : null].filter(Boolean);
       const pop = h('div', { class: 'ficha qd-ficha' }, h('b', null, `Face ${f.i} da quadra ${q.n}`), h('small', null, `${f.r} · ${fmtN(f.c)} m`),
         h('div', null, h('span', { class: 'os-st', style: `background:${COR_FC[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', s.equipe ? s.equipe : eqDaQuadra(q) ? 'quadra da ' + eqDaQuadra(q) : 'sem equipe'),
-        s.marcada_por ? h('small', null, `marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` + (s.largura ? ` · calçada com ${numBR(+s.largura)} m de largura` : '')) : null,
-        pode ? h('div', { class: 'chips qd-chips' }, SIT_FC.filter((x) => x !== 'Levantada, sem árvores').map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: id, situacao: x }]) }, x))) : null,
-        pode ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); iniciarCalcadaFace(q, f); } }, st === 'Levantada, sem árvores' ? 'Refazer o cadastro da calçada sem árvores' : 'Levantada, sem árvores (só a foto)') : null,
-        lado.length > 1 && (pode || ehCoord()) ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'fc'; selecao = new Set(lado.map((x) => x.id)); pintarSelecao(); restilizar([...selecao]); } }, `Escolher o lado todo da rua (${lado.length} faces, ${fmtM(mLado)})`) : null,
-        ehCoord() ? h('div', { class: 'qd-eq' }, eqIn, h('datalist', { id: 'fc-equipes' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e }))), h('button', { class: 'btn sec peq', onclick: () => marcar([{ numero: id, equipe: eqIn.value.trim() }]) }, 'Definir equipe')) : null,
-        pode ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'fc'; selecao = new Set([id]); pintarSelecao(); restilizar([id]); } }, 'Escolher várias faces') : null);
-      L.popup({ maxWidth: 300 }).setLatLng(ll).setContent(pop).openOn(mapa);
+        s.marcada_por ? h('small', null, `marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}`) : null,
+        pode && !FACE_FEITA.includes(st) ? h('button', { class: 'btn cheio acao', onclick: () => marcar([{ numero: id, situacao: 'Levantada' }]) }, ico('check'), 'Marcar como levantada') : null,
+        pode && st === 'A levantar' ? h('button', { class: 'btn sec cheio acao', onclick: () => marcar([{ numero: id, situacao: 'Em levantamento' }]) }, 'Em levantamento') : null,
+        pode ? h('button', { class: 'btn sec cheio acao', onclick: () => { mapa.closePopup(); iniciarCalcadaFace(q, f); } }, ico('camera'), st === 'Levantada, sem árvores' ? 'Refazer o cadastro da calçada sem árvores' : 'Sem árvores (só a foto)') : null,
+        mais.length ? h('details', { class: 'qd-mais' }, h('summary', null, 'Mais opções'), mais) : null);
+      fcAberta = id; restilizar([id]);
+      abrirFicha(pop, ll, () => { fcAberta = null; restilizar([id]); });
     }
     function pintarSelecao() {
-      barraSel.classList.toggle('oculto', !selecao); if (!selecao) return;
-      const fc = selTipo === 'fc'; const eqIn = h('input', { class: 'entrada' + (ehCoord() ? '' : ' oculto'), list: 'qd-equipes2', placeholder: 'Equipe' });
+      barraSel.classList.toggle('oculto', !selecao); if (!selecao) { bts.classList.remove('oculto'); return; }
+      const fc = selTipo === 'fc'; const eqSel = escolhaEquipe('', true); const eqIn = { get value() { const v = eqSel.valor(); return v == null ? '' : v === '' ? 'Sem equipe' : v; } };
       const sitSel = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Situação...'), (fc ? SIT_FC.filter((x) => x !== 'Levantada, sem árvores') : SIT_QD).map((x) => h('option', { value: x }, x)));
       const ruaDe = (id) => { const k = id.lastIndexOf('-'); const q = qdPorN && qdPorN.m.get(id.slice(0, k)); const f = q && q.f && q.f.find((y) => y.i === id.slice(k + 1)); return f ? f.r : ''; };
       const aplicar = async () => {
@@ -1495,10 +1593,12 @@
         try { const r = await marcarQuadras(it); toast(r.fila ? 'Sem internet: guardado no aparelho. Vai quando o sinal voltar.' : (fc ? `${pl(it.length - (r.recusadas || []).length, 'face atualizada', 'faces atualizadas')}.` : `${pl(r.alteradas, 'quadra atualizada', 'quadras atualizadas')}.`) + (r.recusadas && r.recusadas.length ? ` ${r.recusadas.length} não aceita(s): ${r.recusadas[0].motivo}` : ''), 5000); qdSit = await carregarSitQd(!r.fila); selecao = null; pintarSelecao(); desenhar(false); } catch (e) { toast(e.message, 5000); }
       };
       const mSel = fc ? [...selecao].reduce((a, id) => { const k = id.lastIndexOf('-'); const q = qdPorN && qdPorN.m.get(id.slice(0, k)); const f = q && q.f && q.f.find((y) => y.i === id.slice(k + 1)); return a + (f ? f.c : 0); }, 0) : 0;
-      barraSel.replaceChildren(h('b', null, fc ? `${pl(selecao.size, 'face escolhida', 'faces escolhidas')} (${fmtM(mSel)}). Toque nas faces ou escolha uma área.` : `${pl(selecao.size, 'quadra escolhida', 'quadras escolhidas')}. Toque nas quadras ou escolha uma área.`),
+      const sair = () => { const v = [...selecao]; selecao = null; porArea = false; mapa.dragging.enable(); pintarSelecao(); restilizar(v); };
+      barraSel.replaceChildren(h('div', { class: 'qd-sel-cab' }, h('b', null, fc ? `${pl(selecao.size, 'face escolhida', 'faces escolhidas')} (${fmtM(mSel)}). Toque nas faces ou escolha uma área.` : `${pl(selecao.size, 'quadra escolhida', 'quadras escolhidas')}. Toque nas quadras ou escolha uma área.`), h('button', { class: 'ic', 'aria-label': 'Sair da seleção', onclick: sair }, ico('fechar'))),
         h('div', { class: 'qd-sel-linha' }, h('button', { class: 'btn sec peq', onclick: () => { porArea = true; mapa.dragging.disable(); toast('Arraste o dedo sobre o mapa para marcar a área.', 3000); } }, 'Escolher por área'), selecao.size > 1 ? h('button', { class: 'btn sec peq', onclick: () => { const v = [...selecao]; selecao = new Set(); restilizar(v); pintarSelecao(); } }, 'Limpar escolha') : null),
-        h('div', { class: 'qd-sel-linha' }, eqIn, h('datalist', { id: 'qd-equipes2' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e })), h('option', { value: 'Sem equipe' })), sitSel,
-          h('button', { class: 'btn peq', onclick: aplicar }, 'Aplicar'), h('button', { class: 'btn sec peq', onclick: () => { const v = [...selecao]; selecao = null; porArea = false; mapa.dragging.enable(); pintarSelecao(); restilizar(v); } }, 'Sair')));
+        h('div', { class: 'qd-sel-linha' }, ehCoord() ? eqSel.el : null, sitSel,
+          h('button', { class: 'btn peq', onclick: aplicar }, 'Aplicar'), h('button', { class: 'btn sec peq', onclick: sair }, 'Sair')));
+      bts.classList.toggle('oculto', !!selecao);
     }
     const carregarQdMapa = async () => {
       try {
@@ -1506,7 +1606,7 @@
         qdDados = await carregarQuadras(); delete conta.dataset.qd; if (!qdDados || !document.body.contains(div)) { pintarConta(); return; }
         // primeiro com a situação guardada no aparelho, depois com a do servidor
         qdSit = await carregarSitQd(false, true); for (const s of qdSit.values()) if (s.equipe) corEq(s.equipe);
-        selQd.classList.remove('oculto'); preencherEquipes(); desenhar(false);
+        selQd.classList.remove('oculto'); preencherEquipes(); desenhar(false); btSel.classList.toggle('oculto', !(ehCoord() || perfil() === 'coletor'));
         // com a camada do projeto, o mapa abre na cidade: na posição do GPS se a pessoa está nela, senão a cidade inteira
         porCidade = true;
         if (!semFiltro() || mexeu) { /* filtro do painel ou mapa já mexido: fica como está */ }
@@ -1527,21 +1627,30 @@
       if (porOS && !osPorArv) { carregarOSMapa().then(() => desenhar(false)); }
       const hojeD = diaLocal(agoraISO()); const ontemD = diaLocal(new Date(Date.now() - 864e5).toISOString()); const d7 = diaLocal(new Date(Date.now() - 6 * 864e5).toISOString());
       const dv = selDia.value; const okDia = (o) => { if (!dv) return true; const x = o.dia || ''; if (!x) return false; if (dv === 'hoje') return x === hojeD; if (dv === 'ontem') return x === ontemD; if (dv === '7') return x >= d7; if (dv === 'outro') return !diaIn.value || x === diaIn.value; return true; };
-      const vis = pts.filter((o) => (!q || o.chave.includes(q)) && (!eq || o.equipe === eq) && (!rk || String(o.risco) === rk) && (!ba || o.bairro === ba) && okDia(o));
+      const vis = pts.filter((o) => (!q || o.chave.includes(q)) && (!eq || o.equipe === eq) && (!rk || String(o.risco) === rk) && (!soAlto || o.risco === 'Alto' || o.risco === 'Severo') && (!ba || o.bairro === ba) && okDia(o));
+      const mpp = metrosPorPixel();
       for (const o of vis) {
         const os = porOS && osPorArv ? osPorArv.get(o.uid) : null;
         const fill = porOS ? (os ? COR_OS[os.status] : '#C9D3D6') : porRisco ? corRisco[o.risco] || '#8A969C' : corEq(o.equipe || '-');
-        L.circleMarker([o.lat, o.lon], { renderer: render, radius: vis.length > 2000 ? 4 : 6, color: '#fff', weight: 1.5, fillColor: fill, fillOpacity: 0.95 }).on('click', (e) => ficha(o, e.latlng)).addTo(camada);
+        // ponto no tamanho real da copa (como no satélite), com mínimo de 4 px para continuar visível e tocável
+        const mk = L.circleMarker([o.lat, o.lon], { renderer: render, radius: raioPx(o, mpp, vis.length), color: '#13262B', weight: 1.2, fillColor: fill, fillOpacity: 0.8 }).on('click', (e) => { L.DomEvent.stop(e); if (fichaAberta()) return fecharFicha(); ficha(o, e.latlng); }).addTo(camada);
+        mk.__o = o;
       }
       if (porOS && osPorArv) for (const o of osSoltas) L.circleMarker([+o.latitude, +o.longitude], { renderer: render, radius: 8, color: '#13262B', weight: 2, fillColor: COR_OS[o.status], fillOpacity: 0.95 }).on('click', () => ir('#os/' + encodeURIComponent(o.id))).addTo(camada);
       const rq = qdDados && selQd.value ? resumoQd(qdDados, qdSit) : null;
-      conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos` + (rq ? ` · ${fmtN(rq.por.Levantada)} de ${fmtN(rq.tot)} quadras levantadas` : '') + (porOS && osPorArv ? ` · ${[...osPorArv.values()].filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length + osSoltas.filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length} com ordem em aberto` : '') + (conta.dataset.qd ? ' · ' + conta.dataset.qd : '');
+      const meu = perfil() === 'coletor' && minhaEquipe() ? minhaEquipe() : '';
+      const minhasQ = rq && meu && rq.eq[meu] ? ` · Minhas quadras: ${fmtN(rq.eq[meu].Levantada)} de ${fmtN(rq.eq[meu].total)} levantadas` : '';
+      const hojeN = meu ? pts.filter((o) => o.equipe === meu && o.dia === hojeD).length : 0;
+      conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos` + (rq ? ` · ${fmtN(rq.por.Levantada)} de ${fmtN(rq.tot)} quadras levantadas` : '') + minhasQ + (meu ? ` · Hoje: ${fmtN(hojeN)}` : '') + (porOS && osPorArv ? ` · ${[...osPorArv.values()].filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length + osSoltas.filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length} com ordem em aberto` : '') + (conta.dataset.qd ? ' · ' + conta.dataset.qd : '');
       legenda();
       if (ajustar && vis.length && !(porCidade && semFiltro())) {
         if (vis.length === 1) { mapa.setView([vis[0].lat, vis[0].lon], 19); ficha(vis[0]); }
         else mapa.fitBounds(L.latLngBounds(vis.map((o) => [o.lat, o.lon])), { padding: [30, 30], maxZoom: 19 });
       }
     }
+    function metrosPorPixel() { const c = mapa.getCenter(); return 40075016.686 * Math.cos(c.lat * Math.PI / 180) / Math.pow(2, mapa.getZoom() + 8); }
+    const raioPx = (o, mpp, n) => { const min = n > 2000 && mapa.getZoom() < 16 ? 3 : 4; return o.rm ? Math.max(min, Math.min(80, o.rm / mpp)) : (n > 2000 ? 4 : 5); };
+    function ajustarRaios() { const mpp = metrosPorPixel(); const n = camada.getLayers().length; camada.eachLayer((l) => { if (l.__o) l.setRadius(raioPx(l.__o, mpp, n)); }); }
     function ficha(o, ll) {
       const pop = h('div', { class: 'ficha' }, h('b', null, o.cod || 'Sem código'), o.esp ? h('i', null, o.esp) : null,
         o.cat ? h('div', null, rotOp(cCat, o.cat)) : null, o.risco ? h('div', null, 'Risco ' + String(rotOp(cRisco, o.risco)).toLowerCase()) : null,
@@ -1549,14 +1658,14 @@
         linkSeguro(o.foto) ? h('a', { href: linkSeguro(o.foto), target: '_blank', rel: 'noopener' }, 'Ver foto') : null,
         osPorArv && osPorArv.get(o.uid) ? h('button', { class: 'btn sec peq', onclick: () => ir('#os/' + encodeURIComponent(osPorArv.get(o.uid).id)) }, `${numOS(osPorArv.get(o.uid))} · ${osPorArv.get(o.uid).status}`) : null,
         o.local ? h('button', { class: 'btn peq', onclick: () => ir('#form/' + o.uid) }, 'Abrir') : perfil() !== 'coletor' ? h('button', { class: 'btn peq', onclick: () => { S.navVal = []; ir('#ficha/' + encodeURIComponent(o.uid)); } }, 'Ver ficha') : null);
-      L.popup().setLatLng(ll || [o.lat, o.lon]).setContent(pop).openOn(mapa);
+      abrirFicha(pop, ll || L.latLng(o.lat, o.lon));
     }
     let leg = null;
     function legenda() {
       if (leg) leg.remove();
       leg = L.control({ position: 'bottomleft' });
       const itens = selCor.value === 'os' ? [...Object.entries(COR_OS), ['Sem ordem', '#C9D3D6']] : selCor.value === 'risco' ? Object.entries(corRisco) : equipes.map((e) => [e, corEq(e)]);
-      const itQd = qdDados && selQd.value ? (selQd.value === 'eq' ? [...new Set([...qdSit.values()].map((s) => s.equipe).filter(Boolean))].sort().map((e) => [e, corEq(e)]).concat([['Sem equipe', '#9AA9B0']]) : Object.entries(COR_QD)) : [];
+      const itQd = qdDados && selQd.value && !(mapa.getZoom() >= ZOOM_FACES && selQd.value === 'sit') ? (selQd.value === 'eq' ? [...new Set([...qdSit.values()].map((s) => s.equipe).filter(Boolean))].sort().map((e) => [e, corEq(e)]).concat([['Sem equipe', '#9AA9B0']]) : Object.entries(COR_QD)) : [];
       const itFc = qdDados && selQd.value === 'sit' && fcLayers.size ? Object.entries(COR_FC).filter(([t]) => t !== 'A levantar') : [];
       // em tela pequena a legenda começa recolhida (um botão): aberta, ela tapava boa parte do mapa
       if (S.legAberta == null) S.legAberta = mapa.getSize().y >= 520;
@@ -1567,32 +1676,51 @@
     mapa.on('popupopen', () => { if (leg) leg.getContainer().classList.add('oculto'); });
     mapa.on('popupclose', () => { if (leg) leg.getContainer().classList.remove('oculto'); });
     let tBusca = null;
-    busca.addEventListener('input', () => { clearTimeout(tBusca); tBusca = setTimeout(() => desenhar(!!busca.value.trim()), 250); });
+    busca.addEventListener('input', () => { clearTimeout(tBusca); tBusca = setTimeout(() => { desenhar(!!busca.value.trim()); pintarBuscaRes(); }, 250); });
+    busca.addEventListener('focus', () => pintarBuscaRes());
+    busca.addEventListener('blur', () => setTimeout(() => buscaRes.classList.add('oculto'), 250));
+    // resultados agrupados: árvores pelo código, espécies, quadras pelo número e endereço
+    function pintarBuscaRes() {
+      const t = busca.value.trim(); const q = norm(t); if (q.length < 2) return buscaRes.classList.add('oculto');
+      const arv = pts.filter((o) => norm(o.cod).includes(q)).slice(0, 5);
+      const esp = {}; for (const o of pts) if (o.esp && norm(o.esp).includes(q)) esp[o.esp] = (esp[o.esp] || 0) + 1;
+      const esps = Object.entries(esp).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const qds = qdDados && /^\d/.test(t) ? qdDados.quadras.filter((x) => String(x.n).startsWith(t)).slice(0, 3) : [];
+      if (arv.length === 1 && norm(arv[0].cod) === q && !esps.length && !qds.length) return buscaRes.classList.add('oculto'); // código exato: a ficha já abre
+      const it = (txt, sub, fn) => h('button', { class: 'br-it', role: 'option', onmousedown: (e) => e.preventDefault(), onclick: () => { buscaRes.classList.add('oculto'); fn(); } }, h('span', null, txt), sub ? h('small', null, sub) : null);
+      const grupo = (tit, itens) => (itens.length ? [h('b', { class: 'br-tit' }, tit), itens] : null);
+      buscaRes.replaceChildren(
+        grupo('Árvores', arv.map((o) => it(o.cod || 'Sem código', o.esp, () => { busca.value = o.cod; desenhar(false); mapa.setView([o.lat, o.lon], 19); ficha(o); }))),
+        grupo('Espécies', esps.map(([e, n]) => it(e, pl(n, 'árvore', 'árvores'), () => { busca.value = e; desenhar(true); }))),
+        grupo('Quadras', qds.map((x) => it('Quadra ' + x.n, x.f ? pl(x.f.length, 'face', 'faces') : '', () => { busca.value = ''; desenhar(false); mapa.fitBounds(L.latLngBounds([x.b[1], x.b[0]], [x.b[3], x.b[2]]), { maxZoom: 18 }); setTimeout(() => clicarQuadra(x, L.latLng(Quadras.centro(x))), 400); }))),
+        h('b', { class: 'br-tit' }, 'Endereço'), it(`Buscar o endereço "${t}"`, navigator.onLine ? 'no mapa da cidade' : 'precisa de internet', () => { const ev = new KeyboardEvent('keydown', { key: 'Enter' }); ev.forcar = true; busca.dispatchEvent(ev); }));
+      buscaRes.classList.remove('oculto');
+    }
     busca.setAttribute('enterkeyhint', 'search'); busca.placeholder = 'Código, espécie ou endereço';
     let marcaEnd = null;
     busca.addEventListener('keydown', async (e) => {
       if (e.key !== 'Enter') return; const q = busca.value.trim(); if (!q) return;
-      if (pts.some((o) => o.chave.includes(norm(q)))) return desenhar(true);
+      if (!e.forcar && pts.some((o) => o.chave.includes(norm(q)))) return desenhar(true);
       if (!navigator.onLine) return toast('Sem internet para buscar endereço.');
       try {
         const r = await buscarEndereco(q); if (!r) return toast('Endereço não encontrado.');
         busca.value = ''; desenhar(false); mapa.setView([r.lat, r.lon], 18);
-        if (marcaEnd) marcaEnd.remove(); marcaEnd = L.marker([r.lat, r.lon]).addTo(mapa).bindPopup(r.nome).openPopup();
+        if (marcaEnd) marcaEnd.remove(); marcaEnd = L.circleMarker([r.lat, r.lon], { renderer: render, radius: 10, color: '#fff', weight: 3, fillColor: '#C62828', fillOpacity: 1 }).addTo(mapa).bindPopup(r.nome).openPopup();
       } catch (er) { toast('Não foi possível buscar o endereço.'); }
     });
-    [selEq, selRisco, selBairro, selCor].filter(Boolean).forEach((x) => x.addEventListener('change', () => desenhar(x !== selCor)));
-    selDia.addEventListener('change', () => { diaIn.classList.toggle('oculto', selDia.value !== 'outro'); desenhar(true); }); diaIn.addEventListener('change', () => desenhar(true));
+    [selEq, selRisco, selBairro, selCor].filter(Boolean).forEach((x) => x.addEventListener('change', () => { if (x === selRisco && selRisco.value) soAlto = false; pintarChips(); desenhar(x !== selCor); }));
+    selDia.addEventListener('change', () => { diaIn.classList.toggle('oculto', selDia.value !== 'outro'); pintarChips(); desenhar(true); }); diaIn.addEventListener('change', () => desenhar(true));
     selQd.addEventListener('change', () => { S.qdModo = selQd.value; desenhar(false); });
     const preencherBairros = () => { const bs = [...new Set(pts.map((o) => o.bairro).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt')); const at = selBairro.value; selBairro.replaceChildren(h('option', { value: '' }, 'Todos os bairros'), bs.map((b) => h('option', { value: b, selected: b === at }, b))); selBairro.classList.toggle('oculto', !bs.length); };
     const preencherEquipes = () => { preencherBairros(); const atual = selEq.value; selEq.replaceChildren(h('option', { value: '' }, 'Todas as equipes'), ...equipes.filter((e) => e !== '-').map((e) => h('option', { value: e, selected: e === atual }, e))); };
     const aplicarFiltroPainel = () => { if (!S.mapaFiltro) return; if (S.mapaFiltro.equipe) selEq.value = S.mapaFiltro.equipe; const fd = S.mapaFiltro.dia || ''; if (/^\d{4}-\d{2}-\d{2}$/.test(fd)) { selDia.value = 'outro'; diaIn.value = fd; diaIn.classList.remove('oculto'); } else selDia.value = fd; };
-    preencherEquipes(); aplicarFiltroPainel(); desenhar(true); carregarQdMapa();
+    preencherEquipes(); aplicarFiltroPainel(); pintarChips(); desenhar(true); carregarQdMapa();
     if (!Api.demo) {
       conta.textContent = navigator.onLine ? 'Carregando pontos...' : ''; pintarConta();
       try {
-        const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link', 'bairro_aprox', 'criado_em'].map((x) => x || '');
+        const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link', 'bairro_aprox', 'criado_em', cArea && cArea.nome].map((x) => x || '');
         // abre com os pontos da última consulta e troca pelos do servidor quando chegarem
-        const addLinhas = (ls) => { for (const l of ls) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6], cat: l[7], foto: l[8], bairro: l[9] || '', dia: l[10] ? diaLocal(l[10]) : '', local: false }); };
+        const addLinhas = (ls) => { for (const l of ls) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6], cat: l[7], foto: l[8], bairro: l[9] || '', dia: l[10] ? diaLocal(l[10]) : '', rm: raioCopa(l[11]), local: false }); };
         const kc = 'mapapts:' + S.projeto.id + ':' + (S.sessao ? S.sessao.u : '');
         const antes = await Store.get(kc);
         if (antes && antes.campos === campos.join('|') && document.body.contains(div)) { addLinhas(antes.linhas); preencherEquipes(); aplicarFiltroPainel(); desenhar(true); conta.textContent += navigator.onLine ? ' · atualizando...' : ''; }
@@ -1615,8 +1743,21 @@
       if (pts.length) return mapa.fitBounds(L.latLngBounds(pts.map((o) => [o.lat, o.lon])), { padding: [30, 30], maxZoom: 17 });
       toast('Este projeto ainda não tem quadras nem pontos no mapa.');
     }
-    function centrar() { if (!S.pos) return toast('GPS ainda sem sinal.'); mapa.setView([S.pos.lat, S.pos.lon], 19); }
-    const ouv = (p) => { if (!p || !document.body.contains(div)) return; if (!eu) eu = L.circleMarker([p.lat, p.lon], { renderer: render, interactive: false, radius: 8, color: '#fff', weight: 3, fillColor: '#1E88E5', fillOpacity: 1 }).addTo(mapa); else eu.setLatLng([p.lat, p.lon]); };
+    // minha posição: primeiro toque centraliza; o segundo passa a seguir (arrastar o mapa para de seguir)
+    let seguindo = false, euPrec = null;
+    mapa.on('dragstart', () => { if (seguindo) { seguindo = false; btEu.classList.remove('ativo'); } });
+    function centrar() {
+      if (!S.pos) { ligarGps(); return toast('GPS ainda sem sinal.'); }
+      const perto = mapa.getCenter().distanceTo([S.pos.lat, S.pos.lon]) < 15 && mapa.getZoom() >= 18;
+      if (perto && !seguindo) { seguindo = true; btEu.classList.add('ativo'); toast('Seguindo a sua posição. Arraste o mapa para parar.', 2500); }
+      mapa.setView([S.pos.lat, S.pos.lon], Math.max(18, mapa.getZoom()));
+    }
+    const ouv = (p) => {
+      if (!p || !document.body.contains(div)) return;
+      if (!euPrec) euPrec = L.circle([p.lat, p.lon], { renderer: render, interactive: false, radius: p.prec || 5, color: '#1E88E5', weight: 1, fillColor: '#1E88E5', fillOpacity: 0.12 }).addTo(mapa); else { euPrec.setLatLng([p.lat, p.lon]); euPrec.setRadius(p.prec || 5); }
+      if (!eu) eu = L.circleMarker([p.lat, p.lon], { renderer: render, interactive: false, radius: 9, color: '#fff', weight: 3, fillColor: '#1E88E5', fillOpacity: 1 }).addTo(mapa); else eu.setLatLng([p.lat, p.lon]);
+      if (seguindo) mapa.panTo([p.lat, p.lon], { animate: true });
+    };
     Gps.ouvintes.add(ouv); if (S.pos) ouv(S.pos);
     if (!pts.length) { if (S.pos) centrar(); else mapa.setView([-15.8, -47.9], 4); }
   }
@@ -2790,7 +2931,7 @@
   const FACE_FEITA = ['Levantada', 'Levantada, sem árvores'];
   const fmtKm = (m) => (m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km';
   const fmtM = (m) => (m >= 1000 ? fmtKm(m) : fmtN(Math.round(m)) + ' m');
-  const COR_FC = { 'A levantar': '#78909C', 'Em levantamento': '#F2A900', Levantada: '#2E7D32', 'Levantada, sem árvores': '#00838F' };
+  const COR_FC = { 'A levantar': '#78909C', 'Em levantamento': '#F2A900', Levantada: '#2E7D32', 'Levantada, sem árvores': '#6B85A3' }; // cinza-azulado tracejado: longe do teal das equipes
   const COR_QD = { 'A levantar': '#9AA9B0', 'Em levantamento': '#F2A900', Levantada: '#2E7D32' };
   const minhaEquipe = () => (S.projeto && S.projeto.equipe) || (S.sessao && S.sessao.usuario && S.sessao.usuario.equipe) || '';
   async function carregarQuadras() {

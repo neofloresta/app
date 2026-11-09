@@ -50,16 +50,16 @@ const sitF = async (T) => { const j = await P('quadras_situacao', { t: T, projet
   ok('F.3', !/Calçada/i.test(cats) && /Árvore/.test(cats), `categorias no cadastro comum: ${cats.replace(/\s+/g, ' ')}`);
   // 3. marcar no mapa
   const q1 = auto.q; const f1 = q1.f.find((x) => x.i !== auto.f.i && x.c > 30);
-  await pe.goto(L.WEB + '#mapa'); await pe.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000 }); await pe.waitForTimeout(1500);
+  await pe.goto(L.WEB + '#mapa'); await pe.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000, state: 'attached' }); await pe.waitForTimeout(1500);
   await tocar(pe, ...meio(q1, f1)); const pop = await pe.locator('.qd-ficha').innerText().catch(() => '');
   await pe.screenshot({ path: 'fc-ficha.png' });
-  await pe.click('.qd-ficha .chip:text-is("Levantada")'); await pe.waitForTimeout(1500); s = await sitF(T);
+  await pe.click('.qd-ficha button:has-text("Marcar como levantada")'); await pe.waitForTimeout(1500); s = await sitF(T);
   ok('F.4', /Face .* da quadra/.test(pop) && pop.includes(f1.r) && s.f[q1.n + '-' + f1.i] && s.f[q1.n + '-' + f1.i].situacao === 'Levantada', `ficha: "${pop.replace(/\s+/g, ' ').slice(0, 160)}"; servidor: ${s.f[q1.n + '-' + f1.i] && s.f[q1.n + '-' + f1.i].situacao}`);
   // 4. lado todo da rua
   const qL = cam.quadras.find((q) => q.f && q.f.some((x) => x.s && cam.quadras.filter((y) => y.f && y.f.some((z) => z.s === x.s)).length >= 3) && Math.abs(q.b[1] - centro[0]) < 0.006 && q.n !== q1.n);
   const fL = qL.f.find((x) => cam.quadras.filter((y) => y.f && y.f.some((z) => z.s === x.s)).length >= 3);
   const ladoIds = cam.quadras.flatMap((q) => (q.f || []).filter((x) => x.s === fL.s).map((x) => q.n + '-' + x.i));
-  await tocar(pe, ...meio(qL, fL)); await pe.click('.qd-ficha button:has-text("lado todo")'); await pe.waitForTimeout(500);
+  await tocar(pe, ...meio(qL, fL)); await pe.click('.qd-ficha .qd-mais summary'); await pe.click('.qd-ficha button:has-text("lado todo")'); await pe.waitForTimeout(500);
   const barra = await pe.locator('.qd-selecao b').innerText();
   await pe.selectOption('.qd-selecao select', 'Levantada'); await pe.click('.qd-selecao button:has-text("Aplicar")'); await pe.waitForTimeout(2000); s = await sitF(T);
   const feitas = ladoIds.filter((id) => s.f[id] && s.f[id].situacao === 'Levantada').length;
@@ -82,8 +82,8 @@ const sitF = async (T) => { const j = await P('quadras_situacao', { t: T, projet
   const f3 = q1.f.find((x) => ![auto.f.i, f1.i, f2.i].includes(x.i));
   let filaN = -1, depois = '';
   if (f3) {
-    await pe.goto(L.WEB + '#mapa'); await pe.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000 }); await pe.waitForTimeout(1200);
-    await E.ctx.setOffline(true); await tocar(pe, ...meio(q1, f3)); await pe.click('.qd-ficha .chip:text-is("Levantada")'); await pe.waitForTimeout(800);
+    await pe.goto(L.WEB + '#mapa'); await pe.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000, state: 'attached' }); await pe.waitForTimeout(1200);
+    await E.ctx.setOffline(true); await tocar(pe, ...meio(q1, f3)); await pe.click('.qd-ficha button:has-text("Marcar como levantada")'); await pe.waitForTimeout(800);
     filaN = await pe.evaluate(async () => ((await window.__app.Store.get('qdfila')) || []).length);
     await E.ctx.setOffline(false); await sync(pe); await pe.waitForTimeout(2000); s = await sitF(T); depois = (s.f[q1.n + '-' + f3.i] || {}).situacao;
   }
@@ -91,15 +91,15 @@ const sitF = async (T) => { const j = await P('quadras_situacao', { t: T, projet
   ok('F.7', !f3 || (filaN === 1 && depois === 'Levantada'), f3 ? `sem internet ficou guardado (${filaN}); ao voltar: ${depois}` : 'quadra com 3 faces: sem 4ª face para testar');
   ok('F.8', !todasQ1 || s.q[q1.n].situacao === 'Levantada', `quadra ${q1.n}: ${q1.f.length} faces, todas levantadas=${todasQ1}; quadra "${s.q[q1.n].situacao}"`);
   // 7. outra equipe não mexe na face da Equipe 1
-  const E2 = await L.celular(b); await L.logar(E2.p, 'div-2', 'equipe02'); await E2.p.waitForSelector('button.nova'); await E2.p.goto(L.WEB + '#mapa'); await E2.p.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000 }); await E2.p.waitForTimeout(1200);
-  await tocar(E2.p, ...meio(q1, f1)); const pop2 = await E2.p.locator('.qd-ficha').innerText().catch(() => ''); const chips2 = await E2.p.locator('.qd-ficha .chip').count();
+  const E2 = await L.celular(b); await L.logar(E2.p, 'div-2', 'equipe02'); await E2.p.waitForSelector('button.nova'); await E2.p.goto(L.WEB + '#mapa'); await E2.p.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000, state: 'attached' }); await E2.p.waitForTimeout(1200);
+  await tocar(E2.p, ...meio(q1, f1)); const pop2 = await E2.p.locator('.qd-ficha').innerText().catch(() => ''); const chips2 = await E2.p.locator('.qd-ficha .acao').count();
   ok('F.9', /Equipe 1/.test(pop2) && chips2 === 0, `face da Equipe 1 vista pela Equipe 2: só consulta (botões ${chips2})`);
   // 8. painel e "Ver a cidade"
   await pa.goto(L.WEB + '#painel'); await pa.waitForSelector('.kpis'); await pa.waitForSelector('text=Calçada levantada', { timeout: 20000 }).catch(() => null);
   const kp = await pa.locator('.kpi:has-text("Calçada levantada")').innerText().catch(() => ''); const tab = await pa.locator('.painel-os table').first().innerText().catch(() => '');
   await pa.screenshot({ path: 'fc-painel.png', fullPage: true });
   ok('F.10', /km/.test(kp) && /Faces levantadas/i.test(tab) && /Equipe 1/.test(tab), `"${kp.replace(/\s+/g, ' ')}"; tabela por equipe: ${tab.split('\n').slice(0, 2).join(' | ').replace(/\t/g, ' ')}`);
-  await pa.goto(L.WEB + '#mapa'); await pa.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000 });
+  await pa.goto(L.WEB + '#mapa'); await pa.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000, state: 'attached' });
   await pa.evaluate(() => { window.__app.mapa.setView([-19.9, -43.9], 15, { animate: false }); }); await pa.click('button:has-text("Ver a cidade")'); await pa.waitForTimeout(800);
   const vista = await pa.evaluate(() => { const m = window.__app.mapa; const c = m.getCenter(); return { z: m.getZoom(), lat: c.lat, lon: c.lng }; });
   ok('F.11', vista.z <= 14 && Math.abs(vista.lat + 20.14) < 0.1 && Math.abs(vista.lon + 44.89) < 0.1, `depois de "Ver a cidade": zoom ${vista.z}, centro ${vista.lat.toFixed(3)}, ${vista.lon.toFixed(3)}`);
@@ -110,9 +110,9 @@ const sitF = async (T) => { const j = await P('quadras_situacao', { t: T, projet
   const filtrosRecolhidos = await Pq.p.locator('.mapa-sel').evaluate((e) => e.classList.contains('oculto')); const altMapa = await Pq.p.locator('#mapa').evaluate((e) => e.getBoundingClientRect().height); await Pq.p.waitForTimeout(1200);
   const qL2 = cam.quadras.find((q) => q.f && q.n !== q1.n && Math.abs(q.b[1] - centro[0]) < 0.01 && q.f.length >= 3 && +q.n > 2300);
   await tocar(Pq.p, ...meio(qL2, qL2.f[0]));
-  const tapados = await Pq.p.evaluate(() => [...document.querySelectorAll('.qd-ficha button')].filter((b) => { b.scrollIntoView({ block: 'nearest' }); const r = b.getBoundingClientRect(); const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !el || !(el === b || b.contains(el)); }).map((b) => b.textContent));
-  const nBt = await Pq.p.locator('.qd-ficha button').count(); await Pq.p.screenshot({ path: 'fc-tela-pequena.png' });
-  ok('F.13', nBt >= 4 && !tapados.length && filtrosRecolhidos && altMapa > 400, `celular 360x640: filtros recolhidos=${filtrosRecolhidos}, mapa com ${Math.round(altMapa)} px de altura; ${nBt} botões na ficha da face, tapados: ${tapados.join(', ') || 'nenhum'}`);
+  const tapados = await Pq.p.evaluate(() => [...document.querySelectorAll('.qd-ficha button')].filter((b) => (b.checkVisibility ? b.checkVisibility() : b.offsetParent)).filter((b) => { b.scrollIntoView({ block: 'nearest' }); const r = b.getBoundingClientRect(); const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !el || !(el === b || b.contains(el)); }).map((b) => b.textContent));
+  const nBt = await Pq.p.locator('.qd-ficha button:visible').count(); await Pq.p.screenshot({ path: 'fc-tela-pequena.png' });
+  ok('F.13', nBt >= 3 && !tapados.length && filtrosRecolhidos && altMapa > 400, `celular 360x640: filtros recolhidos=${filtrosRecolhidos}, mapa com ${Math.round(altMapa)} px de altura; ${nBt} botões na ficha da face, tapados: ${tapados.join(', ') || 'nenhum'}`);
   const erros = [...pa.erros, ...pe.erros, ...E2.p.erros, ...Pq.p.erros]; ok('F.12', !erros.length, erros.length ? erros.join(' | ') : 'sem erros de JavaScript nas telas');
   fs.writeFileSync(__dirname + '/res-bfc.json', JSON.stringify(R, null, 1));
   const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);

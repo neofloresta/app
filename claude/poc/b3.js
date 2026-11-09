@@ -13,17 +13,19 @@ const N = +(process.argv[2] || 5000);
   const t1 = Date.now(); await L.logar(p, 'div-1', 'equipe01'); await p.waitForSelector('button.nova', { timeout: 120000 }); const tLogin = Date.now() - t1;
   await p.waitForTimeout(500);
   const t2 = Date.now(); await p.goto(L.WEB + '#mapa');
-  await p.waitForFunction((n) => (document.querySelector('.mapa-conta') || {}).textContent?.startsWith((n).toLocaleString('pt-BR') + ' de') || (document.querySelector('.mapa-conta') || {}).textContent?.includes(' de ' + (n).toLocaleString('pt-BR')), N, { timeout: 180000 });
+  // calçadas sem árvores não viram ponto no mapa (só a linha da face): o total fica um pouco abaixo de N
+  await p.waitForFunction((n) => { const t = (document.querySelector('.mapa-conta') || {}).textContent || ''; const m = t.match(/de ([\d.]+) pontos/); return m && +m[1].replace(/\./g, '') >= n * 0.7 && !/Carregando pontos|atualizando/.test(t); }, N, { timeout: 180000 });
+  if (await p.locator('.mapa-sel.oculto').count()) await p.click('.bt-filtros'); // no celular os filtros começam recolhidos
   await p.waitForTimeout(100); const tMapa = Date.now() - t2;
   const desenhados = await p.locator('.mapa-conta').innerText();
   // interação: zoom
-  const t3 = Date.now(); await p.evaluate(() => document.querySelector('.leaflet-control-zoom-in').click()); await p.waitForTimeout(400); const tZoom = Date.now() - t3;
+  const t3 = Date.now(); await p.evaluate(() => { window.__app.mapa.zoomIn(); }); await p.waitForTimeout(400); const tZoom = Date.now() - t3;
   
   // clique num ponto
   let ficha = '';
   // busca por código: deve achar um só e abrir a ficha
-  const t4 = Date.now(); await p.fill('.mapa-filtros input', 'E2-0007'); await p.waitForSelector('.leaflet-popup-content', { timeout: 10000 }).catch(() => {}); const tBusca = Date.now() - t4;
-  ficha = await p.locator('.leaflet-popup-content').innerText().catch(() => 'sem ficha');
+  const t4 = Date.now(); await p.fill('.mapa-filtros input', 'E2-0007'); await p.waitForSelector('.leaflet-popup-content, .mapa-folha .ficha', { timeout: 10000 }).catch(() => {}); const tBusca = Date.now() - t4;
+  ficha = await p.locator('.leaflet-popup-content, .mapa-folha .ficha').first().innerText().catch(() => 'sem ficha');
   await p.fill('.mapa-filtros input', ''); await p.waitForTimeout(600);
   const t5 = Date.now(); await p.selectOption('select:has(option:text("Todos os riscos"))', 'Alto'); await p.waitForTimeout(50); const filtrado = await p.locator('.mapa-conta').innerText(); const tFiltro = Date.now() - t5;
   await p.selectOption('.mapa-sel select >> nth=0', 'Equipe 2'); const filtrado2 = await p.locator('.mapa-conta').innerText();

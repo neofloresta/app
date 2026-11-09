@@ -48,7 +48,7 @@ const ctx = { console, JSON, Date, Math, String, Object, Array, Number,
 vm.createContext(ctx); vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), ctx);
 ctx.configurar();
 const senha = String(SpreadsheetApp.openById(props.BASE_ID).getSheetByName('Usuarios').d[1][1]);
-fs.writeFileSync('senha.txt', senha);
+fs.writeFileSync('senha.txt', senha); fs.writeFileSync('senha-' + (process.env.PORTA || 8790) + '.txt', senha); // por porta: testes em paralelo não trocam a senha um do outro
 http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') { res.writeHead(204, { 'Access-Control-Allow-Headers': '*' }); return res.end(); }

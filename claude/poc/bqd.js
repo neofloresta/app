@@ -5,7 +5,7 @@ const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.s
 const sync = (p) => p.evaluate(() => window.__app.sincronizar(true));
 const sit = async (T) => Object.fromEntries((await P('quadras_situacao', { t: T, projeto: 'divinopolis' })).quadras.map((q) => [q.numero, q]));
 // clica no centro de uma quadra (lat, lon) no mapa
-const tocar = async (p, lat, lon) => { const xy = await p.evaluate(([a, b]) => { const m = window.__app.mapa; m.setView([a, b], 19, { animate: false }); const pt = m.latLngToContainerPoint([a, b]); const r = m.getContainer().getBoundingClientRect(); return { x: r.left + pt.x, y: r.top + pt.y }; }, [lat, lon]); await p.waitForTimeout(500); await p.mouse.click(xy.x, xy.y); await p.waitForTimeout(500); };
+const tocar = async (p, lat, lon) => { const xy = await p.evaluate(([a, b]) => { const m = window.__app.mapa; m.closePopup(); m.setView([a, b], 19, { animate: false }); const pt = m.latLngToContainerPoint([a, b]); const r = m.getContainer().getBoundingClientRect(); return { x: r.left + pt.x, y: r.top + pt.y }; }, [lat, lon]); await p.waitForTimeout(500); await p.mouse.click(xy.x, xy.y); await p.waitForTimeout(500); };
 (async () => {
   await L.subir(); await L.configurar();
   const T = (await P('login', { u: 'admin', s: L.senha() })).token;
@@ -64,11 +64,12 @@ const tocar = async (p, lat, lon) => { const xy = await p.evaluate(([a, b]) => {
   await pe.screenshot({ path: 'qd-inicio-equipe.png' });
   ok('Q.8', /Quadras da sua equipe: 0 de 3 levantadas/.test(faixa) && /2 em levantamento/.test(faixa), `tela inicial: "${faixa.replace(/\s+/g, ' ')}"`);
   // 4. coordenação escolhe várias e define equipe
-  await pa.goto(L.WEB + '#mapa'); await pa.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000 }); await pa.waitForFunction(() => !/Carregando/.test(document.querySelector('.mapa-conta').textContent)); await pa.waitForTimeout(1500);
+  await pa.goto(L.WEB + '#mapa'); await pa.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000, state: 'attached' }); await pa.waitForFunction(() => !/Carregando/.test(document.querySelector('.mapa-conta').textContent)); await pa.waitForTimeout(1500);
   await tocar(pa, ...centro(q4)); await pa.click('.qd-ficha button:has-text("Escolher várias")'); await pa.waitForTimeout(300);
   await tocar(pa, ...centro(q5)); await tocar(pa, ...centro(perto[6]));
   const barra = await pa.locator('.qd-selecao b').innerText();
-  await pa.fill('.qd-selecao input', 'Equipe 2'); await pa.click('.qd-selecao button:has-text("Aplicar")'); await pa.waitForTimeout(1500); s = await sit(T);
+  await pa.selectOption('.qd-selecao select.sel-eq', 'Equipe 2'); await pa.click('.qd-selecao button:has-text("Aplicar")'); await pa.waitForTimeout(1500); s = await sit(T);
+  if (await pa.locator('.mapa-sel.oculto').count()) await pa.click('.bt-filtros');
   await pa.selectOption('select:has(option:text("Quadras por equipe"))', 'eq'); await pa.waitForTimeout(800);
   await pa.screenshot({ path: 'qd-mapa-equipes.png' });
   ok('Q.9', /3 quadras escolhidas/.test(barra) && [q4, q5, perto[6]].every((q) => s[q.n] && s[q.n].equipe === 'Equipe 2'), `barra: "${barra}"; as 3 ficaram com a Equipe 2`);
@@ -78,7 +79,7 @@ const tocar = async (p, lat, lon) => { const xy = await p.evaluate(([a, b]) => {
   await pa.evaluate(([a, c]) => { window.__app.mapa.setView([a, c], 17, { animate: false }); }, centro(perto[20])); await pa.waitForTimeout(800);
   const box = await pa.locator('#mapa').boundingBox(); await pa.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.3); await pa.mouse.down(); await pa.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 8 }); await pa.mouse.up(); await pa.waitForTimeout(500);
   const nArea = +(await pa.locator('.qd-selecao b').innerText()).match(/(\d+)/)[1];
-  await pa.fill('.qd-selecao input', 'Equipe 3'); await pa.click('.qd-selecao button:has-text("Aplicar")'); await pa.waitForTimeout(1500); s = await sit(T);
+  await pa.selectOption('.qd-selecao select.sel-eq', '__outra'); await pa.fill('.qd-selecao .eq-outra', 'Equipe 3'); await pa.click('.qd-selecao button:has-text("Aplicar")'); await pa.waitForTimeout(1500); s = await sit(T);
   const eq3 = Object.values(s).filter((q) => q.equipe === 'Equipe 3').length;
   ok('Q.12', nArea >= 6 && eq3 >= nArea - 1, `arrastando uma área: ${nArea} quadras escolhidas de uma vez; ${eq3} ficaram com a Equipe 3`);
   // 5. painel
