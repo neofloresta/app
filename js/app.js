@@ -1138,7 +1138,7 @@
     $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, h('button', { class: 'gps', onclick: () => verCidade() }, 'Ver a cidade'), h('button', { class: 'gps', onclick: centrar }, 'Minha posição'))), barra, div, barraSel));
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
     const render = L.canvas({ padding: 0.3, tolerance: 8 });
-    const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21, fadeAnimation: false }) // sem animação: a ficha que fecha não recebe mais toque.setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
+    const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21, fadeAnimation: false }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4); // fadeAnimation desligada: a ficha que fecha não recebe mais toque
     if (S.fundo == null) S.fundo = (await Store.get('fundo')) || 'ruas';
     camadasFundo(mapa, false);
     const cores = ['#00546E', '#CD834C', '#6A1B9A', '#2E7D32', '#C62828', '#12A6C8'];
