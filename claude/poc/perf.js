@@ -18,7 +18,7 @@ const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.s
   await p.waitForTimeout(3000); await chamadas();
   await cron('reabrir o app (já logado)', async () => { await p.reload(); await p.waitForSelector('button.nova', { timeout: 60000 }); });
   await p.waitForTimeout(3000); await chamadas();
-  await cron('nova árvore até o formulário', async () => { await p.click('button.nova'); await p.waitForSelector('.prog'); });
+  await cron('nova árvore até a marcação do ponto', async () => { await p.click('button.nova'); await p.waitForSelector('.mp-veu, .prog'); }); await p.waitForSelector('.prog', { timeout: 40000 }); // a marcação espera o GPS estabilizar (por desenho, alguns segundos)
   await cron('escolher categoria', async () => { await A.op(p, 'Categoria', 'Árvore'); });
   await cron('trocar de aba', async () => { await A.aba(p, 'Meio'); });
   await p.goto(L.WEB + '#inicio'); await p.waitForSelector('button.nova'); await p.waitForTimeout(2500); await chamadas();
@@ -36,7 +36,7 @@ const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.s
   for (const [k, hsh, sel] of [['painel', '#painel', '.kpis'], ['usuários', '#admin/usuarios', 'text=Novo usuário'], ['projetos', '#admin/projetos', 'text=Novo projeto'], ['usuários de novo', '#admin/usuarios', 'text=Novo usuário'], ['validação', '#validacao', 'main.validacao select']])
     await cron('abrir ' + k, async () => { await q.goto(L.WEB + hsh); await q.waitForSelector(sel, { timeout: 60000 }); });
   // metas com servidor de 1,5 s por consulta e CPU 4x mais lenta
-  const metas = [['login coletor até a tela inicial', 4000], ['reabrir o app (já logado)', 1500], ['nova árvore até o formulário', 1500], ['trocar de aba', 1000], ['abrir mapa até quadras desenhadas', 2500], ['arrastar o mapa', 800], ['abrir usuários de novo', 500]];
+  const metas = [['login coletor até a tela inicial', 4000], ['reabrir o app (já logado)', 1500], ['nova árvore até a marcação do ponto', 1500], ['trocar de aba', 1000], ['abrir mapa até quadras desenhadas', 2500], ['arrastar o mapa', 800], ['abrir usuários de novo', 500]];
   for (const [k, max] of metas) console.log(T[k] <= max ? 'PASSOU' : 'FALHOU', k, Math.round(T[k]), 'ms (meta', max, 'ms)');
   fs.writeFileSync(__dirname + '/res-perf-' + (process.env.ROTULO || 'x') + '.json', JSON.stringify(T, null, 1));
   await b.close(); process.exit(0);

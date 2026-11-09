@@ -30,7 +30,9 @@ async function configurar(projeto = 'divinopolis') {
   await post('projeto_salvar', { projeto_dados: { id: projeto, nome: 'PMAU Divinópolis', formulario: FORM.id, epsg: '' } });
   const us = [['div-1', 'equipe01', 'Equipe 1', 'coletor', 'E1'], ['div-2', 'equipe02', 'Equipe 2', 'coletor', 'E2'], ['outra', 'outra001', 'Outra cidade', 'coletor', 'OC']];
   for (const [login, senha, equipe, perfil, codigo] of us) await post('usuario_salvar', { usuario_dados: { login, senha, nome: equipe, perfil, projeto: login === 'outra' ? 'carmo' : projeto, equipe, codigo } });
-  if (!process.env.SEM_TERMO) for (const [login, senha] of us) await post('aceitar_termo', { versao: 'teste' }, login, senha);
+  // aceita a versão atual do termo (o teste do novo aceite usa uma versão antiga de propósito)
+  const vTermo = (fs.readFileSync(path.join(APP, 'js/app.js'), 'utf8').match(/TERMO_VERSAO = '([^']+)'/) || [])[1] || 'teste';
+  if (!process.env.SEM_TERMO) for (const [login, senha] of us) await post('aceitar_termo', { versao: vTermo }, login, senha);
   await post('projeto_salvar', { projeto_dados: { id: 'carmo', nome: 'Carmo do Rio Claro', formulario: FORM.id, epsg: '' } });
 }
 // Base fictícia no formato que o app grava na planilha

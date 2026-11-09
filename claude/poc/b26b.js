@@ -6,6 +6,7 @@ const PROIBIDO = /google|drive|planilha|servidor(es)? fora|controlador|operador|
   await L.subir(); await L.configurar();
   await L.post('usuario_salvar', { usuario_dados: { login: 'cli-1', senha: 'cliente01', nome: 'Prefeitura', perfil: 'cliente', projeto: 'divinopolis' } });
   await L.post('aceitar_termo', { versao: '2026-11' }, 'cli-1', 'cliente01');
+  await L.post('aceitar_termo', { versao: '2026-11' }, 'div-1', 'equipe01'); // versão antiga: o app deve pedir o novo aceite
   const b = await chromium.launch(); const { p } = await L.celular(b);
   // 1. ajuda antes de entrar
   await p.goto(L.WEB + '?config=1'); await p.waitForTimeout(400);
