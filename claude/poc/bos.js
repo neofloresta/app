@@ -79,7 +79,7 @@ const sync = (p) => p.evaluate(() => window.__app.sincronizar(true));
   await pk.click('button:has-text("Enviar pedido")'); await pk.waitForTimeout(300); const pedeLocal = await pk.locator('.toast').innerText().catch(() => '');
   await pk.locator('.mapa-mini').scrollIntoViewIfNeeded(); const box = await pk.locator('.mapa-mini').boundingBox(); await pk.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await pk.fill('input[placeholder^="Rua"]', 'Praça do Santuário');
   await pk.click('button:has-text("Enviar pedido")'); await pk.waitForSelector('.os-item', { timeout: 10000 }); await pk.waitForTimeout(500);
-  await pk.click('.chip:has-text("Pedidos")'); const ped = await pk.locator('.os-item').first().innerText();
+  await pk.click('.chip:has-text("Em aberto")'); const ped = await pk.locator('.os-item').first().innerText();
   await pc.goto(L.WEB + '#ordens'); await pc.reload(); await pc.waitForTimeout(1500); await pc.click('.chip:has-text("Pedidos")'); await pc.click('.os-item'); await pc.waitForSelector('text=Aprovar pedido');
   await pc.click('text=Aprovar pedido'); await pc.fill('.folha input[list=os-equipes]', 'Equipe 2'); await pc.fill('.folha input[type=date]', '2026-12-10'); await pc.click('.folha button:has-text("Salvar")'); await pc.waitForTimeout(1200);
   const aprov = await pc.locator('.os-cab').innerText();

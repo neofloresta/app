@@ -1411,6 +1411,8 @@
     const diaIn = h('input', { type: 'date', class: 'entrada oculto' });
     const selCor = h('select', { class: 'entrada' }, h('option', { value: 'equipe' }, 'Cor por equipe'), cRisco ? h('option', { value: 'risco' }, 'Cor por risco') : null, h('option', { value: 'os' }, 'Cor por ordem de serviço'));
     if (S.corMapa) { selCor.value = S.corMapa; S.corMapa = null; }
+    // cliente não vê dados internos das equipes: sem filtro de equipe e cor por risco
+    if (perfil() === 'cliente') { selEq.classList.add('oculto'); const oe = selCor.querySelector('option[value="equipe"]'); if (oe) oe.remove(); if (cRisco && selCor.value !== 'os') selCor.value = 'risco'; }
     let osPorArv = null; const osSoltas = []; const ORD_OS = ['Em execução', 'Aberta', 'Solicitada', 'Concluída', 'Cancelada'];
     const carregarOSMapa = async () => {
       if (osPorArv) return; osPorArv = new Map();
@@ -1727,7 +1729,7 @@
     function ficha(o, ll) {
       const pop = h('div', { class: 'ficha' }, h('b', null, o.cod || 'Sem código'), o.esp ? h('i', null, o.esp) : null,
         o.cat ? h('div', null, rotOp(cCat, o.cat)) : null, o.risco ? h('div', null, 'Risco ' + String(rotOp(cRisco, o.risco)).toLowerCase()) : null,
-        h('small', null, o.equipe || ''),
+        perfil() !== 'cliente' ? h('small', null, o.equipe || '') : null,
         linkSeguro(o.foto) ? h('a', { href: linkSeguro(o.foto), target: '_blank', rel: 'noopener' }, 'Ver foto') : null,
         osPorArv && osPorArv.get(o.uid) ? h('button', { class: 'btn sec peq', onclick: () => ir('#os/' + encodeURIComponent(osPorArv.get(o.uid).id)) }, `${numOS(osPorArv.get(o.uid))} · ${osPorArv.get(o.uid).status}`) : null,
         o.local ? h('button', { class: 'btn peq', onclick: () => ir('#form/' + o.uid) }, 'Abrir') : perfil() !== 'coletor' ? h('button', { class: 'btn peq', onclick: () => { S.navVal = []; ir('#ficha/' + encodeURIComponent(o.uid)); } }, 'Ver ficha') : null);
@@ -2552,34 +2554,38 @@
     const pct = (n, t) => (t ? fmtP(n / t) : '');
     const equipes = Object.keys(d.equipes).sort(); const dias = Object.keys(d.porDia).sort();
     Api.b.auditar && Api.b.auditar('relatorio', S.projeto.id, '');
+    const cli = perfil() === 'cliente'; let nSec = 0; const sec = (t) => h('h2', null, `${++nSec}. ${t}`); // numeração sempre em sequência, sem buracos
+    const semResp = !p.responsavel;
     corpo.replaceChildren(
+      semResp && !cli ? h('div', { class: 'aviso nao-imprime' }, 'Falta o responsável técnico do projeto (nome, registro e ART). Preencha em Coordenação, Projetos, Editar, antes de entregar o relatório.') : null,
       h('header', { class: 'rel-cab' }, h('img', { src: 'icons/logo-horizontal.png', alt: 'Neofloresta' }), h('div', null, h('h1', null, 'Relatório de andamento do inventário'), h('p', null, p.nome), h('small', null, [p.contratante, p.municipio, p.contrato ? 'Contrato ' + p.contrato : ''].filter(Boolean).join(' · ')))),
       h('p', { class: 'rel-data' }, 'Emitido em ' + agora.toLocaleDateString('pt-BR') + ' às ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + (perfil() === 'cliente' ? '. Considera apenas registros validados.' : '. Considera todos os registros enviados, exceto os descartados.')),
-      h('h2', null, '1. Resumo'),
+      h('p', { class: 'rel-leitura' }, 'Como ler: os números mostram o que foi levantado até a data de emissão. Indivíduos são as árvores, arbustos e palmeiras; os demais registros são pontos sem árvore (por exemplo, árvore morta ou calçada sem árvores). As porcentagens de espécies consideram só os indivíduos identificados.'),
+      sec('Resumo'),
       tab(['Indicador', 'Valor'], [
         ['Registros', fmtN(d.total)], ['Indivíduos (árvores, arbustos e palmeiras)', fmtN(A.ind)], p.meta ? ['Meta do contrato', `${fmtN(p.meta)} (${fmtP(d.total / p.meta)} concluído)`] : null,
         ['Espécies distintas', fmtN(d.nEspecies)], perfil() !== 'cliente' ? ['Validados', `${fmtN(d.validacao.Validado || 0)} (${pct(d.validacao.Validado || 0, d.total)})`] : null,
-        A.risco.length ? ['Indivíduos com risco alto', `${fmtN(A.altoN)} (${pct(A.altoN, A.nRisco)} dos avaliados)`] : null,
-        ['Dias de campo', fmtN(dias.length)], d.gps ? ['Precisão mediana do GPS', fmtN(d.gps.mediana) + ' m'] : null].filter(Boolean)),
-      A.cat.length ? [h('h2', null, '2. Registros por categoria'), tab(['Categoria', 'Quantidade', '%'], A.cat.map((c) => [c.rot, fmtN(c.n), pct(c.n, d.total)]))] : null,
-      h('h2', null, '3. Composição de espécies'),
-      h('p', null, `Foram registradas ${fmtN(d.nEspecies)} espécies. ` + (A.esp[0] ? `A mais comum é ${A.esp[0].rot}, com ${fmtP(A.topEsp)} dos indivíduos identificados` + (A.topEsp > 0.1 ? ', acima do limite de referência de 10% por espécie.' : ', dentro do limite de referência de 10% por espécie.') : '')),
+        A.risco.length ? ['Indivíduos com risco alto ou severo', `${fmtN(A.altoN)} (${pct(A.altoN, A.nRisco)} dos avaliados)`] : null,
+        ['Dias de campo', fmtN(dias.length)], d.gps && !cli ? ['Precisão mediana do GPS', fmtN(d.gps.mediana) + ' m'] : null].filter(Boolean)),
+      A.cat.length ? [sec('Registros por categoria'), tab(['Categoria', 'Quantidade', '%'], A.cat.map((c) => [c.rot, fmtN(c.n), pct(c.n, d.total)]))] : null,
+      sec('Composição de espécies'),
+      h('p', null, `Foram registradas ${fmtN(d.nEspecies)} espécies. `, A.esp[0] ? ['A mais comum é ', h('i', null, A.esp[0].rot), `, com ${fmtP(A.topEsp)} dos indivíduos identificados` + (A.topEsp > 0.1 ? ', acima do limite de referência de 10% por espécie.' : ', dentro do limite de referência de 10% por espécie.')] : null),
       tab(['Espécie', 'Indivíduos', '%'], A.esp.slice(0, 30).map((e) => [h('i', null, e.rot), fmtN(e.n), pct(e.n, A.nEsp)])),
-      d.classesDap.length ? [h('h2', null, '4. Classes de diâmetro (DAP)'), tab(['Classe', 'Indivíduos', '%'], d.classesDap.map((c) => [c.ate ? `${c.de} a ${c.ate} cm` : `${c.de} cm ou mais`, fmtN(c.n), pct(c.n, d.classesDap.reduce((a, x) => a + x.n, 0))]))] : null,
-      A.risco.length ? [h('h2', null, '5. Classe de risco'), tab(['Classe', 'Indivíduos', '%'], A.risco.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.nRisco)]))] : null,
-      A.manejo.length ? [h('h2', null, '6. Manejo recomendado'), tab(['Manejo', 'Indivíduos', '%'], A.manejo.filter((x) => x.n).map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
-      A.ocorr.length ? [h('h2', null, '7. Ocorrências observadas'), tab(['Ocorrência', 'Indivíduos', '%'], A.ocorr.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
-      h('h2', null, '8. Produção de campo'),
-      h('p', null, dias.length > 14 ? 'Registros por semana (de segunda a domingo).' : 'Registros por dia de campo.'),
-      tab([dias.length > 14 ? 'Semana' : 'Data', ...equipes, 'Total'], producaoTabela(d.porDia, dias, equipes, dias.length > 14)),
+      d.classesDap.length ? [sec('Classes de diâmetro (DAP)'), tab(['Classe', 'Indivíduos', '%'], d.classesDap.map((c) => [c.ate ? `${c.de} a ${c.ate} cm` : `${c.de} cm ou mais`, fmtN(c.n), pct(c.n, d.classesDap.reduce((a, x) => a + x.n, 0))]))] : null,
+      A.risco.length ? [sec('Classe de risco'), tab(['Classe', 'Indivíduos', '%'], A.risco.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.nRisco)]))] : null,
+      A.manejo.length ? [sec('Manejo recomendado'), tab(['Manejo', 'Indivíduos', '%'], A.manejo.filter((x) => x.n).map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
+      A.ocorr.length ? [sec('Ocorrências observadas'), tab(['Ocorrência', 'Indivíduos', '%'], A.ocorr.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
+      cli ? null : [sec('Produção de campo'),
+        h('p', null, dias.length > 14 ? 'Registros por semana (de segunda a domingo).' : 'Registros por dia de campo.'),
+        tab([dias.length > 14 ? 'Semana' : 'Data', ...equipes, 'Total'], producaoTabela(d.porDia, dias, equipes, dias.length > 14))],
       h('div', { id: 'rel-os' }),
-      p.responsavel ? h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, p.responsavel), p.registro_profissional ? h('div', null, p.registro_profissional) : null, p.art ? h('div', null, 'ART nº ' + p.art) : null, h('div', null, 'Responsável técnico · Neofloresta Serviços Ecossistêmicos Ltda.')) : null,
+      p.responsavel ? h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, p.responsavel), p.registro_profissional ? h('div', null, p.registro_profissional) : null, p.art ? h('div', null, 'ART nº ' + p.art) : null, h('div', null, 'Responsável técnico · Neofloresta Serviços Ecossistêmicos Ltda.')) : h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('div', null, 'Responsável técnico · Neofloresta Serviços Ecossistêmicos Ltda.')),
       h('footer', { class: 'rel-rodape' }, 'Neofloresta Serviços Ecossistêmicos Ltda. · Gerado pelo Neofloresta Inventário ' + VERSAO));
     try {
       const od = await carregarOS(false); const el = document.getElementById('rel-os');
       if (el && !od.semServidor && od.ordens.length) {
         const r = resumoOS(od.ordens); const sts = ['Solicitada', 'Aberta', 'Em execução', 'Concluída', 'Cancelada'];
-        el.replaceChildren(h('h2', null, '9. Ordens de serviço'), h('p', null, `${fmtN(r.total)} ordens registradas, ${fmtN(r.porSt['Concluída'] || 0)} concluídas e ${fmtN(r.atrasadas)} com prazo vencido` + (r.prazoMedio != null ? `. Tempo médio do pedido à conclusão: ${fmtN(Math.round(r.prazoMedio * 10) / 10)} dias.` : '.')),
+        el.replaceChildren(sec('Ordens de serviço'), h('p', null, `${fmtN(r.total)} ordens registradas, ${fmtN(r.porSt['Concluída'] || 0)} concluídas e ${fmtN(r.atrasadas)} com prazo vencido` + (r.prazoMedio != null ? `. Tempo médio do pedido à conclusão: ${fmtN(Math.round(r.prazoMedio * 10) / 10)} dias.` : '.')),
           tab(['Tipo de serviço', ...sts, 'Total'], [...Object.entries(r.porTipo).sort((a, b) => a[0].localeCompare(b[0], 'pt')).map(([t, o]) => [t, ...sts.map((k) => fmtN(o[k] || 0)), fmtN(Object.values(o).reduce((a, b) => a + b, 0))]), ['Total', ...sts.map((k) => fmtN(r.porSt[k] || 0)), fmtN(r.total)]]));
       }
     } catch (e) { /* sem ordens */ }
@@ -2613,10 +2619,10 @@
         tab(['Item', 'Quantidade'], [['Registros validados no período', fmtN(val.length)], ['Indivíduos (árvores, arbustos e palmeiras)', fmtN(val.filter(ehInd).length)], ['Pontos sem árvore (locais de plantio e calçadas)', fmtN(val.filter((l) => !ehInd(l)).length)],
           ehCoord() ? ['Devolvidos para correção no período', fmtN(dev.length)] : null, ehCoord() ? ['Descartados no período', fmtN(desc.length)] : null,
           ['Validados acumulados até o fim do período', fmtN(acum) + (p.meta ? ` (${fmtP(acum / p.meta)} da meta de ${fmtN(p.meta)})` : '')]].filter(Boolean)),
-        h('h2', null, '2. Validados por equipe'),
-        tab(['Equipe', 'Indivíduos', 'Pontos sem árvore', 'Total'], [...equipes.map((e) => { const x = val.filter((l) => (l.equipe || '-') === e); return [e, fmtN(x.filter(ehInd).length), fmtN(x.filter((l) => !ehInd(l)).length), fmtN(x.length)]; }), ['Total', fmtN(val.filter(ehInd).length), fmtN(val.filter((l) => !ehInd(l)).length), fmtN(val.length)]]),
-        h('h2', null, '3. Registros validados no período'),
-        val.length ? tab(['Nº', 'Código', 'Categoria', 'Espécie', 'Equipe', 'Validado em'], val.sort((a, b) => (+a.numero_unico || 0) - (+b.numero_unico || 0)).map((l) => [String(l.numero_unico || ''), (cc && l[cc.nome]) || '', cat ? rotuloOpcao(cat, l[cat.nome]).replace(/\s*\(.*\)/, '') : '', h('i', null, (ce && l[ce.nome]) || ''), l.equipe || '', dataBR(l.validado_em)])) : h('p', null, 'Nenhum registro validado neste período.'),
+        perfil() === 'cliente' ? null : h('h2', null, '2. Validados por equipe'),
+        perfil() === 'cliente' ? null : tab(['Equipe', 'Indivíduos', 'Pontos sem árvore', 'Total'], [...equipes.map((e) => { const x = val.filter((l) => (l.equipe || '-') === e); return [e, fmtN(x.filter(ehInd).length), fmtN(x.filter((l) => !ehInd(l)).length), fmtN(x.length)]; }), ['Total', fmtN(val.filter(ehInd).length), fmtN(val.filter((l) => !ehInd(l)).length), fmtN(val.length)]]),
+        h('h2', null, perfil() === 'cliente' ? '2. Registros validados no período' : '3. Registros validados no período'),
+        val.length ? tab(['Nº', 'Código', 'Categoria', 'Espécie', ...(perfil() === 'cliente' ? [] : ['Equipe']), 'Validado em'], val.sort((a, b) => (+a.numero_unico || 0) - (+b.numero_unico || 0)).map((l) => [String(l.numero_unico || ''), (cc && l[cc.nome]) || '', cat ? rotuloOpcao(cat, l[cat.nome]).replace(/\s*\(.*\)/, '') : '', h('i', null, (ce && l[ce.nome]) || ''), ...(perfil() === 'cliente' ? [] : [l.equipe || '']), dataBR(l.validado_em)])) : h('p', null, 'Nenhum registro validado neste período.'),
         h('div', { id: 'med-os' }),
         h('div', { class: 'rel-assinaturas' },
           h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, p.responsavel || 'Responsável técnico'), p.registro_profissional ? h('div', null, p.registro_profissional) : null, h('div', null, 'Neofloresta Serviços Ecossistêmicos Ltda.')),
@@ -2627,7 +2633,7 @@
         const feitas = od.ordens.filter((o) => o.status === 'Concluída' && o.numero && (() => { const x = diaLocal(o.concluida_em); return x && x >= de.value && x <= ate.value; })()).sort((a, b) => +a.numero - +b.numero);
         if (el && !od.semServidor && od.ordens.length) {
           const tipos = [...new Set(feitas.map((o) => o.tipo))].sort((a, b) => a.localeCompare(b, 'pt')); const eqs = [...new Set(feitas.map((o) => o.responsavel || '-'))].sort();
-          el.replaceChildren(h('h2', null, '4. Serviços executados no período (ordens de serviço concluídas)'),
+          el.replaceChildren(h('h2', null, (perfil() === 'cliente' ? '3' : '4') + '. Serviços executados no período (ordens de serviço concluídas)'),
             h('p', null, 'Conta as ordens pela data de conclusão em campo. As fotos de cada serviço ficam guardadas no sistema (antes e depois; plantio e avaliação de risco têm ao menos a foto de depois). ' + (feitas.filter((o) => o.prazo && diaLocal(o.concluida_em) > o.prazo).length ? `${pl(feitas.filter((o) => o.prazo && diaLocal(o.concluida_em) > o.prazo).length, 'ordem foi concluída', 'ordens foram concluídas')} depois do prazo.` : 'Todas as ordens com prazo foram concluídas dentro dele.')),
             feitas.length ? [tab(['Tipo de serviço', ...eqs, 'Total'], [...tipos.map((t) => [t, ...eqs.map((e) => fmtN(feitas.filter((o) => o.tipo === t && (o.responsavel || '-') === e).length)), fmtN(feitas.filter((o) => o.tipo === t).length)]), ['Total', ...eqs.map((e) => fmtN(feitas.filter((o) => (o.responsavel || '-') === e).length)), fmtN(feitas.length)]]),
               tab(['Ordem', 'Serviço', 'Árvore ou local', 'Equipe', 'Prazo', 'Concluída em', 'No prazo', 'Fotos'], feitas.map((o) => [numOS(o), o.tipo, o.codigo_arvore || o.endereco || '', o.responsavel || '', o.prazo ? o.prazo.split('-').reverse().join('/') : '', dataAno(o.concluida_em), o.prazo ? (diaLocal(o.concluida_em) <= o.prazo ? 'Sim' : 'Não') : '', [linkSeguro(o.foto_antes) ? h('a', { href: linkSeguro(o.foto_antes), target: '_blank', rel: 'noopener' }, 'antes') : null, linkSeguro(o.foto_depois) ? h('a', { href: linkSeguro(o.foto_depois), target: '_blank', rel: 'noopener' }, 'depois') : null].filter(Boolean).flatMap((x, i) => (i ? [' · ', x] : [x]))]))] : h('p', null, 'Nenhuma ordem de serviço concluída neste período.'));
@@ -2906,15 +2912,21 @@
     if (!document.body.contains(lista)) return;
     if (d.semServidor) { lista.replaceChildren(h('div', { class: 'aviso' }, 'O servidor do projeto ainda está numa versão sem ordens de serviço. A coordenação precisa atualizar o servidor (versão 2.2).')); return; }
     selTipo.replaceChildren(h('option', { value: '' }, 'Todos os tipos'), d.tipos.map((t) => h('option', { value: t }, t)));
-    const grupos = [['fazer', 'A fazer', (o) => ['Aberta', 'Em execução'].includes(o.status)], ['abertas', 'Em aberto', (o) => ['Solicitada', 'Aberta', 'Em execução'].includes(o.status)], ['solicitadas', 'Pedidos', (o) => o.status === 'Solicitada'], ['atrasadas', 'Atrasadas', atrasada], ['concluidas', 'Concluídas', (o) => o.status === 'Concluída'], ['canceladas', 'Canceladas', (o) => o.status === 'Cancelada'], ['todas', 'Todas', () => true]].filter(([k]) => pf !== 'coletor' || !['abertas', 'canceladas'].includes(k));
+    const resps = [...new Set(d.ordens.map((o) => o.responsavel).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true }));
+    const selResp = h('select', { class: 'entrada' + (ehCoord() && resps.length ? '' : ' oculto') }, h('option', { value: '' }, 'Todas as equipes'), resps.map((r) => h('option', { value: r }, r)));
+    lista.before(h('div', { class: 'os-busca' }, selResp));
+    // poucos filtros: A fazer, Atrasadas, Concluídas e Todas (mais Pedidos para a coordenação quando há pedido a aprovar); cliente acompanha os pedidos
+    const todosG = { fazer: ['fazer', 'A fazer', (o) => ['Aberta', 'Em execução'].includes(o.status)], abertas: ['abertas', 'Em aberto', (o) => ['Solicitada', 'Aberta', 'Em execução'].includes(o.status)], solicitadas: ['solicitadas', 'Pedidos a aprovar', (o) => o.status === 'Solicitada'], atrasadas: ['atrasadas', 'Atrasadas', atrasada], concluidas: ['concluidas', 'Concluídas', (o) => o.status === 'Concluída'], todas: ['todas', 'Todas', () => true] };
+    const grupos = (pf === 'cliente' ? ['abertas', 'concluidas', 'todas'] : pf === 'coletor' ? ['fazer', 'atrasadas', 'concluidas', 'todas'] : ['fazer', 'solicitadas', 'atrasadas', 'concluidas', 'todas']).map((k) => todosG[k]).filter((g) => g[0] !== 'solicitadas' || d.ordens.some(g[2]));
+    if (!grupos.some((g) => g[0] === S.filtroOS)) S.filtroOS = grupos[0][0];
     const pintar = () => {
       const g = grupos.find((x) => x[0] === S.filtroOS) || grupos[0];
       filtros.replaceChildren(grupos.map(([k, t, f]) => h('button', { class: 'chip' + (k === g[0] ? ' sel' : ''), onclick: () => { S.filtroOS = k; pintar(); } }, `${t} (${d.ordens.filter(f).length})`)));
       const q = norm(busca.value).trim();
-      const vis = d.ordens.filter(g[2]).filter((o) => !selTipo.value || o.tipo === selTipo.value).filter((o) => !q || norm([numOS(o), o.numero, o.codigo_arvore, o.especie, o.endereco, o.bairro, o.descricao, o.responsavel].join(' ')).includes(q)).sort(ordenarOS);
+      const vis = d.ordens.filter(g[2]).filter((o) => !selTipo.value || o.tipo === selTipo.value).filter((o) => !selResp.value || o.responsavel === selResp.value).filter((o) => !q || norm([numOS(o), o.numero, o.codigo_arvore, o.especie, o.endereco, o.bairro, o.descricao, o.responsavel].join(' ')).includes(q)).sort(ordenarOS);
       lista.replaceChildren(vis.length ? vis.slice(0, 500).map(itemOS) : h('div', { class: 'vazio-lista' }, d.ordens.length ? 'Nenhuma ordem neste filtro.' : pf === 'coletor' ? 'Nenhuma ordem de serviço para a sua equipe.' : 'Nenhuma ordem de serviço ainda. Abra uma pela ficha da árvore ou pelo botão acima.'));
     };
-    busca.addEventListener('input', pintar); selTipo.addEventListener('change', pintar); pintar();
+    busca.addEventListener('input', pintar); selTipo.addEventListener('change', pintar); selResp.addEventListener('change', pintar); pintar();
   }
 
   // foto de antes ou depois: tira, reduz e guarda no aparelho até enviar
@@ -3090,6 +3102,8 @@
       let mk = null; const marcar = (lat, lon) => { ponto = { lat, lon }; if (mk) mk.setLatLng([lat, lon]); else mk = L.marker([lat, lon]).addTo(m); };
       m.on('click', (e) => marcar(e.latlng.lat, e.latlng.lng));
       if (S.pos && perfil() === 'coletor') marcar(S.pos.lat, S.pos.lon);
+      // sem ponto conhecido (cliente no escritório): abre na cidade do projeto
+      if (!ponto && perfil() === 'cliente') carregarQuadras().then((cam) => { if (!cam || !cam.quadras.length || !document.body.contains(mapaDiv)) return; let b = [Infinity, Infinity, -Infinity, -Infinity]; for (const q of cam.quadras) b = [Math.min(b[0], q.b[0]), Math.min(b[1], q.b[1]), Math.max(b[2], q.b[2]), Math.max(b[3], q.b[3])]; m.fitBounds([[b[1], b[0]], [b[3], b[2]]]); }).catch(() => {});
     }, 50);
   }
   // seção "Ordens de serviço" da ficha de uma árvore
