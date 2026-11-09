@@ -5,7 +5,9 @@ const ARQUIVOS = ['./', 'index.html', 'styles.css', 'config.js', 'manifest.webma
   'js/expr.js', 'js/qml2form.js', 'js/store.js', 'js/utm.js', 'js/gpkg.js', 'js/indicadores.js', 'js/arquivos.js', 'js/quadras.js', 'js/api.js', 'js/app.js', 'forms/seade-risco.json', 'forms/divinopolis-inventario.json', 'forms/divinopolis-inventario.qml', 'forms/ajuda/fiacao.svg'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting())); });
 const MAPA = 'mapa-fundo'; const MAX_MAPA = 2500; let novasMapa = 0; // imagens do mapa por onde a equipe já passou (funciona sem internet)
-self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE && k !== MAPA).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
+// apara as mais antigas; roda na ativação e na primeira gravação de cada vez que o service worker acorda (o contador zera quando o Android o encerra)
+async function aparar() { try { const c = await caches.open(MAPA); const ks = await c.keys(); for (let i = 0; i < ks.length - MAX_MAPA; i++) await c.delete(ks[i]); } catch (e) { /* segue */ } }
+self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE && k !== MAPA).map((k) => caches.delete(k)))).then(aparar).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);
   if (e.request.method === 'GET' && (u.hostname === 'tile.openstreetmap.org' || u.hostname === 'server.arcgisonline.com')) {
@@ -13,7 +15,8 @@ self.addEventListener('fetch', (e) => {
       const guardada = await c.match(e.request);
       if (guardada) return guardada;
       const rede = fetch(e.request).then(async (resp) => {
-        if (resp.ok && resp.type === 'cors') { await c.put(e.request, resp.clone()); if (++novasMapa % 100 === 0) { const ks = await c.keys(); for (let i = 0; i < ks.length - MAX_MAPA; i++) await c.delete(ks[i]); } } // só guarda resposta legível (as opacas ocupariam muito espaço)
+        // guarda sem segurar a imagem (aparelho sem espaço não pode quebrar o mapa); só resposta legível (as opacas ocupariam muito espaço)
+        if (resp.ok && resp.type === 'cors') c.put(e.request, resp.clone()).then(() => { if (novasMapa++ % 100 === 0) aparar(); }).catch(() => {});
         return resp;
       });
       return rede; // imagem de mapa quase nunca muda: a guardada vale e não gasta internet

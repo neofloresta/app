@@ -80,6 +80,7 @@
 
   // ---------- Sessão e projeto ----------
   async function iniciar() {
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* segue */ } // pede ao navegador para não apagar os dados do app (fotos e cadastros)
     const servidor = (await Store.get('servidor')) ?? window.NEO_CONFIG.servidor;
     Api.configurar(servidor);
     S.sessao = await Store.get('sessao');
@@ -1371,7 +1372,8 @@
         const antes = await Store.get(kc);
         if (antes && antes.campos === campos.join('|') && document.body.contains(div)) { addLinhas(antes.linhas); preencherEquipes(); aplicarFiltroPainel(); desenhar(true); conta.textContent += navigator.onLine ? ' · atualizando...' : ''; }
         // sem internet: fica com os pontos guardados no aparelho e avisa de quando são
-        if (!navigator.onLine) { faixaOff.textContent = antes ? (antes.em ? `Sem internet. Pontos guardados no aparelho em ${dataAno(antes.em)}.` : 'Sem internet. Pontos guardados no aparelho.') : 'Sem internet. Só os seus cadastros deste aparelho aparecem.'; faixaOff.classList.remove('oculto'); return; }
+        const usouGuardados = !!(antes && antes.campos === campos.join('|'));
+        if (!navigator.onLine) { faixaOff.textContent = usouGuardados ? (antes.em ? `Sem internet. Pontos guardados no aparelho em ${dataAno(antes.em)}.` : 'Sem internet. Pontos guardados no aparelho.') : 'Sem internet. Só os seus cadastros deste aparelho aparecem.'; faixaOff.classList.remove('oculto'); throw Object.assign(new Error('sem internet'), { semRede: true }); } // sai só do bloco: o GPS do mapa continua ligando abaixo
         const m = await Api.b.mapa(S.projeto.id, campos);
         Store.set(kc, { campos: campos.join('|'), linhas: m.linhas, em: agoraISO() });
         if (!document.body.contains(div)) return;
@@ -1379,7 +1381,7 @@
         if (usouAntes) for (let i = pts.length - 1; i >= 0; i--) if (!pts[i].local) { vistos.delete(pts[i].uid); pts.splice(i, 1); }
         addLinhas(m.linhas);
         preencherEquipes(); aplicarFiltroPainel(); S.mapaFiltro = null; desenhar(!usouAntes);
-      } catch (e) { pintarConta(); toast('Não foi possível atualizar os pontos agora. Ficam os guardados no aparelho.'); }
+      } catch (e) { conta.textContent = conta.textContent.replace(/Carregando pontos\.\.\.| · atualizando\.\.\./g, ''); if (!document.body.contains(div)) return; if (!e.semRede) { desenhar(false); toast('Não foi possível atualizar os pontos agora. Ficam os guardados no aparelho.'); } else desenhar(false); }
     }
     let eu = null;
     function limitesCidade() { let b = [Infinity, Infinity, -Infinity, -Infinity]; for (const q of qdDados.quadras) b = [Math.min(b[0], q.b[0]), Math.min(b[1], q.b[1]), Math.max(b[2], q.b[2]), Math.max(b[3], q.b[3])]; return L.latLngBounds([b[1], b[0]], [b[3], b[2]]); }
@@ -2939,7 +2941,7 @@
     const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 18, crossOrigin: true, attribution: 'Imagem © Esri, Maxar, Earthstar Geographics' });
     const rot = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 18, crossOrigin: true });
     // se o servidor de mapa recusar o pedido com CORS, volta ao pedido simples (a imagem aparece, só não fica guardada)
-    for (const ly of [ruas, sat, rot]) ly.on('tileerror', () => { if (ly.options.crossOrigin && navigator.onLine && !ly.__semCors) { ly.__semCors = true; ly.options.crossOrigin = false; ly.redraw(); } });
+    for (const ly of [ruas, sat, rot]) { ly.on('tileload', () => { ly.__falhas = 0; }); ly.on('tileerror', () => { if (ly.options.crossOrigin && navigator.onLine && !ly.__semCors && ++ly.__falhas >= 3) { ly.__semCors = true; ly.options.crossOrigin = false; ly.redraw(); } }); ly.__falhas = 0; }
     const hib = L.layerGroup([sat, rot]);
     const escolha = satelite ? 'sat' : (S.fundo || 'ruas');
     (escolha === 'sat' ? hib : ruas).addTo(mapa);
