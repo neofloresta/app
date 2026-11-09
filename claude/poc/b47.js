@@ -26,11 +26,11 @@ const N = +(process.argv[2] || 3000);
   await foto(pr, 'validacao');
   ok('V.1', nItens > 0, `lista de validação abriu em ${(tVal / 1000).toFixed(1)} s com ${N + 1} registros; ${resumo.replace(/\n/g, ' ')}; itens com alerta na página: ${comAlerta}`);
   // abre a ficha do registro do coletor e devolve
-  await pr.fill('.val-filtros input', meu.Codigo); await pr.waitForTimeout(500); await pr.click('.val-item .val-txt'); await pr.waitForSelector('.status-ficha'); await pr.waitForTimeout(400);
+  await pr.fill('.val-busca input', meu.Codigo); await pr.waitForTimeout(500); await pr.click('.val-item .val-txt'); await pr.waitForSelector('.status-ficha'); await pr.waitForTimeout(400);
   await foto(pr, 'ficha-revisor');
   await pr.click('.val-dec button:has-text("Devolver")'); await pr.fill('.folha textarea', 'Conferir a espécie e refazer a foto 1'); await pr.click('.folha button:has-text("Devolver")'); await pr.waitForTimeout(800);
   // valida em lote os sem alerta
-  await pr.goto(L.WEB + '#validacao'); await pr.waitForSelector('.val-lista'); await pr.fill('.val-filtros input', ''); await pr.waitForTimeout(700);
+  await pr.goto(L.WEB + '#validacao'); await pr.waitForSelector('.val-lista'); await pr.fill('.val-busca input', ''); await pr.waitForTimeout(700);
   const btnLote = pr.locator('button:has-text("Validar todos sem alerta")'); const txtLote = await btnLote.innerText().catch(() => '');
   if (await btnLote.count()) { await btnLote.click(); await pr.check('.folha input[type=checkbox]'); await pr.click('.folha button:has-text("Validar")'); await pr.waitForTimeout(1500); }
   const linhas = (await L.post('listar', { projeto: 'divinopolis' })).linhas;

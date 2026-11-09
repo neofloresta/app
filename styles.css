@@ -540,3 +540,23 @@ html.sol .dica, html.sol small { color: #263238; }
 .selo-trajeto i { width: 10px; height: 10px; border-radius: 50%; background: #D81B60; animation: pisca 1.6s infinite; }
 @keyframes pisca { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .selo-trajeto i { animation: none; } }
+/* Validação 2.6 */
+.toast { display: flex; align-items: center; gap: 12px; }
+.toast.erro { background: #B3261E; color: #fff; }
+.toast-acao { background: none; border: 0; color: #FFD27A; font: inherit; font-weight: 700; min-height: 40px; padding: 0 6px; cursor: pointer; text-transform: none; }
+.motivos { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; } .motivos .chip { text-align: left; }
+.val-chip { cursor: pointer; font: inherit; background: #fff; min-height: 40px; } .val-chip.sel { background: #E4F0F3; font-weight: 700; }
+.val-busca { display: flex; gap: 6px; align-items: center; margin: 6px 0; } .val-busca .entrada { flex: 1; }
+.val-dec { gap: 8px; } .val-dec .btn { min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.val-dec .ic-nav { width: 52px; flex: 0 0 52px; padding: 0; }
+.campo-alerta { background: #FFF4D6; border-left: 4px solid #E69F00; padding-left: 8px; border-radius: 4px; }
+.chips-leitura { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-leit { display: inline-block; background: #E4F0F3; color: #13262B; border-radius: 6px; padding: 4px 8px; font-size: 14px; }
+@media (min-width: 1000px) {
+  .ficha-servidor { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; max-width: 1200px; }
+  .ficha-servidor > .status-ficha, .ficha-servidor > .link-perigo { grid-column: 1 / -1; }
+}
+footer.rodape.val-dec { position: fixed; margin: 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--sup, #fff); }
+footer.rodape.val-dec > * { flex: 1 1 auto; }
+footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
+@media (min-width: 1000px) { footer.rodape.val-dec { justify-content: center; } footer.rodape.val-dec > .btn:not(.ic-nav) { flex: 0 1 260px; } }

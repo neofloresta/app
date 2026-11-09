@@ -551,7 +551,7 @@ function numerarExistentes() {
 }
 // Validação pela coordenação ou revisor: Validado, Devolvido (com motivo), Descartado ou Pendente
 function validar(projetoId, itens, usr) {
-  const estados = ['Validado', 'Devolvido', 'Descartado', 'Pendente'];
+  const estados = ['Validado', 'Devolvido', 'Descartado', 'Pendente', 'Corrigido']; // Pendente e Corrigido: "Desfazer" logo depois de decidir
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
     const sh = planilha(projetoId); const cab = cabecalho(sh, COLS_SISTEMA);

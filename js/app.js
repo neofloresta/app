@@ -46,7 +46,7 @@
   function dataBR(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return String(iso); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   function numBR(v) { return v == null || v === '' ? '' : String(v).replace('.', ','); }
   function paraNum(s) { if (s == null) return null; const t = String(s).trim().replace(',', '.'); if (t === '') return null; const n = Number(t); return isNaN(n) ? null : n; }
-  function toast(msg, ms = 2600) { const t = h('div', { class: 'toast' }, msg); document.body.append(t); setTimeout(() => t.remove(), ms); }
+  function toast(msg, ms = 2600, acao, erro) { document.querySelectorAll('.toast').forEach((x) => x.remove()); const t = h('div', { class: 'toast' + (erro || /^(Erro|Não foi possível|Falha)/.test(String(msg)) ? ' erro' : ''), role: 'status' }, h('span', null, msg), acao ? h('button', { class: 'toast-acao', onclick: () => { t.remove(); acao.fn(); } }, acao.texto) : null); document.body.append(t); setTimeout(() => t.remove(), acao ? Math.max(ms, 6000) : ms); }
   function modal(titulo, corpo, botoes) {
     return new Promise((res) => {
       const fechar = (v) => { veu.remove(); res(v); };
@@ -2118,9 +2118,9 @@
         const c = form.campos.find((k) => k.nome === x.campo); if (!c || c.tipo === 'hidden' || c.tipo === 'photo' || E[c.nome].oculto) continue;
         const t = valorTexto(c, valores[c.nome]); if (!t) continue;
         if (c.tipo === 'bool') marc.push((x.grupo ? x.grupo + ': ' : '') + c.rotulo);
-        else linhas.push(h('div', { class: 'fl' }, h('span', null, c.rotulo), c.tipo === 'species' ? h('i', null, t) : h('b', null, t)));
+        else linhas.push(h('div', { class: 'fl', 'data-campo': c.nome }, h('span', null, c.rotulo), c.tipo === 'species' ? h('i', null, t) : h('b', null, t)));
       }
-      if (marc.length) linhas.push(h('div', { class: 'fl col' }, h('span', null, 'Marcados'), h('div', { class: 'chips' }, marc.map((m) => h('span', { class: 'chip sel mini' }, m)))));
+      if (marc.length) linhas.push(h('div', { class: 'fl col' }, h('span', null, 'Marcados'), h('div', { class: 'chips-leitura' }, marc.map((m) => h('span', { class: 'chip-leit' }, m)))));
       if (linhas.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, a.nome), linhas));
     }
     if (fotos && fotos.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Fotos'), h('div', { class: 'ficha-fotos' }, fotos.map((f) => h(linkSeguro(f.link) || f.src ? 'a' : 'div', { href: linkSeguro(f.link) || f.src, target: '_blank', rel: 'noopener', class: 'ficha-foto', 'data-drive': f.drive || null }, f.src ? h('img', { src: f.src, alt: f.rotulo, loading: 'lazy', onerror: (e) => e.target.remove() }) : null, h('span', null, f.rotulo))))));
@@ -2573,18 +2573,26 @@
 
   // ---------- Validação (coordenação e revisão técnica) ----------
   // grava a decisão no servidor e atualiza a lista guardada; devolve true se gravou
+  // motivos sugeridos pelos alertas do registro (um toque preenche o motivo)
+  const MOTIVO_ALERTA = [[/Sem coordenada|GPS/, 'Refazer a marcação do ponto ao lado do tronco (GPS com erro alto ou sem coordenada).'], [/Sem foto/, 'Falta a foto geral da árvore.'], [/Sem espécie|fora da lista/, 'Conferir a espécie (nome fora da lista ou em branco).'], [/Altura/, 'Conferir a altura (valor fora do comum).'], [/DAP|CAP/, 'Conferir a medida do CAP (valor fora do comum).'], [/Código repetido|duplicad/i, 'Código repetido: conferir se é o mesmo indivíduo.']];
   async function decidirRegistros(estado, uuids, amostra) {
     let obs = '';
+    const antes = {}; const cache = S.linhas && S.linhas[S.projeto.id]; if (cache) for (const l of cache.linhas) if (uuids.includes(l.uuid)) antes[l.uuid] = l.validacao || 'Pendente';
     if (estado !== 'Validado') {
       const t = h('textarea', { class: 'entrada', placeholder: estado === 'Devolvido' ? 'Ex.: conferir a espécie e refazer a foto 1' : 'Ex.: registro duplicado' });
-      const ok = await modal(estado === 'Devolvido' ? 'Devolver para a equipe' : 'Descartar', h('div', null, h('p', null, `${uuids.length} registro(s). Escreva o motivo${estado === 'Devolvido' ? ', que a equipe vê no aparelho' : ''}:`), t), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: estado === 'Devolvido' ? 'Devolver' : 'Descartar', classe: estado === 'Descartado' ? 'perigo' : '', valor: true }]);
+      const als = cache ? [...new Set(cache.linhas.filter((l) => uuids.includes(l.uuid)).flatMap((l) => l.__alertas || []))] : [];
+      const sug = [...new Set(MOTIVO_ALERTA.filter(([r]) => als.some((a) => r.test(a))).map(([, m]) => m).concat(estado === 'Devolvido' ? ['Refazer as fotos (fora de foco ou sem a árvore inteira).'] : ['Registro duplicado.', 'Registro de teste.']))];
+      const ok = await modal(estado === 'Devolvido' ? 'Devolver para a equipe' : 'Descartar', h('div', null, h('p', null, `${uuids.length} registro(s). Escreva o motivo${estado === 'Devolvido' ? ', que a equipe vê no aparelho' : ''}:`), sug.length ? h('div', { class: 'motivos' }, sug.map((m) => h('button', { class: 'chip', onclick: () => { t.value = t.value ? t.value + ' ' + m : m; } }, m))) : null, t), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: estado === 'Devolvido' ? 'Devolver' : 'Descartar', classe: estado === 'Descartado' ? 'perigo' : '', valor: true }]);
       if (!ok) return false; obs = t.value.trim(); if (!obs) { toast('Informe o motivo.'); return false; }
     } else if (uuids.length > 1 && !amostra && !(await confirmar('Validar registros', `Validar ${uuids.length} registro(s)? Depois de validados, a equipe não consegue mais alterar.`, 'Validar'))) return false;
     try {
       for (let i = 0; i < uuids.length; i += 500) await Api.b.validar(S.projeto.id, uuids.slice(i, i + 500).map((u) => ({ uuid: u, estado, obs, amostra: !!amostra })));
       const c = S.linhas[S.projeto.id]; const agora = agoraISO(); const set = new Set(uuids);
       if (c) for (const l of c.linhas) if (set.has(l.uuid)) Object.assign(l, { validacao: estado, validacao_obs: obs, validado_por: S.sessao.u, validado_em: agora });
-      S.painel = null; toast(`${uuids.length} registro(s): ${estado.toLowerCase()}.`); return true;
+      S.painel = null;
+      const desfazer = Object.keys(antes).length ? { texto: 'Desfazer', fn: async () => { try { const por = {}; for (const [u, st] of Object.entries(antes)) (por[st] = por[st] || []).push(u); for (const [st, us] of Object.entries(por)) await Api.b.validar(S.projeto.id, us.map((u) => ({ uuid: u, estado: st, obs: '' }))); if (c) for (const l of c.linhas) if (antes[l.uuid]) Object.assign(l, { validacao: antes[l.uuid], validacao_obs: '' }); S.painel = null; toast('Desfeito.'); if (location.hash.startsWith('#validacao')) telaValidacao(); } catch (er) { toast('Não foi possível desfazer: ' + er.message, 5000); } } } : null;
+      const nome = { Validado: 'validado(s)', Devolvido: 'devolvido(s)', Descartado: 'descartado(s)' }[estado] || estado.toLowerCase();
+      toast(`${uuids.length} registro(s) ${nome}.`, 2600, desfazer); return true;
     } catch (e) { toast(e.message, 5000); return false; }
   }
   function alertasDe(l, form, dups) {
@@ -2622,21 +2630,25 @@
     const cont = {}; linhas.forEach((l) => { const k = cc ? String(l[cc.nome] || '') : ''; if (k) cont[k] = (cont[k] || 0) + 1; });
     const dups = new Set(Object.keys(cont).filter((k) => cont[k] > 1));
     linhas.forEach((l) => { l.__alertas = alertasDe(l, form, dups); l.validacao = l.validacao || 'Pendente'; });
-    const F = S.filtroVal = S.filtroVal || { sit: 'revisar', eq: '', alerta: '', q: '', limite: 100 };
+    const F = S.filtroVal = Object.assign({ sit: 'revisar', eq: '', alerta: '', q: '', limite: 100, per: '', ordem: 'antigos' }, S.filtroVal || {});
     const sel = new Set();
     const selSit = h('select', { class: 'entrada' }, [['revisar', 'A revisar'], ['Pendente', 'Aguardando validação'], ['Corrigido', 'Corrigidos'], ['Devolvido', 'Devolvidos'], ['Validado', 'Validados'], ['Descartado', 'Descartados'], ['', 'Todos']].map(([v, t]) => h('option', { value: v, selected: F.sit === v }, t)));
     const eqs = [...new Set(linhas.map((l) => l.equipe || ''))].filter(Boolean).sort();
     const selEq = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todas as equipes'), eqs.map((e) => h('option', { value: e, selected: F.eq === e }, e)));
     const selAl = h('select', { class: 'entrada' }, [['', 'Com e sem alerta'], ['com', 'Só com alerta'], ['sem', 'Só sem alerta']].map(([v, t]) => h('option', { value: v, selected: F.alerta === v }, t)));
     const busca = h('input', { class: 'entrada', placeholder: 'Código ou espécie', value: F.q });
+    const selPer = h('select', { class: 'entrada', 'aria-label': 'Período' }, [['', 'Todo o período'], ['hoje', 'Hoje'], ['ontem', 'Ontem'], ['7', 'Últimos 7 dias']].map(([v, t]) => h('option', { value: v, selected: F.per === v }, t)));
+    const selOrd = h('select', { class: 'entrada', 'aria-label': 'Ordem' }, [['antigos', 'Mais antigos primeiro'], ['novos', 'Mais novos primeiro'], ['alerta', 'Com alerta primeiro']].map(([v, t]) => h('option', { value: v, selected: F.ordem === v }, t)));
+    const dHoje = diaLocal(agoraISO()), dOntem = diaLocal(new Date(Date.now() - 864e5).toISOString()), d7 = diaLocal(new Date(Date.now() - 6 * 864e5).toISOString());
+    const okPer = (l) => { if (!F.per) return true; const d = diaLocal(l.criado_em); return F.per === 'hoje' ? d === dHoje : F.per === 'ontem' ? d === dOntem : d >= d7; };
     const resumo = h('div', { class: 'val-resumo' }); const lista = h('div', { class: 'val-lista' }); const acoes = h('div', { class: 'val-acoes' });
     const filtradas = () => linhas.filter((l) => (F.sit === 'revisar' ? ['Pendente', 'Corrigido'].includes(l.validacao) : !F.sit || l.validacao === F.sit) && (!F.eq || l.equipe === F.eq)
-      && (!F.alerta || (F.alerta === 'com' ? l.__alertas.length : !l.__alertas.length)) && (!F.q || norm((cc ? l[cc.nome] : '') + ' ' + (ce ? l[ce.nome] : '')).includes(norm(F.q))))
-      .sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)));
+      && (!F.alerta || (F.alerta === 'com' ? l.__alertas.length : !l.__alertas.length)) && okPer(l) && (!F.q || norm((cc ? l[cc.nome] : '') + ' ' + (ce ? l[ce.nome] : '')).includes(norm(F.q))))
+      .sort((a, b) => (F.ordem === 'alerta' ? (b.__alertas.length ? 1 : 0) - (a.__alertas.length ? 1 : 0) : 0) || (F.ordem === 'novos' ? String(b.criado_em).localeCompare(String(a.criado_em)) : String(a.criado_em).localeCompare(String(b.criado_em))));
     function desenhar() {
       const vis = filtradas(); S.navVal = vis.map((l) => l.uuid);
       const c = {}; linhas.forEach((l) => (c[l.validacao] = (c[l.validacao] || 0) + 1));
-      resumo.replaceChildren(...['Pendente', 'Corrigido', 'Devolvido', 'Validado', 'Descartado'].map((k) => h('span', { class: 'val-chip', style: `border-color:${COR_VAL[k]}` }, h('b', null, fmtN(c[k] || 0)), ' ', ROT_CURTO[k])));
+      resumo.replaceChildren(...['Pendente', 'Corrigido', 'Devolvido', 'Validado', 'Descartado'].map((k) => h('button', { class: 'val-chip' + (F.sit === k ? ' sel' : ''), style: `border-color:${COR_VAL[k]}`, onclick: () => { selSit.value = F.sit === k ? 'revisar' : k; mudou(); } }, h('b', null, fmtN(c[k] || 0)), ' ', ROT_CURTO[k])));
       lista.replaceChildren(...vis.slice(0, F.limite).map((l) => {
         const cb = h('input', { type: 'checkbox', checked: sel.has(l.uuid), onchange: () => { if (cb.checked) sel.add(l.uuid); else sel.delete(l.uuid); pintarAcoes(); }, 'aria-label': 'Selecionar' });
         return h('div', { class: 'val-item' }, cb, h('button', { class: 'val-txt', onclick: () => ir('#ficha/' + encodeURIComponent(l.uuid)) },
@@ -2654,21 +2666,35 @@
     function pintarAcoes() {
       const vis = filtradas(); const semAlerta = vis.filter((l) => !l.__alertas.length && l.validacao !== 'Validado').map((l) => l.uuid);
       acoes.replaceChildren(h('label', { class: 'tudo' }, h('input', { type: 'checkbox', checked: vis.length && vis.slice(0, F.limite).every((l) => sel.has(l.uuid)), onchange: (e) => { vis.slice(0, F.limite).forEach((l) => (e.target.checked ? sel.add(l.uuid) : sel.delete(l.uuid))); desenhar(); } }), ' Marcar os visíveis'),
-        h('button', { class: 'btn peq', disabled: !sel.size, onclick: () => aplicar('Validado', [...sel]) }, `Validar (${sel.size})`),
+        h('button', { class: 'btn peq', disabled: !sel.size, onclick: () => validarSel() }, `Validar (${sel.size})`),
         h('button', { class: 'btn sec peq', disabled: !sel.size, onclick: () => aplicar('Devolvido', [...sel]) }, 'Devolver'),
         h('button', { class: 'btn perigo peq', disabled: !sel.size, onclick: () => aplicar('Descartado', [...sel]) }, 'Descartar'),
         semAlerta.length ? h('button', { class: 'btn sec peq', onclick: () => validarLote(semAlerta) }, `Validar todos sem alerta (${fmtN(semAlerta.length)})`) : null);
     }
+    // validar os marcados: se algum tem alerta, avisa e oferece validar só os sem alerta
+    async function validarSel() {
+      const marc = linhas.filter((l) => sel.has(l.uuid)); const comAl = marc.filter((l) => l.__alertas.length);
+      if (!comAl.length) return aplicar('Validado', [...sel]);
+      const v = await modal('Validar', h('p', null, `${pl(comAl.length, 'dos marcados tem alerta', 'dos marcados têm alerta')} (${[...new Set(comAl.flatMap((l) => l.__alertas))].slice(0, 3).join(', ')}).`), [{ texto: `Validar só os sem alerta (${fmtN(marc.length - comAl.length)})`, valor: 'sem' }, { texto: `Validar todos (${fmtN(marc.length)})`, valor: 'todos', classe: 'sec' }, { texto: 'Cancelar', valor: null, classe: 'sec' }]);
+      if (v === 'todos') return aplicar('Validado', [...sel]);
+      if (v === 'sem') { const us = marc.filter((l) => !l.__alertas.length).map((l) => l.uuid); if (!us.length) return toast('Todos os marcados têm alerta.'); return aplicar('Validado', us); }
+    }
     async function validarLote(uuids) {
       const n = Math.max(1, Math.ceil(uuids.length * 0.05));
-      const cb = h('input', { type: 'checkbox' });
-      const ok = await modal('Validar em lote', h('div', null, h('p', null, `${fmtN(uuids.length)} registros sem alerta. Antes de validar em lote, confira por amostragem pelo menos ${fmtN(n)} deles (5%), abrindo a ficha e as fotos.`), h('label', null, cb, ` Conferi uma amostra de pelo menos ${fmtN(n)} registros`)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Validar', valor: true }]);
+      const abertas = uuids.filter((u) => (S.fichasAbertas || new Set()).has(u)).length; // amostra contada pelas fichas abertas nesta sessão
+      const cb = h('input', { type: 'checkbox', checked: abertas >= n });
+      const ok = await modal('Validar em lote', h('div', null, h('p', null, `${fmtN(uuids.length)} registros sem alerta. Antes de validar em lote, confira por amostragem pelo menos ${fmtN(n)} deles (5%), abrindo a ficha e as fotos.`), h('p', { class: abertas >= n ? 'info' : 'aviso' }, `Você abriu ${pl(abertas, 'ficha', 'fichas')} destes registros${abertas >= n ? ': amostra feita.' : `. Faltam ${fmtN(n - abertas)}.`}`), h('label', null, cb, ` Conferi uma amostra de pelo menos ${fmtN(n)} registros`)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Validar', valor: true }]);
       if (!ok) return; if (!cb.checked) return toast('Marque a confirmação da amostra conferida.');
       if (await decidirRegistros('Validado', uuids, true)) desenhar();
     }
-    const mudou = () => { F.sit = selSit.value; F.eq = selEq.value; F.alerta = selAl.value; F.q = busca.value; F.limite = 100; sel.clear(); desenhar(); };
-    [selSit, selEq, selAl].forEach((x) => x.addEventListener('change', mudou)); let tb; busca.addEventListener('input', () => { clearTimeout(tb); tb = setTimeout(mudou, 250); });
-    corpo.replaceChildren(resumo, h('div', { class: 'val-filtros' }, selSit, selEq, selAl, busca), acoes, lista);
+    const mudou = () => { F.sit = selSit.value; F.eq = selEq.value; F.alerta = selAl.value; F.q = busca.value; F.per = selPer.value; F.ordem = selOrd.value; F.limite = 100; sel.clear(); desenhar(); pintarBtF(); };
+    [selSit, selEq, selAl, selPer, selOrd].forEach((x) => x.addEventListener('change', mudou)); let tb; busca.addEventListener('input', () => { clearTimeout(tb); tb = setTimeout(mudou, 250); });
+    // no celular os filtros ficam numa folha que abre pelo botão "Filtros (n)"
+    const estreito = window.innerWidth < 700; const caixaF = h('div', { class: 'val-filtros' + (estreito && !S.valFiltrosAbertos ? ' oculto' : '') }, selSit, selEq, selAl, selPer, selOrd);
+    const btF = h('button', { class: 'btn sec peq' + (estreito ? '' : ' oculto'), onclick: () => { S.valFiltrosAbertos = !S.valFiltrosAbertos; caixaF.classList.toggle('oculto', !S.valFiltrosAbertos); pintarBtF(); } });
+    const pintarBtF = () => { const n = [F.sit !== 'revisar', F.eq, F.alerta, F.per, F.ordem !== 'antigos'].filter(Boolean).length; btF.textContent = S.valFiltrosAbertos ? 'Esconder filtros' : 'Filtros' + (n ? ` (${n})` : ''); };
+    pintarBtF();
+    corpo.replaceChildren(resumo, h('div', { class: 'val-busca' }, busca, btF), caixaF, acoes, lista);
     desenhar();
   }
   const idDrive = (u) => { const m = String(u || '').match(/\/d\/([\w-]{20,})/) || String(u || '').match(/id=([\w-]{20,})/); return m ? m[1] : null; };
@@ -2682,9 +2708,13 @@
     const irPara = (k) => { if (k >= 0 && k < nav.length) ir('#ficha/' + encodeURIComponent(nav[k])); };
     const cc = campoCodigo(form);
     const decidir = async (estado) => { if (!(await decidirRegistros(estado, [uuidR]))) return; if (i >= 0 && i + 1 < nav.length) irPara(i + 1); else ir('#validacao'); };
+    (S.fichasAbertas = S.fichasAbertas || new Set()).add(uuidR);
+    if (!l.__alertas) { const ccx = campoCodigo(form); const cont = {}; linhas.forEach((x) => { const k = ccx ? String(x[ccx.nome] || '') : ''; if (k) cont[k] = (cont[k] || 0) + 1; }); l.__alertas = alertasDe(l, form, new Set(Object.keys(cont).filter((k) => cont[k] > 1))); }
+    // atalhos no computador: V valida, D devolve, setas navegam
+    if (ehCoord()) { if (S.atalhoFicha) document.removeEventListener('keydown', S.atalhoFicha); S.atalhoFicha = (e) => { if (!location.hash.startsWith('#ficha/') || document.querySelector('.veu') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName)) return; const k = e.key.toLowerCase(); if (k === 'v') decidir('Validado'); else if (k === 'd') decidir('Devolvido'); else if (e.key === 'ArrowRight') irPara(i + 1); else if (e.key === 'ArrowLeft') irPara(i - 1); }; document.addEventListener('keydown', S.atalhoFicha); }
     const mapaDiv = h('div', { class: 'mapa-mini', style: 'height:220px' });
     $app.replaceChildren(topo((cc && l[cc.nome]) || 'Registro', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(ehCoord() ? '#validacao' : '#mapa'), 'aria-label': 'Voltar' }, ico('voltar')), nav.length && ehCoord() ? h('span', { class: 'nav-n' }, `${fmtN(i + 1)} de ${fmtN(nav.length)}`) : null),
-      h('main', null,
+      h('main', { class: 'ficha-servidor' },
         h('div', { class: 'cartao status-ficha st-' + norm(l.validacao || 'pendente') }, h('b', null, ROT_VAL[l.validacao || 'Pendente'] || l.validacao),
           l.validacao_obs ? h('p', null, 'Motivo: ' + l.validacao_obs) : null,
           h('small', null, `${dataBR(l.criado_em)} · ${l.equipe || ''}${l.usuario ? ' (' + l.usuario + ')' : ''}${l.precisao_gps_m ? ' · GPS ±' + Math.round(l.precisao_gps_m) + ' m' : ''}${l.validado_por ? ' · avaliado por ' + l.validado_por + ' em ' + dataBR(l.validado_em) : ''}`),
@@ -2693,12 +2723,15 @@
         fichaConteudo(form, valores, fotos),
         secaoOSArvore(uuidR, true),
         l.historico ? h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Histórico de alterações'), String(l.historico).split(' | ').map((x) => h('p', { class: 'hist' }, x))) : null,
-        ehCoord() ? h('div', { class: 'linha-btn val-dec' },
-          h('button', { class: 'btn sec', disabled: i <= 0, onclick: () => irPara(i - 1) }, 'Anterior'),
-          h('button', { class: 'btn perigo', onclick: () => decidir('Descartado') }, 'Descartar'),
-          h('button', { class: 'btn sec', onclick: () => decidir('Devolvido') }, 'Devolver'),
-          h('button', { class: 'btn', onclick: () => decidir('Validado') }, 'Validar'),
-          h('button', { class: 'btn sec', disabled: i < 0 || i >= nav.length - 1, onclick: () => irPara(i + 1) }, 'Próximo')) : null));
+        ehCoord() ? h('button', { class: 'link-perigo', style: 'margin:4px 0 90px', onclick: () => decidir('Descartado') }, 'Descartar este registro') : null,
+        ehCoord() ? h('footer', { class: 'rodape val-dec' },
+          h('button', { class: 'btn sec ic-nav', disabled: i <= 0, onclick: () => irPara(i - 1), 'aria-label': 'Anterior', title: 'Anterior (seta para a esquerda)' }, ico('esq')),
+          h('button', { class: 'btn sec', style: 'flex:1', onclick: () => decidir('Devolvido'), title: 'Devolver (D)' }, 'Devolver'),
+          h('button', { class: 'btn', style: 'flex:1.4', onclick: () => decidir('Validado'), title: 'Validar (V)' }, ico('check'), 'Validar'),
+          h('button', { class: 'btn sec ic-nav', disabled: i < 0 || i >= nav.length - 1, onclick: () => irPara(i + 1), 'aria-label': 'Próximo', title: 'Próximo (seta para a direita)' }, ico('dir'))) : null));
+    // destaca na ficha o campo que gerou o alerta
+    const ALVO_ALERTA = [[/Altura/, /altura/i], [/DAP|CAP/, /cap|dap/i], [/espécie/i, /especie/i]];
+    for (const a of l.__alertas || []) for (const [ra, rc] of ALVO_ALERTA) if (ra.test(a)) document.querySelectorAll('.ficha-sec .fl[data-campo]').forEach((el) => { if (rc.test(norm(el.dataset.campo || ''))) el.classList.add('campo-alerta'); });
     if (!Api.demo) setTimeout(() => document.querySelectorAll('.ficha-foto[data-drive]').forEach(async (a) => { try { const b = await Api.b.fotoVer(S.projeto.id, a.dataset.drive); const img = h('img', { src: URL.createObjectURL(b), alt: '', loading: 'lazy' }); a.querySelector('img') ? a.querySelector('img').replaceWith(img) : a.prepend(img); } catch (e) { /* sem permissão ou sem conexão: fica o link */ } }), 30);
     if (l.latitude !== '' && l.latitude != null) setTimeout(() => { const m = L.map(mapaDiv, { zoomControl: false }).setView([+l.latitude, +l.longitude], 19); camadasFundo(m, true); L.circleMarker([+l.latitude, +l.longitude], { radius: 8, color: '#fff', weight: 2, fillColor: '#E10000', fillOpacity: 1 }).addTo(m); }, 50);
   }
