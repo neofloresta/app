@@ -531,3 +531,12 @@ html.sol .dica, html.sol small { color: #263238; }
 .br-it { display: flex; flex-direction: column; align-items: flex-start; width: 100%; min-height: 48px; padding: 6px 14px; border: 0; background: none; text-align: left; font: inherit; cursor: pointer; }
 .br-it:hover, .br-it:focus { background: #E4F0F3; } .br-it small { color: #4F6268; }
 @media (min-width: 900px) { .mapa-bts { bottom: 30px; } }
+/* Turno e trajeto */
+.faixa-turno { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-height: 56px; padding: 10px 14px; margin: 8px 0; border-radius: 12px; border: 1.5px dashed #8FA3A9; background: #fff; font: inherit; text-align: left; cursor: pointer; color: var(--texto, #1d2b30); }
+.faixa-turno b { color: #00546E; font-size: 16px; } .faixa-turno span { color: var(--suave); font-size: 14px; }
+.faixa-turno.ativo { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 12px; border: 1.5px solid #D81B60; cursor: default; }
+.faixa-turno.ativo small { flex: 1; color: var(--suave); }
+.selo-trajeto { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: #AD1457; }
+.selo-trajeto i { width: 10px; height: 10px; border-radius: 50%; background: #D81B60; animation: pisca 1.6s infinite; }
+@keyframes pisca { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .selo-trajeto i { animation: none; } }

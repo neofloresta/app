@@ -192,6 +192,7 @@
     if (!p) { if (S.sessao.usuario.perfil === 'admin') { S.projeto = null; S.form = null; return; } throw new Error('Nenhum projeto liberado para este usuário.'); }
     S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
     S.form = await carregarForm(p.formulario);
+    Turno.carregar().catch(() => {});
     // a numeração dos códigos se prepara em segundo plano: a tela abre na hora
     S.prepCodigosOk = false;
     S.prepCodigos = (async () => { await Promise.race([sincronizarSequencia(), new Promise((r) => setTimeout(r, 8000))]); await Promise.race([garantirFaixa(), new Promise((r) => setTimeout(r, 8000))]); S.prepCodigosOk = true; })();
@@ -332,7 +333,7 @@
     if (S.sincronizando || !S.sessao || S.expirada || perfil() === 'cliente') return;
     if (!navigator.onLine) { if (!silencioso) toast('Sem internet. Os dados ficam guardados e serão enviados depois.'); return atualizarSync(); }
     S.sincronizando = true; // marcado antes de qualquer espera: nunca roda duas vezes ao mesmo tempo
-    try { await enviarPendentes(silencioso); if (!S.expirada) await enviarFilaOS(silencioso); if (!S.expirada) await enviarFilaQd(silencioso); } finally { S.sincronizando = false; await atualizarSync(); }
+    try { await enviarPendentes(silencioso); if (!S.expirada) await enviarFilaOS(silencioso); if (!S.expirada) await enviarFilaQd(silencioso); if (!S.expirada) await Turno.enviar(); } finally { S.sincronizando = false; await atualizarSync(); }
     garantirFaixa();
     if (S.expirada) return;
     await atualizarSituacao();
@@ -463,13 +464,13 @@
         ehCoord() ? h('div', { class: 'linha-btn coord-atalhos' }, h('button', { class: 'btn sec', onclick: () => ir('#hoje') }, 'Hoje no campo'), h('button', { class: 'btn sec', onclick: () => ir('#painel') }, 'Panorama geral')) : null,
         h('div', { id: 'encerrar-face' }),
         h('div', { id: 'aviso-versao' }),
-        h('div', { id: 'aviso-gps' }), h('div', { id: 'continuar' }),
+        h('div', { id: 'turno' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'continuar' }),
         h('div', { id: 'devolvidos' }),
         h('div', { id: 'os-equipe' }),
         h('div', { class: 'resumo', id: 'stats' }), h('small', { class: 'ult-envio', id: 'ult-envio' }),
         h('div', { class: 'busca-box' }, ico('busca'), busca),
         h('div', { id: 'lista', class: 'lista' })));
-    atualizarSync(); listarRegistros(); pintarAvisoVersao(); pintarOSEquipe(); pintarEncerrarFace(); pintarAvisoGps(); pintarDicaGps();
+    atualizarSync(); listarRegistros(); pintarAvisoVersao(); pintarOSEquipe(); pintarEncerrarFace(); pintarAvisoGps(); pintarDicaGps(); pintarTurno();
   }
 
   // "Encerrar face": a face que a equipe está fazendo, com confirmação para não encerrar sem querer
@@ -705,6 +706,60 @@
     S.aba = 0; S.tentou = false;
     await marcarPonto(r); // o ponto é travado aqui, antes de medir: não acompanha o celular enquanto a dupla dá a volta na árvore
     ir('#form/' + r.uuid);
+  }
+
+  // ---------- Turno e trajeto ----------
+  // com o trajeto liberado pela coordenação, a equipe toca em "Começar turno": o app guarda o caminho enquanto está aberto
+  // (tela acesa) e manda em trechos. Parado, a pé ou de carro pela velocidade entre os pontos.
+  const Poly = {
+    enc(pts) { let o = '', pla = 0, plo = 0; const e = (v) => { v = v < 0 ? ~(v << 1) : v << 1; let r = ''; while (v >= 0x20) { r += String.fromCharCode((0x20 | (v & 0x1f)) + 63); v >>= 5; } return r + String.fromCharCode(v + 63); };
+      for (const [la, lo] of pts) { const a = Math.round(la * 1e5), b = Math.round(lo * 1e5); o += e(a - pla) + e(b - plo); pla = a; plo = b; } return o; },
+    dec(s) { const out = []; let i = 0, la = 0, lo = 0; const d = () => { let r = 0, sh = 0, b; do { b = s.charCodeAt(i++) - 63; r |= (b & 0x1f) << sh; sh += 5; } while (b >= 0x20); return r & 1 ? ~(r >> 1) : r >> 1; };
+      while (i < s.length) { la += d(); lo += d(); out.push([la / 1e5, lo / 1e5]); } return out; },
+  };
+  const distPt = (a, b) => Math.hypot((a[2] - b[2]) * 111320 * Math.cos(a[1] * Math.PI / 180), (a[1] - b[1]) * 110540);
+  function resumoTrajeto(pts) { // pts: [t, lat, lon, prec]
+    let pe = 0, carro = 0, parado = 0;
+    for (let i = 1; i < pts.length; i++) { const d = distPt(pts[i - 1], pts[i]); const dt = (pts[i][0] - pts[i - 1][0]) / 1000; if (dt <= 0 || dt > 900) continue; const v = d / dt; if (v < 0.4) parado += dt; else if (v < 2.8) pe += d; else carro += d; }
+    return { km_pe: Math.round(pe / 10) / 100, km_carro: Math.round(carro / 10) / 100, min_parado: Math.round(parado / 60) };
+  }
+  const Turno = {
+    chave: () => 'turno:' + (S.sessao ? S.sessao.u : '') + ':' + (S.projeto ? S.projeto.id : ''),
+    liberado: () => !!(S.sessao && S.sessao.usuario.trajeto === 'sim' && perfil() === 'coletor' && S.projeto),
+    est: null, lock: null, salvarT: null,
+    async carregar() { this.est = this.liberado() ? (await Store.get(this.chave())) : null; if (this.est && this.est.dia !== diaLocal(agoraISO())) { await this.encerrar(true); } if (this.est && this.est.ativo) this.ligar(); },
+    async comecar() { this.est = { ativo: true, dia: diaLocal(agoraISO()), inicio: agoraISO(), pts: [], env: 0, id: uuid().slice(0, 8) }; await Store.set(this.chave(), this.est); this.ligar(); pintarTurno(); toast('Turno começou. O trajeto fica ligado enquanto o app estiver aberto.', 4000); },
+    ligar() { Gps.ouvintes.add(this.ouv); ligarGps(); this.pedirTela(); document.addEventListener('visibilitychange', this.vis); },
+    vis: () => { if (document.visibilityState === 'visible' && Turno.est && Turno.est.ativo) Turno.pedirTela(); },
+    async pedirTela() { try { if ('wakeLock' in navigator && document.visibilityState === 'visible') { this.lock = await navigator.wakeLock.request('screen'); } } catch (e) { /* sem tela acesa: segue gravando enquanto aberto */ } },
+    ouv: (p) => {
+      const e = Turno.est; if (!p || !e || !e.ativo || p.prec > 30) return;
+      const pt = [Date.now(), Math.round(p.lat * 1e6) / 1e6, Math.round(p.lon * 1e6) / 1e6, p.prec]; const ult = e.pts[e.pts.length - 1];
+      if (ult && distPt(ult, pt) < Math.max(8, p.prec) && pt[0] - ult[0] < 60000) return; // parado: um ponto por minuto basta
+      e.pts.push(pt); clearTimeout(Turno.salvarT); Turno.salvarT = setTimeout(() => Store.set(Turno.chave(), e), 3000);
+    },
+    async encerrar(silencioso) {
+      const e = this.est; if (!e) return; e.ativo = false; e.fim = agoraISO(); await Store.set(this.chave(), e);
+      Gps.ouvintes.delete(this.ouv); document.removeEventListener('visibilitychange', this.vis); try { if (this.lock) await this.lock.release(); } catch (er) { /* já solta */ } this.lock = null;
+      await this.enviar(); if (!silencioso) { pintarTurno(); toast('Turno encerrado.'); }
+    },
+    async enviar() {
+      const e = this.est; if (!e || Api.demo || !navigator.onLine) return;
+      while (e.pts.length - e.env >= (e.ativo ? 20 : 1)) {
+        const de = Math.max(0, e.env - 1); const fatia = e.pts.slice(de, de + 400); if (fatia.length < 2 && !(!e.ativo && fatia.length)) break;
+        const trecho = Object.assign({ id: S.sessao.u + '-' + e.dia + '-' + e.id + '-' + e.env, dia: e.dia, inicio: new Date(fatia[0][0]).toISOString(), fim: new Date(fatia[fatia.length - 1][0]).toISOString(), pontos: Poly.enc(fatia.map((x) => [x[1], x[2]])), n: fatia.length }, resumoTrajeto(fatia));
+        try { await Api.b.trajetoSalvar(S.projeto.id, trecho); } catch (er) { return; }
+        e.env = de + fatia.length; await Store.set(this.chave(), e);
+      }
+      if (!e.ativo && e.env >= e.pts.length) { await Store.del(this.chave()); this.est = null; }
+    },
+    km() { const e = this.est; if (!e) return 0; const r = resumoTrajeto(e.pts); return r.km_pe + r.km_carro; },
+  };
+  function pintarTurno() {
+    const el = document.getElementById('turno'); if (!el) return; if (!Turno.liberado()) return el.replaceChildren();
+    const e = Turno.est;
+    if (e && e.ativo) el.replaceChildren(h('div', { class: 'faixa-turno ativo' }, h('span', { class: 'selo-trajeto' }, h('i'), 'Trajeto ligado'), h('small', null, `desde ${new Date(e.inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${numBR(Math.round(Turno.km() * 10) / 10)} km`), h('button', { class: 'btn sec peq', onclick: async () => { if (await confirmar('Encerrar turno', 'Encerrar o turno desliga o trajeto até amanhã (ou até tocar em Começar turno de novo).', 'Encerrar turno')) Turno.encerrar(); } }, 'Encerrar turno')));
+    else el.replaceChildren(h('button', { class: 'faixa-turno', onclick: () => Turno.comecar() }, h('b', null, 'Começar turno'), h('span', null, 'Liga o trajeto e mantém a tela acesa enquanto o app está aberto')));
   }
 
   // ---------- Marcação do ponto ----------
@@ -1367,13 +1422,14 @@
     const rotFiltros = () => (S.filtrosAbertos ? 'Esconder filtros' : 'Filtros' + (nFiltros() ? ` (${nFiltros()})` : ''));
     const btFiltros = h('button', { class: 'btn sec peq bt-filtros' + (baixa ? '' : ' oculto'), onclick: () => { S.filtrosAbertos = !S.filtrosAbertos; selBox.classList.toggle('oculto', !S.filtrosAbertos); btFiltros.textContent = rotFiltros(); setTimeout(() => mapa.invalidateSize(), 50); } }, '');
     // atalhos de um toque para os filtros mais usados
-    let soAlto = false;
+    let soAlto = false, trajOn = false, trajDados = null, trajDia = null; const trajCamada = L.layerGroup();
     const chipR = (txt, ativo, fn) => h('button', { class: 'chip-rapido' + (ativo() ? ' sel' : ''), 'aria-pressed': ativo() ? 'true' : 'false', onclick: (e) => { fn(); pintarChips(); desenhar(true); } }, txt);
     const chipsR = h('div', { class: 'chips-rapidos' });
     function pintarChips() {
       chipsR.replaceChildren(chipR('Hoje', () => selDia.value === 'hoje', () => { selDia.value = selDia.value === 'hoje' ? '' : 'hoje'; diaIn.classList.add('oculto'); }),
         perfil() === 'coletor' && minhaEquipe() ? chipR('Minha equipe', () => selEq.value === minhaEquipe(), () => { selEq.value = selEq.value === minhaEquipe() ? '' : minhaEquipe(); }) : null,
-        cRisco ? chipR('Risco alto', () => soAlto, () => { soAlto = !soAlto; if (soAlto) { selCor.value = 'risco'; if (selRisco) selRisco.value = ''; } }) : null);
+        cRisco ? chipR('Risco alto', () => soAlto, () => { soAlto = !soAlto; if (soAlto) { selCor.value = 'risco'; if (selRisco) selRisco.value = ''; } }) : null,
+        ehCoord() && !Api.demo ? chipR('Trajetos', () => trajOn, () => { trajOn = !trajOn; trajDados = null; }) : null);
       btFiltros.textContent = rotFiltros();
     }
     if (!S.filtrosAbertos) selBox.classList.add('oculto');
@@ -1616,7 +1672,17 @@
         qdSit = nova; for (const s of qdSit.values()) if (s.equipe) corEq(s.equipe); preencherEquipes(); desenhar(false);
       } catch (e) { /* sem quadras */ }
     };
-    const camada = L.layerGroup().addTo(mapa);
+    const camada = L.layerGroup().addTo(mapa); trajCamada.addTo(mapa);
+    // trajeto das equipes (coordenação): em cor própria, fora das paletas, e desligável
+    async function pintarTrajetos() {
+      trajCamada.clearLayers(); if (!trajOn) return;
+      const dv = selDia.value; const dia = dv === 'ontem' ? diaLocal(new Date(Date.now() - 864e5).toISOString()) : dv === 'outro' && diaIn.value ? diaIn.value : diaLocal(agoraISO());
+      if (!trajDados || trajDia !== dia) { try { trajDados = await Api.b.trajetos(S.projeto.id, dia); trajDia = dia; } catch (e) { toast('Não foi possível carregar os trajetos: ' + e.message); trajOn = false; pintarChips(); return; } }
+      if (!trajOn || !document.body.contains(div)) return;
+      let n = 0;
+      for (const t of trajDados) { if (selEq.value && t.equipe !== selEq.value) continue; const ll = Poly.dec(t.pontos); if (ll.length < 2) continue; n++; L.polyline(ll, { renderer: render, color: '#D81B60', weight: 3, opacity: 0.85, interactive: false }).addTo(trajCamada); L.circleMarker(ll[ll.length - 1], { renderer: render, radius: 4, color: '#fff', weight: 1, fillColor: '#D81B60', fillOpacity: 1, interactive: false }).addTo(trajCamada); }
+      if (!n) toast(`Nenhum trajeto em ${dia.split('-').reverse().join('/')}${selEq.value ? ' para ' + selEq.value : ''}.`);
+    }
     let porCidade = false, mexeu = false; mapa.on('dragstart', () => { mexeu = true; });
     const semFiltro = () => !busca.value.trim() && !selEq.value && !selDia.value && !(selRisco && selRisco.value) && !selBairro.value;
     function desenhar(ajustar) {
@@ -1642,7 +1708,7 @@
       const minhasQ = rq && meu && rq.eq[meu] ? ` · Minhas quadras: ${fmtN(rq.eq[meu].Levantada)} de ${fmtN(rq.eq[meu].total)} levantadas` : '';
       const hojeN = meu ? pts.filter((o) => o.equipe === meu && o.dia === hojeD).length : 0;
       conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos` + (rq ? ` · ${fmtN(rq.por.Levantada)} de ${fmtN(rq.tot)} quadras levantadas` : '') + minhasQ + (meu ? ` · Hoje: ${fmtN(hojeN)}` : '') + (porOS && osPorArv ? ` · ${[...osPorArv.values()].filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length + osSoltas.filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length} com ordem em aberto` : '') + (conta.dataset.qd ? ' · ' + conta.dataset.qd : '');
-      legenda();
+      legenda(); pintarTrajetos();
       if (ajustar && vis.length && !(porCidade && semFiltro())) {
         if (vis.length === 1) { mapa.setView([vis[0].lat, vis[0].lon], 19); ficha(vis[0]); }
         else mapa.fitBounds(L.latLngBounds(vis.map((o) => [o.lat, o.lon])), { padding: [30, 30], maxZoom: 19 });
@@ -1860,6 +1926,7 @@
       const pe = h('select', { class: 'entrada' }, PERFIS.map(([v, t]) => h('option', { value: v, selected: (u.perfil === 'campo' ? 'coletor' : u.perfil) === v }, t)));
       const at = h('input', { type: 'checkbox', checked: String(u.ativo || 'sim').toLowerCase() !== 'nao' });
       const mc = h('select', { class: 'entrada' }, h('option', { value: 'raios', selected: (u.modo_copa || 'raios') === 'raios' }, '4 raios com trena (o app calcula a área)'), h('option', { value: 'area', selected: u.modo_copa === 'area' }, 'Área direto, com trena a laser'));
+      const tj = h('input', { type: 'checkbox', checked: u.trajeto === 'sim' });
       const marcados = new Set(String(u.projeto || '').split(',').map((x) => x.trim()));
       const prj = h('div', { class: 'chips' }, projetos.map((p) => { const b = h('button', { class: 'chip' + (marcados.has(p.id) ? ' sel' : ''), onclick: () => { b.classList.toggle('sel'); if (marcados.has(p.id)) marcados.delete(p.id); else marcados.add(p.id); } }, p.nome); return b; }));
       const ok = await modal(novo ? 'Novo usuário' : 'Editar usuário', h('div', null,
@@ -1869,6 +1936,7 @@
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Código da equipe'), cod), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Email'), em)),
         h('div', { class: 'dica' }, 'O código da equipe vira o prefixo dos códigos das árvores (E1 gera E1-0001, E1-0002...). Use um diferente para cada equipe.'),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Como mede a copa'), mc),
+        h('label', { class: 'campo' }, tj, ' Registrar o trajeto do turno (a equipe liga em "Começar turno", só com o app aberto)'),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos liberados'), prj), h('label', null, at, ' Usuário ativo')),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
@@ -1877,7 +1945,7 @@
       if (se.value.trim() && se.value.trim().length < 8 && !Api.demo) return toast('A senha precisa ter pelo menos 8 caracteres.');
       if (novo && !se.value.trim()) return toast('Defina a senha.');
       if (novo && us.some((x) => x.login === login)) return toast('Esse usuário já existe.');
-      const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value };
+      const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '' };
       if (se.value.trim()) dados.senha = se.value.trim();
       if (pe.value === 'coletor' && !dados.codigo) return toast('Defina o código da equipe (ex.: E1).');
       if (pe.value === 'coletor' && us.some((x) => x.login !== login && x.codigo === dados.codigo && String(x.projeto).split(',').some((p) => dados.projeto.split(',').includes(p)))) return toast('Outra equipe deste projeto já usa o código ' + dados.codigo + '.');
@@ -2349,6 +2417,18 @@
         h('p', { class: 'dica' }, 'Tempo do início ao fim de cada cadastro. Cadastros que ficaram abertos mais de 1 hora não entram na conta.')) : null,
       h('div', { class: 'linha-btn', style: 'margin:10px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#painel') }, 'Panorama geral do projeto'), h('button', { class: 'btn sec', onclick: () => ir('#validacao') }, 'Validar registros')));
     const s_ = chips.querySelector('.sel'); if (s_ && s_.scrollIntoView) s_.scrollIntoView({ inline: 'center', block: 'nearest' });
+    // trajeto do turno (quando ligado para a equipe)
+    if (!Api.demo && navigator.onLine) Api.b.trajetos(S.projeto.id, sel).then((ts) => {
+      if (!document.body.contains(corpo) || !ts || !ts.length) return; const por = {};
+      for (const t of ts) { const o = por[t.equipe] = por[t.equipe] || { pe: 0, carro: 0, parado: 0 }; o.pe += t.km_pe; o.carro += t.km_carro; o.parado += t.min_parado; }
+      const txt = (o) => `${numBR(Math.round(o.pe * 10) / 10)} km a pé · ${numBR(Math.round(o.carro * 10) / 10)} km de carro · ${fmtN(o.parado)} min parado`;
+      const vistos = new Set();
+      corpo.querySelectorAll('.hoje-eq').forEach((c) => { const e = c.querySelector('.hoje-eq-cab b').textContent; vistos.add(e); const o = por[e]; if (!o) return; c.querySelector('.hoje-dl').append(h('dt', null, 'Trajeto'), h('dd', null, txt(o))); });
+      // equipe com trajeto e sem registro no dia também aparece (estava em campo)
+      const faltam = Object.keys(por).filter((e) => e && !vistos.has(e)); if (!faltam.length) return;
+      let grade = corpo.querySelector('.hoje-equipes'); if (!grade) { grade = h('div', { class: 'hoje-equipes' }); const info = corpo.querySelector(':scope > .info'); if (info) info.replaceWith(grade); else corpo.append(grade); }
+      for (const e of faltam) grade.append(h('div', { class: 'cartao hoje-eq' }, h('div', { class: 'hoje-eq-cab' }, h('b', null, e), h('span', { class: 'hoje-n' }, '0')), h('small', null, 'Em campo, sem registros enviados no dia'), h('dl', { class: 'hoje-dl' }, h('dt', null, 'Trajeto'), h('dd', null, txt(por[e])))));
+    }).catch(() => {});
   }
   // rendimento de cada equipe (dupla): total, hoje, média por dia de campo e melhor dia
   function rendimentoEquipes(d, equipes) {

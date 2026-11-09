@@ -2,80 +2,615 @@
  "versao": "2.6",
  "passos": {
   "campo": [
-   ["Instale o app", "No Android, abra o app no Chrome, toque nos 3 pontinhos e em \"Instalar app\" (ou \"Adicionar à tela inicial\"). No iPhone, abra no Safari, toque em Compartilhar e em \"Adicionar à Tela de Início\"."],
-   ["Permita a localização", "Na primeira árvore o celular pergunta se o app pode usar a localização: toque em \"Permitir\". Ligue também a \"Precisão da localização do Google\" nas configurações do celular."],
-   ["Teste o GPS no começo do dia", "Fique 1 minuto parado em lugar aberto antes da primeira árvore. O GPS melhora depois desse tempo."],
-   ["Cadastre a primeira árvore", "Toque em \"Nova árvore\", espere o ponto ser marcado ao lado do tronco e siga as etapas. No fim, toque em \"Concluir registro\"."],
-   ["Encerre as faces", "Quando terminar um lado da quadra, toque em \"Encerrar face\". Se não tiver nenhuma árvore, escolha \"sem árvores\" e tire a foto da calçada."]
+   [
+    "Instale o app",
+    "No Android, abra o app no Chrome, toque nos 3 pontinhos e em \"Instalar app\" (ou \"Adicionar à tela inicial\"). No iPhone, abra no Safari, toque em Compartilhar e em \"Adicionar à Tela de Início\"."
+   ],
+   [
+    "Permita a localização",
+    "Na primeira árvore o celular pergunta se o app pode usar a localização: toque em \"Permitir\". Ligue também a \"Precisão da localização do Google\" nas configurações do celular."
+   ],
+   [
+    "Teste o GPS no começo do dia",
+    "Fique 1 minuto parado em lugar aberto antes da primeira árvore. O GPS melhora depois desse tempo."
+   ],
+   [
+    "Cadastre a primeira árvore",
+    "Toque em \"Nova árvore\", espere o ponto ser marcado ao lado do tronco e siga as etapas. No fim, toque em \"Concluir registro\"."
+   ],
+   [
+    "Encerre as faces",
+    "Quando terminar um lado da quadra, toque em \"Encerrar face\". Se não tiver nenhuma árvore, escolha \"sem árvores\" e tire a foto da calçada."
+   ]
   ],
   "coordenacao": [
-   ["Acompanhe o dia", "\"Hoje no campo\" mostra cada equipe: quantos registros, a que horas começou, tempo por amostra e GPS. Os dias anteriores ficam a um toque."],
-   ["Valide os registros", "Em \"Validação dos registros\", abra cada ficha e escolha Validar, Devolver (com o motivo) ou Descartar."],
-   ["Distribua as quadras", "No mapa, toque na quadra ou na face e defina a equipe."],
-   ["Veja o panorama", "O Painel do projeto traz o total, as espécies, o risco, o ritmo e o rendimento de cada equipe."]
+   [
+    "Acompanhe o dia",
+    "\"Hoje no campo\" mostra cada equipe: quantos registros, a que horas começou, tempo por amostra e GPS. Os dias anteriores ficam a um toque."
+   ],
+   [
+    "Valide os registros",
+    "Em \"Validação dos registros\", abra cada ficha e escolha Validar, Devolver (com o motivo) ou Descartar."
+   ],
+   [
+    "Distribua as quadras",
+    "No mapa, toque na quadra ou na face e defina a equipe."
+   ],
+   [
+    "Veja o panorama",
+    "O Painel do projeto traz o total, as espécies, o risco, o ritmo e o rendimento de cada equipe."
+   ]
   ],
   "cliente": [
-   ["Painel", "Os números do inventário, só com registros já conferidos e validados pela Neofloresta."],
-   ["Mapa", "Cada ponto é uma árvore. Toque para ver a ficha com as fotos."],
-   ["Pedidos de serviço", "Na ficha da árvore, toque em \"Solicitar serviço\" e acompanhe em Ordens de serviço."],
-   ["Relatório e dados", "No Painel, gere o relatório para imprimir, o boletim de medição ou baixe os dados."]
+   [
+    "Painel",
+    "Os números do inventário, só com registros já conferidos e validados pela Neofloresta."
+   ],
+   [
+    "Mapa",
+    "Cada ponto é uma árvore. Toque para ver a ficha com as fotos."
+   ],
+   [
+    "Pedidos de serviço",
+    "Na ficha da árvore, toque em \"Solicitar serviço\" e acompanhe em Ordens de serviço."
+   ],
+   [
+    "Relatório e dados",
+    "No Painel, gere o relatório para imprimir, o boletim de medição ou baixe os dados."
+   ]
   ]
  },
  "perguntas": [
-  {"perfis": ["campo"], "tema": "Envio e internet", "chave": "envio", "p": "Preciso de internet para trabalhar?", "r": "Só no primeiro acesso e para enviar. Sem sinal, cadastre normalmente: tudo fica guardado no celular e vai sozinho quando houver conexão."},
-  {"perfis": ["campo"], "tema": "Envio e internet", "chave": "envio", "p": "Como sei se meus registros foram enviados?", "r": "O botão no canto de cima mostra \"Tudo enviado\" ou quantos faltam. Embaixo do resumo aparece \"Último envio às...\". Toque no botão para enviar na hora."},
-  {"perfis": ["campo"], "tema": "Envio e internet", "chave": "envio", "p": "Por que as fotos esperam o Wi-Fi?", "r": "As fotos vão na qualidade original e são pesadas. Os cadastros sobem na hora pelo 4G; as fotos esperam o Wi-Fi para não gastar o pacote de dados. Para mandar agora pelo 4G, toque no botão de envio e confirme. Dá para mudar isso em Preferências."},
-  {"perfis": ["campo"], "tema": "Envio e internet", "chave": "envio", "p": "As fotos saem do celular depois de enviadas?", "r": "Não. Continuam guardadas no celular. O app confere no servidor se cada registro e cada foto chegaram e manda de novo o que faltar. Se faltar espaço, em Preferências dá para liberar as fotos já confirmadas com mais de 30 dias."},
-  {"perfis": ["campo"], "tema": "Envio e internet", "chave": "envio", "p": "Posso fechar o app ou desligar o celular com registros não enviados?", "r": "Pode. Só não apague os dados do navegador nem desinstale o app antes de enviar."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "Preciso digitar o código da árvore?", "r": "Não. O app cria o código (por exemplo E1-0751), sem repetir entre equipes."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "Não consigo passar para a próxima etapa. Por quê?", "r": "Depois que você começa a preencher, o app só deixa avançar com os campos obrigatórios da etapa preenchidos e diz o que falta. Sem preencher nada dá para passear pelas etapas, para treinar."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "Não sei a espécie. E agora?", "r": "Toque em \"Sem ID\" ao lado do campo Espécie e tire as 4 fotos: folha por cima, folha por baixo, ramo e detalhe do tronco."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "Escrevi a espécie e apareceu \"fora da lista\".", "r": "O app procura parecidos enquanto você digita, mesmo com erro de grafia. Se a espécie não estiver na lista, pode deixar o texto: a coordenação confere na validação."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "Como meço o CAP?", "r": "Com fita a 1,30 m do chão, em centímetros. Com vários caules, meça os 3 mais representativos."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "Raios ou área de copa?", "r": "Quem define é a coordenação, no seu usuário. Com 4 raios, meça do tronco até a ponta da copa em 4 direções."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "A planta tem menos de 2 m. Cadastro?", "r": "Não. Fica fora do critério do inventário (a partir de 2 m de altura)."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "Apareceu um aviso amarelo \"quis dizer...?\"", "r": "O valor está fora do comum (por exemplo 65 m de altura). Confira: se estiver certo, siga; se não, corrija."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "Árvore morta: o que preencher?", "r": "Só o ponto e a foto geral."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "Errei um registro. Posso corrigir?", "r": "No mesmo dia, abra o registro e toque em Editar. Depois disso, ou se já foi validado, só a coordenação."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "Como apago um cadastro?", "r": "Só os não enviados: abra a lista de etapas e toque em \"Excluir este registro\". Os enviados, peça à coordenação."},
-  {"perfis": ["campo"], "tema": "Cadastro", "chave": "cadastro", "p": "O que é \"Devolvido\"?", "r": "A coordenação pediu uma correção. Leia o motivo, corrija e conclua de novo."},
-  {"perfis": ["campo"], "tema": "GPS", "chave": "gps", "p": "Onde fico para marcar o ponto?", "r": "Fora da copa, do lado da rua, encostado no tronco, e não debaixo da copa."},
-  {"perfis": ["campo"], "tema": "GPS", "chave": "gps", "p": "Como funciona a marcação do ponto?", "r": "Ao tocar em Nova árvore, o app mostra o erro do GPS ao vivo e marca sozinho quando o erro fica em até 5 m e estável. Se demorar, dá para tocar em \"Marcar agora\". Depois de marcado, o ponto não muda enquanto você mede a árvore."},
-  {"perfis": ["campo"], "tema": "GPS", "chave": "gps", "p": "O erro do GPS está alto. O que faço?", "r": "Saia de baixo da copa e vá para o lado da rua. Segure o celular na mão, com a tela para cima. Ligue a \"Precisão da localização do Google\". Se não baixar, desligue e ligue a localização do celular."},
-  {"perfis": ["campo"], "tema": "GPS", "chave": "gps", "p": "O GPS melhora ao longo do dia?", "r": "Ele melhora nos primeiros minutos depois de ligado e com o céu aberto. Prédios altos e copas fechadas pioram. Começar o dia com 1 minuto parado em lugar aberto ajuda."},
-  {"perfis": ["campo"], "tema": "GPS", "chave": "gps", "p": "Posso salvar sem GPS?", "r": "Pode, o app pergunta. Evite: registro sem coordenada vira pendência para a coordenação."},
-  {"perfis": ["campo"], "tema": "GPS", "chave": "gps", "p": "Neguei a localização sem querer.", "r": "No Android: Configurações, Apps, Chrome (ou o app instalado), Permissões, Localização, Permitir. No iPhone: Ajustes, Privacidade, Serviços de Localização, Safari, Ao Usar. Depois volte ao app."},
-  {"perfis": ["campo", "coordenacao"], "tema": "Mapa", "chave": "mapa", "p": "O que são as cores do mapa?", "r": "Os pontos são as árvores, coloridos conforme o filtro escolhido (risco, situação ou equipe). As linhas na beira das quadras são as faces: cinza a levantar, amarela em levantamento, verde levantada e tracejada quando é calçada sem árvores. Toque em Legenda para ver tudo."},
-  {"perfis": ["campo", "coordenacao", "cliente"], "tema": "Mapa", "chave": "mapa", "p": "Como volto para onde eu estou?", "r": "Toque no botão de minha posição no mapa."},
-  {"perfis": ["campo", "coordenacao"], "tema": "Mapa", "chave": "mapa", "p": "Como vou até a cidade do projeto?", "r": "Toque no botão de ver a cidade no mapa: ele enquadra todas as quadras do projeto."},
-  {"perfis": ["campo", "coordenacao"], "tema": "Mapa", "chave": "mapa", "p": "Não aparecem as faces das quadras.", "r": "Elas aparecem a partir de um zoom mais próximo. Aproxime o mapa até ver os números das quadras."},
-  {"perfis": ["campo", "coordenacao", "cliente"], "tema": "Mapa", "chave": "mapa", "p": "O mapa de fundo ficou cinza ou sumiu.", "r": "Sem internet o fundo só aparece nas áreas por onde você já passou com internet. Os pontos continuam aparecendo, com o aviso \"Sem internet\"."},
-  {"perfis": ["campo", "coordenacao", "cliente"], "tema": "Mapa", "chave": "mapa", "p": "Como acho uma árvore no mapa?", "r": "Use a busca no topo do mapa: código, espécie ou endereço."},
-  {"perfis": ["campo", "coordenacao", "cliente"], "tema": "Mapa", "chave": "mapa", "p": "Como filtro o que aparece?", "r": "Abra os filtros do mapa e escolha equipe, dia, risco ou bairro. Para ver tudo de novo, volte cada filtro para \"Todos\"."},
-  {"perfis": ["campo"], "tema": "Faces de quadra", "chave": "faces", "p": "O que é face de quadra?", "r": "Cada lado da quadra voltado para uma rua (por exemplo 2459-B). Ela começa sozinha quando você salva uma árvore perto dela."},
-  {"perfis": ["campo"], "tema": "Faces de quadra", "chave": "faces", "p": "Quando encerro a face?", "r": "Quando terminar todo aquele lado da rua. Toque em \"Encerrar face\" na tela inicial, confira a face e confirme."},
-  {"perfis": ["campo"], "tema": "Faces de quadra", "chave": "faces", "p": "A calçada não tem nenhuma árvore.", "r": "Encerre a face como \"sem árvores\" e tire a foto da calçada inteira, no sentido do comprimento. Não precisa medir nada."},
-  {"perfis": ["campo"], "tema": "Faces de quadra", "chave": "faces", "p": "A face é de outra equipe. Posso fazer?", "r": "Não. Peça à coordenação para passar a face para a sua equipe."},
-  {"perfis": ["campo"], "tema": "Ordens de serviço", "chave": "ordens", "p": "Como executo uma ordem de serviço?", "r": "Em Ordens de serviço, A fazer: foto de antes, Iniciar, execute o serviço, foto de depois e Concluir. Funciona sem internet."},
-  {"perfis": ["campo", "coordenacao", "cliente"], "tema": "Conta e app", "chave": "conta", "p": "Apareceu \"Sua sessão expirou\".", "r": "Toque em \"Entrar de novo\". Nada do celular se perde."},
-  {"perfis": ["campo", "coordenacao", "cliente"], "tema": "Conta e app", "chave": "conta", "p": "Fui bloqueado.", "r": "Depois de 5 senhas erradas o acesso fica bloqueado por 15 minutos. Espere ou peça o desbloqueio à coordenação."},
-  {"perfis": ["campo", "coordenacao", "cliente"], "tema": "Conta e app", "chave": "conta", "p": "Esqueci minha senha.", "r": "Fale com a coordenação: ela cria uma senha nova para você."},
-  {"perfis": ["campo", "coordenacao", "cliente"], "tema": "Conta e app", "chave": "conta", "p": "Apareceu \"Nova versão disponível\".", "r": "Toque em Atualizar. Os registros continuam guardados no celular."},
-  {"perfis": ["campo"], "tema": "Conta e app", "chave": "conta", "p": "Posso usar o mesmo usuário em dois celulares?", "r": "Use um celular por dupla. Com dois celulares e muito trabalho sem internet, a numeração pode se confundir."},
-  {"perfis": ["campo", "coordenacao"], "tema": "Conta e app", "chave": "conta", "p": "A letra está difícil de ler no sol.", "r": "Em Preferências, ligue o Modo Sol: letras pretas, bordas mais fortes e texto maior."},
-  {"perfis": ["coordenacao"], "tema": "Acompanhar o campo", "chave": "hoje", "p": "Como vejo o que cada equipe fez hoje?", "r": "Em \"Hoje no campo\": registros, horário do primeiro e do último, tempo por amostra, intervalo, GPS, aguardando validação e devolvidos. Toque em Ontem ou em outro dia para ver os anteriores."},
-  {"perfis": ["coordenacao"], "tema": "Acompanhar o campo", "chave": "hoje", "p": "Como é calculado o tempo por amostra?", "r": "É a mediana do tempo entre abrir e concluir cada cadastro. Cadastros que ficaram abertos mais de 1 hora não entram. O intervalo é o tempo entre um registro e o próximo da mesma equipe, sem contar pausas de mais de 30 minutos."},
-  {"perfis": ["coordenacao"], "tema": "Acompanhar o campo", "chave": "hoje", "p": "Os números de hoje não batem com o que a equipe diz.", "r": "Os números contam só o que já chegou ao servidor. Registros guardados no celular sem internet aparecem quando a equipe enviar. Toque em Atualizar."},
-  {"perfis": ["coordenacao"], "tema": "Validação", "chave": "validacao", "p": "Como valido?", "r": "Em Validação dos registros, abra a ficha e escolha Validar, Devolver (com o motivo) ou Descartar. Para vários de uma vez, use \"Validar todos sem alerta\"."},
-  {"perfis": ["coordenacao"], "tema": "Validação", "chave": "validacao", "p": "O que acontece quando devolvo?", "r": "O registro volta para a equipe com o motivo. Ela corrige, conclui de novo e o registro reaparece como Corrigido."},
-  {"perfis": ["coordenacao"], "tema": "Equipes e quadras", "chave": "mapa", "p": "Como passo uma quadra ou um lado de rua para outra equipe?", "r": "No mapa, toque na quadra ou na face (ou escolha o lado todo da rua) e defina a equipe."},
-  {"perfis": ["coordenacao"], "tema": "Equipes e quadras", "chave": "conta", "p": "Como defino se a equipe mede raios ou área de copa?", "r": "No cadastro do usuário, em \"Como mede a copa\"."},
-  {"perfis": ["coordenacao"], "tema": "Painel e entrega", "chave": "painel", "p": "Onde vejo o rendimento das equipes?", "r": "No Painel do projeto, em Rendimento por equipe: hoje, média por dia de campo, melhor dia, tempo por amostra e total."},
-  {"perfis": ["coordenacao"], "tema": "Painel e entrega", "chave": "painel", "p": "Como exporto os dados?", "r": "No menu, Exportar: GeoPackage (QGIS), Excel, Shapefile, CSV ou Google Earth. O Excel traz também as faces de quadra, em metros, para a medição."},
-  {"perfis": ["cliente"], "tema": "Dados", "chave": "painel", "p": "Quais dados aparecem para mim?", "r": "Só os registros já conferidos e validados pela Neofloresta. Os números crescem conforme o campo avança."},
-  {"perfis": ["cliente"], "tema": "Dados", "chave": "mapa", "p": "Como vejo as árvores de risco alto?", "r": "No mapa, filtre o risco Alto e Severo. Toque no ponto para abrir a ficha com as fotos."},
-  {"perfis": ["cliente"], "tema": "Pedidos de serviço", "chave": "ordens", "p": "Como peço um serviço?", "r": "Na ficha da árvore, toque em \"Solicitar serviço\". Para um local sem árvore cadastrada, vá em Ordens de serviço, Solicitar serviço e marque o local no mapa."},
-  {"perfis": ["cliente"], "tema": "Pedidos de serviço", "chave": "ordens", "p": "Como acompanho o pedido?", "r": "Em Ordens de serviço: pedidos, em aberto e concluídos, com as fotos de antes e depois."},
-  {"perfis": ["cliente"], "tema": "Dados", "chave": "painel", "p": "Como gero o relatório ou baixo os dados?", "r": "No Painel: Relatório para imprimir ou PDF, Boletim de medição e Baixar dados (só os validados)."}
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Envio e internet",
+   "chave": "envio",
+   "p": "Preciso de internet para trabalhar?",
+   "r": "Só no primeiro acesso e para enviar. Sem sinal, cadastre normalmente: tudo fica guardado no celular e vai sozinho quando houver conexão."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Envio e internet",
+   "chave": "envio",
+   "p": "Como sei se meus registros foram enviados?",
+   "r": "O botão no canto de cima mostra \"Tudo enviado\" ou quantos faltam. Embaixo do resumo aparece \"Último envio às...\". Toque no botão para enviar na hora."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Envio e internet",
+   "chave": "envio",
+   "p": "Por que as fotos esperam o Wi-Fi?",
+   "r": "As fotos vão na qualidade original e são pesadas. Os cadastros sobem na hora pelo 4G; as fotos esperam o Wi-Fi para não gastar o pacote de dados. Para mandar agora pelo 4G, toque no botão de envio e confirme. Dá para mudar isso em Preferências."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Envio e internet",
+   "chave": "envio",
+   "p": "As fotos saem do celular depois de enviadas?",
+   "r": "Não. Continuam guardadas no celular. O app confere no servidor se cada registro e cada foto chegaram e manda de novo o que faltar. Se faltar espaço, em Preferências dá para liberar as fotos já confirmadas com mais de 30 dias."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Envio e internet",
+   "chave": "envio",
+   "p": "Posso fechar o app ou desligar o celular com registros não enviados?",
+   "r": "Pode. Só não apague os dados do navegador nem desinstale o app antes de enviar."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Preciso digitar o código da árvore?",
+   "r": "Não. O app cria o código (por exemplo E1-0751), sem repetir entre equipes."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Não consigo passar para a próxima etapa. Por quê?",
+   "r": "Depois que você começa a preencher, o app só deixa avançar com os campos obrigatórios da etapa preenchidos e diz o que falta. Sem preencher nada dá para passear pelas etapas, para treinar."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Não sei a espécie. E agora?",
+   "r": "Toque em \"Sem ID\" ao lado do campo Espécie e tire as 4 fotos: folha por cima, folha por baixo, ramo e detalhe do tronco."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Escrevi a espécie e apareceu \"fora da lista\".",
+   "r": "O app procura parecidos enquanto você digita, mesmo com erro de grafia. Se a espécie não estiver na lista, pode deixar o texto: a coordenação confere na validação."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Como meço o CAP?",
+   "r": "Com fita a 1,30 m do chão, em centímetros. Com vários caules, meça os 3 mais representativos."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Raios ou área de copa?",
+   "r": "Quem define é a coordenação, no seu usuário. Com 4 raios, meça do tronco até a ponta da copa em 4 direções."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "A planta tem menos de 2 m. Cadastro?",
+   "r": "Não. Fica fora do critério do inventário (a partir de 2 m de altura)."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Apareceu um aviso amarelo \"quis dizer...?\"",
+   "r": "O valor está fora do comum (por exemplo 65 m de altura). Confira: se estiver certo, siga; se não, corrija."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Árvore morta: o que preencher?",
+   "r": "Só o ponto e a foto geral."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Errei um registro. Posso corrigir?",
+   "r": "No mesmo dia, abra o registro e toque em Editar. Depois disso, ou se já foi validado, só a coordenação."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Como apago um cadastro?",
+   "r": "Só os não enviados: abra a lista de etapas e toque em \"Excluir este registro\". Os enviados, peça à coordenação."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "O que é \"Devolvido\"?",
+   "r": "A coordenação pediu uma correção. Leia o motivo, corrija e conclua de novo."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "GPS",
+   "chave": "gps",
+   "p": "Onde fico para marcar o ponto?",
+   "r": "Fora da copa, do lado da rua, encostado no tronco, e não debaixo da copa."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "GPS",
+   "chave": "gps",
+   "p": "Como funciona a marcação do ponto?",
+   "r": "Ao tocar em Nova árvore, o app mostra o erro do GPS ao vivo e marca sozinho quando o erro fica em até 5 m e estável. Se demorar, dá para tocar em \"Marcar agora\". Depois de marcado, o ponto não muda enquanto você mede a árvore."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "GPS",
+   "chave": "gps",
+   "p": "O erro do GPS está alto. O que faço?",
+   "r": "Saia de baixo da copa e vá para o lado da rua. Segure o celular na mão, com a tela para cima. Ligue a \"Precisão da localização do Google\". Se não baixar, desligue e ligue a localização do celular."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "GPS",
+   "chave": "gps",
+   "p": "O GPS melhora ao longo do dia?",
+   "r": "Ele melhora nos primeiros minutos depois de ligado e com o céu aberto. Prédios altos e copas fechadas pioram. Começar o dia com 1 minuto parado em lugar aberto ajuda."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "GPS",
+   "chave": "gps",
+   "p": "Posso salvar sem GPS?",
+   "r": "Pode, o app pergunta. Evite: registro sem coordenada vira pendência para a coordenação."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "GPS",
+   "chave": "gps",
+   "p": "Neguei a localização sem querer.",
+   "r": "No Android: Configurações, Apps, Chrome (ou o app instalado), Permissões, Localização, Permitir. No iPhone: Ajustes, Privacidade, Serviços de Localização, Safari, Ao Usar. Depois volte ao app."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao"
+   ],
+   "tema": "Mapa",
+   "chave": "mapa",
+   "p": "O que são as cores do mapa?",
+   "r": "Os pontos são as árvores, coloridos conforme o filtro escolhido (risco, situação ou equipe). As linhas na beira das quadras são as faces: cinza a levantar, amarela em levantamento, verde levantada e tracejada quando é calçada sem árvores. Toque em Legenda para ver tudo."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao",
+    "cliente"
+   ],
+   "tema": "Mapa",
+   "chave": "mapa",
+   "p": "Como volto para onde eu estou?",
+   "r": "Toque no botão de minha posição no mapa."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao"
+   ],
+   "tema": "Mapa",
+   "chave": "mapa",
+   "p": "Como vou até a cidade do projeto?",
+   "r": "Toque no botão de ver a cidade no mapa: ele enquadra todas as quadras do projeto."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao"
+   ],
+   "tema": "Mapa",
+   "chave": "mapa",
+   "p": "Não aparecem as faces das quadras.",
+   "r": "Elas aparecem a partir de um zoom mais próximo. Aproxime o mapa até ver os números das quadras."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao",
+    "cliente"
+   ],
+   "tema": "Mapa",
+   "chave": "mapa",
+   "p": "O mapa de fundo ficou cinza ou sumiu.",
+   "r": "Sem internet o fundo só aparece nas áreas por onde você já passou com internet. Os pontos continuam aparecendo, com o aviso \"Sem internet\"."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao",
+    "cliente"
+   ],
+   "tema": "Mapa",
+   "chave": "mapa",
+   "p": "Como acho uma árvore no mapa?",
+   "r": "Use a busca no topo do mapa: código, espécie ou endereço."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao",
+    "cliente"
+   ],
+   "tema": "Mapa",
+   "chave": "mapa",
+   "p": "Como filtro o que aparece?",
+   "r": "Abra os filtros do mapa e escolha equipe, dia, risco ou bairro. Para ver tudo de novo, volte cada filtro para \"Todos\"."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Faces de quadra",
+   "chave": "faces",
+   "p": "O que é face de quadra?",
+   "r": "Cada lado da quadra voltado para uma rua (por exemplo 2459-B). Ela começa sozinha quando você salva uma árvore perto dela."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Faces de quadra",
+   "chave": "faces",
+   "p": "Quando encerro a face?",
+   "r": "Quando terminar todo aquele lado da rua. Toque em \"Encerrar face\" na tela inicial, confira a face e confirme."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Faces de quadra",
+   "chave": "faces",
+   "p": "A calçada não tem nenhuma árvore.",
+   "r": "Encerre a face como \"sem árvores\" e tire a foto da calçada inteira, no sentido do comprimento. Não precisa medir nada."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Faces de quadra",
+   "chave": "faces",
+   "p": "A face é de outra equipe. Posso fazer?",
+   "r": "Não. Peça à coordenação para passar a face para a sua equipe."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Ordens de serviço",
+   "chave": "ordens",
+   "p": "Como executo uma ordem de serviço?",
+   "r": "Em Ordens de serviço, A fazer: foto de antes, Iniciar, execute o serviço, foto de depois e Concluir. Funciona sem internet."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao",
+    "cliente"
+   ],
+   "tema": "Conta e app",
+   "chave": "conta",
+   "p": "Apareceu \"Sua sessão expirou\".",
+   "r": "Toque em \"Entrar de novo\". Nada do celular se perde."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao",
+    "cliente"
+   ],
+   "tema": "Conta e app",
+   "chave": "conta",
+   "p": "Fui bloqueado.",
+   "r": "Depois de 5 senhas erradas o acesso fica bloqueado por 15 minutos. Espere ou peça o desbloqueio à coordenação."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao",
+    "cliente"
+   ],
+   "tema": "Conta e app",
+   "chave": "conta",
+   "p": "Esqueci minha senha.",
+   "r": "Fale com a coordenação: ela cria uma senha nova para você."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao",
+    "cliente"
+   ],
+   "tema": "Conta e app",
+   "chave": "conta",
+   "p": "Apareceu \"Nova versão disponível\".",
+   "r": "Toque em Atualizar. Os registros continuam guardados no celular."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Conta e app",
+   "chave": "conta",
+   "p": "Posso usar o mesmo usuário em dois celulares?",
+   "r": "Use um celular por dupla. Com dois celulares e muito trabalho sem internet, a numeração pode se confundir."
+  },
+  {
+   "perfis": [
+    "campo",
+    "coordenacao"
+   ],
+   "tema": "Conta e app",
+   "chave": "conta",
+   "p": "A letra está difícil de ler no sol.",
+   "r": "Em Preferências, ligue o Modo Sol: letras pretas, bordas mais fortes e texto maior."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Acompanhar o campo",
+   "chave": "hoje",
+   "p": "Como vejo o que cada equipe fez hoje?",
+   "r": "Em \"Hoje no campo\": registros, horário do primeiro e do último, tempo por amostra, intervalo, GPS, aguardando validação e devolvidos. Toque em Ontem ou em outro dia para ver os anteriores."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Acompanhar o campo",
+   "chave": "hoje",
+   "p": "Como é calculado o tempo por amostra?",
+   "r": "É a mediana do tempo entre abrir e concluir cada cadastro. Cadastros que ficaram abertos mais de 1 hora não entram. O intervalo é o tempo entre um registro e o próximo da mesma equipe, sem contar pausas de mais de 30 minutos."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Acompanhar o campo",
+   "chave": "hoje",
+   "p": "Os números de hoje não batem com o que a equipe diz.",
+   "r": "Os números contam só o que já chegou ao servidor. Registros guardados no celular sem internet aparecem quando a equipe enviar. Toque em Atualizar."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Validação",
+   "chave": "validacao",
+   "p": "Como valido?",
+   "r": "Em Validação dos registros, abra a ficha e escolha Validar, Devolver (com o motivo) ou Descartar. Para vários de uma vez, use \"Validar todos sem alerta\"."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Validação",
+   "chave": "validacao",
+   "p": "O que acontece quando devolvo?",
+   "r": "O registro volta para a equipe com o motivo. Ela corrige, conclui de novo e o registro reaparece como Corrigido."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Equipes e quadras",
+   "chave": "mapa",
+   "p": "Como passo uma quadra ou um lado de rua para outra equipe?",
+   "r": "No mapa, toque na quadra ou na face (ou escolha o lado todo da rua) e defina a equipe."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Equipes e quadras",
+   "chave": "conta",
+   "p": "Como defino se a equipe mede raios ou área de copa?",
+   "r": "No cadastro do usuário, em \"Como mede a copa\"."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Painel e entrega",
+   "chave": "painel",
+   "p": "Onde vejo o rendimento das equipes?",
+   "r": "No Painel do projeto, em Rendimento por equipe: hoje, média por dia de campo, melhor dia, tempo por amostra e total."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Painel e entrega",
+   "chave": "painel",
+   "p": "Como exporto os dados?",
+   "r": "No menu, Exportar: GeoPackage (QGIS), Excel, Shapefile, CSV ou Google Earth. O Excel traz também as faces de quadra, em metros, para a medição."
+  },
+  {
+   "perfis": [
+    "cliente"
+   ],
+   "tema": "Dados",
+   "chave": "painel",
+   "p": "Quais dados aparecem para mim?",
+   "r": "Só os registros já conferidos e validados pela Neofloresta. Os números crescem conforme o campo avança."
+  },
+  {
+   "perfis": [
+    "cliente"
+   ],
+   "tema": "Dados",
+   "chave": "mapa",
+   "p": "Como vejo as árvores de risco alto?",
+   "r": "No mapa, filtre o risco Alto e Severo. Toque no ponto para abrir a ficha com as fotos."
+  },
+  {
+   "perfis": [
+    "cliente"
+   ],
+   "tema": "Pedidos de serviço",
+   "chave": "ordens",
+   "p": "Como peço um serviço?",
+   "r": "Na ficha da árvore, toque em \"Solicitar serviço\". Para um local sem árvore cadastrada, vá em Ordens de serviço, Solicitar serviço e marque o local no mapa."
+  },
+  {
+   "perfis": [
+    "cliente"
+   ],
+   "tema": "Pedidos de serviço",
+   "chave": "ordens",
+   "p": "Como acompanho o pedido?",
+   "r": "Em Ordens de serviço: pedidos, em aberto e concluídos, com as fotos de antes e depois."
+  },
+  {
+   "perfis": [
+    "cliente"
+   ],
+   "tema": "Dados",
+   "chave": "painel",
+   "p": "Como gero o relatório ou baixo os dados?",
+   "r": "No Painel: Relatório para imprimir ou PDF, Boletim de medição e Baixar dados (só os validados)."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Turno e trajeto",
+   "chave": "turno",
+   "p": "O que é \"Começar turno\"?",
+   "r": "Quando a coordenação liga o trajeto para a sua equipe, aparece \"Começar turno\" na tela inicial. Ao tocar, o app guarda o caminho da equipe enquanto estiver aberto e mantém a tela acesa. No fim do dia, toque em \"Encerrar turno\"."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Turno e trajeto",
+   "chave": "turno",
+   "p": "O trajeto grava com o celular no bolso ou com a tela desligada?",
+   "r": "Não. Ele grava só com o app aberto na tela. Por isso o app pede para manter a tela acesa durante o turno."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Turno e trajeto",
+   "chave": "turno",
+   "p": "Esqueci de encerrar o turno.",
+   "r": "No dia seguinte o app encerra o turno anterior sozinho ao abrir."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Acompanhar o campo",
+   "chave": "hoje",
+   "p": "Como vejo o trajeto das equipes?",
+   "r": "Ligue o trajeto no cadastro do usuário (\"Registrar o trajeto do turno\"). No mapa, toque no atalho Trajetos: aparece o caminho do dia escolhido no filtro de dia. Em \"Hoje no campo\", cada equipe mostra os km a pé, de carro e o tempo parado."
+  }
  ]
 }

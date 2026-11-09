@@ -12,7 +12,7 @@
 
 const PROPS = PropertiesService.getScriptProperties();
 const VERSAO_SCRIPT = '2.6';
-const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao'];
+const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto'];
 const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
@@ -29,7 +29,7 @@ const BLOQUEIO_MIN = 15;
 const FUSO = 'America/Sao_Paulo';
 const ITERACOES = 1000;
 const SENHA_MIN = 8;
-const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar'];
+const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar'];
 // texto que começaria uma fórmula na planilha vira texto puro
 function seguro(v) { v = v == null ? '' : String(v); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
 function hashToken(t) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'sessao|' + t, Utilities.Charset.UTF_8)); }
@@ -107,6 +107,8 @@ function doPost(e) {
       case 'quadras_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarQuadras(d.projeto, d.camada, usr)));
       case 'quadras_camada': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaQuadras(d.projeto, d.versao)));
       case 'quadras_situacao': exigeProjeto(d.projeto); return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(publicoOS), faces: d.faces ? lerSitFaces(d.projeto).map(publicoOS) : undefined });
+      case 'trajeto_salvar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarTrajeto(d.projeto, d.trecho || {}, usr)));
+      case 'trajetos': pode('revisor'); exigeProjeto(d.projeto); return json({ ok: true, trechos: lerTrajetos(d.projeto, d.dia) });
       case 'quadras_marcar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, marcarQuadras(d.projeto, d.itens, usr)));
       case 'os_listar': exigeProjeto(d.projeto); return json({ ok: true, ordens: listarOS(d.projeto, usr), tipos: tiposOS(d.projeto) });
       case 'os_salvar': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarOS(d.projeto, d.os || {}, usr)));
@@ -299,7 +301,8 @@ function salvarUsuario(dados) {
   if (!dados || !dados.login) throw new Error('Informe o usuário.');
   if (!/^[a-z0-9._-]{2,40}$/i.test(dados.login)) throw new Error('Usuário só pode ter letras, números, ponto, hífen e sublinhado.');
   const o = { login: String(dados.login).trim().toLowerCase() };
-  ['nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'modo_copa'].forEach((k) => { if (dados[k] != null) o[k] = String(dados[k]).trim(); });
+  ['nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'modo_copa', 'trajeto'].forEach((k) => { if (dados[k] != null) o[k] = String(dados[k]).trim(); });
+  if (o.trajeto) o.trajeto = o.trajeto === 'sim' ? 'sim' : '';
   if (o.modo_copa && ['raios', 'area'].indexOf(o.modo_copa) < 0) o.modo_copa = 'raios';
   if (o.perfil) o.perfil = normalizarPerfil(o.perfil);
   const existe = buscarUsuario(o.login);
@@ -309,9 +312,9 @@ function salvarUsuario(dados) {
   salvarLinha('Usuarios', COLS_USUARIOS, 'login', o);
   if (dados.senha && existe) encerrarSessoesDe(o.login);
 }
-function publico(u) { return { login: u.login, nome: u.nome, perfil: normalizarPerfil(u.perfil), equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: u.modo_copa || 'raios' }; }
+function publico(u) { return { login: u.login, nome: u.nome, perfil: normalizarPerfil(u.perfil), equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: u.modo_copa || 'raios', trajeto: u.trajeto === 'sim' ? 'sim' : '' }; }
 function paraAdmin(u) {
-  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'termo_versao', 'criado_em', 'modo_copa'].forEach((k) => (o[k] = u[k] || ''));
+  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'termo_versao', 'criado_em', 'modo_copa', 'trajeto'].forEach((k) => (o[k] = u[k] || ''));
   o.perfil = normalizarPerfil(u.perfil);
   o.bloqueado = !!(u.bloqueado_ate && new Date(u.bloqueado_ate) > new Date());
   o.senha_antiga = !u.senha_hash;
@@ -993,6 +996,34 @@ function abaFaces(projetoId) {
   return garantirCab(sh, COLS_FACES);
 }
 function lerSitFaces(projetoId) { return lerOS(abaFaces(projetoId)); }
+// ---------- Trajeto da equipe no turno ----------
+// cada envio é um trecho: pontos em polyline codificada (lat/lon com 5 casas), mais o resumo calculado no aparelho
+const COLS_TRAJETOS = ['id', 'dia', 'equipe', 'usuario', 'inicio', 'fim', 'pontos', 'km_pe', 'km_carro', 'min_parado', 'n', 'recebido_em'];
+function abaTrajetos(projetoId) {
+  const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Trajetos');
+  if (!sh) { sh = ss.insertSheet('Trajetos'); sh.appendRow(COLS_TRAJETOS); sh.setFrozenRows(1); }
+  if (!sh.getLastRow()) sh.appendRow(COLS_TRAJETOS);
+  return garantirCab(sh, COLS_TRAJETOS);
+}
+function salvarTrajeto(projetoId, t, usr) {
+  const id = String(t.id || ''); if (!/^[0-9a-z-]{8,60}$/i.test(id)) throw new Error('Trecho inválido.');
+  const pts = String(t.pontos || ''); if (pts.length > 40000) throw new Error('Trecho grande demais.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(t.dia || ''))) throw new Error('Dia inválido.');
+  const num = (x, max) => { const v = +x; return isFinite(v) && v >= 0 ? Math.min(v, max) : 0; };
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const sh = abaTrajetos(projetoId); const v = lerOS(sh);
+    if (v.some((x) => x.id === id)) return { repetido: true }; // reenvio do mesmo trecho
+    const o = { id, dia: t.dia, equipe: usr.equipe || '', usuario: usr.login, inicio: String(t.inicio || '').slice(0, 30), fim: String(t.fim || '').slice(0, 30), pontos: pts, km_pe: num(t.km_pe, 500), km_carro: num(t.km_carro, 2000), min_parado: num(t.min_parado, 1440), n: num(t.n, 100000), recebido_em: new Date().toISOString() };
+    const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+    sh.getRange(sh.getLastRow() + 1, 1, 1, cab.length).setValues([cab.map((c) => (o[c] == null ? '' : typeof o[c] === 'number' ? o[c] : "'" + o[c]))]);
+    return { salvo: true };
+  } finally { lock.releaseLock(); }
+}
+function lerTrajetos(projetoId, dia) {
+  const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); const sh = ss.getSheetByName('Trajetos'); if (!sh || sh.getLastRow() < 2) return [];
+  return lerOS(sh).filter((x) => !dia || x.dia === dia).map((x) => ({ id: x.id, dia: x.dia, equipe: x.equipe, usuario: x.usuario, inicio: x.inicio, fim: x.fim, pontos: x.pontos, km_pe: +x.km_pe || 0, km_carro: +x.km_carro || 0, min_parado: +x.min_parado || 0 }));
+}
 // Marca quadras e faces (itens com tipo "face", número "quadra-letra"). Ao mexer numa face, a quadra acompanha:
 // todas as faces levantadas deixam a quadra levantada; uma face começada deixa a quadra em levantamento.
 function marcarQuadras(projetoId, itens, usr) {
