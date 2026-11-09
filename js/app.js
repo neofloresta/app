@@ -1798,7 +1798,8 @@
         const antes = await Store.get(kc);
         if (antes && antes.campos === campos.join('|') && document.body.contains(div)) { addLinhas(antes.linhas); preencherEquipes(); aplicarFiltroPainel(); desenhar(true); conta.textContent += navigator.onLine ? ' · atualizando...' : ''; }
         // sem internet: fica com os pontos guardados no aparelho e avisa de quando são
-        if (!navigator.onLine) { faixaOff.textContent = antes ? (antes.em ? `Sem internet. Pontos guardados no aparelho em ${dataAno(antes.em)}.` : 'Sem internet. Pontos guardados no aparelho.') : 'Sem internet. Só os seus cadastros deste aparelho aparecem.'; faixaOff.classList.remove('oculto'); return; }
+        const usouGuardados = !!(antes && antes.campos === campos.join('|'));
+        if (!navigator.onLine) { faixaOff.textContent = usouGuardados ? (antes.em ? `Sem internet. Pontos guardados no aparelho em ${dataAno(antes.em)}.` : 'Sem internet. Pontos guardados no aparelho.') : 'Sem internet. Só os seus cadastros deste aparelho aparecem.'; faixaOff.classList.remove('oculto'); throw Object.assign(new Error('sem internet'), { semRede: true }); } // sai só do bloco: o GPS do mapa continua ligando abaixo
         const m = await Api.b.mapa(S.projeto.id, campos);
         Store.set(kc, { campos: campos.join('|'), linhas: m.linhas, em: agoraISO() });
         if (!document.body.contains(div)) return;
@@ -1806,7 +1807,7 @@
         if (usouAntes) for (let i = pts.length - 1; i >= 0; i--) if (!pts[i].local) { vistos.delete(pts[i].uid); pts.splice(i, 1); }
         addLinhas(m.linhas);
         preencherEquipes(); aplicarFiltroPainel(); S.mapaFiltro = null; desenhar(!usouAntes);
-      } catch (e) { pintarConta(); toast('Não foi possível atualizar os pontos agora. Ficam os guardados no aparelho.'); }
+      } catch (e) { conta.textContent = conta.textContent.replace(/Carregando pontos\.\.\.| · atualizando\.\.\./g, ''); if (!document.body.contains(div)) return; if (!e.semRede) { desenhar(false); toast('Não foi possível atualizar os pontos agora. Ficam os guardados no aparelho.'); } else desenhar(false); }
     }
     let eu = null;
     function limitesCidade() { let b = [Infinity, Infinity, -Infinity, -Infinity]; for (const q of qdDados.quadras) b = [Math.min(b[0], q.b[0]), Math.min(b[1], q.b[1]), Math.max(b[2], q.b[2]), Math.max(b[3], q.b[3])]; return L.latLngBounds([b[1], b[0]], [b[3], b[2]]); }
@@ -1922,13 +1923,17 @@
   async function adminUsuarios(corpo) {
     const [us, projetos] = await Promise.all([Api.b.usuariosListar(), Api.b.projetosListar()]);
     const PERFIS = [['coletor', 'Equipe de campo (coleta)'], ['revisor', 'Revisão técnica (valida registros)'], ['cliente', 'Cliente (consulta painel, mapa e relatório)'], ['admin', 'Coordenação (acesso total)']];
-    async function editar(u) {
-      const novo = !u; u = u || { login: '', nome: '', perfil: 'coletor', projeto: S.projeto ? S.projeto.id : '', equipe: '', ativo: 'sim' };
+    // código sugerido: o próximo E<n> livre no projeto
+    const proxCodigo = (proj) => { const usados = new Set(us.filter((x) => String(x.projeto).split(',').some((pp) => String(proj).split(',').includes(pp))).map((x) => String(x.codigo || '').toUpperCase())); let n = 1; while (usados.has('E' + n)) n++; return 'E' + n; };
+    async function editar(u, novoF, senhaF) {
+      const novo = novoF != null ? novoF : !u; u = u || { login: '', nome: '', perfil: 'coletor', projeto: S.projeto ? S.projeto.id : '', equipe: '', ativo: 'sim' };
       const lo = h('input', { class: 'entrada', value: u.login, disabled: !novo, autocapitalize: 'none', placeholder: 'ex.: div-1' });
       const no = h('input', { class: 'entrada', value: u.nome || '', placeholder: 'ex.: Equipe 1' });
-      const se = h('input', { class: 'entrada', type: 'text', autocomplete: 'new-password', placeholder: novo ? 'mínimo 8 caracteres' : 'deixe em branco para manter' });
-      const eq = h('input', { class: 'entrada', value: u.equipe || '', placeholder: 'ex.: Equipe 1' });
-      const cod = h('input', { class: 'entrada', value: u.codigo || '', autocapitalize: 'characters', placeholder: 'ex.: E1' });
+      const se = h('input', { class: 'entrada', type: 'text', autocomplete: 'new-password', value: senhaF || '', placeholder: novo ? 'mínimo 8 caracteres' : 'deixe em branco para manter' });
+      const eq = h('input', { class: 'entrada', value: u.equipe || '', placeholder: 'ex.: Equipe 1', oninput: () => { eqMexida = true; } });
+      const cod = h('input', { class: 'entrada', value: u.codigo || (novo ? proxCodigo(u.projeto) : ''), autocapitalize: 'characters', placeholder: 'ex.: E1' });
+      // a equipe acompanha o nome enquanto não for escrita à mão
+      let eqMexida = !!u.equipe; no.addEventListener('input', () => { if (!eqMexida) eq.value = no.value; });
       const em = h('input', { class: 'entrada', type: 'email', value: u.email || '', placeholder: 'opcional' });
       const pe = h('select', { class: 'entrada' }, PERFIS.map(([v, t]) => h('option', { value: v, selected: (u.perfil === 'campo' ? 'coletor' : u.perfil) === v }, t)));
       const at = h('input', { type: 'checkbox', checked: String(u.ativo || 'sim').toLowerCase() !== 'nao' });
@@ -1948,27 +1953,64 @@
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
       const login = lo.value.trim().toLowerCase();
-      if (!login) return toast('Preencha o usuário.');
-      if (se.value.trim() && se.value.trim().length < 8 && !Api.demo) return toast('A senha precisa ter pelo menos 8 caracteres.');
-      if (novo && !se.value.trim()) return toast('Defina a senha.');
-      if (novo && us.some((x) => x.login === login)) return toast('Esse usuário já existe.');
+      const digitado = () => ({ login: lo.value.trim().toLowerCase(), nome: no.value, perfil: pe.value, projeto: [...marcados].filter(Boolean).join(','), equipe: eq.value, codigo: cod.value, email: em.value, ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '' });
+      const erro = (m) => { toast(m, 5000, null, true); return editar(digitado(), novo, se.value); }; // o formulário volta com o que foi digitado
+      if (!login) return erro('Preencha o usuário.');
+      if (se.value.trim() && se.value.trim().length < 8 && !Api.demo) return erro('A senha precisa ter pelo menos 8 caracteres.');
+      if (novo && !se.value.trim()) return erro('Defina a senha.');
+      if (novo && us.some((x) => x.login === login)) return erro('Esse usuário já existe.');
       const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '' };
       if (se.value.trim()) dados.senha = se.value.trim();
-      if (pe.value === 'coletor' && !dados.codigo) return toast('Defina o código da equipe (ex.: E1).');
-      if (pe.value === 'coletor' && us.some((x) => x.login !== login && x.codigo === dados.codigo && String(x.projeto).split(',').some((p) => dados.projeto.split(',').includes(p)))) return toast('Outra equipe deste projeto já usa o código ' + dados.codigo + '.');
-      try { await Api.b.usuarioSalvar(dados); toast('Usuário salvo.'); telaAdmin('usuarios'); } catch (e) { toast(e.message, 5000); }
+      if (pe.value === 'coletor' && !dados.codigo) return erro('Defina o código da equipe (ex.: E1).');
+      if (pe.value === 'coletor' && us.some((x) => x.login !== login && x.codigo === dados.codigo && String(x.projeto).split(',').some((p) => dados.projeto.split(',').includes(p)))) return erro('Outra equipe deste projeto já usa o código ' + dados.codigo + '.');
+      try { await Api.b.usuarioSalvar(dados); toast('Usuário salvo.'); telaAdmin('usuarios'); } catch (e) { erro(e.message); }
     }
     async function remover(u) { if (u.login === S.sessao.u) return toast('Você não pode remover o próprio usuário.'); if (await confirmar('Remover', `Remover o usuário ${u.login}? Os registros feitos por ele continuam na planilha.`, 'Remover', 'perigo')) { try { await Api.b.usuarioRemover(u.login); telaAdmin('usuarios'); } catch (e) { toast(e.message, 5000); } } }
     async function desbloquear(u) { try { await Api.b.usuarioDesbloquear(u.login); toast('Usuário desbloqueado.'); telaAdmin('usuarios'); } catch (e) { toast(e.message, 5000); } }
     const nomeP = (ids) => ids === '*' ? 'Todos' : String(ids || '').split(',').map((i) => (projetos.find((p) => p.id === i.trim()) || {}).nome || i).join(', ');
     const rotP = (p) => (PERFIS.find((x) => x[0] === (p === 'campo' ? 'coletor' : p)) || [p, p])[1].replace(/\s*\(.*\)/, '');
-    corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Usuários'),
-      h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Usuário'), h('th', null, 'Perfil e projetos'), h('th', null, '')),
-        us.map((u) => h('tr', { class: String(u.ativo).toLowerCase() === 'nao' ? 'inativo' : '' }, h('td', null, h('b', null, u.login), h('br'), h('small', null, u.nome || ''), u.bloqueado ? h('span', { class: 'tag-alerta' }, 'bloqueado') : null, String(u.ativo).toLowerCase() === 'nao' ? h('span', { class: 'tag-cinza' }, 'inativo') : null),
-          h('td', null, rotP(u.perfil), u.codigo ? ` · ${u.codigo}` : '', h('br'), h('small', null, nomeP(u.projeto)), u.senha_antiga ? h('div', null, h('small', { class: 'dica' }, 'senha ainda no formato antigo: é convertida no próximo acesso')) : null),
-          h('td', { style: 'white-space:nowrap' }, u.bloqueado ? h('button', { class: 'btn peq', onclick: () => desbloquear(u) }, 'Desbloquear') : null, ' ', h('button', { class: 'btn sec peq', onclick: () => editar(u) }, 'Editar'), ' ', h('button', { class: 'btn perigo peq', onclick: () => remover(u) }, 'Excluir'))))),
-      h('button', { class: 'btn', style: 'margin-top:12px', onclick: () => editar(null) }, '+ Novo usuário'),
-      h('p', { class: 'dica' }, 'Equipe de campo coleta; revisão técnica valida ou devolve registros; cliente só consulta painel, mapa e relatório dos dados validados; coordenação faz tudo. Senhas ficam guardadas de forma criptografada e o usuário é bloqueado por 15 minutos após 5 senhas erradas. Senha com no mínimo 8 caracteres.')));
+    async function alternarAtivo(u) { const at = String(u.ativo).toLowerCase() !== 'nao'; if (u.login === S.sessao.u && at) return toast('Você não pode desativar o próprio usuário.'); try { await Api.b.usuarioSalvar({ login: u.login, ativo: at ? 'nao' : 'sim' }); toast(at ? 'Usuário desativado.' : 'Usuário reativado.'); telaAdmin('usuarios'); } catch (e) { toast(e.message, 5000); } }
+    // várias equipes de uma vez, com a folha de acessos para entregar às duplas
+    async function criarSerie() {
+      const proj = S.projeto ? S.projeto.id : (projetos[0] || {}).id || '';
+      const nIn = h('input', { class: 'entrada', type: 'number', min: 1, max: 30, value: 3 });
+      const prefIn = h('input', { class: 'entrada', value: (proj || 'eq').slice(0, 3) + '-', autocapitalize: 'none' });
+      const iniN = (() => { let n = 1; while (us.some((x) => String(x.codigo).toUpperCase() === 'E' + n && String(x.projeto).split(',').includes(proj))) n++; return n; })();
+      const iniIn = h('input', { class: 'entrada', type: 'number', min: 1, value: iniN });
+      const selP = h('select', { class: 'entrada' }, projetos.map((p) => h('option', { value: p.id, selected: p.id === proj }, p.nome)));
+      const ok = await modal('Criar equipes em série', h('div', null, h('p', { class: 'dica' }, 'Cria as equipes de campo com usuário, senha, nome "Equipe N" e código "EN". No fim aparece a folha de acessos para imprimir ou copiar.'),
+        h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Quantas equipes'), nIn), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Começar pela equipe número'), iniIn)),
+        h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Início do usuário'), prefIn), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), selP))),
+        [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Criar', valor: true }]);
+      if (!ok) return;
+      const n = Math.max(1, Math.min(30, +nIn.value || 0)), ini = Math.max(1, +iniIn.value || 1), pref = prefIn.value.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+      const senha = () => { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; let x = ''; const r = crypto.getRandomValues(new Uint8Array(10)); for (const b of r) x += a[b % a.length]; return x; };
+      const feitos = []; const erros = [];
+      for (let k = 0; k < n; k++) {
+        const num = ini + k; const login = pref + num; if (us.some((x) => x.login === login)) { erros.push(`${login}: já existe`); continue; }
+        const d = { login, senha: senha(), nome: 'Equipe ' + num, equipe: 'Equipe ' + num, codigo: 'E' + num, perfil: 'coletor', projeto: selP.value, ativo: 'sim', modo_copa: 'raios' };
+        try { await Api.b.usuarioSalvar(d); feitos.push(d); } catch (e) { erros.push(`${login}: ${e.message}`); }
+      }
+      const linhasT = feitos.map((d) => `${d.equipe}\t${d.codigo}\tusuário: ${d.login}\tsenha: ${d.senha}`).join('\n');
+      await modal('Folha de acessos', h('div', { class: 'folha-acessos' }, h('p', { class: 'dica' }, 'Guarde ou imprima agora: as senhas não aparecem de novo (ficam guardadas de forma criptografada).'),
+        h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Equipe'), h('th', null, 'Código'), h('th', null, 'Usuário'), h('th', null, 'Senha')), feitos.map((d) => h('tr', null, h('td', null, d.equipe), h('td', null, d.codigo), h('td', null, d.login), h('td', null, h('code', null, d.senha))))),
+        erros.length ? h('div', { class: 'aviso' }, 'Não criados: ' + erros.join('; ')) : null,
+        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: () => { navigator.clipboard && navigator.clipboard.writeText(linhasT).then(() => toast('Copiado.'), () => toast('Não foi possível copiar.')); } }, 'Copiar'), h('button', { class: 'btn sec', onclick: () => baixar('acessos-equipes.txt', linhasT.replace(/\t/g, '  '), 'text/plain') }, 'Baixar'))),
+        [{ texto: 'Fechar', valor: true }]);
+      telaAdmin('usuarios');
+    }
+    const quando = (x) => (x ? dataAno(x) : 'nunca');
+    corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Equipes e usuários'),
+      h('div', { class: 'linha-btn', style: 'margin-bottom:10px' }, h('button', { class: 'btn', onclick: () => editar(null) }, '+ Novo usuário'), h('button', { class: 'btn sec', onclick: criarSerie }, 'Criar equipes em série')),
+      h('div', { class: 'us-lista' }, us.map((u) => { const inativo = String(u.ativo).toLowerCase() === 'nao';
+        return h('div', { class: 'us-card' + (inativo ? ' inativo' : '') },
+          h('div', { class: 'us-cab' }, h('b', null, u.login), u.codigo ? h('span', { class: 'selo' }, u.codigo) : null, u.bloqueado ? h('span', { class: 'tag-alerta' }, 'bloqueado') : null, inativo ? h('span', { class: 'tag-cinza' }, 'desativado') : null),
+          h('small', null, `${u.nome || ''} · ${rotP(u.perfil)}`), h('small', null, nomeP(u.projeto)),
+          h('small', { class: 'dica' }, `Último acesso: ${quando(u.ultimo_acesso)}`), u.senha_antiga ? h('small', { class: 'dica' }, 'senha ainda no formato antigo: é convertida no próximo acesso') : null,
+          h('div', { class: 'linha-btn' }, u.bloqueado ? h('button', { class: 'btn peq', onclick: () => desbloquear(u) }, 'Desbloquear') : null, h('button', { class: 'btn sec peq', onclick: () => editar(u) }, 'Editar'), h('button', { class: 'btn sec peq', onclick: () => alternarAtivo(u) }, inativo ? 'Reativar' : 'Desativar'),
+            h('details', { class: 'us-mais' }, h('summary', { 'aria-label': 'Mais ações' }, '···'), h('button', { class: 'link-perigo', onclick: () => remover(u) }, 'Excluir usuário'))));
+      })),
+      h('p', { class: 'dica' }, 'Equipe de campo coleta; revisão técnica valida ou devolve registros; cliente só consulta painel, mapa e relatório dos dados validados; coordenação faz tudo. Prefira desativar a excluir: o histórico continua ligado ao usuário. Senhas ficam guardadas de forma criptografada e o usuário é bloqueado por 15 minutos após 5 senhas erradas.')));
   }
 
   async function adminFormularios(corpo) {
@@ -3566,7 +3608,7 @@
     const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 18, crossOrigin: true, attribution: 'Imagem © Esri, Maxar, Earthstar Geographics' });
     const rot = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 18, crossOrigin: true });
     // se o servidor de mapa recusar o pedido com CORS, volta ao pedido simples (a imagem aparece, só não fica guardada)
-    for (const ly of [ruas, sat, rot]) ly.on('tileerror', () => { if (ly.options.crossOrigin && navigator.onLine && !ly.__semCors) { ly.__semCors = true; ly.options.crossOrigin = false; ly.redraw(); } });
+    for (const ly of [ruas, sat, rot]) { ly.on('tileload', () => { ly.__falhas = 0; }); ly.on('tileerror', () => { if (ly.options.crossOrigin && navigator.onLine && !ly.__semCors && ++ly.__falhas >= 3) { ly.__semCors = true; ly.options.crossOrigin = false; ly.redraw(); } }); ly.__falhas = 0; }
     const hib = L.layerGroup([sat, rot]);
     const escolha = satelite ? 'sat' : (S.fundo || 'ruas');
     (escolha === 'sat' ? hib : ruas).addTo(mapa);

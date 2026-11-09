@@ -44,6 +44,7 @@ const suites = [
   ['2.6: marcação do ponto, trava de etapas, espécie, fotos no Wi-Fi, conferência, Hoje no campo, modo Sol', 'node b26.js'],
   ['2.6: termo por perfil com novo aceite, ajuda com busca e "?" nas telas', 'node b26b.js'],
   ['2.6: turno com trajeto e trajeto da equipe no mapa e no Hoje no campo', 'node b26c.js'],
+  ['2.6: coordenação (menu agrupado, equipes em série, formulário que não perde o digitado, desativar, painel em abas, Desfazer na validação)', 'node b26d.js'],
   ['estresse: 2 mil cadastros em 6 celulares (5 equipes), servidor lento, sem internet e quedas', 'node bstress.js 2000', null, { LATENCIA: '300', UI: '2' }],
   ['velocidade com servidor lento (1,5 s por consulta) e celular fraco', 'node perf.js', null, { LATENCIA: '1500', ROTULO: 'liberar' }],
 ];

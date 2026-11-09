@@ -25,10 +25,12 @@ const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console
   await p.waitForSelector('.faixa-off:not(.oculto)', { timeout: 15000 }).catch(() => {});
   await p.waitForTimeout(800);
   const off = await p.locator('.mapa-conta').innerText(); const faixa = await p.locator('.faixa-off').innerText().catch(() => '');
+  const euOff = await p.evaluate(() => { let n = 0; window.__app.mapa.eachLayer((l) => { if (l.options && l.options.fillColor === '#1E88E5') n++; }); return n; }); // "minha posição" continua sem internet
   await p.screenshot({ path: 'b251-mapa-offline.png' });
   const nOn = +((online.match(/de ([\d.]+) pontos/) || [])[1] || '0').replace('.', ''), nOff = +((off.match(/de ([\d.]+) pontos/) || [])[1] || '0').replace('.', '');
   ok('U.3', nOn >= 300 && nOff === nOn && /Sem internet/.test(faixa), `com internet ${nOn} pontos; sem internet ${nOff} pontos e o aviso "${faixa}"`);
   await E.ctx.setOffline(false);
+  ok('U.8', euOff >= 1, `sem internet a bolinha de "minha posição" aparece no mapa (${euOff})`);
   ok('U.4', opc.fade === false, `ficha do mapa sem animação de sumir (sem toque fantasma): fadeAnimation=${opc.fade}`);
   const sat = await p.evaluate(() => { const ls = []; document.querySelectorAll('.leaflet-control-layers-base label').forEach((x) => ls.push(x.textContent.trim())); return ls; });
   ok('U.5', sat.length >= 2, `camadas de fundo disponíveis: ${sat.join(', ')}`);

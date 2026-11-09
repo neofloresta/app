@@ -12,7 +12,7 @@
 
 const PROPS = PropertiesService.getScriptProperties();
 const VERSAO_SCRIPT = '2.6';
-const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto'];
+const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso'];
 const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
@@ -238,6 +238,8 @@ function autenticarSenha(login, senha, legado) {
     if (u.bloqueado_ate) mud.bloqueado_ate = '';
     // migra senha antiga em texto para a forma criptografada
     if (!u.senha_hash) { const sal = novoSal(); mud.sal = sal; mud.senha_hash = hashSenha(sal, s); mud.senha = ''; }
+    // último acesso: no máximo uma gravação por hora por usuário
+    if (!u.ultimo_acesso || Date.now() - new Date(u.ultimo_acesso).getTime() > 3600000) mud.ultimo_acesso = new Date().toISOString();
     if (Object.keys(mud).length) atualizarUsuario(u.login, mud);
     return comProjetos(u);
   } finally { lock.releaseLock(); }
@@ -314,7 +316,7 @@ function salvarUsuario(dados) {
 }
 function publico(u) { return { login: u.login, nome: u.nome, perfil: normalizarPerfil(u.perfil), equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: u.modo_copa || 'raios', trajeto: u.trajeto === 'sim' ? 'sim' : '' }; }
 function paraAdmin(u) {
-  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'termo_versao', 'criado_em', 'modo_copa', 'trajeto'].forEach((k) => (o[k] = u[k] || ''));
+  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'termo_versao', 'criado_em', 'modo_copa', 'trajeto', 'ultimo_acesso'].forEach((k) => (o[k] = u[k] || ''));
   o.perfil = normalizarPerfil(u.perfil);
   o.bloqueado = !!(u.bloqueado_ate && new Date(u.bloqueado_ate) > new Date());
   o.senha_antiga = !u.senha_hash;

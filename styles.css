@@ -567,3 +567,12 @@ footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
 .kpi.clicavel { cursor: pointer; } .kpi.clicavel:hover, .kpi.clicavel:focus { outline: 2px solid #00546E; outline-offset: 1px; }
 .kpi.clicavel b::after { content: ' ›'; color: var(--suave); font-weight: 400; }
 .painel-abas { margin-bottom: 10px; }
+/* Equipes e usuários */
+.us-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.us-card { border: 1.5px solid var(--linha); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; background: #fff; }
+.us-card.inativo { opacity: .7; background: #F2F5F6; }
+.us-cab { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.us-card .linha-btn { margin-top: 6px; align-items: center; }
+.us-mais { position: relative; } .us-mais summary { list-style: none; min-width: 44px; min-height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 700; color: var(--suave); }
+.us-mais summary::-webkit-details-marker { display: none; }
+.folha-acessos code { font-size: 15px; background: #E4F0F3; padding: 2px 6px; border-radius: 4px; }
