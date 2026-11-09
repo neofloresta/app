@@ -2310,7 +2310,7 @@
   // conteúdo em forms/ajuda.json (guardado pelo app para funcionar sem internet); "?" de cada tela abre no tema dela
   const ajudaBt = (chave) => h('button', { class: 'ic', onclick: () => ir('#ajuda/' + chave), 'aria-label': 'Ajuda' }, ico('ajuda'));
   async function telaAjuda(chave) {
-    const voltar = () => { if (S.sessao && history.length > 1) history.back(); else { location.hash = ''; S.sessao ? ir('#inicio') : telaLogin(); } };
+    const voltar = () => { if (S.sessao && history.length > 1) history.back(); else if (S.sessao) ir('#inicio'); else if (location.hash) location.hash = ''; else telaLogin(); }; // a troca de endereço já redesenha o login (sem desenhar duas vezes)
     const corpo = h('main', { class: 'ajuda' }, h('div', { class: 'info' }, 'Carregando a ajuda...'));
     $app.replaceChildren(topo('Ajuda', 'Perguntas frequentes', h('button', { class: 'ic', onclick: voltar, 'aria-label': 'Voltar' }, ico('voltar')), null), corpo);
     let A_; try { A_ = S.ajuda || (S.ajuda = await (await fetch('forms/ajuda.json')).json()); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, 'Não foi possível abrir a ajuda agora. Abra o app uma vez com internet para guardá-la no celular.')); return; }
