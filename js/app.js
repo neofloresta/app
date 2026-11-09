@@ -3598,7 +3598,8 @@
     const projetos = await Api.b.projetosListar().catch(() => []);
     const selP = h('select', { class: 'entrada' }, projetos.map((p) => h('option', { value: p.id, selected: S.projeto && p.id === S.projeto.id }, p.nome)));
     const selC = h('select', { class: 'entrada' }); const msg = h('div');
-    const carregar = async () => { selC.replaceChildren(h('option', { value: '' }, 'Carregando...')); try { const cs = await Api.b.backupListar(selP.value); selC.replaceChildren(cs.length ? cs.map((c) => h('option', { value: c.id }, /antes da restauração/.test(c.nome) ? 'Estado antes de uma restauração (' + c.nome.slice(-16).replace(/-(\d\d)$/, ':$1') + ')' : 'Cópia de ' + c.dia.split('-').reverse().join('/'))) : h('option', { value: '' }, 'Nenhuma cópia deste projeto ainda')); } catch (e) { selC.replaceChildren(h('option', { value: '' }, e.message)); } };
+    const btRest = h('button', { class: 'btn perigo', disabled: true, onclick: () => restaurar() }, 'Restaurar esta cópia');
+    const carregar = async () => { btRest.disabled = true; selC.replaceChildren(h('option', { value: '' }, 'Carregando...')); try { const cs = await Api.b.backupListar(selP.value); btRest.disabled = !cs.length; selC.replaceChildren(cs.length ? cs.map((c) => h('option', { value: c.id }, /antes da restauração/.test(c.nome) ? 'Estado antes de uma restauração (' + c.nome.slice(-16).replace(/-(\d\d)$/, ':$1') + ')' : 'Cópia de ' + c.dia.split('-').reverse().join('/'))) : h('option', { value: '' }, 'Nenhuma cópia deste projeto ainda')); } catch (e) { selC.replaceChildren(h('option', { value: '' }, e.message)); } };
     const restaurar = async () => {
       const p = projetos.find((x) => x.id === selP.value); if (!selC.value || !p) return toast('Escolha a cópia.');
       const conf = h('input', { class: 'entrada', placeholder: p.nome });
@@ -3608,7 +3609,7 @@
       try { const r = await Api.b.backupRestaurar(p.id, selC.value); S.linhas = {}; S.painel = null; msg.replaceChildren(h('div', { class: 'info' }, `Restaurado: ${pl(r.registros, 'registro', 'registros')} e ${pl(r.ordens, 'ordem de serviço', 'ordens de serviço')}. O estado anterior foi guardado e aparece na lista para desfazer.`)); carregar(); } catch (e) { msg.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
     };
     selP.addEventListener('change', carregar);
-    box.replaceChildren(h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), selP), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Cópia'), selC)), h('div', { class: 'linha-btn' }, h('button', { class: 'btn perigo', onclick: restaurar }, 'Restaurar esta cópia')), msg);
+    box.replaceChildren(h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), selP), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Cópia'), selC)), h('div', { class: 'linha-btn' }, btRest), msg);
     carregar();
   }
   async function pintarChaves(box) {
