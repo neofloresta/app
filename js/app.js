@@ -567,25 +567,32 @@
 
   function abrirMenu() {
     const it = (txt, fn) => h('button', { class: 'menu-it', onclick: () => { veu.remove(); fn(); } }, txt);
-    const veu = h('div', { class: 'veu', onclick: (e) => e.target === veu && veu.remove() }, h('div', { class: 'folha' },
-      h('img', { class: 'folha-marca', src: 'icons/logo-horizontal.png', alt: 'Neofloresta' }),
-      h('h3', null, S.sessao.usuario.nome, h('small', { class: 'perfil-tag' }, ROT_PERFIL[perfil()] || '')),
+    const grupo = (tit, ...itens) => { const v = itens.filter(Boolean); return v.length ? h('div', { class: 'menu-grupo' }, h('b', { class: 'menu-tit' }, tit), v) : null; };
+    const pf = perfil(); const coord = ehCoord(); const admin = pf === 'admin';
+    const conta = grupo('Conta',
       S.sessao.projetos.length > 1 ? it('Trocar projeto', trocarProjeto) : null,
-      it('Mapa das árvores', () => ir('#mapa')),
-      it('Ordens de serviço', () => ir('#ordens')),
-
-      perfil() !== 'cliente' ? it('Enviar agora', () => sincronizar()) : null,
-      ehCoord() ? it('Hoje no campo', () => ir('#hoje')) : null,
-      perfil() !== 'coletor' ? it('Painel do projeto', () => ir('#painel')) : null,
-      ehCoord() ? it('Validação dos registros', () => ir('#validacao')) : null,
-      perfil() === 'admin' ? it('Coordenação (exportar, equipes, formulários, segurança)', () => ir('#admin/exportar')) : null,
-      perfil() === 'admin' ? it('Servidor', configurarServidor) : null,
-      !Api.demo || true ? it('Trocar minha senha', trocarSenha) : null,
-      S.novaVersao ? it(`Atualizar para a versão ${S.novaVersao.versao}`, atualizarApp) : it('Verificar atualização', () => verificarAtualizacao(true)),
       it('Preferências', () => ir('#preferencias')),
+      it('Trocar minha senha', trocarSenha),
+      S.novaVersao ? it(`Atualizar para a versão ${S.novaVersao.versao}`, atualizarApp) : it('Verificar atualização', () => verificarAtualizacao(true)),
       it('Ajuda e perguntas frequentes', () => ir('#ajuda')),
       it('Sobre, termo de uso e privacidade', () => ir('#sobre')),
-      it('Sair', () => sair()),
+      it('Sair', () => sair()));
+    const grupos = pf === 'cliente' ? [
+      grupo('Projeto', it('Painel', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa')), it('Pedidos de serviço', () => ir('#ordens'))),
+      grupo('Entregas', it('Relatório para imprimir ou PDF', () => ir('#relatorio')), it('Boletim de medição', () => ir('#medicao')), it('Baixar dados', () => exportarCliente())),
+    ] : pf === 'coletor' ? [
+      grupo('Campo', it('Mapa das árvores', () => ir('#mapa')), it('Ordens de serviço', () => ir('#ordens')), it('Enviar agora', () => sincronizar())),
+    ] : [
+      grupo('Acompanhar', coord ? it('Hoje no campo', () => ir('#hoje')) : null, it('Painel do projeto', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa'))),
+      grupo('Agir', coord ? it('Validação dos registros', () => ir('#validacao')) : null, it('Ordens de serviço', () => ir('#ordens')), !admin ? it('Enviar agora', () => sincronizar()) : null),
+      grupo('Entregar', it('Relatório para imprimir ou PDF', () => ir('#relatorio')), it('Boletim de medição', () => ir('#medicao')), admin ? it('Exportar dados', () => ir('#admin/exportar')) : null),
+      admin ? grupo('Configurar projeto', it('Projetos', () => ir('#admin/projetos')), it('Equipes e usuários', () => ir('#admin/usuarios')), it('Formulários', () => ir('#admin/formularios')), it('Importar inventário', () => ir('#admin/importar'))) : null,
+      admin ? grupo('Administração', it('Segurança, cópias e servidor', () => ir('#admin/seguranca'))) : null,
+    ];
+    const veu = h('div', { class: 'veu', onclick: (e) => e.target === veu && veu.remove() }, h('div', { class: 'folha menu-lateral' },
+      h('img', { class: 'folha-marca', src: 'icons/logo-horizontal.png', alt: 'Neofloresta' }),
+      h('h3', null, S.sessao.usuario.nome, h('small', { class: 'perfil-tag' }, ROT_PERFIL[pf] || '')),
+      grupos, conta,
       h('p', { class: 'dica', style: 'margin-top:12px' }, `Versão ${VERSAO}${Api.demo ? ' · demonstração' : ''}`)));
     document.body.append(veu);
   }
@@ -1450,7 +1457,7 @@
     camadasFundo(mapa, false);
     const cores = ['#00546E', '#CD834C', '#6A1B9A', '#2E7D32', '#C62828', '#12A6C8'];
     const corRisco = { Baixo: COR_RISCO.Baixo, 'Médio': COR_RISCO['Médio'], Alto: COR_RISCO.Alto, Severo: COR_RISCO.Severo };
-    const equipes = []; const corEq = (e) => { if (!equipes.includes(e)) equipes.push(e); return cores[equipes.indexOf(e) % cores.length]; };
+    const equipes = []; const corEq = (e) => { if (!equipes.includes(e)) equipes.push(e); return e === '-' ? '#8A969C' : corEquipe(e); };
     // pontos: os do aparelho primeiro (podem ter edição ainda não enviada), depois os do servidor
     const pts = []; const vistos = new Set();
     const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; if (opCalc && String(o.cat) === String(opCalc.v)) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
@@ -1779,7 +1786,7 @@
     selQd.addEventListener('change', () => { S.qdModo = selQd.value; desenhar(false); });
     const preencherBairros = () => { const bs = [...new Set(pts.map((o) => o.bairro).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt')); const at = selBairro.value; selBairro.replaceChildren(h('option', { value: '' }, 'Todos os bairros'), bs.map((b) => h('option', { value: b, selected: b === at }, b))); selBairro.classList.toggle('oculto', !bs.length); };
     const preencherEquipes = () => { preencherBairros(); const atual = selEq.value; selEq.replaceChildren(h('option', { value: '' }, 'Todas as equipes'), ...equipes.filter((e) => e !== '-').map((e) => h('option', { value: e, selected: e === atual }, e))); };
-    const aplicarFiltroPainel = () => { if (!S.mapaFiltro) return; if (S.mapaFiltro.equipe) selEq.value = S.mapaFiltro.equipe; const fd = S.mapaFiltro.dia || ''; if (/^\d{4}-\d{2}-\d{2}$/.test(fd)) { selDia.value = 'outro'; diaIn.value = fd; diaIn.classList.remove('oculto'); } else selDia.value = fd; };
+    const aplicarFiltroPainel = () => { if (!S.mapaFiltro) return; if (S.mapaFiltro.alto && cRisco) { soAlto = true; selCor.value = 'risco'; } if (S.mapaFiltro.equipe) selEq.value = S.mapaFiltro.equipe; const fd = S.mapaFiltro.dia || ''; if (/^\d{4}-\d{2}-\d{2}$/.test(fd)) { selDia.value = 'outro'; diaIn.value = fd; diaIn.classList.remove('oculto'); } else selDia.value = fd; };
     preencherEquipes(); aplicarFiltroPainel(); pintarChips(); desenhar(true); carregarQdMapa();
     if (!Api.demo) {
       conta.textContent = navigator.onLine ? 'Carregando pontos...' : ''; pintarConta();
@@ -2261,6 +2268,9 @@
   const ROT_CURTO = { Pendente: 'Aguardando', Validado: 'Validados', Corrigido: 'Corrigidos', Devolvido: 'Devolvidos', Descartado: 'Descartados' };
   const COR_VAL = { Validado: '#2E7D32', Pendente: '#8A969C', Corrigido: '#12A6C8', Devolvido: '#CD834C', Descartado: '#B0BEC5' };
   const CORES = ['#00546E', '#CD834C', '#12A6C8', '#5B8C5A', '#8E6C8A', '#C9A227'];
+  // uma paleta de equipes para o painel e o mapa (acessível a daltônicos e sem o vermelho do risco); a mesma equipe tem sempre a mesma cor
+  const CORES_EQ = ['#00546E', '#E69F00', '#56B4E9', '#CC79A7', '#009E73', '#3B0F70', '#8C6D31', '#0072B2'];
+  function corEquipe(e) { const m = String(e || '').match(/(\d+)\s*$/); if (m) return CORES_EQ[(+m[1] - 1 + CORES_EQ.length) % CORES_EQ.length]; let hsh = 0; for (const ch of String(e)) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0; return CORES_EQ[hsh % CORES_EQ.length]; }
   const pl = (n, um, varios) => `${fmtN(n)} ${n === 1 ? um : varios}`;
   const fmtN = (n) => (n == null ? '' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 1 }));
   const fmtP = (x) => (x == null || !isFinite(x) ? '' : (x * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%');
@@ -2283,10 +2293,10 @@
     [0, topo_ / 2, topo_].forEach((v) => { svg.append(el('line', { x1: ml, x2: W - 4, y1: y(v), y2: y(v), stroke: '#E3E8EA' })); svg.append(el('text', { x: ml - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#5B6B72' }, fmtN(v))); });
     dias.forEach((d, i) => {
       let acc = 0; const x = ml + i * bw + bw * 0.15, w = Math.max(1, bw * 0.7);
-      equipes.forEach((e, k) => { const v = porDia[d][e] || 0; if (!v) return; const r = el('rect', { x, width: w, y: y(acc + v), height: y(acc) - y(acc + v), fill: CORES[k % CORES.length], rx: 1.5 }); r.append(el('title', {}, `${d.slice(8, 10)}/${d.slice(5, 7)} · ${e}: ${v}`)); svg.append(r); acc += v; });
+      equipes.forEach((e, k) => { const v = porDia[d][e] || 0; if (!v) return; const r = el('rect', { x, width: w, y: y(acc + v), height: y(acc) - y(acc + v), fill: corEquipe(e), rx: 1.5 }); r.append(el('title', {}, `${d.slice(8, 10)}/${d.slice(5, 7)} · ${e}: ${v}`)); svg.append(r); acc += v; });
       const k = Math.max(1, Math.ceil(dias.length / 10)); if (i % k === 0) svg.append(el('text', { x: x + w / 2, y: H - 6, 'text-anchor': 'middle', 'font-size': 10, fill: '#5B6B72' }, `${d.slice(8, 10)}/${d.slice(5, 7)}`));
     });
-    return h('div', null, svg, h('div', { class: 'leg' }, equipes.map((e, k) => h('span', null, h('i', { style: `background:${CORES[k % CORES.length]}` }), e))));
+    return h('div', null, svg, h('div', { class: 'leg' }, equipes.map((e, k) => h('span', null, h('i', { style: `background:${corEquipe(e)}` }), e))));
   }
   const kpi = (rot, val, sub, cls) => h('div', { class: 'kpi ' + (cls || '') }, h('small', null, rot), h('b', null, val), sub ? h('span', null, sub) : null);
 
@@ -2343,31 +2353,46 @@
     if (d.semCoordenada) alertas.push(`${fmtN(d.semCoordenada)} registro(s) sem coordenada.`);
     if (d.gps && d.gps.ate5m < 0.8) alertas.push(`Só ${fmtP(d.gps.ate5m)} dos pontos têm GPS com erro de até 5 m.`);
     const vazioCliente = perfil() === 'cliente' && !d.total ? h('div', { class: 'info' }, 'Ainda não há árvores validadas. Os números aparecem aqui assim que a Neofloresta concluir a conferência dos primeiros registros.') : null;
-    corpo.replaceChildren(vazioCliente,
-      h('div', { class: 'painel-cab' }, h('div', null, p.contratante ? h('div', null, p.contratante) : null, p.municipio ? h('small', null, p.municipio + (p.contrato ? ' · Contrato ' + p.contrato : '')) : null),
-        h('small', null, (perfil() === 'cliente' ? 'Dados validados pela Neofloresta. ' : '') + 'Atualizado às ' + new Date(d.gerado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), ' ', h('button', { class: 'btn sec peq', onclick: () => telaPainel(true) }, 'Atualizar'))),
+    const cli = perfil() === 'cliente';
+    const irVal = (sit) => { S.filtroVal = Object.assign(S.filtroVal || {}, { sit, limite: 100 }); ir('#validacao'); };
+    const cab = h('div', { class: 'painel-cab' }, h('div', null, p.contratante ? h('div', null, p.contratante) : null, p.municipio ? h('small', null, p.municipio + (p.contrato ? ' · Contrato ' + p.contrato : '')) : null),
+      h('small', null, (cli ? 'Dados validados pela Neofloresta. ' : '') + 'Atualizado às ' + new Date(d.gerado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), ' ', h('button', { class: 'btn sec peq', onclick: () => telaPainel(true) }, 'Atualizar')));
+    const kpiBt = (fn, ...a) => { const k = kpi(...a); if (!fn) return k; k.classList.add('clicavel'); k.setAttribute('role', 'button'); k.tabIndex = 0; k.addEventListener('click', fn); k.addEventListener('keydown', (e) => { if (e.key === 'Enter') fn(); }); return k; };
+    const altoMapa = () => { S.mapaFiltro = { alto: true }; ir('#mapa'); };
+    // Operação: andamento do campo (coordenação). Inventário: o que foi encontrado (coordenação e cliente)
+    const operacao = cli ? null : h('div', { class: 'painel-aba', 'data-aba': 'op' },
       h('div', { class: 'kpis' },
         kpi('Registros', fmtN(d.total), `${fmtN(A.ind)} indivíduos e ${fmtN(d.total - A.ind)} pontos sem árvore` + (meta ? ` · ${fmtP(d.total / meta)} da meta de ${fmtN(meta)}` : '')),
-        perfil() !== 'cliente' ? kpi('Validados', fmtN(validados), d.total ? fmtP(validados / d.total) + ' do total' : '') : kpi('Indivíduos', fmtN(A.ind), 'árvores, arbustos e palmeiras'),
-        kpi('Espécies', fmtN(d.nEspecies), A.esp[0] ? 'mais comum: ' + A.esp[0].rot : ''),
-        A.risco.length ? kpi('Risco alto ou severo', fmtN(A.altoN), A.nRisco ? fmtP(A.altoN / A.nRisco) + ' dos indivíduos avaliados' : '', A.altoN ? 'alerta' : '') : null,
+        kpiBt(() => irVal('Validado'), 'Validados', fmtN(validados), d.total ? fmtP(validados / d.total) + ' do total' : ''),
+        kpiBt(() => irVal('revisar'), 'A revisar', fmtN((d.validacao.Pendente || 0) + (d.validacao.Corrigido || 0)), 'aguardando ou corrigidos'),
         kpi('Ritmo', fmtN(Math.round(media7)), 'registros por dia (últimos 7 dias de campo)' + (previsao != null ? ` · faltam cerca de ${fmtN(previsao)} dias` : '')),
         d.gps ? kpi('Precisão do GPS', fmtN(d.gps.mediana) + ' m', fmtP(d.gps.ate5m) + ' com erro até 5 m') : null,
-        perfil() !== 'cliente' && d.tempos && d.tempos.dur != null ? kpi('Tempo por amostra', fmtMin(d.tempos.dur), `mediana · intervalo entre amostras ${fmtMin(d.tempos.int)}`) : null),
-      alertas.length && perfil() !== 'cliente' ? h('div', { class: 'cartao alertas' }, h('h3', null, 'Pontos de atenção'), h('ul', null, alertas.map((a) => h('li', null, a)))) : null,
+        d.tempos && d.tempos.dur != null ? kpiBt(() => ir('#hoje'), 'Tempo por amostra', fmtMin(d.tempos.dur), `mediana · intervalo entre amostras ${fmtMin(d.tempos.int)}`) : null),
+      alertas.length ? h('div', { class: 'cartao alertas' }, h('h3', null, 'Pontos de atenção'), h('ul', null, alertas.map((a) => h('li', null, a)))) : null,
       h('div', { class: 'grade-cartoes' },
         h('div', { class: 'cartao larga' }, h('h3', null, 'Registros por dia de campo'), serieDias(d.porDia, equipes)),
-        perfil() !== 'cliente' ? h('div', { class: 'cartao' }, h('h3', null, 'Situação da validação'), barras(A.val, { total: d.total })) : null,
+        h('div', { class: 'cartao' }, h('h3', null, 'Situação da validação'), barras(A.val, { total: d.total })),
+        h('div', { class: 'cartao' }, h('h3', null, 'Por equipe'), barras(equipes.map((e, k) => ({ rot: e, n: d.equipes[e], cor: corEquipe(e, k) }))))),
+      equipes.length ? rendimentoEquipes(d, equipes) : null);
+    const inventario = h('div', { class: 'painel-aba', 'data-aba': 'inv' },
+      h('div', { class: 'kpis' },
+        kpi('Indivíduos', fmtN(A.ind), 'árvores, arbustos e palmeiras'),
+        kpi('Espécies', fmtN(d.nEspecies), A.esp[0] ? h('span', null, 'mais comum: ', h('i', null, A.esp[0].rot)) : ''),
+        A.risco.length ? kpiBt(cli ? null : altoMapa, 'Risco alto ou severo', fmtN(A.altoN), A.nRisco ? fmtP(A.altoN / A.nRisco) + ' dos indivíduos avaliados' : '', A.altoN ? 'alerta' : '') : null,
+        null),
+      h('div', { class: 'grade-cartoes' },
         A.cat.length ? h('div', { class: 'cartao' }, h('h3', null, 'Categoria'), barras(A.cat)) : null,
         A.risco.length ? h('div', { class: 'cartao' }, h('h3', null, 'Classe de risco'), barras(A.risco)) : null,
         h('div', { class: 'cartao' }, h('h3', null, 'Espécies mais comuns'), barras(A.esp.slice(0, 12), { total: A.nEsp })),
         d.classesDap.length ? h('div', { class: 'cartao' }, h('h3', null, S.form && S.form.campos.some((c) => c.tipo === 'multinumber' && /cap/i.test(c.nome)) ? 'Classes de DAP (calculado do CAP)' : 'Classes de DAP'), barras(d.classesDap.map((c) => ({ rot: c.ate ? `${c.de} a ${c.ate} cm` : `${c.de} cm ou mais`, n: c.n })))) : null,
         A.manejo.length ? h('div', { class: 'cartao' }, h('h3', null, 'Manejo recomendado'), barras(A.manejo.filter((x) => x.n), { total: A.ind, cor: CORES[1] })) : null,
-        A.ocorr.length ? h('div', { class: 'cartao' }, h('h3', null, 'Ocorrências observadas'), barras(A.ocorr, { total: A.ind, cor: CORES[2] })) : null,
-        perfil() !== 'cliente' ? h('div', { class: 'cartao' }, h('h3', null, 'Por equipe'), barras(equipes.map((e, k) => ({ rot: e, n: d.equipes[e], cor: CORES[k % CORES.length] })))) : null),
-      perfil() !== 'cliente' && equipes.length ? rendimentoEquipes(d, equipes) : null,
+        A.ocorr.length ? h('div', { class: 'cartao' }, h('h3', null, 'Ocorrências observadas'), barras(A.ocorr, { total: A.ind, cor: CORES[2] })) : null));
+    if (!S.painelAba || cli) S.painelAba = cli ? 'inv' : 'op';
+    const abasP = cli ? null : h('div', { class: 'subabas painel-abas', role: 'tablist' }, [['op', 'Operação'], ['inv', 'Inventário']].map(([k, t]) => h('button', { class: S.painelAba === k ? 'at' : '', role: 'tab', 'aria-selected': S.painelAba === k ? 'true' : 'false', onclick: (e) => { S.painelAba = k; corpo.querySelectorAll('.painel-abas button').forEach((b) => { b.classList.toggle('at', b === e.currentTarget); b.setAttribute('aria-selected', b === e.currentTarget ? 'true' : 'false'); }); corpo.querySelectorAll('.painel-aba').forEach((x) => x.classList.toggle('oculto', x.dataset.aba !== k)); } }, t)));
+    [operacao, inventario].forEach((x) => x && x.classList.toggle('oculto', x.dataset.aba !== S.painelAba));
+    corpo.replaceChildren(vazioCliente, cab, abasP, operacao, cli && !d.total ? null : inventario,
       h('div', { class: 'linha-btn botoes-painel', style: 'margin:6px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#relatorio') }, 'Relatório para imprimir ou PDF'), h('button', { class: 'btn sec', onclick: () => ir('#medicao') }, 'Boletim de medição'), h('button', { class: 'btn sec', onclick: () => ir('#mapa') }, 'Ver no mapa'),
-        perfil() === 'cliente' ? h('button', { class: 'btn sec', onclick: () => exportarCliente() }, 'Baixar dados') : null));
+        cli ? h('button', { class: 'btn sec', onclick: () => exportarCliente() }, 'Baixar dados') : null));
     pintarPainelOS(corpo); pintarPainelQd(corpo, forcar);
   }
   // "Hoje no campo": o dia de cada equipe, com os dias anteriores a um toque
@@ -2466,6 +2491,7 @@
         h('div', { class: 'cartao' }, h('h3', null, 'Situação'), barras(['Solicitada', 'Aberta', 'Em execução', 'Concluída', 'Cancelada'].map((k) => ({ rot: k, n: r.porSt[k] || 0, cor: COR_OS[k] })).filter((x) => x.n), { total: r.total })),
         h('div', { class: 'cartao' }, h('h3', null, 'Por tipo de serviço'), barras(Object.entries(r.porTipo).map(([t, o]) => ({ rot: t, n: Object.values(o).reduce((a, b) => a + b, 0) })).sort((a, b) => b.n - a.n), { total: r.total, cor: CORES[1] }))),
       h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: () => ir('#ordens') }, 'Ver ordens de serviço')));
+    const op = corpo.querySelector('.painel-aba[data-aba="op"]'); if (op) { op.append(sec); return; }
     const bt = corpo.querySelector('.botoes-painel'); if (bt) corpo.insertBefore(sec, bt); else corpo.append(sec);
   }
   function producaoTabela(porDia, dias, equipes, semanal) {
@@ -3178,6 +3204,8 @@
     let cam; try { cam = await carregarQuadras(); } catch (e) { return; } if (!cam || !document.body.contains(corpo)) return;
     const sit = await carregarSitQd(!!forcar); const r = resumoQd(cam, sit); const F = resumoFaces(cam, sit);
     const km = fmtKm;
+    // cliente: só o potencial de plantio (calçadas levantadas sem árvores), sem dados das equipes
+    if (perfil() === 'cliente') { if (!F.n || !F.mSem) return; const ks = corpo.querySelector('.painel-aba[data-aba="inv"] .kpis'); if (ks) ks.append(kpi('Potencial de plantio', km(F.mSem), 'de calçada levantada sem nenhuma árvore')); return; }
     for (const e of Object.keys(F.eq)) if (!r.eq[e]) r.eq[e] = { total: 0, Levantada: 0, 'Em levantamento': 0 };
     const sec = h('section', { class: 'painel-os' }, h('h2', { class: 'painel-tit' }, 'Andamento por quadras'),
       h('div', { class: 'kpis' }, kpi('Quadras levantadas', fmtN(r.por.Levantada), `de ${fmtN(r.tot)} (${fmtP(r.tot ? r.por.Levantada / r.tot : 0)})`), kpi('Em levantamento', fmtN(r.por['Em levantamento']), ''), kpi('A levantar', fmtN(r.por['A levantar']), ''),
@@ -3187,6 +3215,7 @@
         Object.entries(r.eq).sort((a, b) => a[0].localeCompare(b[0], 'pt')).map(([e, x]) => h('tr', null, h('td', null, e), h('td', null, fmtN(x.total)), h('td', null, fmtN(x.Levantada)), h('td', null, fmtN(x['Em levantamento'])), h('td', null, x.total ? fmtP(x.Levantada / x.total) : ''),
           F.n ? h('td', null, fmtN((F.eq[e] || {}).n || 0)) : null, F.n ? h('td', null, km((F.eq[e] || {}).m || 0)) : null)))) : null,
       h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: () => { S.qdModo = 'sit'; ir('#mapa'); } }, 'Ver quadras no mapa')));
+    const op = corpo.querySelector('.painel-aba[data-aba="op"]'); if (op) { op.append(sec); return; }
     const bt = corpo.querySelector('.botoes-painel'); if (bt) corpo.insertBefore(sec, bt); else corpo.append(sec);
   }
   // importação da camada (coordenação > projetos)
@@ -3473,6 +3502,7 @@
       itens.filter((i) => !q || norm(i.login + ' ' + i.acao + ' ' + (ROT_AC[i.acao] || '') + ' ' + i.alvo + ' ' + i.detalhe).includes(q)).slice(0, 300).map((i) => h('tr', null, h('td', null, dataBR(i.em)), h('td', null, i.login), h('td', null, ROT_AC[i.acao] || i.acao), h('td', null, [i.alvo, i.detalhe].filter(Boolean).join(' · ')))))); };
     filtro.addEventListener('input', pintar);
     corpo.replaceChildren(
+      h('div', { class: 'cartao' }, h('h3', null, 'Servidor'), h('p', { class: 'dica' }, 'Endereço da ponte com o servidor usada por este aparelho.'), h('button', { class: 'btn sec peq', onclick: configurarServidor }, 'Configurar servidor')),
       h('div', { class: 'cartao' }, h('h3', null, 'Cópia de segurança'),
         st.demo ? h('p', { class: 'dica' }, 'Disponível com o servidor Google.') : [
           h('p', { class: 'dica' }, 'Copia todo dia a base de usuários e a planilha de cada projeto para a pasta Backup do Drive, guarda as últimas 30 cópias e manda email com as planilhas em Excel.'),

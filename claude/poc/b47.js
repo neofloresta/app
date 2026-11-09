@@ -52,7 +52,7 @@ const N = +(process.argv[2] || 3000);
 
   // --- painel (revisor) e relatório
   t0 = Date.now(); await pr.goto(L.WEB + '#painel'); await pr.waitForSelector('.kpis', { timeout: 60000 }); const tPainel = Date.now() - t0; await pr.waitForTimeout(300);
-  const kpis = await pr.locator('.kpis').innerText(); await foto(pr, 'painel-revisor');
+  const kpis = await pr.locator('.kpis:visible').first().innerText(); await foto(pr, 'painel-revisor');
   ok('P.1', true, `painel em ${(tPainel / 1000).toFixed(1)} s: ${kpis.replace(/\n/g, ' | ')}`);
   await pr.goto(L.WEB + '#relatorio'); await pr.waitForSelector('.rel-cab', { timeout: 60000 }); await pr.waitForTimeout(300); await foto(pr, 'relatorio');
   const pdf = await pr.pdf({ format: 'A4', printBackground: true }).catch(() => null); if (pdf) fs.writeFileSync('relatorio.pdf', pdf);
@@ -60,9 +60,9 @@ const N = +(process.argv[2] || 3000);
 
   // --- cliente
   const { p: pp } = await L.celular(b); await L.logar(pp, 'pref', 'cliente1'); await pp.waitForSelector('.kpis', { timeout: 60000 }); await pp.waitForTimeout(400);
-  const kc = await pp.locator('.kpis').innerText(); await foto(pp, 'cliente-painel');
+  const kc = await pp.locator('.kpis:visible').first().innerText(); await foto(pp, 'cliente-painel');
   const temValidacao = await pp.locator('text=Situação da validação').count(); const temEquipe = await pp.locator('h3:text-is("Por equipe")').count();
-  ok('C.1', !temValidacao && !temEquipe && /Registros/.test(kc), `cliente cai direto no painel só com validados: ${kc.replace(/\n/g, ' | ')}`);
+  ok('C.1', !temValidacao && !temEquipe && /Indivíduos/.test(kc) && !/Precisão do GPS|faltam/.test(kc), `cliente cai direto no painel só com validados: ${kc.replace(/\n/g, ' | ')}`);
   await pp.goto(L.WEB + '#mapa'); await pp.waitForFunction(() => / de /.test((document.querySelector('.mapa-conta') || {}).textContent || ''), null, { timeout: 60000 }); const contaC = await pp.locator('.mapa-conta').innerText(); await foto(pp, 'cliente-mapa');
   const novaC = await pp.locator('button.nova').count();
   await pp.goto(L.WEB + '#inicio'); await pp.waitForTimeout(500); const naInicio = await pp.locator('button.nova').count();

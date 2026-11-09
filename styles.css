@@ -560,3 +560,10 @@ footer.rodape.val-dec { position: fixed; margin: 0; padding: 10px 12px calc(10px
 footer.rodape.val-dec > * { flex: 1 1 auto; }
 footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
 @media (min-width: 1000px) { footer.rodape.val-dec { justify-content: center; } footer.rodape.val-dec > .btn:not(.ic-nav) { flex: 0 1 260px; } }
+/* Menu agrupado */
+.menu-grupo { margin-top: 10px; } .menu-grupo + .menu-grupo { border-top: 1px solid var(--linha); padding-top: 6px; }
+.menu-tit { display: block; font-size: 13px; color: var(--suave); margin: 4px 0 2px; }
+.menu-lateral { max-height: 92vh; overflow-y: auto; }
+.kpi.clicavel { cursor: pointer; } .kpi.clicavel:hover, .kpi.clicavel:focus { outline: 2px solid #00546E; outline-offset: 1px; }
+.kpi.clicavel b::after { content: ' ›'; color: var(--suave); font-weight: 400; }
+.painel-abas { margin-bottom: 10px; }
