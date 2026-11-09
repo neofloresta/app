@@ -46,7 +46,7 @@
   function dataBR(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return String(iso); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   function numBR(v) { return v == null || v === '' ? '' : String(v).replace('.', ','); }
   function paraNum(s) { if (s == null) return null; const t = String(s).trim().replace(',', '.'); if (t === '') return null; const n = Number(t); return isNaN(n) ? null : n; }
-  function toast(msg, ms = 2600, acao, erro) { document.querySelectorAll('.toast').forEach((x) => x.remove()); const t = h('div', { class: 'toast' + (erro || /^(Erro|Não foi possível|Falha)/.test(String(msg)) ? ' erro' : ''), role: 'status' }, h('span', null, msg), acao ? h('button', { class: 'toast-acao', onclick: () => { t.remove(); acao.fn(); } }, acao.texto) : null); document.body.append(t); setTimeout(() => t.remove(), acao ? Math.max(ms, 6000) : ms); }
+  function toast(msg, ms = 2600, acao, erro) { document.querySelectorAll('.toast').forEach((x) => x.remove()); const t = h('div', { class: 'toast' + (erro || /^(Erro|Não foi possível|Falha)/.test(String(msg)) ? ' erro' : ''), role: 'status', 'data-t': String(Date.now()) }, h('span', null, msg), acao ? h('button', { class: 'toast-acao', onclick: () => { t.remove(); acao.fn(); } }, acao.texto) : null); document.body.append(t); setTimeout(() => t.remove(), acao ? Math.max(ms, 6000) : ms); }
   function modal(titulo, corpo, botoes) {
     return new Promise((res) => {
       const fechar = (v) => { veu.remove(); res(v); };
@@ -218,8 +218,11 @@
     } catch (e) { /* sem conexão: segue com o do aparelho */ }
   }
 
+  // esboço da tela enquanto carrega (no lugar de um texto solto)
+  const esboco = (txt) => h('div', { class: 'esboco', role: 'status', 'aria-label': txt }, h('small', { class: 'dica' }, txt), [90, 70, 80, 55, 85].map((w) => h('div', { class: 'carregando-esboco', style: `width:${w}%` })));
   function rota() {
     document.querySelectorAll('.veu').forEach((v) => v.remove());
+    document.querySelectorAll('.toast').forEach((t) => { if (!t.querySelector('.toast-acao') && Date.now() - (+t.dataset.t || 0) > 1500) t.remove(); }); // aviso antigo da tela anterior não fica por cima da nova (o recém-mostrado e o de "Desfazer" ficam)
     if (S.reg && !location.hash.startsWith('#form/' + S.reg.uuid)) { const r = S.reg; clearTimeout(salvarTimer); Store.salvarRegistro(r); Gps.ouvintes.forEach((f) => f.__form && Gps.ouvintes.delete(f)); S.reg = null; }
     if (location.hash.startsWith('#ajuda')) return telaAjuda(location.hash.split('/')[1] || ''); // ajuda abre até antes de entrar
     if (!S.sessao) return telaLogin();
@@ -2308,9 +2311,10 @@
   }
 
   // ---------- Painel, relatório e validação ----------
-  const COR_RISCO = { Baixo: '#3CB300', 'Médio': '#D9C21E', Alto: '#E10000', Severo: '#7606DE', Extremo: '#7606DE' };
+  // paletas acessíveis a daltônicos (Okabe-Ito): risco, validação e ordens de serviço; sempre acompanhadas de texto
+  const COR_RISCO = { Baixo: '#009E73', 'Médio': '#F0E442', Alto: '#D55E00', Severo: '#3B0F70', Extremo: '#3B0F70' };
   const ROT_CURTO = { Pendente: 'Aguardando', Validado: 'Validados', Corrigido: 'Corrigidos', Devolvido: 'Devolvidos', Descartado: 'Descartados' };
-  const COR_VAL = { Validado: '#2E7D32', Pendente: '#8A969C', Corrigido: '#12A6C8', Devolvido: '#CD834C', Descartado: '#B0BEC5' };
+  const COR_VAL = { Validado: '#1B7F3B', Pendente: '#8A969C', Corrigido: '#0072B2', Devolvido: '#E69F00', Descartado: '#B0BEC5' };
   const CORES = ['#00546E', '#CD834C', '#12A6C8', '#5B8C5A', '#8E6C8A', '#C9A227'];
   // uma paleta de equipes para o painel e o mapa (acessível a daltônicos e sem o vermelho do risco); a mesma equipe tem sempre a mesma cor
   const CORES_EQ = ['#00546E', '#E69F00', '#56B4E9', '#CC79A7', '#009E73', '#3B0F70', '#8C6D31', '#0072B2'];
@@ -2382,7 +2386,7 @@
     return { risco, cat, ind, sit, manejo, ocorr, val, esp, nEsp, topEsp, gen, topGen, altoN, nRisco };
   }
   async function telaPainel(forcar) {
-    const corpo = h('main', { class: 'painel' }, h('div', { class: 'info' }, 'Carregando indicadores...'));
+    const corpo = h('main', { class: 'painel' }, esboco('Carregando indicadores...'));
     const voltar = perfil() === 'cliente' ? h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')) : h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar'));
     $app.replaceChildren(topo('Painel', S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, ajudaBt('painel'), h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')))), corpo);
     let d; try { d = await dadosPainel(forcar); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, 'Não foi possível carregar o painel: ' + e.message)); return; }
@@ -2443,7 +2447,7 @@
   const fmtMin = (m) => (m == null ? '-' : m < 1 ? Math.round(m * 60) + ' s' : fmtN(Math.round(m * 10) / 10) + ' min');
   const SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
   async function telaHoje(diaSel, forcar) {
-    const corpo = h('main', { class: 'hoje' }, h('div', { class: 'info' }, 'Carregando o dia das equipes...'));
+    const corpo = h('main', { class: 'hoje' }, esboco('Carregando o dia das equipes...'));
     $app.replaceChildren(topo('Hoje no campo', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, ajudaBt('hoje'), h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')))), corpo);
     let d; try { d = await dadosPainel(forcar); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, 'Não foi possível carregar: ' + e.message), h('button', { class: 'btn', onclick: () => telaHoje(diaSel, true) }, 'Tentar de novo')); return; }
     if (!document.body.contains(corpo)) return;
@@ -2698,7 +2702,7 @@
   async function telaValidacao(forcar) {
     const form = S.form; const cc = campoCodigo(form), ce = campoEspecie(form);
     const cat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
-    const corpo = h('main', { class: 'validacao' }, h('div', { class: 'info' }, 'Carregando registros...'));
+    const corpo = h('main', { class: 'validacao' }, h('div', { class: 'info' }, 'Carregando registros...'), esboco(''));
     $app.replaceChildren(topo('Validação', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, ajudaBt('validacao'), h('button', { class: 'gps', onclick: () => telaValidacao(true) }, 'Atualizar'))), corpo);
     let linhas; try { linhas = await linhasProjeto(forcar, (n, t) => { const i = corpo.querySelector('.info'); if (i) i.textContent = `Carregando registros: ${fmtN(n)}${t ? ' de ' + fmtN(t) : ''}...`; }); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); return; }
     const cont = {}; linhas.forEach((l) => { const k = cc ? String(l[cc.nome] || '') : ''; if (k) cont[k] = (cont[k] || 0) + 1; });
@@ -2816,7 +2820,7 @@
   const TIPOS_OS_PADRAO = ['Poda de limpeza', 'Poda de levantamento de copa', 'Poda de adequação à rede elétrica', 'Poda de condução', 'Supressão', 'Remoção de toco', 'Plantio', 'Substituição', 'Tratamento fitossanitário', 'Avaliação de risco', 'Outro'];
   const PRIOR_OS = ['Urgente', 'Alta', 'Média', 'Baixa'];
   const OS_SEM_ANTES = ['Plantio', 'Avaliação de risco'];
-  const COR_OS = { Solicitada: '#8E6C8A', Aberta: '#CD834C', 'Em execução': '#12A6C8', 'Concluída': '#2E7D32', Cancelada: '#90A4AE' };
+  const COR_OS = { Solicitada: '#CC79A7', Aberta: '#E69F00', 'Em execução': '#0072B2', 'Concluída': '#1B7F3B', Cancelada: '#90A4AE' };
   const numOS = (o) => (o.numero ? 'OS ' + String(o.numero).padStart(4, '0') : 'Nova ordem');
   const hojeISO = () => diaLocal(agoraISO());
   const atrasada = (o) => !!o.prazo && ['Aberta', 'Em execução', 'Solicitada'].includes(o.status) && o.prazo < hojeISO();
@@ -2905,7 +2909,7 @@
     const selTipo = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todos os tipos'));
     const filtros = h('div', { class: 'chips os-chips' });
     S.filtroOS = S.filtroOS || (pf === 'coletor' ? 'fazer' : 'abertas');
-    const novo = pf === 'cliente' ? 'Solicitar serviço' : ehCoord() ? 'Nova ordem' : 'Pedir serviço';
+    const novo = ehCoord() ? 'Nova ordem' : 'Solicitar serviço';
     $app.replaceChildren(topo('Ordens de serviço', S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, ajudaBt('ordens'), h('button', { class: 'ic', onclick: () => { S.corMapa = 'os'; ir('#mapa'); }, 'aria-label': 'Mapa' }, ico('mapa')))),
       h('main', null, h('button', { class: 'btn nova canto', onclick: () => ir('#os-nova') }, ico('mais'), novo), filtros, h('div', { class: 'grade2 os-busca' }, busca, selTipo), lista));
     const d = await carregarOS(true);
@@ -3085,7 +3089,7 @@
         ir(arv && pf === 'coletor' ? '#form/' + arv.uuid : '#ordens');
       } catch (e) { toast(e.message, 5000); }
     };
-    $app.replaceChildren(topo(pf === 'cliente' ? 'Solicitar serviço' : coord ? 'Nova ordem de serviço' : 'Pedir serviço', S.projeto.nome, h('button', { class: 'ic', onclick: () => history.back(), 'aria-label': 'Voltar' }, ico('voltar')), null),
+    $app.replaceChildren(topo(pf === 'cliente' ? 'Solicitar serviço' : coord ? 'Nova ordem de serviço' : 'Solicitar serviço', S.projeto.nome, h('button', { class: 'ic', onclick: () => history.back(), 'aria-label': 'Voltar' }, ico('voltar')), null),
       h('main', null,
         arv ? h('div', { class: 'cartao' }, h('h3', null, 'Árvore ' + (arv.cod || '')), arv.esp ? h('p', null, h('i', null, arv.esp)) : null, arv.local ? h('p', { class: 'trava' }, 'Este registro ainda não foi enviado. Envie antes de pedir o serviço.') : null)
           : h('div', { class: 'cartao' }, h('h3', null, 'Local do serviço'), h('p', { class: 'dica' }, 'Toque no mapa para marcar o ponto. Para uma árvore já cadastrada, abra o pedido pela ficha dela.'), mapaDiv, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Endereço ou referência'), end)),
@@ -3111,7 +3115,7 @@
     const box = h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Ordens de serviço'), h('small', null, 'Carregando...'));
     (async () => {
       const d = await carregarOS(false); const os = d.ordens.filter((o) => o.registro_uuid === uuidR).sort((a, b) => (+b.numero || 1e9) - (+a.numero || 1e9));
-      const pf = perfil(); const rot = pf === 'cliente' ? 'Solicitar serviço' : ehCoord() ? 'Abrir ordem de serviço' : 'Pedir serviço para esta árvore';
+      const pf = perfil(); const rot = pf === 'cliente' ? 'Solicitar serviço' : ehCoord() ? 'Abrir ordem de serviço' : 'Solicitar serviço para esta árvore';
       box.replaceChildren(h('h3', null, 'Ordens de serviço'), d.semServidor ? h('p', { class: 'dica' }, 'Disponível depois da atualização do servidor.') : null,
         os.length ? os.map(itemOS) : h('p', { class: 'dica' }, 'Nenhuma intervenção registrada nesta árvore.'),
         d.semServidor ? null : enviado ? h('button', { class: 'btn sec peq', style: 'margin-top:8px', onclick: () => ir('#os-nova/' + encodeURIComponent(uuidR)) }, rot) : h('p', { class: 'dica' }, 'Para pedir um serviço, envie o registro primeiro.'));
