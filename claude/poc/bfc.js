@@ -65,18 +65,19 @@ const sitF = async (T) => { const j = await P('quadras_situacao', { t: T, projet
   const feitas = ladoIds.filter((id) => s.f[id] && s.f[id].situacao === 'Levantada').length;
   ok('F.5', new RegExp(ladoIds.length + ' faces escolhidas').test(barra) && feitas === ladoIds.length, `${fL.r}: "${barra}"; ${feitas} de ${ladoIds.length} faces levantadas no servidor`);
   await pe.screenshot({ path: 'fc-lado.png' });
-  // 5. calçada sem árvores: foto e largura pelo cadastro de calçada
+  // 5. calçada sem árvores: só a foto, pelo cadastro de calçada
   const f2 = q1.f.find((x) => x.i !== auto.f.i && x.i !== f1.i) || q1.f[0];
   await tocar(pe, ...meio(q1, f2)); await pe.click('.qd-ficha button:has-text("sem árvores")'); await pe.waitForSelector('.prog'); await pe.waitForTimeout(500);
   const titulo = await pe.locator('header, .topo').first().innerText(); const faixa = await pe.locator('.faixa-face').innerText().catch(() => '');
   const catSel = await A.campo(pe, 'Categoria').locator('.op.sel').innerText().catch(() => '');
-  await A.op(pe, 'Local do registro', 'Via pública'); await A.foto(pe, 'Foto 1'); await A.concluir(pe); let falta = await A.faltas(pe);
-  const pedeLarg = falta.some((x) => /Largura/.test(x)); try { await A.aba(pe, 'Meio'); } catch (e) { /* segue */ } await A.num(pe, 'Largura da calcada (m)', '2,6'); await A.concluir(pe); falta = await A.faltas(pe);
+  const locPre = await A.campo(pe, 'Local do registro').locator('.op.sel').innerText().catch(() => ''); // a face já traz o local preenchido
+  await A.foto(pe, 'Foto 1'); await A.concluir(pe); let falta = await A.faltas(pe);
+  const pedeLarg = falta.some((x) => /Largura/.test(x)); // desde a 2.6 a calçada sem árvores é só a foto
   if (await pe.locator('.folha >> text=Salvar sem GPS').count()) await pe.click('.folha >> text=Salvar sem GPS');
   await pe.waitForTimeout(1500); await sync(pe); await pe.waitForTimeout(2000); s = await sitF(T); const x2 = s.f[q1.n + '-' + f2.i] || {};
   const regs = await pe.evaluate(async () => (await window.__app.Store.todosRegistros()).filter((r) => r.faceId).map((r) => ({ uuid: r.uuid, st: r.status })));
-  ok('F.6', /Calçada sem árvores/.test(titulo) && /Face sem árvores/.test(faixa) && /Calçada/.test(catSel) && pedeLarg && falta.length === 0 && x2.situacao === 'Levantada, sem árvores' && x2.largura === '2.6' && regs.length === 1 && x2.registro === regs[0].uuid,
-    `tela "${titulo.split('\n')[0]}", faixa "${faixa.split('\n')[0]}", categoria "${catSel}", largura cobrada=${pedeLarg}; servidor: ${x2.situacao}, largura ${x2.largura}, registro ${x2.registro === (regs[0] || {}).uuid ? 'ligado ao cadastro' : 'não ligado'}`);
+  ok('F.6', /Calçada sem árvores/.test(titulo) && /Face sem árvores/.test(faixa) && /Calçada/.test(catSel) && /Via pública/.test(locPre) && !pedeLarg && falta.length === 0 && x2.situacao === 'Levantada, sem árvores' && !x2.largura && regs.length === 1 && x2.registro === regs[0].uuid,
+    `tela "${titulo.split('\n')[0]}", faixa "${faixa.split('\n')[0]}", categoria "${catSel}", local já preenchido "${locPre}", largura cobrada=${pedeLarg}; servidor: ${x2.situacao}, largura ${x2.largura}, registro ${x2.registro === (regs[0] || {}).uuid ? 'ligado ao cadastro' : 'não ligado'}`);
   // 6. sem internet
   const f3 = q1.f.find((x) => ![auto.f.i, f1.i, f2.i].includes(x.i));
   let filaN = -1, depois = '';

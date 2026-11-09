@@ -1,7 +1,7 @@
 // Neofloresta Inventário
 (() => {
   const VERSAO = '2.5.1';
-  const TERMO_VERSAO = '2026-11';
+  const TERMO_VERSAO = '2026-11-b';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
   { const rc = Element.prototype.replaceChildren; Element.prototype.replaceChildren = function (...k) { return rc.apply(this, k.flat(Infinity).filter((x) => x != null && x !== false)); }; }
@@ -60,6 +60,7 @@
   const confirmar = (titulo, texto, ok = 'Confirmar', classe = '') => modal(titulo, h('p', null, texto), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: ok, classe, valor: true }]);
   function baixar(nome, dados, tipo) { const b = dados instanceof Blob ? dados : new Blob([dados], { type: tipo }); const a = h('a', { href: URL.createObjectURL(b), download: nome }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
   const ICONES = {
+    ajuda: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>', voltar: '<path d="M15 5l-7 7 7 7"/>', mapa: '<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>',
     busca: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>', camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', mais: '<path d="M12 5v14M5 12h14"/>',
     etapas: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>', esq: '<path d="M15 5l-7 7 7 7"/>', dir: '<path d="M9 5l7 7-7 7"/>',
@@ -126,10 +127,10 @@
     setInterval(() => verificarAtualizacao(), 30 * 60000); verificarAtualizacao();
     Api.aoExpirar(() => { if (!S.expirada) { S.expirada = true; toast('Sua sessão expirou. Entre de novo para continuar enviando. Nada do aparelho foi perdido.', 6000); atualizarSync(); } });
     if (S.sessao) {
-      Api.credenciais(credDe(S.sessao));
+      Api.credenciais(credDe(S.sessao)); S.termoLocal = await Store.get('termoV:' + S.sessao.u);
       if (S.sessao.usuario.perfil === 'campo') S.sessao.usuario.perfil = 'coletor';
       if (S.sessao.usuario.perfil !== 'cliente') await abrirProjeto(S.sessao.projetoAtual); else await abrirProjetoCliente(S.sessao.projetoAtual);
-      if (S.sessao.usuario.perfil !== 'cliente' && S.sessao.usuario.termo_aceito_em) ligarGps();
+      if (S.sessao.usuario.perfil !== 'cliente' && termoEmDia()) ligarGps();
       atualizarSessao();
     }
     rota(); sincronizar(true);
@@ -217,8 +218,9 @@
   function rota() {
     document.querySelectorAll('.veu').forEach((v) => v.remove());
     if (S.reg && !location.hash.startsWith('#form/' + S.reg.uuid)) { const r = S.reg; clearTimeout(salvarTimer); Store.salvarRegistro(r); Gps.ouvintes.forEach((f) => f.__form && Gps.ouvintes.delete(f)); S.reg = null; }
+    if (location.hash.startsWith('#ajuda')) return telaAjuda(location.hash.split('/')[1] || ''); // ajuda abre até antes de entrar
     if (!S.sessao) return telaLogin();
-    if (!S.sessao.usuario.termo_aceito_em) return telaTermo(true);
+    if (!termoEmDia()) return telaTermo(true);
     const [r, a, b] = location.hash.replace(/^#/, '').split('/');
     const pf = perfil();
     if (r === 'sobre') return telaSobre();
@@ -257,10 +259,10 @@
         if (!r.projetos.length && r.usuario.perfil !== 'admin') throw new Error('Este usuário não tem projeto liberado.');
         S.sessao = { u: usuario, t: r.token || '', usuario: r.usuario, projetos: r.projetos, projetoAtual: r.projetos.length ? r.projetos[0].id : null, servidor: Api.servidor || '', versaoScript: r.versaoScript || '' };
         if (!r.token) S.sessao.s = senha; // servidor antigo ou demonstração: sem sessão, guarda a senha como antes
-        Api.credenciais(credDe(S.sessao)); S.expirada = false;
+        Api.credenciais(credDe(S.sessao)); S.expirada = false; S.termoLocal = await Store.get('termoV:' + usuario);
         await Store.set('sessao', S.sessao);
         for (const [fid, f] of Object.entries(r.formularios || {})) if (f && Array.isArray(f.campos)) { await Store.set('form:' + fid, f); S.formsEm = Date.now(); }
-        if (r.usuario.perfil === 'cliente') await abrirProjetoCliente(S.sessao.projetoAtual); else { await abrirProjeto(S.sessao.projetoAtual); if (r.usuario.termo_aceito_em) ligarGps(); }
+        if (r.usuario.perfil === 'cliente') await abrirProjetoCliente(S.sessao.projetoAtual); else { await abrirProjeto(S.sessao.projetoAtual); if (termoEmDia()) ligarGps(); }
         ir(r.usuario.perfil === 'cliente' ? '#painel' : '#inicio'); rota();
       } catch (e) {
         erro.textContent = navigator.onLine ? e.message : 'Sem internet. O primeiro acesso precisa de conexão.'; erro.classList.remove('oculto');
@@ -275,7 +277,7 @@
       Api.demo ? h('div', { class: 'info' }, 'Modo demonstração: os dados ficam só neste aparelho. Usuários de teste (senha 1234): ', h('b', null, 'admin'), ', ', h('b', null, 'revisor'), ' e ', h('b', null, 'prefeitura'), '. Equipes de campo: ', h('b', null, 'equipe1 / 1111'), ' e ', h('b', null, 'equipe2 / 2222'), '.') : null,
       h('div', { class: 'campo' }, u), h('div', { class: 'campo' }, s), erro, btn,
       Api.demo || /[?&]config/.test(location.search) ? h('button', { class: 'btn linha cheio', style: 'margin-top:12px', onclick: configurarServidor }, 'Configurar servidor') : null,
-      h('p', { class: 'dica', style: 'text-align:center;margin-top:18px' }, 'Versão ' + VERSAO, ' · ', h('a', { href: '#', class: 'link-termo', onclick: (e) => { e.preventDefault(); verTermo(); } }, 'Termo de uso e privacidade'))), h('div', { class: 'padronagem', 'aria-hidden': 'true' })));
+      h('p', { class: 'dica', style: 'text-align:center;margin-top:18px' }, 'Versão ' + VERSAO, ' · ', h('a', { href: '#', class: 'link-termo', onclick: (e) => { e.preventDefault(); verTermo(); } }, 'Termo de uso e privacidade'), ' · ', h('a', { href: '#ajuda', class: 'link-ajuda' }, 'Ajuda'))), h('div', { class: 'padronagem', 'aria-hidden': 'true' })));
   }
 
   async function configurarServidor() {
@@ -452,7 +454,7 @@
     const sync = h('button', { class: 'sync', onclick: tocarSync }, '...');
     const busca = h('input', { class: 'busca', placeholder: 'Buscar código ou espécie', oninput: () => listarRegistros(busca.value) });
     $app.replaceChildren(
-      topo(S.projeto.nome, S.projeto.equipe || S.sessao.usuario.nome, menu, h('div', { class: 'topo-dir' }, h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')), sync)),
+      topo(S.projeto.nome, S.projeto.equipe || S.sessao.usuario.nome, menu, h('div', { class: 'topo-dir' }, ajudaBt(''), h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')), sync)),
       h('main', null,
         S.expirada ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo'), ' Os registros continuam guardados aqui.') : null,
         h('button', { class: 'btn nova canto', onclick: novoRegistro }, ico('mais'), 'Nova árvore'),
@@ -578,6 +580,7 @@
       !Api.demo || true ? it('Trocar minha senha', trocarSenha) : null,
       S.novaVersao ? it(`Atualizar para a versão ${S.novaVersao.versao}`, atualizarApp) : it('Verificar atualização', () => verificarAtualizacao(true)),
       it('Preferências', () => ir('#preferencias')),
+      it('Ajuda e perguntas frequentes', () => ir('#ajuda')),
       it('Sobre, termo de uso e privacidade', () => ir('#sobre')),
       it('Sair', () => sair()),
       h('p', { class: 'dica', style: 'margin-top:12px' }, `Versão ${VERSAO}${Api.demo ? ' · demonstração' : ''}`)));
@@ -961,6 +964,7 @@
         h('h3', null, 'Etapas'),
         vis.map((i) => { const st = estadoAba(abas[i]); return h('button', { class: 'menu-it' + (i === S.aba ? ' at' : ''), onclick: () => { veu.remove(); irAba(i); } }, h('span', { class: 'seg-dot ' + st }), h('span', { style: 'flex:1' }, abas[i].nome), h('small', { class: 'dica' }, rot[st])); }),
         h('div', { class: 'linha-btn', style: 'margin-top:14px' }, h('button', { class: 'btn cheio', onclick: () => { veu.remove(); concluir(); } }, ico('check'), 'Concluir registro')),
+        h('button', { class: 'link-ajuda-form', onclick: () => { veu.remove(); ir('#ajuda/cadastro'); } }, ico('ajuda'), 'Ajuda do cadastro'),
         r.status !== 'enviado' ? h('button', { class: 'link-perigo', onclick: () => { veu.remove(); excluir(); } }, 'Excluir este registro') : null));
       document.body.append(veu);
     }
@@ -1473,7 +1477,7 @@
         h('div', null, h('span', { class: 'os-st', style: `background:${COR_FC[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', s.equipe ? s.equipe : eqDaQuadra(q) ? 'quadra da ' + eqDaQuadra(q) : 'sem equipe'),
         s.marcada_por ? h('small', null, `marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` + (s.largura ? ` · calçada com ${numBR(+s.largura)} m de largura` : '')) : null,
         pode ? h('div', { class: 'chips qd-chips' }, SIT_FC.filter((x) => x !== 'Levantada, sem árvores').map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: id, situacao: x }]) }, x))) : null,
-        pode ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); iniciarCalcadaFace(q, f); } }, st === 'Levantada, sem árvores' ? 'Refazer o cadastro da calçada sem árvores' : 'Levantada, sem árvores (foto e largura)') : null,
+        pode ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); iniciarCalcadaFace(q, f); } }, st === 'Levantada, sem árvores' ? 'Refazer o cadastro da calçada sem árvores' : 'Levantada, sem árvores (só a foto)') : null,
         lado.length > 1 && (pode || ehCoord()) ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'fc'; selecao = new Set(lado.map((x) => x.id)); pintarSelecao(); restilizar([...selecao]); } }, `Escolher o lado todo da rua (${lado.length} faces, ${fmtM(mLado)})`) : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn, h('datalist', { id: 'fc-equipes' }, equipes.filter((e) => e !== '-').map((e) => h('option', { value: e }))), h('button', { class: 'btn sec peq', onclick: () => marcar([{ numero: id, equipe: eqIn.value.trim() }]) }, 'Definir equipe')) : null,
         pode ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'fc'; selecao = new Set([id]); pintarSelecao(); restilizar([id]); } }, 'Escolher várias faces') : null);
@@ -1940,32 +1944,96 @@
   }
 
   // ---------- Termo de uso e privacidade ----------
-  function textoTermo() {
-    return h('div', { class: 'termo' },
-      h('p', null, 'Este aplicativo é da Neofloresta Serviços Ecossistêmicos Ltda. e serve para registrar o inventário da arborização urbana nos projetos contratados.'),
-      h('h4', null, 'Dados pessoais tratados'),
-      h('p', null, 'Usuário, nome e equipe de quem usa o app, data, hora e posição do aparelho no momento de cada registro, e o modelo do aparelho. Não coletamos contatos, arquivos pessoais nem a localização fora do registro das árvores.'),
-      h('h4', null, 'Para que usamos'),
-      h('p', null, 'Identificar quem fez cada registro, garantir a qualidade e a rastreabilidade do inventário (histórico de alterações e registro de auditoria) e cumprir o contrato com o cliente. A base legal é a execução de contrato e o legítimo interesse (Lei 13.709/2018, art. 7º, incisos V e IX).'),
-      h('h4', null, 'Onde ficam e por quanto tempo'),
-      h('p', null, 'Em planilhas e pastas do Google Drive da Neofloresta, com acesso restrito à coordenação, e no próprio aparelho até o envio. Guardamos durante o contrato e pelo prazo exigido para prestação de contas. O cliente recebe os dados do inventário, sem os dados internos das equipes.'),
-      h('h4', null, 'Fotos e dados do inventário'),
-      h('p', null, 'As fotos são das árvores e do seu entorno. Evite enquadrar pessoas, placas de veículos e o interior de imóveis; se aparecerem, a foto é usada só como registro técnico. Os dados do inventário pertencem ao contratante, que é o controlador; a Neofloresta atua como operadora e usa serviços do Google (Planilhas e Drive) para guardar e processar os dados, o que pode envolver servidores fora do Brasil. Ao fim do contrato, os dados e as fotos são entregues ao contratante e as cópias da Neofloresta são descartadas no prazo combinado em contrato.'),
+  // por perfil (equipe de campo e coordenação x cliente), curto, por perguntas, com o texto completo a um toque.
+  // Quando TERMO_VERSAO muda, todos aceitam de novo antes de continuar.
+  function textoTermo(pf, completo) {
+    pf = pf || perfil(); const cliente = pf === 'cliente';
+    const contato = 'à coordenação do projeto' + (CONTATO.email ? ' ou pelo email ' + CONTATO.email : '') + (CONTATO.telefone ? ' ou pelo telefone ' + CONTATO.telefone : '');
+    const P = (q, r) => h('div', { class: 'termo-q' }, h('h4', null, q), h('p', null, r));
+    const curto = cliente ? [
+      P('O que é este app?', 'O sistema da Neofloresta para acompanhar o inventário da arborização urbana do seu município: painel, mapa, relatórios, pedidos de serviço e download dos dados validados.'),
+      P('Quais dados meus o app usa?', 'Seu usuário, nome e as ações que você faz no sistema (entrar, baixar dados, pedir serviço), para segurança e registro.'),
+      P('De quem são os dados do inventário?', 'Do contratante. A Neofloresta faz o levantamento, confere cada registro e entrega os dados e as fotos no fim do contrato.'),
+      P('Os dados estão protegidos?', 'Sim. Conexão criptografada, senha guardada de forma criptografada, bloqueio depois de senhas erradas e cópia de segurança diária.'),
+      P('Como peço acesso, correção ou exclusão?', 'Fale ' + contato + '.'),
+    ] : [
+      P('O que é este app?', 'O app da Neofloresta para registrar o inventário da arborização urbana nos projetos contratados.'),
+      P('Quais dados meus o app usa?', 'Usuário, nome e equipe; data, hora e posição do celular quando você marca um ponto; o modelo do aparelho. Não usamos contatos, galeria pessoal nem arquivos do celular.'),
+      P('O app acompanha onde eu estou?', 'Só durante o trabalho e só com o app aberto: a posição na hora de marcar cada árvore e, quando a coordenação liga o trajeto do turno, o caminho da equipe até você tocar em "Encerrar turno". Fora disso, nada.'),
+      P('Para que servem esses dados?', 'Saber quem fez cada registro, conferir a qualidade e a localização das árvores, acompanhar o andamento do campo e cumprir o contrato com o cliente.'),
+      P('Quem vê?', 'A coordenação da Neofloresta. O cliente recebe os dados das árvores, sem os dados das equipes.'),
+      P('E as fotos?', 'Fotografe a árvore e o entorno. Evite pessoas, placas de veículos e o interior das casas; se aparecerem, a foto é usada só como registro técnico.'),
+      P('Os dados estão protegidos?', 'Sim. Conexão criptografada, senha guardada de forma criptografada, bloqueio depois de senhas erradas e cópia de segurança diária.'),
+      P('Como peço acesso, correção ou exclusão?', 'Fale ' + contato + '.'),
+      P('Combinado de uso', 'Usuário e senha são pessoais: não compartilhe. Registre só o que observou em campo.'),
+    ];
+    const longo = h('div', { class: 'termo-longo' },
+      h('p', null, 'Este sistema é da Neofloresta Serviços Ecossistêmicos Ltda.' + (CONTATO.cnpj ? ' (CNPJ ' + CONTATO.cnpj + ')' : '') + ' e é usado para o inventário da arborização urbana nos projetos contratados pelo poder público ou por empresas.'),
+      h('h4', null, 'Dados pessoais'),
+      h('p', null, cliente ? 'Tratamos o usuário, o nome, o email informado pelo contratante e o registro das ações no sistema (auditoria).' : 'Tratamos o usuário, o nome e a equipe de quem usa o app; data, hora e posição do aparelho no momento de cada registro; o trajeto da equipe durante o turno, quando ligado pela coordenação, sempre com aviso na tela e só com o app aberto; e o modelo do aparelho. Não coletamos contatos, arquivos pessoais nem a localização fora do trabalho de campo.'),
+      h('h4', null, 'Finalidade e base legal'),
+      h('p', null, 'Identificar quem fez cada registro, garantir a qualidade e a rastreabilidade do inventário (histórico de alterações e auditoria), acompanhar o andamento e a segurança do trabalho de campo e cumprir o contrato. O tratamento se apoia na execução do contrato e no legítimo interesse, nos termos da Lei Geral de Proteção de Dados Pessoais.'),
+      h('h4', null, 'Guarda e compartilhamento'),
+      h('p', null, 'Os dados ficam em ambiente seguro, com acesso restrito à coordenação da Neofloresta, e no próprio aparelho até o envio. São guardados durante o contrato e pelo prazo exigido para prestação de contas. O contratante recebe os dados e as fotos do inventário, sem os dados internos das equipes. Os dados não são vendidos nem usados para publicidade.'),
+      h('h4', null, 'Dados do inventário'),
+      h('p', null, 'Os dados das árvores e as fotos pertencem ao contratante. Ao fim do contrato, são entregues a ele, e as cópias da Neofloresta são descartadas no prazo combinado em contrato.'),
       h('h4', null, 'Segurança'),
       h('p', null, 'Conexão criptografada (HTTPS), senha guardada de forma criptografada, bloqueio após senhas erradas, sessão com prazo de validade e cópia de segurança diária.'),
-      h('h4', null, 'Seus direitos'),
-      h('p', null, 'Você pode pedir acesso, correção ou exclusão dos seus dados pessoais à coordenação do projeto' + (CONTATO.email ? ' ou pelo email ' + CONTATO.email : '') + '.' + (CONTATO.encarregado ? ' Encarregado de dados: ' + CONTATO.encarregado + '.' : '')),
-      h('h4', null, 'Uso correto'),
-      h('p', null, 'O usuário e a senha são pessoais. Não compartilhe. Registre apenas informações verdadeiras observadas em campo.'),
-      h('p', { class: 'dica' }, 'Versão do termo: ' + TERMO_VERSAO));
+      h('h4', null, 'Direitos'),
+      h('p', null, 'Você pode pedir confirmação, acesso, correção, anonimização ou exclusão dos seus dados pessoais ' + contato + '.' + (CONTATO.encarregado ? ' Encarregado pelo tratamento de dados: ' + CONTATO.encarregado + '.' : '')),
+      h('h4', null, 'Mudanças'),
+      h('p', null, 'Quando este termo mudar, o app mostra o novo texto e pede um novo aceite antes de continuar.'));
+    if (completo) return h('div', { class: 'termo' }, curto, longo, h('p', { class: 'dica' }, 'Versão do termo: ' + TERMO_VERSAO));
+    return h('div', { class: 'termo' }, curto, h('details', { class: 'termo-completo' }, h('summary', null, 'Ver o texto completo'), longo), h('p', { class: 'dica' }, 'Versão do termo: ' + TERMO_VERSAO));
   }
-  function verTermo() { modal('Termo de uso e privacidade', textoTermo(), [{ texto: 'Fechar', valor: true }]); }
+  const termoEmDia = () => { const u = S.sessao && S.sessao.usuario; return !!(u && u.termo_aceito_em && (u.termo_versao === TERMO_VERSAO || (u.termo_versao === undefined && S.termoLocal === TERMO_VERSAO))); };
+  function verTermo() { modal('Termo de uso e privacidade', h('div', null, h('p', { class: 'dica' }, 'Equipe de campo e coordenação:'), textoTermo('coletor'), h('p', { class: 'dica', style: 'margin-top:14px' }, 'Clientes (prefeitura ou empresa contratante):'), textoTermo('cliente')), [{ texto: 'Fechar', valor: true }]); }
   function telaTermo() {
+    const mudou = !!(S.sessao && S.sessao.usuario.termo_aceito_em);
     const btn = h('button', { class: 'btn cheio', onclick: async () => {
       btn.disabled = true;
-      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch((e) => { if (!/desconhecida/i.test(e.message)) throw e; }); S.sessao.usuario.termo_aceito_em = agoraISO(); await Store.set('sessao', S.sessao); await Store.set('termo:' + S.sessao.u, S.sessao.usuario.termo_aceito_em); rota(); if (perfil() !== 'cliente') ligarGps(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
+      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch((e) => { if (!/desconhecida/i.test(e.message)) throw e; }); Object.assign(S.sessao.usuario, { termo_aceito_em: agoraISO(), termo_versao: TERMO_VERSAO }); S.termoLocal = TERMO_VERSAO; await Store.set('sessao', S.sessao); await Store.set('termo:' + S.sessao.u, S.sessao.usuario.termo_aceito_em); await Store.set('termoV:' + S.sessao.u, TERMO_VERSAO); rota(); if (perfil() !== 'cliente') ligarGps(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
     } }, 'Li e aceito');
-    $app.replaceChildren(topo('Termo de uso e privacidade', 'Leia antes de começar', null, null), h('main', null, h('div', { class: 'cartao' }, textoTermo()), h('div', { style: 'margin-bottom:30px' }, btn, h('button', { class: 'btn linha cheio', style: 'margin-top:10px', onclick: () => sair(true) }, 'Não aceito, sair'))));
+    $app.replaceChildren(topo('Termo de uso e privacidade', mudou ? 'O termo mudou: leia e aceite de novo' : 'Leia antes de começar', null, null), h('main', null,
+      mudou ? h('div', { class: 'info' }, 'Atualizamos o termo de uso e privacidade. Seus registros continuam guardados; é só ler e aceitar para seguir.') : null,
+      h('div', { class: 'cartao' }, textoTermo()), h('div', { style: 'margin-bottom:30px' }, btn, h('button', { class: 'btn linha cheio', style: 'margin-top:10px', onclick: () => sair(true) }, 'Não aceito, sair'))));
+  }
+  // ---------- Ajuda ----------
+  // conteúdo em forms/ajuda.json (guardado pelo app para funcionar sem internet); "?" de cada tela abre no tema dela
+  const ajudaBt = (chave) => h('button', { class: 'ic', onclick: () => ir('#ajuda/' + chave), 'aria-label': 'Ajuda' }, ico('ajuda'));
+  async function telaAjuda(chave) {
+    const voltar = () => { if (S.sessao && history.length > 1) history.back(); else { location.hash = ''; S.sessao ? ir('#inicio') : telaLogin(); } };
+    const corpo = h('main', { class: 'ajuda' }, h('div', { class: 'info' }, 'Carregando a ajuda...'));
+    $app.replaceChildren(topo('Ajuda', 'Perguntas frequentes', h('button', { class: 'ic', onclick: voltar, 'aria-label': 'Voltar' }, ico('voltar')), null), corpo);
+    let A_; try { A_ = S.ajuda || (S.ajuda = await (await fetch('forms/ajuda.json')).json()); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, 'Não foi possível abrir a ajuda agora. Abra o app uma vez com internet para guardá-la no celular.')); return; }
+    let notas = null; try { notas = await (await fetch('version.json', { cache: 'no-store' })).json(); } catch (e) { /* sem internet: sem "o que mudou" */ }
+    const pf = S.sessao ? perfil() : 'campo'; const meu = pf === 'cliente' ? 'cliente' : ehCoord() ? 'coordenacao' : 'campo';
+    const abas = meu === 'cliente' ? ['cliente'] : meu === 'coordenacao' ? ['coordenacao', 'campo'] : ['campo'];
+    const NOMES = { campo: 'Equipe de campo', coordenacao: 'Coordenação', cliente: 'Cliente' };
+    let aba = S.ajudaAba && abas.includes(S.ajudaAba) ? S.ajudaAba : abas[0];
+    if (chave && meu === 'coordenacao' && !A_.perguntas.some((q) => q.chave === chave && q.perfis.includes('coordenacao'))) aba = 'campo';
+    const busca = h('input', { class: 'entrada busca-ajuda', type: 'search', placeholder: 'Buscar na ajuda (ex.: GPS, foto, senha)', 'aria-label': 'Buscar na ajuda', oninput: () => pintar() });
+    const lista = h('div', { class: 'ajuda-lista' }); const seletor = h('div', { class: 'subabas' });
+    const tel = String(CONTATO.telefone || '').replace(/\D/g, '');
+    const contato = h('div', { class: 'cartao ajuda-contato' }, h('h3', null, 'Ainda com dúvida?'),
+      h('p', null, meu === 'campo' ? 'Fale com a coordenação do seu projeto.' : 'Fale com a Neofloresta.'),
+      h('div', { class: 'linha-btn' }, tel ? h('a', { class: 'btn', href: 'https://wa.me/' + (tel.length <= 11 ? '55' + tel : tel), target: '_blank', rel: 'noopener' }, 'WhatsApp') : null, tel ? h('a', { class: 'btn sec', href: 'tel:+' + (tel.length <= 11 ? '55' + tel : tel) }, 'Ligar') : null, CONTATO.email ? h('a', { class: 'btn sec', href: 'mailto:' + CONTATO.email }, 'Email') : null));
+    function pintar() {
+      seletor.replaceChildren(...(abas.length > 1 ? abas.map((x) => h('button', { class: 'subaba' + (x === aba ? ' sel' : ''), onclick: () => { aba = x; S.ajudaAba = x; pintar(); } }, NOMES[x])) : []));
+      const q = norm(busca.value).trim(); const termos = q.split(/\s+/).filter(Boolean);
+      // com várias palavras, ficam as perguntas que batem com mais delas (quem escreve "localizacao negada" acha "Neguei a localização")
+      const pont = (x) => { const t_ = norm(x.p + ' ' + x.r + ' ' + x.tema); return termos.filter((t) => t_.includes(t)).length + (termos.some((t) => norm(x.p).includes(t)) ? 0.5 : 0); };
+      let itens = A_.perguntas.filter((x) => x.perfis.includes(aba));
+      if (termos.length) { const pt = itens.map((x) => [x, pont(x)]).filter(([, n]) => n >= 1); const mx = Math.max(0, ...pt.map(([, n]) => Math.floor(n))); itens = pt.filter(([, n]) => Math.floor(n) === mx).sort((a_, b_) => b_[1] - a_[1]).map(([x]) => x); }
+      const temas = [...new Set(itens.map((x) => x.tema))];
+      const passos = !termos.length && A_.passos[aba] ? h('details', { class: 'cartao ajuda-passos', open: !chave && !S.sessao ? true : null }, h('summary', null, 'Primeiros passos'), h('ol', null, A_.passos[aba].map(([t, d]) => h('li', null, h('b', null, t), h('span', null, d))))) : null;
+      lista.replaceChildren(passos,
+        ...temas.map((t) => h('section', { class: 'ajuda-tema' }, h('h3', null, t), itens.filter((x) => x.tema === t).map((x) => h('details', { class: 'ajuda-q', open: (termos.length && itens.length <= 3) || (chave && x.chave === chave && itens.filter((y) => y.chave === chave).length <= 2) ? true : null, 'data-chave': x.chave }, h('summary', null, x.p), h('p', null, x.r))))),
+        !itens.length ? h('div', { class: 'info' }, 'Nada encontrado. Tente outra palavra ou fale com a coordenação.') : null,
+        !termos.length && notas && notas.notas ? h('details', { class: 'cartao ajuda-mudou' }, h('summary', null, `O que mudou na versão ${notas.versao}`), h('ul', null, notas.notas.map((n) => h('li', null, n)))) : null);
+      if (chave && !termos.length) { const el = lista.querySelector(`[data-chave="${chave}"]`); if (el) setTimeout(() => el.closest('section').scrollIntoView({ block: 'start' }), 50); }
+    }
+    corpo.replaceChildren(seletor, busca, lista, contato); pintar();
   }
   function telaSobre() {
     $app.replaceChildren(topo('Sobre', 'Neofloresta Inventário', h('button', { class: 'ic', onclick: () => history.back(), 'aria-label': 'Voltar' }, ico('voltar')), null),
@@ -1976,7 +2044,7 @@
           h('p', null, 'Coleta de campo, validação, painel e entrega dos dados do inventário da arborização urbana. Funciona sem internet: os registros ficam no aparelho e são enviados quando houver conexão.'),
           h('p', { class: 'dica' }, ['Neofloresta Serviços Ecossistêmicos Ltda.', CONTATO.cnpj ? 'CNPJ ' + CONTATO.cnpj : '', CONTATO.cidade || 'Dois Vizinhos/PR'].filter(Boolean).join(' · ')),
           CONTATO.email || CONTATO.telefone ? h('p', null, 'Suporte: ', [CONTATO.email, CONTATO.telefone].filter(Boolean).join(' · ')) : null),
-        h('div', { class: 'cartao' }, h('h3', null, 'Termo de uso e privacidade'), textoTermo(), S.sessao && S.sessao.usuario.termo_aceito_em ? h('p', { class: 'dica' }, 'Aceito em ' + dataBR(S.sessao.usuario.termo_aceito_em)) : null)));
+        h('div', { class: 'cartao' }, h('h3', null, 'Termo de uso e privacidade'), S.sessao ? textoTermo(null, true) : textoTermo('coletor', true), S.sessao && S.sessao.usuario.termo_aceito_em ? h('p', { class: 'dica' }, 'Aceito em ' + dataBR(S.sessao.usuario.termo_aceito_em)) : null)));
   }
 
   // ---------- Painel, relatório e validação ----------
@@ -2053,7 +2121,7 @@
   async function telaPainel(forcar) {
     const corpo = h('main', { class: 'painel' }, h('div', { class: 'info' }, 'Carregando indicadores...'));
     const voltar = perfil() === 'cliente' ? h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')) : h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar'));
-    $app.replaceChildren(topo('Painel', S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')))), corpo);
+    $app.replaceChildren(topo('Painel', S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, ajudaBt('painel'), h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')))), corpo);
     let d; try { d = await dadosPainel(forcar); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, 'Não foi possível carregar o painel: ' + e.message)); return; }
     const A = analisarPainel(d, S.form); const p = d.projeto || S.projeto;
     const meta = +(p.meta || 0); const validados = d.validacao.Validado || 0;
@@ -2098,7 +2166,7 @@
   const SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
   async function telaHoje(diaSel, forcar) {
     const corpo = h('main', { class: 'hoje' }, h('div', { class: 'info' }, 'Carregando o dia das equipes...'));
-    $app.replaceChildren(topo('Hoje no campo', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')))), corpo);
+    $app.replaceChildren(topo('Hoje no campo', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, ajudaBt('hoje'), h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')))), corpo);
     let d; try { d = await dadosPainel(forcar); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, 'Não foi possível carregar: ' + e.message), h('button', { class: 'btn', onclick: () => telaHoje(diaSel, true) }, 'Tentar de novo')); return; }
     if (!document.body.contains(corpo)) return;
     const diario = d.diario || {}; const hoje = diaLocal(agoraISO()); const ontem = diaLocal(new Date(Date.now() - 864e5).toISOString());
@@ -2328,7 +2396,7 @@
     const form = S.form; const cc = campoCodigo(form), ce = campoEspecie(form);
     const cat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
     const corpo = h('main', { class: 'validacao' }, h('div', { class: 'info' }, 'Carregando registros...'));
-    $app.replaceChildren(topo('Validação', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('button', { class: 'gps', onclick: () => telaValidacao(true) }, 'Atualizar')), corpo);
+    $app.replaceChildren(topo('Validação', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, ajudaBt('validacao'), h('button', { class: 'gps', onclick: () => telaValidacao(true) }, 'Atualizar'))), corpo);
     let linhas; try { linhas = await linhasProjeto(forcar, (n, t) => { const i = corpo.querySelector('.info'); if (i) i.textContent = `Carregando registros: ${fmtN(n)}${t ? ' de ' + fmtN(t) : ''}...`; }); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); return; }
     const cont = {}; linhas.forEach((l) => { const k = cc ? String(l[cc.nome] || '') : ''; if (k) cont[k] = (cont[k] || 0) + 1; });
     const dups = new Set(Object.keys(cont).filter((k) => cont[k] > 1));
@@ -2388,7 +2456,7 @@
     let linhas; try { linhas = await linhasProjeto(false); } catch (e) { return toast(e.message); }
     const l = linhas.find((x) => x.uuid === uuidR); if (!l) { toast('Registro não encontrado.'); return ir(ehCoord() ? '#validacao' : '#painel'); }
     const valores = {}; for (const c of form.campos) { let v = l[c.nome]; if (c.tipo === 'bool') v = v === 1 || v === '1' || v === true; valores[c.nome] = v; }
-    const fotos = form.campos.filter((c) => c.tipo === 'photo' && l[c.nome]).map((c) => { const link = linkSeguro(l[c.nome + ' link']); const id = idDrive(link); return { rotulo: c.rotulo + (link ? '' : ' (ainda não enviada ao Drive)'), src: null, link: link || '', drive: id || '' }; });
+    const fotos = form.campos.filter((c) => c.tipo === 'photo' && l[c.nome]).map((c) => { const link = linkSeguro(l[c.nome + ' link']); const id = idDrive(link); return { rotulo: c.rotulo + (link ? '' : ' (ainda não enviada)'), src: null, link: link || '', drive: id || '' }; });
     const nav = S.navVal || []; const i = nav.indexOf(uuidR);
     const irPara = (k) => { if (k >= 0 && k < nav.length) ir('#ficha/' + encodeURIComponent(nav[k])); };
     const cc = campoCodigo(form);
@@ -2510,7 +2578,7 @@
     const filtros = h('div', { class: 'chips os-chips' });
     S.filtroOS = S.filtroOS || (pf === 'coletor' ? 'fazer' : 'abertas');
     const novo = pf === 'cliente' ? 'Solicitar serviço' : ehCoord() ? 'Nova ordem' : 'Pedir serviço';
-    $app.replaceChildren(topo('Ordens de serviço', S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, h('button', { class: 'ic', onclick: () => { S.corMapa = 'os'; ir('#mapa'); }, 'aria-label': 'Mapa' }, ico('mapa')))),
+    $app.replaceChildren(topo('Ordens de serviço', S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, ajudaBt('ordens'), h('button', { class: 'ic', onclick: () => { S.corMapa = 'os'; ir('#mapa'); }, 'aria-label': 'Mapa' }, ico('mapa')))),
       h('main', null, h('button', { class: 'btn nova canto', onclick: () => ir('#os-nova') }, ico('mais'), novo), filtros, h('div', { class: 'grade2 os-busca' }, busca, selTipo), lista));
     const d = await carregarOS(true);
     if (!document.body.contains(lista)) return;
@@ -2828,7 +2896,7 @@
       if (itens.length) await marcarQuadras(itens);
     } catch (e) { /* não atrapalha a coleta */ }
   }
-  // "Levantada, sem árvores": abre o cadastro de calçada (foto de auditoria e largura) ligado à face
+  // "Levantada, sem árvores": abre o cadastro de calçada (só a foto de auditoria) ligado à face
   async function iniciarCalcadaFace(q, f) {
     const cat = S.form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
     const op = cat && cat.opcoes.find((o) => /cal[cç]ada/i.test(o.t));
@@ -2922,7 +2990,7 @@
         const estilo = await Api.b.estilo(form.id).catch(() => null);
         const r = await Gpkg.gerar({ form, linhas, epsg: p.epsg, nomeCamada: Q2F.slug(p.id).replace(/-/g, '_'), estiloQml: estilo });
         entregar(base + '.gpkg', r.bytes, 'application/geopackage+sqlite3');
-        msg(`GeoPackage gerado: ${fmtN(r.total)} registros em SIRGAS 2000 / UTM (EPSG:${r.srs})${r.semPonto ? `, ${r.semPonto} sem coordenada` : ''}${estilo ? ', com a simbologia do QGIS embutida' : ''}. Fotos: baixe a pasta DCIM do projeto no Drive e coloque ao lado do arquivo.`);
+        msg(`GeoPackage gerado: ${fmtN(r.total)} registros em SIRGAS 2000 / UTM (EPSG:${r.srs})${r.semPonto ? `, ${r.semPonto} sem coordenada` : ''}${estilo ? ', com a simbologia do QGIS embutida' : ''}. Fotos: use o pacote completo (com a pasta DCIM) e coloque as fotos ao lado do arquivo.`);
       } else if (formato === 'xlsx') {
         const leg = linhas.map(legivel);
         const unid = (c) => { const m = String(c.rotulo + ' ' + c.nome).match(/\((cm|m|m2|m²|%|graus)\)/i); return m ? m[1].replace('m2', 'm²') : ''; };
@@ -3000,8 +3068,8 @@
       const leia = [`Pacote de entrega: ${p.nome}`, `Gerado em ${dia} pelo Neofloresta Inventário ${VERSAO}.`, `Contratante: ${p.contratante || ''}  Contrato: ${p.contrato || ''}  Município: ${p.municipio || ''}`, `Responsável técnico: ${[p.responsavel, p.registro_profissional, p.art ? 'ART ' + p.art : ''].filter(Boolean).join(', ')}`, '',
         `Registros: ${linhas.length} (${filtro === 'validados' ? 'somente validados' : 'todos, exceto descartados'}).`, `Ordens de serviço: ${os.length}.`, '',
         'Arquivos:', ...arqs.filter((a) => !a.nome.startsWith('DCIM/')).map((a) => '  ' + a.nome + ({ gpkg: ': GeoPackage para o QGIS, em SIRGAS 2000 / UTM, com a simbologia embutida', xlsx: ': Excel com os registros, as ordens de serviço, o dicionário de campos (unidade e descrição) e os metadados', zip: ': Shapefile em SIRGAS 2000 / UTM; o arquivo _campos.csv traz o nome completo de cada campo', csv: ': texto separado por ponto e vírgula, decimal com vírgula', kml: ': Google Earth e Google Maps' }[a.nome.split('.').pop()] || '')),
-        fotos.length <= LIM ? `  DCIM/: ${baixadas} fotos. As dos registros têm o nome da coluna de foto da planilha; as das ordens de serviço ficam em DCIM/ordens/ com o nome indicado nas colunas "arquivo no pacote" da aba Ordens de serviço.` : `  Fotos: são ${fotos.length}, grandes demais para um arquivo só. Baixe a pasta DCIM do projeto no Google Drive (botão direito > Fazer download) e coloque ao lado do GeoPackage. Cada linha da planilha tem o link da foto.`,
-        '', 'Coordenadas: SIRGAS 2000. Datas e horas no horário de Brasília nas planilhas legíveis e em UTC (ISO 8601) no CSV.', 'Os dados pertencem ao contratante. A Neofloresta atua como operadora dos dados, conforme o termo de uso e privacidade do sistema.'].join('\r\n');
+        fotos.length <= LIM ? `  DCIM/: ${baixadas} fotos. As dos registros têm o nome da coluna de foto da planilha; as das ordens de serviço ficam em DCIM/ordens/ com o nome indicado nas colunas "arquivo no pacote" da aba Ordens de serviço.` : `  Fotos: são ${fotos.length}, grandes demais para um arquivo só. Peça à Neofloresta o pacote de fotos (pasta DCIM) e coloque ao lado do GeoPackage. Cada linha da planilha tem o link da foto.`,
+        '', 'Coordenadas: SIRGAS 2000. Datas e horas no horário de Brasília nas planilhas legíveis e em UTC (ISO 8601) no CSV.', 'Os dados pertencem ao contratante, conforme o termo de uso e privacidade do sistema.'].join('\r\n');
       arqs.push({ nome: 'LEIA-ME.txt', dados: new Blob(['﻿' + leia], { type: 'text/plain' }) });
       msg('Compactando...');
       const prontos = []; for (const a of arqs) prontos.push({ nome: a.nome, dados: new Uint8Array(await a.dados.arrayBuffer()) });

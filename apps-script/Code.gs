@@ -11,8 +11,8 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.5';
-const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa'];
+const VERSAO_SCRIPT = '2.6';
+const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao'];
 const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
@@ -90,7 +90,7 @@ function doPost(e) {
     switch (d.acao) {
       case 'sessao': return json({ ok: true, versaoScript: VERSAO_SCRIPT, usuario: publico(usr), projetos: projetosDoUsuario(usr) });
       case 'sair': encerrarSessao(d.t); return json({ ok: true });
-      case 'aceitar_termo': atualizarUsuario(usr.login, { termo_aceito_em: new Date().toISOString() }); auditar(usr.login, 'aceitar_termo', '', d.versao || ''); return json({ ok: true });
+      case 'aceitar_termo': atualizarUsuario(usr.login, { termo_aceito_em: new Date().toISOString(), termo_versao: String(d.versao || '').slice(0, 30) }); auditar(usr.login, 'aceitar_termo', '', d.versao || ''); return json({ ok: true });
       case 'trocar_senha': trocarSenha(usr, d.atual, d.nova, d.t); return json({ ok: true });
       case 'formulario': formLiberado(d.id); return json({ ok: true, formulario: lerFormulario(d.id) });
       case 'estilo': formLiberado(d.id); return json({ ok: true, qml: lerArquivoForm(d.id + '.qml') });
@@ -309,9 +309,9 @@ function salvarUsuario(dados) {
   salvarLinha('Usuarios', COLS_USUARIOS, 'login', o);
   if (dados.senha && existe) encerrarSessoesDe(o.login);
 }
-function publico(u) { return { login: u.login, nome: u.nome, perfil: normalizarPerfil(u.perfil), equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', modo_copa: u.modo_copa || 'raios' }; }
+function publico(u) { return { login: u.login, nome: u.nome, perfil: normalizarPerfil(u.perfil), equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: u.modo_copa || 'raios' }; }
 function paraAdmin(u) {
-  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'criado_em', 'modo_copa'].forEach((k) => (o[k] = u[k] || ''));
+  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'termo_versao', 'criado_em', 'modo_copa'].forEach((k) => (o[k] = u[k] || ''));
   o.perfil = normalizarPerfil(u.perfil);
   o.bloqueado = !!(u.bloqueado_ate && new Date(u.bloqueado_ate) > new Date());
   o.senha_antiga = !u.senha_hash;

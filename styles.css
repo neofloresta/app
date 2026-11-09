@@ -486,3 +486,19 @@ html.sol .dica, html.sol small { color: #263238; }
 .hoje-dl { display: grid; grid-template-columns: auto auto; gap: 2px 12px; margin: 0; font-size: 14.5px; }
 .hoje-dl dt { color: var(--suave); } .hoje-dl dd { margin: 0; text-align: right; font-weight: 600; } .hoje-dl dd.ruim { color: #B3261E; }
 .hoje-cats { display: flex; flex-wrap: wrap; gap: 4px; }
+/* Termo por perguntas */
+.termo-q h4 { margin: 12px 0 2px; font-size: 15.5px; color: #00546E; }
+.termo-q p { margin: 0 0 4px; }
+.termo-completo { margin-top: 14px; border-top: 1px solid var(--linha); padding-top: 8px; }
+.termo-completo summary { min-height: 44px; display: flex; align-items: center; font-weight: 600; color: #00546E; cursor: pointer; }
+/* Ajuda */
+.ajuda .busca-ajuda { margin: 8px 0 12px; min-height: 48px; font-size: 16px; }
+.ajuda-tema h3 { margin: 16px 0 6px; color: #00546E; font-size: 16px; }
+.ajuda-q { border: 1.5px solid var(--linha); border-radius: 10px; background: #fff; margin-bottom: 6px; }
+.ajuda-q summary { min-height: 48px; display: flex; align-items: center; padding: 8px 12px; font-weight: 600; cursor: pointer; }
+.ajuda-q p { margin: 0; padding: 0 12px 12px; }
+.ajuda-passos summary, .ajuda-mudou summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
+.ajuda-passos ol { padding-left: 22px; margin: 6px 0 0; } .ajuda-passos li { margin-bottom: 8px; } .ajuda-passos li b { display: block; } .ajuda-passos li span { color: var(--suave); }
+.ajuda-contato { margin: 14px 0 30px; }
+.link-ajuda-form { display: flex; align-items: center; gap: 6px; background: none; border: 0; color: #00546E; font: inherit; font-weight: 600; min-height: 44px; margin-top: 10px; cursor: pointer; }
+.link-ajuda-form .ico svg { width: 20px; height: 20px; }
