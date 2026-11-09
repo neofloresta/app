@@ -106,7 +106,7 @@ function doPost(e) {
       case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
       case 'quadras_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarQuadras(d.projeto, d.camada, usr)));
       case 'quadras_camada': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaQuadras(d.projeto, d.versao)));
-      case 'quadras_situacao': exigeProjeto(d.projeto); return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(publicoOS), faces: d.faces ? lerSitFaces(d.projeto).map(publicoOS) : undefined });
+      case 'quadras_situacao': { exigeProjeto(d.projeto); const cli = usr.perfil === 'cliente'; const pub = (o) => { const x = publicoOS(o); if (cli) { delete x.equipe; delete x.marcada_por; delete x.historico; delete x.atribuida; } return x; }; return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(pub), faces: d.faces ? lerSitFaces(d.projeto).map(pub) : undefined }); }
       case 'trajeto_salvar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarTrajeto(d.projeto, d.trecho || {}, usr)));
       case 'trajetos': pode('revisor'); exigeProjeto(d.projeto); return json({ ok: true, trechos: lerTrajetos(d.projeto, d.dia) });
       case 'quadras_marcar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, marcarQuadras(d.projeto, d.itens, usr)));
@@ -490,12 +490,14 @@ function conferirEnvios(projetoId, uuids, usr) {
   const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   const iu = cab.indexOf('uuid'), ius = cab.indexOf('usuario'); const links = cab.map((c, i) => [c, i]).filter((x) => / link$/.test(x[0]));
   const quero = {}; uuids.forEach((u) => { quero[u] = 1; });
-  const v = sh.getRange(2, 1, sh.getLastRow() - 1, cab.length).getValues();
-  v.forEach((l) => {
-    const u = String(l[iu]); if (!quero[u]) return;
-    if (usr.perfil === 'coletor' && ius >= 0 && String(l[ius]) !== usr.login) return;
-    const o = {}; links.forEach(([c, i]) => { if (l[i]) o[c.replace(/ link$/, '')] = 1; }); out[u] = { fotos: o };
-  });
+  // lê só as colunas necessárias (identificador, usuário e links), não a planilha inteira
+  const n = sh.getLastRow() - 1; const col = (i) => sh.getRange(2, i + 1, n, 1).getValues();
+  const vu = col(iu); const vus = ius >= 0 ? col(ius) : null; const vl = links.map(([c, i]) => [c, col(i)]);
+  for (let k = 0; k < n; k++) {
+    const u = String(vu[k][0]); if (!quero[u]) continue;
+    if (usr.perfil === 'coletor' && vus && String(vus[k][0]) !== usr.login) continue;
+    const o = {}; vl.forEach(([c, v]) => { if (v[k][0]) o[c.replace(/ link$/, '')] = 1; }); out[u] = { fotos: o };
+  }
   return out;
 }
 function salvarRegistro(projetoId, linha, usr) {
@@ -515,15 +517,19 @@ function salvarRegistro(projetoId, linha, usr) {
     if (achado) {
       const r = achado.getRow();
       const atual = linhaObj(cab, sh.getRange(r, 1, 1, cab.length).getValues()[0]);
-      if (usr.perfil === 'coletor' && atual.atualizado_em && linha.atualizado_em && String(atual.atualizado_em) > String(linha.atualizado_em)) return { ignorado: 'versao_antiga' };
+      // foto que subiu depois (esperou o Wi-Fi): o link entra na coluna vazia mesmo com o registro travado ou validado
+      const soLinks = cab.filter((c) => / link$/.test(c) && !atual[c] && linha[c]);
+      const gravarLinks = () => { soLinks.forEach((c) => { sh.getRange(r, cab.indexOf(c) + 1).setNumberFormat('@').setValue(String(linha[c])); const b = c.replace(/ link$/, ''); const ib = cab.indexOf(b); if (ib >= 0 && !atual[b] && linha[b]) sh.getRange(r, ib + 1).setNumberFormat('@').setValue(String(linha[b])); }); return { atualizado: true, soLinks: soLinks.length }; };
+      const mesmoDono = !atual.usuario || String(atual.usuario).toLowerCase() === usr.login.toLowerCase();
+      if (usr.perfil === 'coletor' && atual.atualizado_em && linha.atualizado_em && String(atual.atualizado_em) > String(linha.atualizado_em)) return soLinks.length && mesmoDono ? gravarLinks() : { ignorado: 'versao_antiga' };
       if (usr.perfil === 'coletor') {
         linha.concluido_em = atual.concluido_em || linha.concluido_em; linha.criado_em = atual.criado_em || linha.criado_em; linha.usuario = atual.usuario || usr.login;
-        if (atual.usuario && String(atual.usuario).toLowerCase() !== usr.login.toLowerCase()) throw new Error('Este registro é de outra equipe. Só a coordenação pode alterá-lo.');
+        if (!mesmoDono) throw new Error('Este registro é de outra equipe. Só a coordenação pode alterá-lo.');
         const v = String(atual.validacao || '');
-        if (v === 'Validado') throw new Error('Registro já validado pela coordenação. Para alterar, peça à coordenação.');
+        if (v === 'Validado') { if (soLinks.length) return gravarLinks(); throw new Error('Registro já validado pela coordenação. Para alterar, peça à coordenação.'); }
         const conc = atual.concluido_em || atual.criado_em;
         const mesmoDia = dia(conc) === dia(linha.atualizado_em) && (Date.now() - new Date(conc).getTime()) < 4 * 864e5;
-        if (v !== 'Devolvido' && !mesmoDia) throw new Error('Registro travado: a equipe só altera no mesmo dia em que concluiu. Peça à coordenação.');
+        if (v !== 'Devolvido' && !mesmoDia) { if (soLinks.length) return gravarLinks(); throw new Error('Registro travado: a equipe só altera no mesmo dia em que concluiu. Peça à coordenação.'); }
         if (v === 'Devolvido') linha.validacao = 'Corrigido';
       }
       const valores = cab.map((c) => (c in linha ? celula(linha[c]) : celula(atual[c])));
@@ -570,12 +576,14 @@ function validar(projetoId, itens, usr) {
     const quando = Utilities.formatDate(new Date(), FUSO, 'dd/MM/yyyy HH:mm');
     for (const it of itens) {
       if (estados.indexOf(it.estado) < 0) throw new Error('Situação inválida: ' + it.estado);
-      if (it.estado === 'Devolvido' && !String(it.obs || '').trim()) throw new Error('Informe o motivo da devolução.');
+      const desfazer = it.desfazer && typeof it.desfazer === 'object'; // "Desfazer": volta exatamente ao que estava (motivo, quem e quando)
+      if (it.estado === 'Devolvido' && !desfazer && !String(it.obs || '').trim()) throw new Error('Informe o motivo da devolução.');
       const k = pos[String(it.uuid)]; if (k == null) continue;
       const obs = seguro(String(it.obs || '').slice(0, 500));
-      col.validacao[k] = [it.estado]; col.validacao_obs[k] = [obs]; col.validado_por[k] = [usr.nome || usr.login]; col.validado_em[k] = [agora];
+      if (desfazer) { const dz = it.desfazer; const dt = String(dz.validado_em || ''); col.validacao[k] = [it.estado]; col.validacao_obs[k] = [seguro(String(dz.validacao_obs || '').slice(0, 500))]; col.validado_por[k] = [seguro(String(dz.validado_por || '').slice(0, 80))]; col.validado_em[k] = [/^\d{4}-\d{2}-\d{2}T/.test(dt) ? dt : '']; }
+      else { col.validacao[k] = [it.estado]; col.validacao_obs[k] = [obs]; col.validado_por[k] = [usr.nome || usr.login]; col.validado_em[k] = [agora]; }
       const ant = texto(col.validacao_hist[k][0]);
-      col.validacao_hist[k] = [seguro((ant ? ant + ' | ' : '') + quando + ' ' + (usr.nome || usr.login) + ': ' + it.estado + (obs ? ' (' + obs + ')' : '') + (it.amostra ? ' [lote com amostra conferida]' : '')).slice(-2000)];
+      col.validacao_hist[k] = [seguro((ant ? ant + ' | ' : '') + quando + ' ' + (usr.nome || usr.login) + ': ' + (desfazer ? 'desfez a decisão, voltou para ' + it.estado : it.estado + (obs ? ' (' + obs + ')' : '')) + (it.amostra ? ' [lote com amostra conferida]' : '')).slice(-2000)];
       alterados++;
     }
     if (alterados) nomes.forEach((c) => sh.getRange(2, cab.indexOf(c) + 1, n, 1).setNumberFormat('@').setValues(col[c]));
@@ -604,9 +612,14 @@ function listarPagina(projetoId, de, n, usr) {
   return { linhas: linhas, total: total, proximo: proximo };
 }
 function clienteVeTodos(projetoId) { return String(projeto(projetoId).cliente_ve || '').toLowerCase() === 'todos'; }
+// colunas que o cliente não recebe: dados internos das equipes (quem coletou, histórico com logins)
+function ocultasCliente(projetoId) {
+  let auto = []; try { auto = lerFormulario(projeto(projetoId).formulario).campos.filter((c) => c.auto === 'coletor').map((c) => c.nome); } catch (e) { /* sem formulário */ }
+  return COLS_INTERNAS.concat(['equipe', 'validado_por', 'historico', 'validacao_hist'], auto);
+}
 function paraCliente(projetoId, linhas) {
-  const todos = clienteVeTodos(projetoId);
-  return linhas.filter((l) => l.validacao !== 'Descartado' && (todos || l.validacao === 'Validado')).map((l) => { COLS_INTERNAS.forEach((c) => delete l[c]); return l; });
+  const todos = clienteVeTodos(projetoId); const oc = ocultasCliente(projetoId);
+  return linhas.filter((l) => l.validacao !== 'Descartado' && (todos || l.validacao === 'Validado')).map((l) => { oc.forEach((c) => delete l[c]); return l; });
 }
 // Só algumas colunas de todas as linhas, em lista compacta (mapa e sequência do código)
 function colunas(projetoId, campos, usr) {
@@ -615,7 +628,8 @@ function colunas(projetoId, campos, usr) {
   const cliente = usr && usr.perfil === 'cliente'; const coletor = usr && usr.perfil === 'coletor';
   const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   const pedir = (cliente ? campos.slice(0, 30).concat(['validacao']) : campos.slice(0, 30));
-  const proibida = (c) => (cliente && COLS_INTERNAS.indexOf(c) >= 0) || (coletor && (COLS_INTERNAS.indexOf(c) >= 0 || COLS_SISTEMA.indexOf(c) >= 0));
+  const ocC = cliente ? ocultasCliente(projetoId) : [];
+  const proibida = (c) => (cliente && ocC.indexOf(c) >= 0) || (coletor && (COLS_INTERNAS.indexOf(c) >= 0 || COLS_SISTEMA.indexOf(c) >= 0));
   const cols = pedir.map((c, k) => { const i = cab.indexOf(c); return i < 0 || (proibida(c) && !(cliente && k === pedir.length - 1)) ? null : sh.getRange(2, i + 1, total, 1).getValues(); });
   const todos = cliente && clienteVeTodos(projetoId);
   const linhas = [];
@@ -636,7 +650,10 @@ function painel(projetoId, usr) {
   const p = projeto(projetoId); const form = lerFormulario(p.formulario);
   let linhas = listarPagina(projetoId, 0, 0, usr).linhas;
   const out = indicadores(form, linhas, p);
-  if (usr.perfil === 'cliente') { delete out.diario; delete out.tempos.porEquipe; } // dados das equipes ficam só com a Neofloresta
+  if (usr.perfil === 'cliente') { // dados das equipes ficam só com a Neofloresta
+    delete out.diario; delete out.tempos.porEquipe; delete out.equipes;
+    const pd = {}; Object.keys(out.porDia).forEach((k) => { pd[k] = { Total: Object.values(out.porDia[k]).reduce((a, b) => a + b, 0) }; }); out.porDia = pd;
+  }
   try { cache.put(chave, JSON.stringify(out), 300); } catch (e) { /* grande demais para o cache */ }
   return out;
 }
@@ -780,6 +797,7 @@ function listarOS(projetoId, usr) {
     const c = colunas(projetoId, ['uuid', 'validacao'], { perfil: 'admin' }); const val = {}; c.linhas.forEach((l) => { if (l[1] === 'Validado') val[l[0]] = 1; });
     out = out.map((o) => (!o.registro_uuid || val[o.registro_uuid] || o.solicitada_por === usr.login ? o : Object.assign({}, o, { codigo_arvore: '', especie: '', latitude: '', longitude: '', endereco: '', bairro: '', registro_uuid: '' })));
   }
+  if (usr.perfil === 'cliente') return out.map((o) => { const x = publicoOS(o); delete x.responsavel; ['aberta_por', 'iniciada_por', 'concluida_por', 'aprovada_por', 'cancelada_por', 'historico'].forEach((k) => { if (k in x && x.solicitada_por !== usr.login) delete x[k]; }); return x; }); // cliente não vê qual equipe executa
   return out.map(publicoOS);
 }
 function idFoto(u) { const m = String(u || '').match(/^https:\/\/drive\.google\.com\/file\/d\/([\w-]{20,80})\/view$/); return m ? m[1] : ''; }
@@ -1011,7 +1029,7 @@ function abaTrajetos(projetoId) {
   return garantirCab(sh, COLS_TRAJETOS);
 }
 function salvarTrajeto(projetoId, t, usr) {
-  const id = String(t.id || ''); if (!/^[0-9a-z-]{8,60}$/i.test(id)) throw new Error('Trecho inválido.');
+  const id = String(t.id || ''); if (!/^[0-9a-z._-]{8,140}$/i.test(id)) throw new Error('Trecho inválido.'); // o login pode ter ponto e sublinhado
   const pts = String(t.pontos || ''); if (pts.length > 40000) throw new Error('Trecho grande demais.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(t.dia || ''))) throw new Error('Dia inválido.');
   const num = (x, max) => { const v = +x; return isFinite(v) && v >= 0 ? Math.min(v, max) : 0; };

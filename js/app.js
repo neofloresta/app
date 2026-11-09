@@ -46,7 +46,7 @@
   function dataBR(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return String(iso); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   function numBR(v) { return v == null || v === '' ? '' : String(v).replace('.', ','); }
   function paraNum(s) { if (s == null) return null; const t = String(s).trim().replace(',', '.'); if (t === '') return null; const n = Number(t); return isNaN(n) ? null : n; }
-  function toast(msg, ms = 2600, acao, erro) { document.querySelectorAll('.toast').forEach((x) => x.remove()); const t = h('div', { class: 'toast' + (erro || /^(Erro|Não foi possível|Falha)/.test(String(msg)) ? ' erro' : ''), role: 'status', 'data-t': String(Date.now()) }, h('span', null, msg), acao ? h('button', { class: 'toast-acao', onclick: () => { t.remove(); acao.fn(); } }, acao.texto) : null); document.body.append(t); setTimeout(() => t.remove(), acao ? Math.max(ms, 6000) : ms); }
+  function toast(msg, ms = 2600, acao, erro) { document.querySelectorAll('.toast').forEach((x) => { if (!x.querySelector('.toast-acao')) x.remove(); }); const t = h('div', { class: 'toast' + (erro || /^(Erro|Não foi possível|Falha)/.test(String(msg)) ? ' erro' : ''), role: 'status', 'data-t': String(Date.now()) }, h('span', null, msg), acao ? h('button', { class: 'toast-acao', onclick: () => { t.remove(); acao.fn(); } }, acao.texto) : null); document.body.append(t); setTimeout(() => t.remove(), acao ? Math.max(ms, 6000) : ms); }
   function modal(titulo, corpo, botoes) {
     return new Promise((res) => {
       const fechar = (v) => { veu.remove(); res(v); };
@@ -177,6 +177,7 @@
         Object.assign(S.sessao, { usuario: r.usuario, projetos: r.projetos }); await Store.set('sessao', S.sessao); return;
       }
       const r = await Api.b.sessao(); if (!r) return;
+      if (S.termoLocal === TERMO_VERSAO && r.usuario && r.usuario.termo_versao !== TERMO_VERSAO) Object.assign(r.usuario, { termo_versao: TERMO_VERSAO, termo_aceito_em: r.usuario.termo_aceito_em || S.sessao.usuario.termo_aceito_em || agoraISO() }); // aceite no aparelho ainda indo ao servidor
       Object.assign(S.sessao, { usuario: r.usuario, projetos: r.projetos, versaoScript: r.versaoScript }); await Store.set('sessao', S.sessao);
     } catch (e) { /* sem conexão ou sessão expirada: o aviso já aparece */ }
   }
@@ -299,8 +300,9 @@
   }
 
   async function sair(semPerguntar) {
-    const pend = (await Store.todosRegistros()).filter((r) => r.status === 'pendente').length + (S.sessao ? await nFilaOS() : 0);
-    if (!semPerguntar && pend && !(await confirmar('Sair', `Há ${pend} registro(s) ou atualização(ões) de ordem de serviço ainda não enviados. Eles continuam guardados neste aparelho e serão enviados no próximo acesso.`, 'Sair mesmo assim'))) return;
+    const regs = await Store.todosRegistros();
+    const pend = regs.filter((r) => r.status === 'pendente' || (r.status === 'enviado' && fotoFalta(r))).length + (S.sessao ? await nFilaOS() : 0); // inclui fotos esperando o Wi-Fi
+    if (!semPerguntar && pend && !(await confirmar('Sair', `Há ${pend} registro(s) ou atualização(ões) de ordem de serviço ainda não enviados (registros, fotos esperando o Wi-Fi ou ordens de serviço). Eles continuam guardados neste aparelho e serão enviados quando você entrar de novo com o mesmo usuário.`, 'Sair mesmo assim'))) return;
     try { await Api.b.sair(); } catch (e) { /* sem conexão: a sessão expira sozinha */ }
     S.ultimoUsuario = S.sessao && S.sessao.u; S.sessao = null; S.projeto = null; S.linhas = {}; S.painel = null; S.qdSitEm = null; S.qdEm = null; S.formsEm = null; await Store.del('sessao'); location.hash = ''; telaLogin();
   }
@@ -338,6 +340,7 @@
     if (S.sincronizando || !S.sessao || S.expirada || perfil() === 'cliente') return;
     if (!navigator.onLine) { if (!silencioso) toast('Sem internet. Os dados ficam guardados e serão enviados depois.'); return atualizarSync(); }
     S.sincronizando = true; // marcado antes de qualquer espera: nunca roda duas vezes ao mesmo tempo
+    try { const tp = await Store.get('termoPend:' + S.sessao.u); if (tp) { await Api.b.aceitarTermo(tp); await Store.del('termoPend:' + S.sessao.u); } } catch (e) { /* tenta no próximo envio */ }
     try { await enviarPendentes(silencioso); if (!S.expirada) await enviarFilaOS(silencioso); if (!S.expirada) await enviarFilaQd(silencioso); if (!S.expirada) await Turno.enviar(); } finally { S.sincronizando = false; await atualizarSync(); }
     garantirFaixa();
     if (S.expirada) return;
@@ -351,7 +354,7 @@
     if (Api.demo || !navigator.onLine || !S.projeto || !['coletor', 'revisor'].includes(perfil())) return;
     if (S.conferidoEm && Date.now() - S.conferidoEm < 5 * 60000) return; S.conferidoEm = Date.now();
     try {
-      const alvo = (await Store.registros(S.projeto.id)).filter((r) => r.status === 'enviado' && !r.conferido && !r.__base && !fotoFalta(r)).slice(0, 300);
+      const alvo = (await Store.registros(S.projeto.id)).filter((r) => r.status === 'enviado' && !r.conferido && !r.conferenciaFalhou && !r.__base && !fotoFalta(r) && (perfil() !== 'coletor' || !r.usuario || r.usuario === S.sessao.u)).slice(0, 300); // celular compartilhado: confere só os do próprio login
       if (!alvo.length) return;
       const ach = await Api.b.conferir(S.projeto.id, alvo.map((r) => r.uuid)); if (!ach) return;
       let reenviar = 0;
@@ -360,7 +363,7 @@
         const a = ach[r.uuid];
         if (a && Object.keys(r.fotos || {}).every((k) => !r.fotos[k] || !r.fotos[k].chave || a.fotos[k])) { r.conferido = true; await Store.salvarRegistro(r); continue; }
         r.tentConf = (r.tentConf || 0) + 1;
-        if (r.tentConf > 3) { r.conferido = true; r.erroSync = 'O servidor não confirmou este registro depois de 3 envios. Avise a coordenação.'; await Store.salvarRegistro(r); continue; }
+        if (r.tentConf > 3) { r.conferenciaFalhou = true; r.erroSync = 'O servidor não confirmou este registro depois de 3 envios. Avise a coordenação.'; await Store.salvarRegistro(r); continue; } // não vale como confirmado: as fotos nunca são liberadas
         if (!a) { r.status = 'pendente'; reenviar++; } // não está na planilha: manda de novo
         else {
           let falta = false; for (const [campo, f] of Object.entries(r.fotos || {})) if (f && f.chave && !a.fotos[campo]) { f.enviado = false; falta = true; }
@@ -568,7 +571,7 @@
     const itens = [];
     for (const r of lista.slice(0, 300)) {
       const img = await miniatura(r);
-      const rotSt = r.status === 'enviado' && r.validacao && r.validacao !== 'Pendente' ? r.validacao : { rascunho: 'Rascunho', pendente: r.erroSync ? 'Erro' : 'A enviar', enviado: 'Enviado', recusado: 'Recusado' }[r.status];
+      const rotSt = r.status === 'enviado' && r.validacao && r.validacao !== 'Pendente' ? r.validacao : { rascunho: 'Rascunho', pendente: r.erroSync ? 'Erro' : 'A enviar', enviado: r.conferenciaFalhou ? 'Não confirmado' : 'Enviado', recusado: 'Recusado' }[r.status];
       const clsSt = r.status === 'enviado' && r.validacao && r.validacao !== 'Pendente' ? 'v-' + norm(r.validacao) : (r.erroSync && r.status === 'pendente') || r.status === 'recusado' ? 'erro' : r.status;
       itens.push(h('button', { class: 'reg', onclick: () => ir('#form/' + r.uuid) },
         img ? h('img', { src: img, alt: '' }) : h('div', { class: 'sem' }),
@@ -707,6 +710,7 @@
 
   async function novoRegistro(ex) {
     if (!ex || !ex.faceId) ex = null; // chamado pelo botão: recebe o clique
+    if (S.abrindoNova && Date.now() - S.abrindoNova < 60000) return; S.abrindoNova = Date.now(); // toque duplo não cria dois rascunhos
     const r = {
       uuid: uuid(), projeto: S.projeto.id, equipe: S.projeto.equipe || '', usuario: S.sessao.u,
       criado_em: agoraISO(), atualizado_em: agoraISO(), status: 'rascunho', valores: {}, fotos: {},
@@ -726,7 +730,9 @@
     if (ex) { r.faceId = ex.faceId; r.faceRua = ex.faceRua; r.faceTxt = ex.faceTxt; r.valores[ex.cat[0]] = ex.cat[1]; Object.assign(r.valores, ex.extra || {}); }
     await Store.salvarRegistro(r);
     S.aba = 0; S.tentou = false;
-    await marcarPonto(r); // o ponto é travado aqui, antes de medir: não acompanha o celular enquanto a dupla dá a volta na árvore
+    const marcou = await marcarPonto(r); // o ponto é travado aqui, antes de medir: não acompanha o celular enquanto a dupla dá a volta na árvore
+    S.abrindoNova = false;
+    if (marcou === false) { await Store.apagarRegistro(r.uuid); return; } // saiu da tela no meio da marcação: não deixa rascunho vazio
     ir('#form/' + r.uuid);
   }
 
@@ -750,7 +756,10 @@
     liberado: () => !!(S.sessao && S.sessao.usuario.trajeto === 'sim' && perfil() === 'coletor' && S.projeto),
     est: null, lock: null, salvarT: null,
     async carregar() { this.est = this.liberado() ? (await Store.get(this.chave())) : null; if (this.est && this.est.dia !== diaLocal(agoraISO())) { await this.encerrar(true); } if (this.est && this.est.ativo) this.ligar(); },
-    async comecar() { this.est = { ativo: true, dia: diaLocal(agoraISO()), inicio: agoraISO(), pts: [], env: 0, id: uuid().slice(0, 8) }; await Store.set(this.chave(), this.est); this.ligar(); pintarTurno(); toast('Turno começou. O trajeto fica ligado enquanto o app estiver aberto.', 4000); },
+    async comecar() {
+      // turno anterior ainda não enviado (sem rede) vai para a fila antes de começar outro: nada é gravado por cima
+      if (this.est && this.est.env < this.est.pts.length) { const k = this.chave() + ':fila'; const f = (await Store.get(k)) || []; this.est.ativo = false; f.push(this.est); await Store.set(k, f); }
+      this.est = { ativo: true, dia: diaLocal(agoraISO()), inicio: agoraISO(), pts: [], env: 0, id: uuid().slice(0, 8) }; await Store.set(this.chave(), this.est); this.ligar(); pintarTurno(); toast('Turno começou. O trajeto fica ligado enquanto o app estiver aberto.', 4000); },
     ligar() { Gps.ouvintes.add(this.ouv); ligarGps(); this.pedirTela(); document.addEventListener('visibilitychange', this.vis); },
     vis: () => { if (document.visibilityState === 'visible' && Turno.est && Turno.est.ativo) Turno.pedirTela(); },
     async pedirTela() { try { if ('wakeLock' in navigator && document.visibilityState === 'visible') { this.lock = await navigator.wakeLock.request('screen'); } } catch (e) { /* sem tela acesa: segue gravando enquanto aberto */ } },
@@ -766,14 +775,22 @@
       await this.enviar(); if (!silencioso) { pintarTurno(); toast('Turno encerrado.'); }
     },
     async enviar() {
-      const e = this.est; if (!e || Api.demo || !navigator.onLine) return;
+      if (Api.demo || !navigator.onLine || !S.projeto || !S.sessao) return;
+      const kf = this.chave() + ':fila'; const fila = (await Store.get(kf)) || [];
+      while (fila.length) { if (!(await this.enviarEst(fila[0]))) { await Store.set(kf, fila); return; } fila.shift(); await Store.set(kf, fila); }
+      const e = this.est; if (!e) return;
+      await this.enviarEst(e, true);
+      if (!e.ativo && e.env >= e.pts.length) { await Store.del(this.chave()); this.est = null; }
+    },
+    // manda os pontos que faltam de um turno em trechos de até 400; devolve true quando não sobra nada a enviar
+    async enviarEst(e, atual) {
       while (e.pts.length - e.env >= (e.ativo ? 20 : 1)) {
         const de = Math.max(0, e.env - 1); const fatia = e.pts.slice(de, de + 400); if (fatia.length < 2 && !(!e.ativo && fatia.length)) break;
         const trecho = Object.assign({ id: S.sessao.u + '-' + e.dia + '-' + e.id + '-' + e.env, dia: e.dia, inicio: new Date(fatia[0][0]).toISOString(), fim: new Date(fatia[fatia.length - 1][0]).toISOString(), pontos: Poly.enc(fatia.map((x) => [x[1], x[2]])), n: fatia.length }, resumoTrajeto(fatia));
-        try { await Api.b.trajetoSalvar(S.projeto.id, trecho); } catch (er) { return; }
-        e.env = de + fatia.length; await Store.set(this.chave(), e);
+        try { await Api.b.trajetoSalvar(S.projeto.id, trecho); } catch (er) { return false; }
+        e.env = de + fatia.length; if (atual) await Store.set(this.chave(), e);
       }
-      if (!e.ativo && e.env >= e.pts.length) { await Store.del(this.chave()); this.est = null; }
+      return e.env >= e.pts.length || e.ativo;
     },
     km() { const e = this.est; if (!e) return 0; const r = resumoTrajeto(e.pts); return r.km_pe + r.km_carro; },
   };
@@ -796,7 +813,7 @@
       const dicas = h('details', { class: 'mp-dicas' }, h('summary', null, 'Dicas para melhorar o GPS'), h('ul', null, DICAS_GPS.map((d) => h('li', null, d))));
       Store.get(hojeK).then((v) => { if (!v) { dicas.open = true; Store.set(hojeK, 1); } }); // primeira marcação do dia: dicas abertas (teste do GPS do dia)
       const btAgora = h('button', { class: 'btn cheio', disabled: true, onclick: () => travar(true) }, 'Marcar agora');
-      const btSem = h('button', { class: 'btn sec oculto', onclick: () => sair(false) }, 'Continuar sem GPS');
+      const btSem = h('button', { class: 'btn sec oculto', onclick: () => { pronto = true; sair(true); } }, 'Continuar sem GPS');
       const veu = h('div', { class: 'veu mp-veu' }, h('div', { class: 'folha mp' }, h('h3', null, 'Marcando o ponto'),
         h('div', { class: 'mp-orienta' }, ORIENTA_GPS), num, st, det, h('div', { class: 'mp-meta' }, `Espere o erro ficar em até ${META} m. O app marca sozinho quando estabilizar.`),
         h('div', { class: 'linha-btn col' }, btAgora, btSem), dicas));
@@ -807,7 +824,7 @@
         if (pronto) return;
         if (!p) { if (e && e.code === 1) { st.textContent = 'O GPS está bloqueado para o app.'; btSem.classList.remove('oculto'); } return; }
         if (Date.now() - p.t > 3000) return;
-        leituras.push({ lat: p.lat, lon: p.lon, prec: p.prec }); if (leituras.length > 40) leituras.shift();
+        leituras.push({ lat: p.lat, lon: p.lon, prec: Math.max(0.5, +p.prec || 0.5) }); if (leituras.length > 40) leituras.shift();
         const pr = p.prec; num.textContent = '±' + (pr >= 10 ? Math.round(pr) : numBR(Math.round(pr * 10) / 10)) + ' m'; num.className = 'mp-num ' + (pr <= META ? 'bom' : pr <= 10 ? 'medio' : 'ruim');
         btAgora.disabled = Date.now() - t0 < 2500;
         const ult = leituras.slice(-3); const melhor = Math.min(...leituras.map((x) => x.prec));
@@ -823,10 +840,14 @@
         Store.salvarRegistro(r);
         num.className = 'mp-num ' + (m.prec <= META ? 'bom' : m.prec <= 10 ? 'medio' : 'ruim'); num.textContent = '±' + numBR(m.prec) + ' m';
         st.textContent = manual ? 'Ponto marcado.' : 'Ponto marcado ✓'; btAgora.disabled = true;
-        setTimeout(() => sair(true), 700);
+        setTimeout(() => { if (!sair.feito && document.body.contains(veu)) sair(true); }, 700);
       }
-      function sair() { clearInterval(tm); Gps.ouvintes.delete(ouv); veu.remove(); fim(); }
+      function sair(v) { if (sair.feito) return; sair.feito = true; clearInterval(tm); Gps.ouvintes.delete(ouv); window.removeEventListener('hashchange', aoSair); veu.remove(); fim(v !== false); }
+      // Voltar do Android (ou qualquer troca de tela) cancela a marcação: nada fica lendo GPS nem abre o cadastro depois
+      const aoSair = () => { if (!pronto) { pronto = true; sair(false); } };
+      window.addEventListener('hashchange', aoSair);
       Gps.ouvintes.add(ouv); ligarGps();
+      if (S.gpsNegado) { st.textContent = 'O GPS está bloqueado para o app.'; btSem.classList.remove('oculto'); }
       if (S.pos) ouv(S.pos);
       const tm = setInterval(() => { Gps.ler(); if (!leituras.length && Date.now() - t0 > 12000) { btSem.classList.remove('oculto'); st.textContent = 'Sem sinal de GPS ainda. Vá para um lugar aberto ou continue sem GPS.'; } }, 1000);
     });
@@ -865,7 +886,7 @@
     const lim = Date.now() - 30 * 864e5; let n = 0;
     if (!(await confirmar('Liberar espaço', 'Apaga do celular só as fotos que o servidor já confirmou, de cadastros de mais de 30 dias. Os cadastros continuam no celular.', 'Liberar'))) return;
     for (const r of await Store.todosRegistros()) {
-      if (!r.conferido || r.status !== 'enviado' || new Date(r.atualizado_em || 0).getTime() > lim) continue;
+      if (!r.conferido || r.conferenciaFalhou || r.status !== 'enviado' || new Date(r.atualizado_em || 0).getTime() > lim) continue; // só o que o servidor confirmou de fato
       let mudou = false; for (const f of Object.values(r.fotos || {})) if (f && f.chave && f.enviado && f.url) { await Store.apagarFoto(f.chave); f.chave = ''; mudou = true; n++; }
       if (mudou) await Store.salvarRegistro(r);
     }
@@ -1440,7 +1461,8 @@
       try { const d = await carregarOS(false); for (const o of d.ordens) { if (!o.registro_uuid) { if (o.latitude !== '' && !isNaN(+o.latitude)) osSoltas.push(o); continue; } const a = osPorArv.get(o.registro_uuid); if (!a || ORD_OS.indexOf(o.status) < ORD_OS.indexOf(a.status)) osPorArv.set(o.registro_uuid, o); } } catch (e) { /* sem ordens */ }
     };
     const selQd = h('select', { class: 'entrada oculto' }, h('option', { value: 'sit' }, 'Quadras por situação'), h('option', { value: 'eq' }, 'Quadras por equipe'), h('option', { value: '' }, 'Sem quadras'));
-    if (S.qdModo != null) selQd.value = S.qdModo;
+    if (perfil() === 'cliente') { const oq = selQd.querySelector('option[value="eq"]'); if (oq) oq.remove(); } // cliente não vê equipes
+    if (S.qdModo != null && (S.qdModo !== 'eq' || perfil() !== 'cliente')) selQd.value = S.qdModo;
     const conta = h('small', { class: 'mapa-conta' });
     const faixaOff = h('div', { class: 'faixa-off oculto', role: 'status' });
     const pintarConta = () => { conta.textContent = conta.textContent.replace(/ · Carregando quadras\.\.\./, '') + (conta.dataset.qd ? ' · ' + conta.dataset.qd : ''); };
@@ -1452,14 +1474,14 @@
     const rotFiltros = () => (S.filtrosAbertos ? 'Esconder filtros' : 'Filtros' + (nFiltros() ? ` (${nFiltros()})` : ''));
     const btFiltros = h('button', { class: 'btn sec peq bt-filtros' + (baixa ? '' : ' oculto'), onclick: () => { S.filtrosAbertos = !S.filtrosAbertos; selBox.classList.toggle('oculto', !S.filtrosAbertos); btFiltros.textContent = rotFiltros(); setTimeout(() => mapa.invalidateSize(), 50); } }, '');
     // atalhos de um toque para os filtros mais usados
-    let soAlto = false, trajOn = false, trajDados = null, trajDia = null; const trajCamada = L.layerGroup();
-    const chipR = (txt, ativo, fn) => h('button', { class: 'chip-rapido' + (ativo() ? ' sel' : ''), 'aria-pressed': ativo() ? 'true' : 'false', onclick: (e) => { fn(); pintarChips(); desenhar(true); } }, txt);
+    let soAlto = false, trajOn = false, trajDados = null, trajDia = null, trajGen = 0, trajAvisou = ''; const trajCamada = L.layerGroup();
+    const chipR = (txt, ativo, fn, semAjustar) => h('button', { class: 'chip-rapido' + (ativo() ? ' sel' : ''), 'aria-pressed': ativo() ? 'true' : 'false', onclick: (e) => { fn(); pintarChips(); desenhar(!semAjustar); } }, txt);
     const chipsR = h('div', { class: 'chips-rapidos' });
     function pintarChips() {
       chipsR.replaceChildren(chipR('Hoje', () => selDia.value === 'hoje', () => { selDia.value = selDia.value === 'hoje' ? '' : 'hoje'; diaIn.classList.add('oculto'); }),
         perfil() === 'coletor' && minhaEquipe() ? chipR('Minha equipe', () => selEq.value === minhaEquipe(), () => { selEq.value = selEq.value === minhaEquipe() ? '' : minhaEquipe(); }) : null,
         cRisco ? chipR('Risco alto', () => soAlto, () => { soAlto = !soAlto; if (soAlto) { selCor.value = 'risco'; if (selRisco) selRisco.value = ''; } }) : null,
-        ehCoord() && !Api.demo ? chipR('Trajetos', () => trajOn, () => { trajOn = !trajOn; trajDados = null; }) : null);
+        ehCoord() && !Api.demo ? chipR('Trajetos', () => trajOn, () => { trajOn = !trajOn; trajDados = null; trajAvisou = ''; }, true) : null);
       btFiltros.textContent = rotFiltros();
     }
     if (!S.filtrosAbertos) selBox.classList.add('oculto');
@@ -1476,6 +1498,8 @@
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
     const render = L.canvas({ padding: 0.3, tolerance: 8 });
     const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21, fadeAnimation: false, zoomControl: !celular }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4); // fadeAnimation desligada: a ficha que fecha não recebe mais toque
+    // declarados antes de qualquer espera: os botões e eventos do mapa podem ser tocados enquanto os dados carregam
+    let qdDados = null, qdSit = new Map(), selecao = null; let seguindo = false, euPrec = null, eu = null;
     if (S.fundo == null) S.fundo = (await Store.get('fundo')) || 'ruas';
     camadasFundo(mapa, false);
     const cores = ['#00546E', '#CD834C', '#6A1B9A', '#2E7D32', '#C62828', '#12A6C8'];
@@ -1487,7 +1511,6 @@
     if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, bairro: r.bairro || '', dia: diaLocal(r.criado_em), cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', rm: raioCopa(cArea ? r.valores[cArea.nome] : 0), foto: '', local: true });
     // quadras: desenhadas antes dos pontos, no mesmo canvas, para o toque no ponto ter prioridade
     const qdCamada = L.layerGroup().addTo(mapa); const rotulos = L.layerGroup().addTo(mapa);
-    let qdDados = null, qdSit = new Map(), selecao = null;
     const corQd = (q) => { const s = qdSit.get(q.n) || {}; if (selQd.value === 'eq') return s.equipe ? corEq(s.equipe) : '#9AA9B0'; return COR_QD[s.situacao || 'A levantar']; };
     const qdLayers = new Map();
     // faces de quadra: linhas sobre o contorno da quadra, por cima dela e por baixo dos pontos
@@ -1574,7 +1597,7 @@
     mapa.on('click', (e) => { if (fichaAberta()) return fecharFicha(); if (!selecao) tocarMapa(e.latlng, null); });
     // distância (em pixels na tela) do toque até cada face perto dele
     function facesPerto(ll) {
-      if (!qdDados || mapa.getZoom() < ZOOM_FACES) return [];
+      if (!qdDados || !selQd.value || mapa.getZoom() < ZOOM_FACES) return [];
       const pt = mapa.latLngToContainerPoint(ll); const a = mapa.containerPointToLatLng([pt.x - 40, pt.y + 40]), b = mapa.containerPointToLatLng([pt.x + 40, pt.y - 40]);
       const out = [];
       for (const q of qdDados.quadras) {
@@ -1705,13 +1728,13 @@
     const camada = L.layerGroup().addTo(mapa); trajCamada.addTo(mapa);
     // trajeto das equipes (coordenação): em cor própria, fora das paletas, e desligável
     async function pintarTrajetos() {
-      trajCamada.clearLayers(); if (!trajOn) return;
+      const gen = ++trajGen; trajCamada.clearLayers(); if (!trajOn) return; // só a chamada mais recente desenha
       const dv = selDia.value; const dia = dv === 'ontem' ? diaLocal(new Date(Date.now() - 864e5).toISOString()) : dv === 'outro' && diaIn.value ? diaIn.value : diaLocal(agoraISO());
       if (!trajDados || trajDia !== dia) { try { trajDados = await Api.b.trajetos(S.projeto.id, dia); trajDia = dia; } catch (e) { toast('Não foi possível carregar os trajetos: ' + e.message); trajOn = false; pintarChips(); return; } }
-      if (!trajOn || !document.body.contains(div)) return;
+      if (!trajOn || gen !== trajGen || !document.body.contains(div)) return;
       let n = 0;
       for (const t of trajDados) { if (selEq.value && t.equipe !== selEq.value) continue; const ll = Poly.dec(t.pontos); if (ll.length < 2) continue; n++; L.polyline(ll, { renderer: render, color: '#D81B60', weight: 3, opacity: 0.85, interactive: false }).addTo(trajCamada); L.circleMarker(ll[ll.length - 1], { renderer: render, radius: 4, color: '#fff', weight: 1, fillColor: '#D81B60', fillOpacity: 1, interactive: false }).addTo(trajCamada); }
-      if (!n) toast(`Nenhum trajeto em ${dia.split('-').reverse().join('/')}${selEq.value ? ' para ' + selEq.value : ''}.`);
+      const chaveAv = dia + '|' + selEq.value; if (!n && trajAvisou !== chaveAv) trajAvisou = chaveAv, toast(`Nenhum trajeto em ${dia.split('-').reverse().join('/')}${selEq.value ? ' para ' + selEq.value : ''}.`);
     }
     let porCidade = false, mexeu = false; mapa.on('dragstart', () => { mexeu = true; });
     const semFiltro = () => !busca.value.trim() && !selEq.value && !selDia.value && !(selRisco && selRisco.value) && !selBairro.value;
@@ -1832,7 +1855,6 @@
         preencherEquipes(); aplicarFiltroPainel(); S.mapaFiltro = null; desenhar(!usouAntes);
       } catch (e) { conta.textContent = conta.textContent.replace(/Carregando pontos\.\.\.| · atualizando\.\.\./g, ''); if (!document.body.contains(div)) return; if (!e.semRede) { desenhar(false); toast('Não foi possível atualizar os pontos agora. Ficam os guardados no aparelho.'); } else desenhar(false); }
     }
-    let eu = null;
     function limitesCidade() { let b = [Infinity, Infinity, -Infinity, -Infinity]; for (const q of qdDados.quadras) b = [Math.min(b[0], q.b[0]), Math.min(b[1], q.b[1]), Math.max(b[2], q.b[2]), Math.max(b[3], q.b[3])]; return L.latLngBounds([b[1], b[0]], [b[3], b[2]]); }
     // enquadra a cidade do projeto: a camada de quadras ou, sem ela, todos os pontos
     function verCidade() {
@@ -1841,7 +1863,6 @@
       toast('Este projeto ainda não tem quadras nem pontos no mapa.');
     }
     // minha posição: primeiro toque centraliza; o segundo passa a seguir (arrastar o mapa para de seguir)
-    let seguindo = false, euPrec = null;
     mapa.on('dragstart', () => { if (seguindo) { seguindo = false; btEu.classList.remove('ativo'); } });
     function centrar() {
       if (!S.pos) { ligarGps(); return toast('GPS ainda sem sinal.'); }
@@ -1999,9 +2020,10 @@
       const proj = S.projeto ? S.projeto.id : (projetos[0] || {}).id || '';
       const nIn = h('input', { class: 'entrada', type: 'number', min: 1, max: 30, value: 3 });
       const prefIn = h('input', { class: 'entrada', value: (proj || 'eq').slice(0, 3) + '-', autocapitalize: 'none' });
-      const iniN = (() => { let n = 1; while (us.some((x) => String(x.codigo).toUpperCase() === 'E' + n && String(x.projeto).split(',').includes(proj))) n++; return n; })();
-      const iniIn = h('input', { class: 'entrada', type: 'number', min: 1, value: iniN });
-      const selP = h('select', { class: 'entrada' }, projetos.map((p) => h('option', { value: p.id, selected: p.id === proj }, p.nome)));
+      const codUsado = (cod, pj) => us.some((x) => String(x.codigo).toUpperCase() === cod && String(x.projeto).split(',').includes(pj));
+      const iniDe = (pj) => { let n = 1; while (codUsado('E' + n, pj)) n++; return n; };
+      const iniIn = h('input', { class: 'entrada', type: 'number', min: 1, value: iniDe(proj) });
+      const selP = h('select', { class: 'entrada', onchange: () => { iniIn.value = iniDe(selP.value); } }, projetos.map((p) => h('option', { value: p.id, selected: p.id === proj }, p.nome)));
       const ok = await modal('Criar equipes em série', h('div', null, h('p', { class: 'dica' }, 'Cria as equipes de campo com usuário, senha, nome "Equipe N" e código "EN". No fim aparece a folha de acessos para imprimir ou copiar.'),
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Quantas equipes'), nIn), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Começar pela equipe número'), iniIn)),
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Início do usuário'), prefIn), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projeto'), selP))),
@@ -2012,6 +2034,7 @@
       const feitos = []; const erros = [];
       for (let k = 0; k < n; k++) {
         const num = ini + k; const login = pref + num; if (us.some((x) => x.login === login)) { erros.push(`${login}: já existe`); continue; }
+        if (codUsado('E' + num, selP.value)) { erros.push(`${login}: o código E${num} já é de outra equipe deste projeto`); continue; }
         const d = { login, senha: senha(), nome: 'Equipe ' + num, equipe: 'Equipe ' + num, codigo: 'E' + num, perfil: 'coletor', projeto: selP.value, ativo: 'sim', modo_copa: 'raios' };
         try { await Api.b.usuarioSalvar(d); feitos.push(d); } catch (e) { erros.push(`${login}: ${e.message}`); }
       }
@@ -2274,7 +2297,7 @@
     const mudou = !!(S.sessao && S.sessao.usuario.termo_aceito_em);
     const btn = h('button', { class: 'btn cheio', onclick: async () => {
       btn.disabled = true;
-      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch((e) => { if (!/desconhecida/i.test(e.message)) throw e; }); Object.assign(S.sessao.usuario, { termo_aceito_em: agoraISO(), termo_versao: TERMO_VERSAO }); S.termoLocal = TERMO_VERSAO; await Store.set('sessao', S.sessao); await Store.set('termo:' + S.sessao.u, S.sessao.usuario.termo_aceito_em); await Store.set('termoV:' + S.sessao.u, TERMO_VERSAO); rota(); if (perfil() !== 'cliente') ligarGps(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
+      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch(async (e) => { if (/desconhecida/i.test(e.message)) return; if (!navigator.onLine || /fetch|network|rede|Failed/i.test(e.message)) { await Store.set('termoPend:' + S.sessao.u, TERMO_VERSAO); return; } throw e; }); Object.assign(S.sessao.usuario, { termo_aceito_em: agoraISO(), termo_versao: TERMO_VERSAO }); S.termoLocal = TERMO_VERSAO; await Store.set('sessao', S.sessao); await Store.set('termo:' + S.sessao.u, S.sessao.usuario.termo_aceito_em); await Store.set('termoV:' + S.sessao.u, TERMO_VERSAO); rota(); if (perfil() !== 'cliente') ligarGps(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
     } }, 'Li e aceito');
     $app.replaceChildren(topo('Termo de uso e privacidade', mudou ? 'O termo mudou: leia e aceite de novo' : 'Leia antes de começar', null, null), h('main', null,
       mudou ? h('div', { class: 'info' }, 'Atualizamos o termo de uso e privacidade. Seus registros continuam guardados; é só ler e aceitar para seguir.') : null,
@@ -2411,7 +2434,7 @@
     let d; try { d = await dadosPainel(forcar); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, 'Não foi possível carregar o painel: ' + e.message)); return; }
     const A = analisarPainel(d, S.form); const p = d.projeto || S.projeto;
     const meta = +(p.meta || 0); const validados = d.validacao.Validado || 0;
-    const equipes = Object.keys(d.equipes).sort();
+    const equipes = Object.keys(d.equipes || {}).sort();
     const dias = Object.keys(d.porDia).sort(); const ult7 = dias.slice(-7); const media7 = ult7.length ? ult7.reduce((a, x) => a + Object.values(d.porDia[x]).reduce((s, v) => s + v, 0), 0) / ult7.length : 0;
     const faltam = meta ? Math.max(0, meta - d.total) : 0; const previsao = meta && media7 ? Math.ceil(faltam / media7) : null;
     const alertas = [];
@@ -2575,7 +2598,7 @@
     const A = analisarPainel(d, S.form); const p = d.projeto || S.projeto; const agora = new Date();
     const tab = (cab, linhas) => h('table', { class: 'tab-rel' }, h('thead', null, h('tr', null, cab.map((c) => h('th', null, c)))), h('tbody', null, linhas.map((l) => h('tr', null, l.map((c) => h('td', null, c))))));
     const pct = (n, t) => (t ? fmtP(n / t) : '');
-    const equipes = Object.keys(d.equipes).sort(); const dias = Object.keys(d.porDia).sort();
+    const equipes = Object.keys(d.equipes || {}).sort(); const dias = Object.keys(d.porDia).sort();
     Api.b.auditar && Api.b.auditar('relatorio', S.projeto.id, '');
     const cli = perfil() === 'cliente'; let nSec = 0; const sec = (t) => h('h2', null, `${++nSec}. ${t}`); // numeração sempre em sequência, sem buracos
     const semResp = !p.responsavel;
@@ -2655,11 +2678,11 @@
         const od = await carregarOS(false); const el = document.getElementById('med-os');
         const feitas = od.ordens.filter((o) => o.status === 'Concluída' && o.numero && (() => { const x = diaLocal(o.concluida_em); return x && x >= de.value && x <= ate.value; })()).sort((a, b) => +a.numero - +b.numero);
         if (el && !od.semServidor && od.ordens.length) {
-          const tipos = [...new Set(feitas.map((o) => o.tipo))].sort((a, b) => a.localeCompare(b, 'pt')); const eqs = [...new Set(feitas.map((o) => o.responsavel || '-'))].sort();
+          const tipos = [...new Set(feitas.map((o) => o.tipo))].sort((a, b) => a.localeCompare(b, 'pt')); const eqs = perfil() === 'cliente' ? ['Executadas'] : [...new Set(feitas.map((o) => o.responsavel || '-'))].sort(); const eqDe = (o) => (perfil() === 'cliente' ? 'Executadas' : o.responsavel || '-');
           el.replaceChildren(h('h2', null, (perfil() === 'cliente' ? '3' : '4') + '. Serviços executados no período (ordens de serviço concluídas)'),
             h('p', null, 'Conta as ordens pela data de conclusão em campo. As fotos de cada serviço ficam guardadas no sistema (antes e depois; plantio e avaliação de risco têm ao menos a foto de depois). ' + (feitas.filter((o) => o.prazo && diaLocal(o.concluida_em) > o.prazo).length ? `${pl(feitas.filter((o) => o.prazo && diaLocal(o.concluida_em) > o.prazo).length, 'ordem foi concluída', 'ordens foram concluídas')} depois do prazo.` : 'Todas as ordens com prazo foram concluídas dentro dele.')),
-            feitas.length ? [tab(['Tipo de serviço', ...eqs, 'Total'], [...tipos.map((t) => [t, ...eqs.map((e) => fmtN(feitas.filter((o) => o.tipo === t && (o.responsavel || '-') === e).length)), fmtN(feitas.filter((o) => o.tipo === t).length)]), ['Total', ...eqs.map((e) => fmtN(feitas.filter((o) => (o.responsavel || '-') === e).length)), fmtN(feitas.length)]]),
-              tab(['Ordem', 'Serviço', 'Árvore ou local', 'Equipe', 'Prazo', 'Concluída em', 'No prazo', 'Fotos'], feitas.map((o) => [numOS(o), o.tipo, o.codigo_arvore || o.endereco || '', o.responsavel || '', o.prazo ? o.prazo.split('-').reverse().join('/') : '', dataAno(o.concluida_em), o.prazo ? (diaLocal(o.concluida_em) <= o.prazo ? 'Sim' : 'Não') : '', [linkSeguro(o.foto_antes) ? h('a', { href: linkSeguro(o.foto_antes), target: '_blank', rel: 'noopener' }, 'antes') : null, linkSeguro(o.foto_depois) ? h('a', { href: linkSeguro(o.foto_depois), target: '_blank', rel: 'noopener' }, 'depois') : null].filter(Boolean).flatMap((x, i) => (i ? [' · ', x] : [x]))]))] : h('p', null, 'Nenhuma ordem de serviço concluída neste período.'));
+            feitas.length ? [tab(perfil() === 'cliente' ? ['Tipo de serviço', 'Total'] : ['Tipo de serviço', ...eqs, 'Total'], [...tipos.map((t) => [t, ...eqs.map((e) => fmtN(feitas.filter((o) => o.tipo === t && eqDe(o) === e).length)), fmtN(feitas.filter((o) => o.tipo === t).length)]), ['Total', ...eqs.map((e) => fmtN(feitas.filter((o) => eqDe(o) === e).length)), fmtN(feitas.length)]].map((l) => (perfil() === 'cliente' ? [l[0], l[l.length - 1]] : l))),
+              tab(['Ordem', 'Serviço', 'Árvore ou local', perfil() === 'cliente' ? null : 'Equipe', 'Prazo', 'Concluída em', 'No prazo', 'Fotos'].filter(Boolean), feitas.map((o) => [numOS(o), o.tipo, o.codigo_arvore || o.endereco || '', ...(perfil() === 'cliente' ? [] : [o.responsavel || '']), o.prazo ? o.prazo.split('-').reverse().join('/') : '', dataAno(o.concluida_em), o.prazo ? (diaLocal(o.concluida_em) <= o.prazo ? 'Sim' : 'Não') : '', [linkSeguro(o.foto_antes) ? h('a', { href: linkSeguro(o.foto_antes), target: '_blank', rel: 'noopener' }, 'antes') : null, linkSeguro(o.foto_depois) ? h('a', { href: linkSeguro(o.foto_depois), target: '_blank', rel: 'noopener' }, 'depois') : null].filter(Boolean).flatMap((x, i) => (i ? [' · ', x] : [x]))]))] : h('p', null, 'Nenhuma ordem de serviço concluída neste período.'));
         }
       } catch (e) { /* sem ordens */ }
     };
@@ -2674,7 +2697,7 @@
   const MOTIVO_ALERTA = [[/Sem coordenada|GPS/, 'Refazer a marcação do ponto ao lado do tronco (GPS com erro alto ou sem coordenada).'], [/Sem foto/, 'Falta a foto geral da árvore.'], [/Sem espécie|fora da lista/, 'Conferir a espécie (nome fora da lista ou em branco).'], [/Altura/, 'Conferir a altura (valor fora do comum).'], [/DAP|CAP/, 'Conferir a medida do CAP (valor fora do comum).'], [/Código repetido|duplicad/i, 'Código repetido: conferir se é o mesmo indivíduo.']];
   async function decidirRegistros(estado, uuids, amostra) {
     let obs = '';
-    const antes = {}; const cache = S.linhas && S.linhas[S.projeto.id]; if (cache) for (const l of cache.linhas) if (uuids.includes(l.uuid)) antes[l.uuid] = l.validacao || 'Pendente';
+    const antes = {}; const cache = S.linhas && S.linhas[S.projeto.id]; if (cache) for (const l of cache.linhas) if (uuids.includes(l.uuid)) antes[l.uuid] = { st: l.validacao || 'Pendente', validacao_obs: l.validacao_obs || '', validado_por: l.validado_por || '', validado_em: l.validado_em || '' };
     if (estado !== 'Validado') {
       const t = h('textarea', { class: 'entrada', placeholder: estado === 'Devolvido' ? 'Ex.: conferir a espécie e refazer a foto 1' : 'Ex.: registro duplicado' });
       const als = cache ? [...new Set(cache.linhas.filter((l) => uuids.includes(l.uuid)).flatMap((l) => l.__alertas || []))] : [];
@@ -2687,7 +2710,7 @@
       const c = S.linhas[S.projeto.id]; const agora = agoraISO(); const set = new Set(uuids);
       if (c) for (const l of c.linhas) if (set.has(l.uuid)) Object.assign(l, { validacao: estado, validacao_obs: obs, validado_por: S.sessao.u, validado_em: agora });
       S.painel = null;
-      const desfazer = Object.keys(antes).length ? { texto: 'Desfazer', fn: async () => { try { const por = {}; for (const [u, st] of Object.entries(antes)) (por[st] = por[st] || []).push(u); for (const [st, us] of Object.entries(por)) await Api.b.validar(S.projeto.id, us.map((u) => ({ uuid: u, estado: st, obs: '' }))); if (c) for (const l of c.linhas) if (antes[l.uuid]) Object.assign(l, { validacao: antes[l.uuid], validacao_obs: '' }); S.painel = null; toast('Desfeito.'); if (location.hash.startsWith('#validacao')) telaValidacao(); } catch (er) { toast('Não foi possível desfazer: ' + er.message, 5000); } } } : null;
+      const desfazer = Object.keys(antes).length ? { texto: 'Desfazer', fn: async () => { try { const its = Object.entries(antes).map(([u, a]) => ({ uuid: u, estado: a.st, obs: a.validacao_obs, desfazer: { validacao_obs: a.validacao_obs, validado_por: a.validado_por, validado_em: a.validado_em } })); for (let k = 0; k < its.length; k += 500) await Api.b.validar(S.projeto.id, its.slice(k, k + 500)); if (c) for (const l of c.linhas) if (antes[l.uuid]) { const a = antes[l.uuid]; Object.assign(l, { validacao: a.st, validacao_obs: a.validacao_obs, validado_por: a.validado_por, validado_em: a.validado_em }); } S.painel = null; toast('Desfeito.'); if (location.hash.startsWith('#validacao')) telaValidacao(); } catch (er) { toast('Não foi possível desfazer: ' + er.message, 5000); } } } : null;
       const nome = { Validado: 'validado(s)', Devolvido: 'devolvido(s)', Descartado: 'descartado(s)' }[estado] || estado.toLowerCase();
       toast(`${uuids.length} registro(s) ${nome}.`, 2600, desfazer); return true;
     } catch (e) { toast(e.message, 5000); return false; }
@@ -2761,7 +2784,7 @@
       if (await decidirRegistros(estado, uuids)) { uuids.forEach((u) => sel.delete(u)); desenhar(); }
     }
     function pintarAcoes() {
-      const vis = filtradas(); const semAlerta = vis.filter((l) => !l.__alertas.length && l.validacao !== 'Validado').map((l) => l.uuid);
+      const vis = filtradas(); const semAlerta = vis.filter((l) => !l.__alertas.length && ['Pendente', 'Corrigido'].includes(l.validacao)).map((l) => l.uuid); // nunca valida descartados ou devolvidos em lote
       acoes.replaceChildren(h('label', { class: 'tudo' }, h('input', { type: 'checkbox', checked: vis.length && vis.slice(0, F.limite).every((l) => sel.has(l.uuid)), onchange: (e) => { vis.slice(0, F.limite).forEach((l) => (e.target.checked ? sel.add(l.uuid) : sel.delete(l.uuid))); desenhar(); } }), ' Marcar os visíveis'),
         h('button', { class: 'btn peq', disabled: !sel.size, onclick: () => validarSel() }, `Validar (${sel.size})`),
         h('button', { class: 'btn sec peq', disabled: !sel.size, onclick: () => aplicar('Devolvido', [...sel]) }, 'Devolver'),
@@ -2804,11 +2827,11 @@
     const nav = S.navVal || []; const i = nav.indexOf(uuidR);
     const irPara = (k) => { if (k >= 0 && k < nav.length) ir('#ficha/' + encodeURIComponent(nav[k])); };
     const cc = campoCodigo(form);
-    const decidir = async (estado) => { if (!(await decidirRegistros(estado, [uuidR]))) return; if (i >= 0 && i + 1 < nav.length) irPara(i + 1); else ir('#validacao'); };
+    const decidir = async (estado) => { if (S.decidindo) return; S.decidindo = true; let ok; try { ok = await decidirRegistros(estado, [uuidR]); } finally { S.decidindo = false; } if (!ok) return; if (i >= 0 && i + 1 < nav.length) irPara(i + 1); else ir('#validacao'); };
     (S.fichasAbertas = S.fichasAbertas || new Set()).add(uuidR);
     if (!l.__alertas) { const ccx = campoCodigo(form); const cont = {}; linhas.forEach((x) => { const k = ccx ? String(x[ccx.nome] || '') : ''; if (k) cont[k] = (cont[k] || 0) + 1; }); l.__alertas = alertasDe(l, form, new Set(Object.keys(cont).filter((k) => cont[k] > 1))); }
     // atalhos no computador: V valida, D devolve, setas navegam
-    if (ehCoord()) { if (S.atalhoFicha) document.removeEventListener('keydown', S.atalhoFicha); S.atalhoFicha = (e) => { if (!location.hash.startsWith('#ficha/') || document.querySelector('.veu') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName)) return; const k = e.key.toLowerCase(); if (k === 'v') decidir('Validado'); else if (k === 'd') decidir('Devolvido'); else if (e.key === 'ArrowRight') irPara(i + 1); else if (e.key === 'ArrowLeft') irPara(i - 1); }; document.addEventListener('keydown', S.atalhoFicha); }
+    if (ehCoord()) { if (S.atalhoFicha) document.removeEventListener('keydown', S.atalhoFicha); S.atalhoFicha = (e) => { if (!location.hash.startsWith('#ficha/') || document.querySelector('.veu') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName)) return; if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || S.decidindo) return; const k = e.key.toLowerCase(); if (k === 'v') decidir('Validado'); else if (k === 'd') decidir('Devolvido'); else if (e.key === 'ArrowRight') irPara(i + 1); else if (e.key === 'ArrowLeft') irPara(i - 1); }; document.addEventListener('keydown', S.atalhoFicha); }
     const mapaDiv = h('div', { class: 'mapa-mini', style: 'height:220px' });
     $app.replaceChildren(topo((cc && l[cc.nome]) || 'Registro', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(ehCoord() ? '#validacao' : '#mapa'), 'aria-label': 'Voltar' }, ico('voltar')), nav.length && ehCoord() ? h('span', { class: 'nav-n' }, `${fmtN(i + 1)} de ${fmtN(nav.length)}`) : null),
       h('main', { class: 'ficha-servidor' },
