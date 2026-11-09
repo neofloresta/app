@@ -1,12 +1,11 @@
 {
- "versao": "2.5.0",
+ "versao": "2.5.1",
  "data": "2026-11-08",
  "notas": [
-  "App mais rápido: abre na hora com o que está no celular e atualiza em segundo plano; mapa leve com milhares de quadras",
-  "Faces de quadra: cada lado da quadra com o nome da rua e o comprimento, colorido pela situação no mapa",
-  "A face da calçada começa sozinha quando o GPS deixa claro qual é; marcar levantada ou levantada sem árvores (foto e largura)",
-  "Escolher o lado todo de uma rua de uma vez; a quadra fica levantada quando todas as faces estão",
-  "Quilômetros de calçada levantados por equipe no painel e na planilha de exportação",
-  "Mapa abre na cidade do projeto quando você está longe dela, botão Ver a cidade e aviso enquanto as quadras carregam"
+  "Campo Espécie: dá para digitar letra por letra, com as sugestões aparecendo",
+  "Mapa sem internet mostra os pontos guardados no aparelho, com aviso de quando são",
+  "Imagem de satélite não some mais com o zoom bem próximo",
+  "Mapa guarda as imagens das áreas por onde a equipe já passou, para usar sem internet",
+  "Toque logo depois de fechar a ficha do mapa não aciona mais um botão escondido"
  ]
 }

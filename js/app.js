@@ -1,6 +1,6 @@
 // Neofloresta Inventário
 (() => {
-  const VERSAO = '2.5.0';
+  const VERSAO = '2.5.1';
   const TERMO_VERSAO = '2026-11';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -775,8 +775,10 @@
 
     function mudar(c, v) {
       r.valores[c.nome] = v; r.mexido = true; recalcular(r);
+      const antes = camposRegra.has(c.nome) ? JSON.stringify(E) : '';
       E = estadoCampos(form, r.valores);
-      if (camposRegra.has(c.nome)) { salvarRascunho(); return render(); }
+      // campo de regra (ex.: Espécie "Não identificada" mostra as fotos): redesenha só se o que aparece mudou; senão o teclado fecharia a cada letra
+      if (camposRegra.has(c.nome) && JSON.stringify(E) !== antes) { salvarRascunho(); return render(); }
       for (const [nome, el] of calcEls) pintarCalc(el, form.campos.find((x) => x.nome === nome));
       salvarRascunho(); pintarAbas();
       if (S.tentou) { const box = conteudo.querySelector(`[data-campo="${CSS.escape(c.nome)}"]`); if (box) box.classList.toggle('falta', E[c.nome].obrig && vazio(c, valorDe(r, c))); }
@@ -1124,18 +1126,19 @@
     const selQd = h('select', { class: 'entrada oculto' }, h('option', { value: 'sit' }, 'Quadras por situação'), h('option', { value: 'eq' }, 'Quadras por equipe'), h('option', { value: '' }, 'Sem quadras'));
     if (S.qdModo != null) selQd.value = S.qdModo;
     const conta = h('small', { class: 'mapa-conta' });
+    const faixaOff = h('div', { class: 'faixa-off oculto', role: 'status' });
     const pintarConta = () => { conta.textContent = conta.textContent.replace(/ · Carregando quadras\.\.\./, '') + (conta.dataset.qd ? ' · ' + conta.dataset.qd : ''); };
     // em tela baixa os filtros ficam recolhidos num botão, para sobrar mapa
     const selBox = h('div', { class: 'mapa-sel' }, selEq, selDia, diaIn, selRisco, selBairro, selCor, selQd);
     const baixa = window.innerHeight < 760; if (S.filtrosAbertos == null) S.filtrosAbertos = !baixa;
     const btFiltros = h('button', { class: 'btn sec peq bt-filtros' + (baixa ? '' : ' oculto'), onclick: () => { S.filtrosAbertos = !S.filtrosAbertos; selBox.classList.toggle('oculto', !S.filtrosAbertos); btFiltros.textContent = S.filtrosAbertos ? 'Esconder filtros' : 'Filtros'; setTimeout(() => mapa.invalidateSize(), 50); } }, S.filtrosAbertos ? 'Esconder filtros' : 'Filtros');
     if (!S.filtrosAbertos) selBox.classList.add('oculto');
-    const barra = h('div', { class: 'mapa-filtros' }, h('div', { class: 'mapa-busca' }, busca, btFiltros), selBox, conta);
+    const barra = h('div', { class: 'mapa-filtros' }, h('div', { class: 'mapa-busca' }, busca, btFiltros), selBox, conta, faixaOff);
     const barraSel = h('div', { class: 'qd-selecao oculto' });
     $app.replaceChildren(h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, h('button', { class: 'gps', onclick: () => verCidade() }, 'Ver a cidade'), h('button', { class: 'gps', onclick: centrar }, 'Minha posição'))), barra, div, barraSel));
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
     const render = L.canvas({ padding: 0.3, tolerance: 8 });
-    const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21 }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
+    const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21, fadeAnimation: false }) // sem animação: a ficha que fecha não recebe mais toque.setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4);
     if (S.fundo == null) S.fundo = (await Store.get('fundo')) || 'ruas';
     camadasFundo(mapa, false);
     const cores = ['#00546E', '#CD834C', '#6A1B9A', '#2E7D32', '#C62828', '#12A6C8'];
@@ -1358,23 +1361,25 @@
     const preencherEquipes = () => { preencherBairros(); const atual = selEq.value; selEq.replaceChildren(h('option', { value: '' }, 'Todas as equipes'), ...equipes.filter((e) => e !== '-').map((e) => h('option', { value: e, selected: e === atual }, e))); };
     const aplicarFiltroPainel = () => { if (!S.mapaFiltro) return; if (S.mapaFiltro.equipe) selEq.value = S.mapaFiltro.equipe; selDia.value = S.mapaFiltro.dia || ''; };
     preencherEquipes(); aplicarFiltroPainel(); desenhar(true); carregarQdMapa();
-    if (!Api.demo && navigator.onLine) {
-      conta.textContent = 'Carregando pontos...'; pintarConta();
+    if (!Api.demo) {
+      conta.textContent = navigator.onLine ? 'Carregando pontos...' : ''; pintarConta();
       try {
         const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link', 'bairro_aprox', 'criado_em'].map((x) => x || '');
         // abre com os pontos da última consulta e troca pelos do servidor quando chegarem
         const addLinhas = (ls) => { for (const l of ls) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6], cat: l[7], foto: l[8], bairro: l[9] || '', dia: l[10] ? diaLocal(l[10]) : '', local: false }); };
         const kc = 'mapapts:' + S.projeto.id + ':' + (S.sessao ? S.sessao.u : '');
         const antes = await Store.get(kc);
-        if (antes && antes.campos === campos.join('|') && document.body.contains(div)) { addLinhas(antes.linhas); preencherEquipes(); aplicarFiltroPainel(); desenhar(true); conta.textContent += ' · atualizando...'; }
+        if (antes && antes.campos === campos.join('|') && document.body.contains(div)) { addLinhas(antes.linhas); preencherEquipes(); aplicarFiltroPainel(); desenhar(true); conta.textContent += navigator.onLine ? ' · atualizando...' : ''; }
+        // sem internet: fica com os pontos guardados no aparelho e avisa de quando são
+        if (!navigator.onLine) { faixaOff.textContent = antes ? (antes.em ? `Sem internet. Pontos guardados no aparelho em ${dataAno(antes.em)}.` : 'Sem internet. Pontos guardados no aparelho.') : 'Sem internet. Só os seus cadastros deste aparelho aparecem.'; faixaOff.classList.remove('oculto'); return; }
         const m = await Api.b.mapa(S.projeto.id, campos);
-        Store.set(kc, { campos: campos.join('|'), linhas: m.linhas });
+        Store.set(kc, { campos: campos.join('|'), linhas: m.linhas, em: agoraISO() });
         if (!document.body.contains(div)) return;
         const usouAntes = antes && antes.campos === campos.join('|');
         if (usouAntes) for (let i = pts.length - 1; i >= 0; i--) if (!pts[i].local) { vistos.delete(pts[i].uid); pts.splice(i, 1); }
         addLinhas(m.linhas);
         preencherEquipes(); aplicarFiltroPainel(); S.mapaFiltro = null; desenhar(!usouAntes);
-      } catch (e) { conta.textContent = ''; toast('Não foi possível carregar os pontos das outras equipes.'); }
+      } catch (e) { pintarConta(); toast('Não foi possível atualizar os pontos agora. Ficam os guardados no aparelho.'); }
     }
     let eu = null;
     function limitesCidade() { let b = [Infinity, Infinity, -Infinity, -Infinity]; for (const q of qdDados.quadras) b = [Math.min(b[0], q.b[0]), Math.min(b[1], q.b[1]), Math.max(b[2], q.b[2]), Math.max(b[3], q.b[3])]; return L.latLngBounds([b[1], b[0]], [b[3], b[2]]); }
@@ -2929,9 +2934,12 @@
 
   // ---------- Fundo do mapa: ruas ou satélite ----------
   function camadasFundo(mapa, satelite) {
-    const ruas = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap' });
-    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 19, attribution: 'Imagem © Esri, Maxar, Earthstar Geographics' });
-    const rot = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 19 });
+    // satélite: acima do zoom 18 várias cidades não têm imagem ("not available"); o app amplia a do zoom 18
+    const ruas = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap' });
+    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 18, crossOrigin: true, attribution: 'Imagem © Esri, Maxar, Earthstar Geographics' });
+    const rot = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 18, crossOrigin: true });
+    // se o servidor de mapa recusar o pedido com CORS, volta ao pedido simples (a imagem aparece, só não fica guardada)
+    for (const ly of [ruas, sat, rot]) ly.on('tileerror', () => { if (ly.options.crossOrigin && navigator.onLine && !ly.__semCors) { ly.__semCors = true; ly.options.crossOrigin = false; ly.redraw(); } });
     const hib = L.layerGroup([sat, rot]);
     const escolha = satelite ? 'sat' : (S.fundo || 'ruas');
     (escolha === 'sat' ? hib : ruas).addTo(mapa);
