@@ -1215,7 +1215,7 @@
       for (const q of qdDados.quadras) { if (q.b[2] < b.getWest() || q.b[0] > b.getEast() || q.b[3] < b.getSouth() || q.b[1] > b.getNorth()) continue; if (++n > 400) break; L.marker(Quadras.centro(q), { interactive: false, keyboard: false, icon: L.divIcon({ className: 'qd-rot', html: h('span', null, q.n), iconSize: null }) }).addTo(rotulos); }
     }
     let zAnt = mapa.getZoom();
-    mapa.on('moveend zoomend', () => { sincQdVista(); pintarRotulos(); const z = mapa.getZoom(); if ((z >= ZOOM_FACES) !== (zAnt >= ZOOM_FACES)) legenda(); zAnt = z; }); window.__app.mapa = mapa;
+    mapa.on('moveend zoomend', () => setTimeout(() => { if (!document.body.contains(div)) return; sincQdVista(); pintarRotulos(); const z = mapa.getZoom(); if ((z >= ZOOM_FACES) !== (zAnt >= ZOOM_FACES)) legenda(); zAnt = z; }, 0)); window.__app.mapa = mapa;
     const podeMarcarQd = (s) => ehCoord() || (perfil() === 'coletor' && (!s.equipe || s.equipe === minhaEquipe()));
     function clicarQuadra(q, ll) {
       if (selecao) { if (selTipo !== 'qd') return toast('Toque nas linhas das faces para escolher.'); if (selecao.has(q.n)) selecao.delete(q.n); else selecao.add(q.n); pintarSelecao(); restilizar([q.n]); return; }
