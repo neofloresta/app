@@ -1,6 +1,6 @@
 // Neofloresta Inventário
 (() => {
-  const VERSAO = '2.5.1';
+  const VERSAO = '2.6.0';
   const TERMO_VERSAO = '2026-11-b';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');

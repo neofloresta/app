@@ -1,11 +1,14 @@
 {
- "versao": "2.5.1",
- "data": "2026-11-08",
+ "versao": "2.6.0",
+ "data": "2026-11-09",
  "notas": [
-  "Campo Espécie: dá para digitar letra por letra, com as sugestões aparecendo",
-  "Mapa sem internet mostra os pontos guardados no aparelho, com aviso de quando são",
-  "Imagem de satélite não some mais com o zoom bem próximo",
-  "Mapa guarda as imagens das áreas por onde a equipe já passou, para usar sem internet",
-  "Toque logo depois de fechar a ficha do mapa não aciona mais um botão escondido"
+  "Nova árvore abre a tela de marcação do ponto: o app mostra o erro do GPS e marca sozinho quando fica em até 5 m",
+  "Depois de começar a preencher, só avança de etapa com os obrigatórios da etapa preenchidos (e diz o que falta)",
+  "Espécie acha parecidos mesmo com erro de grafia; botão Sem ID leva direto às fotos de identificação",
+  "Fotos sobem na qualidade original pelo Wi-Fi; o app confere no servidor se tudo chegou e manda de novo o que faltar",
+  "Botão Encerrar face na tela inicial; calçada sem árvores é só a foto",
+  "Mapa com botões grandes embaixo, ficha que sobe de baixo, toque certo na calçada e pontos no tamanho da copa",
+  "Turno com trajeto (quando a coordenação liga), Modo Sol e ajuda com perguntas frequentes",
+  "Coordenação: tela Hoje no campo, validação com Desfazer, painel em abas e equipes criadas em série"
  ]
 }
