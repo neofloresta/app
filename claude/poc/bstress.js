@@ -96,7 +96,7 @@ const ctxq = { TextDecoder, console }; vm.createContext(ctxq); vm.runInContext(f
   await pa.screenshot({ path: 'estresse-mapa.png' });
   ok('S.7', kReg.includes(N.toLocaleString('pt-BR')), `painel em ${(tPainel / 1000).toFixed(1)} s: "${kReg.replace(/\s+/g, ' ')}"; mapa com ${N} pontos em ${(tMapa / 1000).toFixed(1)} s`);
   const erros = [...pa.erros, ...eqs.flatMap((E) => E.p.erros)]; ok('S.8', !erros.length, erros.length ? erros.slice(0, 3).join(' | ') : 'sem erros de JavaScript nos 6 aparelhos');
-  const lentos = fs.readFileSync(__dirname + '/mock.log', 'utf8').split('\n').filter((l) => /\[lento\] registro/.test(l)).map((l) => +l.split(' ')[2]);
+  const lentos = fs.readFileSync(__dirname + '/mock-' + new URL(L.MOCK).port + '.log', 'utf8').split('\n').filter((l) => /\[lento\] registro/.test(l)).map((l) => +l.split(' ')[2]);
   console.log(`servidor simulado: ${lentos.length} envios de registro acima de 200 ms (máx ${Math.max(0, ...lentos)} ms); tempo total ${min()}`);
   fs.writeFileSync(__dirname + '/res-bstress.json', JSON.stringify({ N, R, tEnvioMin: tEnvio / 60, tPainel, tMapa, lentos: lentos.length }, null, 1));
   const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);

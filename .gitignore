@@ -5,3 +5,5 @@ claude/poc/*.png
 claude/poc/mock.log
 claude/poc/mock.pid
 claude/poc/res-*.json
+claude/poc/mock-*.log
+claude/poc/mock-*.pid

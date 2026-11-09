@@ -11,12 +11,12 @@ let senhaAdmin = null;
 async function subir() {
   // derruba só o servidor desta pasta (outros testes podem estar rodando em outras portas)
   try { execSync(`pkill -f "http.server ${new URL(WEB).port}"`); } catch (e) {}
-  try { process.kill(+fs.readFileSync(path.join(__dirname, 'mock.pid'), 'utf8')); } catch (e) {}
+  try { process.kill(+fs.readFileSync(path.join(__dirname, 'mock-' + new URL(MOCK).port + '.pid'), 'utf8')); } catch (e) {}
   try { execSync(`fuser -k ${new URL(MOCK).port}/tcp`, { stdio: 'ignore' }); } catch (e) {}
   await espera(300);
   const web = spawn('python3', ['-m', 'http.server', new URL(WEB).port], { cwd: APP, stdio: 'ignore', detached: true }); web.unref();
-  const log = fs.openSync(path.join(__dirname, 'mock.log'), 'w');
-  const m = spawn('node', ['mock.js', GS], { cwd: __dirname, stdio: ['ignore', log, log], detached: true, env: Object.assign({}, process.env, { PORTA: new URL(MOCK).port }) }); m.unref(); fs.writeFileSync(path.join(__dirname, 'mock.pid'), String(m.pid));
+  const log = fs.openSync(path.join(__dirname, 'mock-' + new URL(MOCK).port + '.log'), 'w');
+  const m = spawn('node', ['mock.js', GS], { cwd: __dirname, stdio: ['ignore', log, log], detached: true, env: Object.assign({}, process.env, { PORTA: new URL(MOCK).port }) }); m.unref(); fs.writeFileSync(path.join(__dirname, 'mock-' + new URL(MOCK).port + '.pid'), String(m.pid));
   for (let i = 0; i < 50; i++) { await espera(150); try { await fetch(MOCK); await fetch(WEB); break; } catch (e) {} }
   senhaAdmin = fs.readFileSync(path.join(__dirname, 'senha.txt'), 'utf8').trim();
   return senhaAdmin;
@@ -82,6 +82,12 @@ async function celular(b, extra = {}) {
   const { devices } = require('playwright');
   const ctx = await b.newContext({ ...devices['Pixel 7'], geolocation: { latitude: -20.1436, longitude: -44.8908, accuracy: 4 }, permissions: ['geolocation'], locale: 'pt-BR', ...extra });
   const p = await ctx.newPage(); p.erros = []; p.on('pageerror', (e) => p.erros.push(e.message));
+  // GPS de celular de verdade entrega uma leitura por segundo mesmo parado; o emulado só avisa quando a posição muda.
+  // Aqui a posição "treme" 1 cm a cada 700 ms para a tela de marcação receber leituras como no campo.
+  const geo = Object.assign({ latitude: -20.1436, longitude: -44.8908, accuracy: 4 }, extra.geolocation || {}); const setOrig = ctx.setGeolocation.bind(ctx);
+  ctx.setGeolocation = async (g) => { if (g) Object.assign(geo, g); return setOrig(g); };
+  let k = 0; const tm = setInterval(() => { if (extra.semTremer) return; k++; setOrig({ ...geo, latitude: geo.latitude + (k % 2) * 1e-7 }).catch(() => clearInterval(tm)); }, 700); tm.unref();
+  ctx.on('close', () => clearInterval(tm));
   return { ctx, p };
 }
 async function logar(p, u, s) {

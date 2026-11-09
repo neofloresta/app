@@ -225,6 +225,7 @@
     if (r === 'admin' && pf === 'admin') return telaAdmin(a);
     if (!S.projeto) { if (pf === 'admin') return telaAdmin('projetos'); return telaLogin(); }
     if (r === 'painel' && pf !== 'coletor') return telaPainel();
+    if (r === 'hoje' && ehCoord()) return telaHoje(a || null);
     if (r === 'relatorio' && pf !== 'coletor') return telaRelatorio();
     if (r === 'medicao' && pf !== 'coletor') return telaMedicao();
     if (r === 'mapa') return telaMapa();
@@ -455,6 +456,7 @@
       h('main', null,
         S.expirada ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo'), ' Os registros continuam guardados aqui.') : null,
         h('button', { class: 'btn nova canto', onclick: novoRegistro }, ico('mais'), 'Nova árvore'),
+        ehCoord() ? h('div', { class: 'linha-btn coord-atalhos' }, h('button', { class: 'btn sec', onclick: () => ir('#hoje') }, 'Hoje no campo'), h('button', { class: 'btn sec', onclick: () => ir('#painel') }, 'Panorama geral')) : null,
         h('div', { id: 'encerrar-face' }),
         h('div', { id: 'aviso-versao' }),
         h('div', { id: 'aviso-gps' }), h('div', { id: 'continuar' }),
@@ -568,6 +570,7 @@
       it('Ordens de serviço', () => ir('#ordens')),
 
       perfil() !== 'cliente' ? it('Enviar agora', () => sincronizar()) : null,
+      ehCoord() ? it('Hoje no campo', () => ir('#hoje')) : null,
       perfil() !== 'coletor' ? it('Painel do projeto', () => ir('#painel')) : null,
       ehCoord() ? it('Validação dos registros', () => ir('#validacao')) : null,
       perfil() === 'admin' ? it('Coordenação (exportar, equipes, formulários, segurança)', () => ir('#admin/exportar')) : null,
@@ -1578,7 +1581,7 @@
     selQd.addEventListener('change', () => { S.qdModo = selQd.value; desenhar(false); });
     const preencherBairros = () => { const bs = [...new Set(pts.map((o) => o.bairro).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt')); const at = selBairro.value; selBairro.replaceChildren(h('option', { value: '' }, 'Todos os bairros'), bs.map((b) => h('option', { value: b, selected: b === at }, b))); selBairro.classList.toggle('oculto', !bs.length); };
     const preencherEquipes = () => { preencherBairros(); const atual = selEq.value; selEq.replaceChildren(h('option', { value: '' }, 'Todas as equipes'), ...equipes.filter((e) => e !== '-').map((e) => h('option', { value: e, selected: e === atual }, e))); };
-    const aplicarFiltroPainel = () => { if (!S.mapaFiltro) return; if (S.mapaFiltro.equipe) selEq.value = S.mapaFiltro.equipe; selDia.value = S.mapaFiltro.dia || ''; };
+    const aplicarFiltroPainel = () => { if (!S.mapaFiltro) return; if (S.mapaFiltro.equipe) selEq.value = S.mapaFiltro.equipe; const fd = S.mapaFiltro.dia || ''; if (/^\d{4}-\d{2}-\d{2}$/.test(fd)) { selDia.value = 'outro'; diaIn.value = fd; diaIn.classList.remove('oculto'); } else selDia.value = fd; };
     preencherEquipes(); aplicarFiltroPainel(); desenhar(true); carregarQdMapa();
     if (!Api.demo) {
       conta.textContent = navigator.onLine ? 'Carregando pontos...' : ''; pintarConta();
@@ -2072,7 +2075,8 @@
         kpi('Espécies', fmtN(d.nEspecies), A.esp[0] ? 'mais comum: ' + A.esp[0].rot : ''),
         A.risco.length ? kpi('Risco alto ou severo', fmtN(A.altoN), A.nRisco ? fmtP(A.altoN / A.nRisco) + ' dos indivíduos avaliados' : '', A.altoN ? 'alerta' : '') : null,
         kpi('Ritmo', fmtN(Math.round(media7)), 'registros por dia (últimos 7 dias de campo)' + (previsao != null ? ` · faltam cerca de ${fmtN(previsao)} dias` : '')),
-        d.gps ? kpi('Precisão do GPS', fmtN(d.gps.mediana) + ' m', fmtP(d.gps.ate5m) + ' com erro até 5 m') : null),
+        d.gps ? kpi('Precisão do GPS', fmtN(d.gps.mediana) + ' m', fmtP(d.gps.ate5m) + ' com erro até 5 m') : null,
+        perfil() !== 'cliente' && d.tempos && d.tempos.dur != null ? kpi('Tempo por amostra', fmtMin(d.tempos.dur), `mediana · intervalo entre amostras ${fmtMin(d.tempos.int)}`) : null),
       alertas.length && perfil() !== 'cliente' ? h('div', { class: 'cartao alertas' }, h('h3', null, 'Pontos de atenção'), h('ul', null, alertas.map((a) => h('li', null, a)))) : null,
       h('div', { class: 'grade-cartoes' },
         h('div', { class: 'cartao larga' }, h('h3', null, 'Registros por dia de campo'), serieDias(d.porDia, equipes)),
@@ -2089,6 +2093,54 @@
         perfil() === 'cliente' ? h('button', { class: 'btn sec', onclick: () => exportarCliente() }, 'Baixar dados') : null));
     pintarPainelOS(corpo); pintarPainelQd(corpo, forcar);
   }
+  // "Hoje no campo": o dia de cada equipe, com os dias anteriores a um toque
+  const fmtMin = (m) => (m == null ? '-' : m < 1 ? Math.round(m * 60) + ' s' : fmtN(Math.round(m * 10) / 10) + ' min');
+  const SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  async function telaHoje(diaSel, forcar) {
+    const corpo = h('main', { class: 'hoje' }, h('div', { class: 'info' }, 'Carregando o dia das equipes...'));
+    $app.replaceChildren(topo('Hoje no campo', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')))), corpo);
+    let d; try { d = await dadosPainel(forcar); } catch (e) { corpo.replaceChildren(h('div', { class: 'aviso' }, 'Não foi possível carregar: ' + e.message), h('button', { class: 'btn', onclick: () => telaHoje(diaSel, true) }, 'Tentar de novo')); return; }
+    if (!document.body.contains(corpo)) return;
+    const diario = d.diario || {}; const hoje = diaLocal(agoraISO()); const ontem = diaLocal(new Date(Date.now() - 864e5).toISOString());
+    const dias = [...new Set([hoje, ...Object.keys(diario)])].sort().reverse();
+    const sel = diaSel && dias.includes(diaSel) ? diaSel : diaSel || hoje;
+    const nomeDia = (x) => { const dt = new Date(x + 'T12:00:00'); return x === hoje ? 'Hoje' : x === ontem ? 'Ontem' : `${SEMANA[dt.getDay()]} ${x.slice(8, 10)}/${x.slice(5, 7)}`; };
+    const totDia = (x) => Object.values(diario[x] || {}).reduce((a, v) => a + v.n, 0);
+    const chips = h('div', { class: 'dias-chips', role: 'tablist' }, dias.map((x) => h('button', { class: 'dia-chip' + (x === sel ? ' sel' : ''), role: 'tab', 'aria-selected': x === sel ? 'true' : 'false', onclick: () => telaHoje(x) }, h('b', null, nomeDia(x)), h('small', null, pl(totDia(x), 'registro', 'registros')))));
+    const outro = h('input', { type: 'date', class: 'entrada dia-outro', value: sel, max: hoje, 'aria-label': 'Escolher outro dia', onchange: () => outro.value && telaHoje(outro.value) });
+    const eqs = diario[sel] || {}; const lista = Object.entries(eqs).sort((a, b) => b[1].n - a[1].n);
+    const cCat = S.form && S.form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
+    const rotCat = (v) => { const o = cCat && cCat.opcoes.find((x) => String(x.v) === String(v)); return o ? o.t.replace(/\s*\(.*\)/, '') : v; };
+    const n = lista.reduce((a, [, v]) => a + v.n, 0);
+    const meds = (k) => { const v = lista.map(([, x]) => x[k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    const T = d.tempos || {};
+    const dt = new Date(sel + 'T12:00:00');
+    corpo.replaceChildren(
+      chips, h('div', { class: 'hoje-outro' }, h('label', null, 'Outro dia: ', outro), h('small', null, 'Atualizado às ' + new Date(d.gerado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), ' ', h('button', { class: 'btn sec peq', onclick: () => telaHoje(sel, true) }, 'Atualizar'))),
+      h('h2', { class: 'painel-tit' }, (sel === hoje ? 'Hoje, ' : '') + dt.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })),
+      h('div', { class: 'kpis' },
+        kpi('Registros no dia', fmtN(n), lista.length ? pl(lista.length, 'equipe em campo', 'equipes em campo') : 'nenhuma equipe enviou registros'),
+        kpi('Tempo por amostra', fmtMin(meds('dur')), 'mediana do início ao fim do cadastro' + (T.dur != null ? ` · no projeto ${fmtMin(T.dur)}` : '')),
+        kpi('Intervalo entre amostras', fmtMin(meds('int')), 'de um registro ao próximo, sem pausas' + (T.int != null ? ` · no projeto ${fmtMin(T.int)}` : '')),
+        kpi('Precisão do GPS', meds('gps') != null ? fmtN(Math.round(meds('gps') * 10) / 10) + ' m' : '-', 'mediana do erro', meds('gps') > 7 ? 'alerta' : '')),
+      lista.length ? h('div', { class: 'hoje-equipes' }, lista.map(([e, v]) => h('div', { class: 'cartao hoje-eq' },
+        h('div', { class: 'hoje-eq-cab' }, h('b', null, e), h('span', { class: 'hoje-n' }, fmtN(v.n))),
+        h('small', null, sel === hoje ? `Começou às ${v.ini} · último registro às ${v.fim}` : `Das ${v.ini} às ${v.fim}`),
+        h('dl', { class: 'hoje-dl' },
+          h('dt', null, 'Tempo por amostra'), h('dd', null, fmtMin(v.dur)),
+          h('dt', null, 'Intervalo'), h('dd', null, fmtMin(v.int)),
+          h('dt', null, 'GPS'), h('dd', { class: v.gps > 7 ? 'ruim' : '' }, v.gps != null ? '±' + fmtN(v.gps) + ' m' : '-'),
+          v.aguardando != null ? [h('dt', null, 'Aguardando validação'), h('dd', null, fmtN(v.aguardando))] : null,
+          v.devolvidos ? [h('dt', null, 'Devolvidos'), h('dd', { class: 'ruim' }, fmtN(v.devolvidos))] : null),
+        Object.keys(v.cat || {}).length ? h('div', { class: 'hoje-cats' }, Object.entries(v.cat).sort((a, b) => b[1] - a[1]).map(([c, k]) => h('span', { class: 'selo' }, `${rotCat(c)}: ${fmtN(k)}`))) : null,
+        h('button', { class: 'btn sec', onclick: () => { S.mapaFiltro = { equipe: e, dia: sel === hoje ? 'hoje' : sel }; ir('#mapa'); } }, 'Ver os pontos no mapa')))) : h('div', { class: 'info' }, sel === hoje ? 'Nenhum registro chegou hoje ainda. Os registros aparecem aqui quando as equipes enviam (o envio é automático quando há internet).' : 'Nenhum registro neste dia.'),
+      T.porCategoria && Object.keys(T.porCategoria).length ? h('div', { class: 'cartao' }, h('h3', null, 'Tempo por amostra em todo o projeto'),
+        h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Categoria'), h('th', null, 'Tempo (mediana)'), h('th', null, 'Amostras')),
+          Object.entries(T.porCategoria).sort((a, b) => b[1].n - a[1].n).map(([c, x]) => h('tr', null, h('td', null, c ? rotCat(c) : 'Sem categoria'), h('td', null, fmtMin(x.dur)), h('td', null, fmtN(x.n))))),
+        h('p', { class: 'dica' }, 'Tempo do início ao fim de cada cadastro. Cadastros que ficaram abertos mais de 1 hora não entram na conta.')) : null,
+      h('div', { class: 'linha-btn', style: 'margin:10px 0 30px' }, h('button', { class: 'btn', onclick: () => ir('#painel') }, 'Panorama geral do projeto'), h('button', { class: 'btn sec', onclick: () => ir('#validacao') }, 'Validar registros')));
+    const s_ = chips.querySelector('.sel'); if (s_ && s_.scrollIntoView) s_.scrollIntoView({ inline: 'center', block: 'nearest' });
+  }
   // rendimento de cada equipe (dupla): total, hoje, média por dia de campo e melhor dia
   function rendimentoEquipes(d, equipes) {
     const hoje = diaLocal(agoraISO()); const dias = Object.keys(d.porDia || {}).sort(); const ult7 = dias.slice(-7);
@@ -2096,12 +2148,13 @@
       const porDia = dias.map((x) => [x, (d.porDia[x] || {})[e] || 0]).filter(([, n]) => n);
       const tot = porDia.reduce((a, [, n]) => a + n, 0); const melhor = porDia.reduce((m, x) => (x[1] > m[1] ? x : m), ['', 0]);
       const n7 = ult7.map((x) => (d.porDia[x] || {})[e] || 0).filter((n) => n); const media = n7.length ? n7.reduce((a, b) => a + b, 0) / n7.length : 0;
-      return { e, tot, hoje: (d.porDia[hoje] || {})[e] || 0, diasCampo: porDia.length, media, melhor };
+      const te = ((d.tempos || {}).porEquipe || {})[e] || {};
+      return { e, tot, hoje: (d.porDia[hoje] || {})[e] || 0, diasCampo: porDia.length, media, melhor, dur: te.dur, int: te.int };
     }).sort((a, b) => b.media - a.media);
     const dBR = (x) => (x ? x.split('-').reverse().slice(0, 2).join('/') : '');
     return h('div', { class: 'cartao tab-rolagem' }, h('h3', null, 'Rendimento por equipe'),
-      h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Equipe'), h('th', null, 'Hoje'), h('th', null, 'Média por dia de campo (últimos 7)'), h('th', null, 'Dias de campo'), h('th', null, 'Melhor dia'), h('th', null, 'Total'), h('th', null, '')),
-        lin.map((x) => h('tr', null, h('td', null, x.e), h('td', null, fmtN(x.hoje)), h('td', null, fmtN(Math.round(x.media * 10) / 10)), h('td', null, fmtN(x.diasCampo)), h('td', null, x.melhor[1] ? `${fmtN(x.melhor[1])} em ${dBR(x.melhor[0])}` : ''), h('td', null, fmtN(x.tot)),
+      h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Equipe'), h('th', null, 'Hoje'), h('th', null, 'Média por dia de campo (últimos 7)'), h('th', null, 'Dias de campo'), h('th', null, 'Melhor dia'), h('th', null, 'Tempo por amostra'), h('th', null, 'Intervalo'), h('th', null, 'Total'), h('th', null, '')),
+        lin.map((x) => h('tr', null, h('td', null, x.e), h('td', null, fmtN(x.hoje)), h('td', null, fmtN(Math.round(x.media * 10) / 10)), h('td', null, fmtN(x.diasCampo)), h('td', null, x.melhor[1] ? `${fmtN(x.melhor[1])} em ${dBR(x.melhor[0])}` : ''), h('td', null, fmtMin(x.dur)), h('td', null, fmtMin(x.int)), h('td', null, fmtN(x.tot)),
           h('td', null, h('button', { class: 'btn sec peq', onclick: () => { S.mapaFiltro = { equipe: x.e, dia: 'hoje' }; ir('#mapa'); } }, 'Pontos de hoje'), ' ', h('button', { class: 'btn sec peq', onclick: () => { S.mapaFiltro = { equipe: x.e, dia: '' }; ir('#mapa'); } }, 'Todos'))))),
       h('p', { class: 'dica' }, 'Dia de campo é o dia em que a equipe cadastrou pelo menos um ponto. No mapa dá para filtrar por equipe e por dia.'));
   }
@@ -3186,6 +3239,6 @@
     return new Promise((res) => cv.toBlob(res, 'image/jpeg', q));
   }
 
-  window.__app = { S, Store, sincronizar, proximoCodigo, marcarQuadras }; // usados pelos testes de estresse
+  window.__app = { S, Store, sincronizar, proximoCodigo, marcarQuadras, conferirEnvio }; // usados pelos testes de estresse
   iniciar().catch((e) => { $app.replaceChildren(h('div', { class: 'login' }, h('div', { class: 'aviso' }, 'Erro ao iniciar: ' + e.message), h('button', { class: 'btn', onclick: () => sair(true) }, 'Voltar ao login'))); });
 })();

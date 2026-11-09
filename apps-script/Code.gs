@@ -628,6 +628,7 @@ function painel(projetoId, usr) {
   const p = projeto(projetoId); const form = lerFormulario(p.formulario);
   let linhas = listarPagina(projetoId, 0, 0, usr).linhas;
   const out = indicadores(form, linhas, p);
+  if (usr.perfil === 'cliente') { delete out.diario; delete out.tempos.porEquipe; } // dados das equipes ficam só com a Neofloresta
   try { cache.put(chave, JSON.stringify(out), 300); } catch (e) { /* grande demais para o cache */ }
   return out;
 }
@@ -647,7 +648,9 @@ function indicadores(form, linhas, p) {
   const especies = esp ? Object.entries(conta(ativos, (l) => String(l[esp.nome] || '').trim())).sort((a, b) => b[1] - a[1]) : [];
   const porDia = {}; ativos.forEach((l) => { const d = l.criado_em ? dia(l.criado_em) : ''; if (!d) return; const e = l.equipe || '-'; porDia[d] = porDia[d] || {}; porDia[d][e] = (porDia[d][e] || 0) + 1; });
   const gps = ativos.map((l) => +l.precisao_gps_m).filter((x) => x > 0).sort((a, b) => a - b);
+  const tm = tempos(form, ativos);
   return {
+    diario: tm.diario, tempos: tm.tempos,
     gerado_em: new Date().toISOString(), projeto: p ? { id: p.id, nome: p.nome, contratante: p.contratante || '', contrato: p.contrato || '', municipio: p.municipio || '', meta: +p.meta || 0, responsavel: p.responsavel || '', registro_profissional: p.registro_profissional || '', art: p.art || '' } : null,
     total: ativos.length, descartados: linhas.length - ativos.length,
     validacao: conta(ativos, (l) => l.validacao || 'Pendente'), equipes: conta(ativos, (l) => l.equipe || '-'),
@@ -656,6 +659,37 @@ function indicadores(form, linhas, p) {
     gps: gps.length ? { mediana: gps[Math.floor(gps.length / 2)], ate5m: gps.filter((x) => x <= 5).length / gps.length } : null,
     semCoordenada: ativos.filter((l) => l.latitude === '' || l.latitude == null).length,
   };
+}
+// Tempo por amostra e o dia de cada equipe (tela "Hoje" da coordenação)
+// duração: do início ao fim do cadastro (até 60 min; acima disso o cadastro ficou aberto e não conta)
+// intervalo: entre um cadastro concluído e o próximo da mesma equipe no mesmo dia (até 30 min; acima disso é pausa)
+function tempos(form, ativos) {
+  const med = (v) => { if (!v.length) return null; const o = v.slice().sort((a, b) => a - b); return Math.round(o[Math.floor(o.length / 2)] * 10) / 10; };
+  const cCat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(c.nome));
+  const hora = (iso) => Utilities.formatDate(new Date(iso), FUSO, 'HH:mm');
+  const limite = dia(new Date(Date.now() - 60 * 864e5).toISOString());
+  const grupos = {}; const durCat = {}; const durEq = {}; const intEq = {};
+  ativos.forEach((l) => {
+    if (!l.criado_em) return; const fim = l.concluido_em || l.criado_em; const d = dia(fim); const e = l.equipe || '-';
+    const dur = l.concluido_em ? (new Date(l.concluido_em) - new Date(l.criado_em)) / 60000 : null;
+    const cat = cCat ? String(l[cCat.nome] || '') : '';
+    if (dur != null && dur > 0 && dur <= 60) { (durCat[cat] = durCat[cat] || []).push(dur); (durEq[e] = durEq[e] || []).push(dur); }
+    const k = d + '|' + e; (grupos[k] = grupos[k] || []).push({ t: new Date(fim).getTime(), fim, dur, cat, prec: +l.precisao_gps_m || 0, val: l.validacao || 'Pendente' });
+  });
+  const diario = {};
+  Object.keys(grupos).forEach((k) => {
+    const [d, e] = k.split('|'); const g = grupos[k].sort((a, b) => a.t - b.t);
+    const ints = []; for (let i = 1; i < g.length; i++) { const m = (g[i].t - g[i - 1].t) / 60000; if (m > 0 && m <= 30) ints.push(m); }
+    (intEq[e] = intEq[e] || []).push(...ints);
+    if (d < limite) return;
+    const cats = {}; g.forEach((x) => { if (x.cat) cats[x.cat] = (cats[x.cat] || 0) + 1; });
+    diario[d] = diario[d] || {};
+    diario[d][e] = { n: g.length, ini: hora(g[0].fim), fim: hora(g[g.length - 1].fim), dur: med(g.map((x) => x.dur).filter((x) => x != null && x > 0 && x <= 60)), int: med(ints), gps: med(g.map((x) => x.prec).filter((x) => x > 0)), cat: cats, aguardando: g.filter((x) => x.val === 'Pendente').length, devolvidos: g.filter((x) => x.val === 'Devolvido').length };
+  });
+  const porCat = {}; Object.keys(durCat).forEach((c) => (porCat[c] = { dur: med(durCat[c]), n: durCat[c].length }));
+  const porEq = {}; Object.keys(Object.assign({}, durEq, intEq)).forEach((e) => (porEq[e] = { dur: med(durEq[e] || []), int: med(intEq[e] || []) }));
+  const todasDur = [].concat(...Object.values(durCat)); const todosInt = [].concat(...Object.values(intEq));
+  return { diario, tempos: { dur: med(todasDur), int: med(todosInt), porCategoria: porCat, porEquipe: porEq } };
 }
 // DAP com vários fustes ("32,5;20") vira DAP equivalente: raiz da soma dos quadrados
 function valorNum(v, multi) {

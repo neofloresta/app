@@ -470,3 +470,19 @@ html.sol { --texto: #000; --suave: #263238; --linha: #4F6268; }
 html.sol body { font-size: 18px; }
 html.sol .op, html.sol .chip, html.sol .entrada { border-width: 2px; border-color: #4F6268; }
 html.sol .dica, html.sol small { color: #263238; }
+
+/* Hoje no campo (coordenação) */
+.coord-atalhos { margin: 8px 0; } .coord-atalhos .btn { flex: 1; }
+.dias-chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 10px; scroll-snap-type: x proximity; }
+.dia-chip { flex: 0 0 auto; min-width: 92px; min-height: 52px; border: 1.5px solid #8FA3A9; border-radius: 10px; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px 10px; scroll-snap-align: center; color: var(--texto, #1d2b30); font: inherit; cursor: pointer; }
+.dia-chip b { font-size: 15px; } .dia-chip small { font-size: 12.5px; color: var(--suave); }
+.dia-chip.sel { background: #00546E; border-color: #00546E; color: #fff; } .dia-chip.sel small { color: #E4F0F3; }
+.hoje-outro { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.hoje-outro .entrada { width: auto; display: inline-block; min-height: 44px; }
+.hoje-equipes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 10px 0; }
+.hoje-eq { display: flex; flex-direction: column; gap: 6px; }
+.hoje-eq-cab { display: flex; justify-content: space-between; align-items: baseline; font-size: 17px; }
+.hoje-n { font-size: 28px; font-weight: 700; color: #00546E; }
+.hoje-dl { display: grid; grid-template-columns: auto auto; gap: 2px 12px; margin: 0; font-size: 14.5px; }
+.hoje-dl dt { color: var(--suave); } .hoje-dl dd { margin: 0; text-align: right; font-weight: 600; } .hoje-dl dd.ruim { color: #B3261E; }
+.hoje-cats { display: flex; flex-wrap: wrap; gap: 4px; }
