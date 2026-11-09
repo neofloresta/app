@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 5,
+ "versao": 6,
  "campos": [
   {
    "armazenar": "text",
@@ -18,7 +18,8 @@
    "rotulo": "Data e hora da avaliação",
    "tipo": "datetime",
    "agora": true,
-   "ajuda": "Preenchida pelo app no momento do cadastro."
+   "somenteLeitura": true,
+   "ajuda": "O app grava a hora em que o cadastro começou. Não dá para mudar."
   },
   {
    "armazenar": "text",
@@ -231,12 +232,12 @@
    "tipo": "choice",
    "opcoes": [
     {
-     "v": "Presente",
-     "t": "Presente"
-    },
-    {
      "v": "Ausente",
      "t": "Ausente"
+    },
+    {
+     "v": "Presente",
+     "t": "Presente"
     }
    ],
    "ajuda": "Elementos a até 2 m do tronco que disputam espaço com a árvore: poste, placa, entrada de garagem, boca de lobo, hidrante, muro."
@@ -304,12 +305,12 @@
    "tipo": "choice",
    "opcoes": [
     {
-     "v": "Presente",
-     "t": "Presente"
-    },
-    {
      "v": "Ausente",
      "t": "Ausente"
+    },
+    {
+     "v": "Presente",
+     "t": "Presente"
     }
    ],
    "ajuda": "Marquise, toldo ou cobertura da fachada que encosta ou fica a menos de 1 m da copa."
@@ -335,16 +336,6 @@
    "tipo": "bool",
    "exclusivo": true,
    "ajuda": "A árvore não atrapalha pedestres nem veículos."
-  },
-  {
-   "armazenar": "real",
-   "nome": "Largura da calcada (m)",
-   "rotulo": "Largura da calçada (m)",
-   "tipo": "number",
-   "oculto": true,
-   "avisoMin": 0.5,
-   "avisoMax": 10,
-   "ajuda": "Do meio-fio até o muro ou a fachada, em metros."
   },
   {
    "armazenar": "bool",
@@ -567,7 +558,7 @@
     },
     {
      "v": "4",
-     "t": "Alto (vai atingir o alvo - geralmente quando o alvo é fixo)"
+     "t": "Alto (vai atingir o alvo, geralmente quando o alvo é fixo)"
     }
    ],
    "ajuda": "Chance de a parte que pode falhar atingir um alvo (pessoas, veículos, imóveis, rede)."
@@ -728,31 +719,31 @@
   },
   {
    "armazenar": "text",
-   "nome": "Observacoes",
-   "rotulo": "Observações",
-   "tipo": "textarea",
-   "ajuda": "Qualquer informação útil que não cabe nos campos."
-  },
-  {
-   "armazenar": "text",
    "nome": "Foto 2",
-   "rotulo": "Foto 2",
+   "rotulo": "Foto 2: copa e entorno",
    "tipo": "photo",
-   "ajuda": "Opcional: uma característica geral da árvore (copa, tronco, raízes, conflito)."
+   "ajuda": "Opcional: a copa e o que está em volta (fiação, fachada, poste)."
   },
   {
    "armazenar": "text",
    "nome": "Foto 3",
-   "rotulo": "Foto 3",
+   "rotulo": "Foto 3: base e calçada",
    "tipo": "photo",
-   "ajuda": "Opcional: outra característica geral."
+   "ajuda": "Opcional: a base do tronco, o canteiro e a calçada."
   },
   {
    "armazenar": "text",
    "nome": "Foto 4",
-   "rotulo": "Foto 4",
+   "rotulo": "Foto 4: detalhe",
    "tipo": "photo",
-   "ajuda": "Opcional: outra característica geral."
+   "ajuda": "Opcional: um detalhe que precisa de atenção (lesão, oco, praga, poda malfeita)."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Observacoes",
+   "rotulo": "Observações",
+   "tipo": "textarea",
+   "ajuda": "Qualquer informação útil que não cabe nos campos."
   }
  ],
  "abas": [
@@ -877,9 +868,6 @@
     {
      "campo": "Tráfego sem interferência",
      "grupo": "Interferência no tráfego"
-    },
-    {
-     "campo": "Largura da calcada (m)"
     }
    ]
   },
@@ -936,7 +924,7 @@
    ]
   },
   {
-   "nome": "Fitossanidade e risco",
+   "nome": "Fitossanidade",
    "campos": [
     {
      "campo": "Qualidade da copa"
@@ -968,6 +956,14 @@
     {
      "campo": "Fitossanidade ausente",
      "grupo": "Fitossanidade"
+    }
+   ]
+  },
+  {
+   "nome": "Risco",
+   "campos": [
+    {
+     "campo": "Risco"
     },
     {
      "campo": "Probabilidade de falha"
@@ -986,9 +982,6 @@
     },
     {
      "campo": "Matriz de Prob + Conseq"
-    },
-    {
-     "campo": "Risco"
     }
    ]
   },
@@ -1044,9 +1037,6 @@
    "nome": "Fotos e observações",
    "campos": [
     {
-     "campo": "Observacoes"
-    },
-    {
      "campo": "Foto 2"
     },
     {
@@ -1054,6 +1044,9 @@
     },
     {
      "campo": "Foto 4"
+    },
+    {
+     "campo": "Observacoes"
     }
    ]
   }
@@ -1382,7 +1375,6 @@
      "Interfere pedestres": "oculto",
      "Interfere veículos": "oculto",
      "Tráfego sem interferência": "oculto",
-     "Largura da calcada (m)": "obrig",
      "Danos por podas": "oculto",
      "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
@@ -1403,13 +1395,13 @@
      "Doença aparente": "oculto",
      "Praga aparente": "oculto",
      "Fitossanidade ausente": "oculto",
+     "Risco": "oculto",
      "Probabilidade de falha": "oculto",
      "Probabilidade de impacto": "oculto",
      "Falha+Impacto": "oculto",
      "Matriz de Probabilidade": "oculto",
      "Consequencias": "oculto",
      "Matriz de Prob + Conseq": "oculto",
-     "Risco": "oculto",
      "Manejo remoção do indivíduo": "oculto",
      "Manejo remoção do alvo": "oculto",
      "Manejo poda": "oculto",
@@ -1421,10 +1413,10 @@
      "Manejo avaliação nível 2 ou 3": "oculto",
      "Manejo nenhum": "oculto",
      "Outras mitigacoes": "oculto",
-     "Observacoes": "oculto",
      "Foto 2": "oculto",
      "Foto 3": "oculto",
-     "Foto 4": "oculto"
+     "Foto 4": "oculto",
+     "Observacoes": "oculto"
     }
    }
   },
@@ -1490,7 +1482,6 @@
      "Interfere pedestres": "oculto",
      "Interfere veículos": "oculto",
      "Tráfego sem interferência": "oculto",
-     "Largura da calcada (m)": "oculto",
      "Danos por podas": "oculto",
      "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
@@ -1511,13 +1502,13 @@
      "Doença aparente": "oculto",
      "Praga aparente": "oculto",
      "Fitossanidade ausente": "oculto",
+     "Risco": "oculto",
      "Probabilidade de falha": "oculto",
      "Probabilidade de impacto": "oculto",
      "Falha+Impacto": "oculto",
      "Matriz de Probabilidade": "oculto",
      "Consequencias": "oculto",
      "Matriz de Prob + Conseq": "oculto",
-     "Risco": "oculto",
      "Manejo remoção do indivíduo": "oculto",
      "Manejo remoção do alvo": "oculto",
      "Manejo poda": "oculto",
@@ -1529,10 +1520,10 @@
      "Manejo avaliação nível 2 ou 3": "oculto",
      "Manejo nenhum": "oculto",
      "Outras mitigacoes": "oculto",
-     "Observacoes": "oculto",
      "Foto 2": "oculto",
      "Foto 3": "oculto",
-     "Foto 4": "oculto"
+     "Foto 4": "oculto",
+     "Observacoes": "oculto"
     }
    }
   }

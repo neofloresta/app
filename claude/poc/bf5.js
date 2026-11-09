@@ -3,7 +3,7 @@ const { chromium } = require('playwright'); const L = require('./lib'); const A 
 const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
 const regs = (p) => p.evaluate(async () => Store.todosRegistros());
 const etapas = (p) => p.evaluate(() => [...document.querySelectorAll('.prog .aba, .prog [data-aba], .prog button')].map((b) => b.textContent.trim()).filter(Boolean));
-const visiveis = async (p) => { const out = []; for (const a of ['Identificação', 'Indivíduo', 'Meio', 'Podas e danos', 'Fitossanidade e risco', 'Manejo', 'Fotos e observações']) { await p.click('.prog-topo'); await p.waitForTimeout(150); const it = p.locator(`.folha .menu-it:has-text("${a}")`); if (!(await it.count())) { await p.evaluate(() => document.querySelectorAll('.veu').forEach((v) => v.remove())); continue; } await it.first().click(); await p.waitForTimeout(150); out.push(...(await p.evaluate(() => [...document.querySelectorAll('main [data-campo], main [data-grupo]')].map((e) => e.dataset.campo || 'grupo:' + e.dataset.grupo)))); } return [...new Set(out)]; };
+const visiveis = async (p) => { await p.evaluate(() => { if (window.__app.S.reg) window.__app.S.reg.mexido = false; }); const out = []; for (const a of ['Identificação', 'Indivíduo', 'Meio', 'Podas e danos', 'Fitossanidade', 'Risco', 'Manejo', 'Fotos e observações']) { await p.click('.prog-topo'); await p.waitForTimeout(150); const it = p.locator(`.folha .menu-it:has-text("${a}")`); if (!(await it.count())) { await p.evaluate(() => document.querySelectorAll('.veu').forEach((v) => v.remove())); continue; } await it.first().click(); await p.waitForTimeout(150); out.push(...(await p.evaluate(() => [...document.querySelectorAll('main [data-campo], main [data-grupo]')].map((e) => e.dataset.campo || 'grupo:' + e.dataset.grupo)))); } return [...new Set(out)]; };
 (async () => {
   await L.subir(); await L.configurar();
   const b = await chromium.launch(); const { p } = await L.celular(b);
@@ -12,7 +12,7 @@ const visiveis = async (p) => { const out = []; for (const a of ['Identificaçã
   let f = await A.arvoreCompleta(p, { manejoNenhum: false }); let rs = await regs(p); let r = rs.find((x) => x.status !== 'rascunho');
   ok('F.1', f.length === 0 && r && r.valores['Manejo nenhum'] === true && r.valores.Risco === 'Baixo' && r.valores['Area de copa (m2)'] > 0, `concluiu; manejo vazio virou "Nenhum" depois da confirmação; risco calculado ${r && r.valores.Risco}; área de copa ${r && r.valores['Area de copa (m2)']}`);
   // 2. risco severo pela matriz
-  await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Árvore'); await A.aba(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva'); await A.aba(p, 'Fitossanidade e risco');
+  await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Árvore'); await A.aba(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva'); await p.evaluate(() => { window.__app.S.reg.mexido = false; }); await A.aba(p, 'Risco');
   await A.op(p, 'Probabilidade de falha', 'Iminente'); await A.op(p, 'Probabilidade de impacto', 'Alto'); await A.op(p, 'Consequencias', 'Severa'); await p.waitForTimeout(300);
   const risco = await A.campo(p, 'Risco').innerText();
   ok('F.2', /Severo/.test(risco), `iminente + alto + severa = "${risco.replace(/\s+/g, ' ')}"`);

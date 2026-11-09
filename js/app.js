@@ -27,6 +27,21 @@
   const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const pad = (n, l = 2) => String(n).padStart(l, '0');
   function carimbo(d = new Date()) { return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}${pad(d.getMilliseconds(), 3)}`; }
+  // espécie parecida com o que foi digitado: começo das palavras (nome científico ou popular), sem acento, com 1 ou 2 letras erradas
+  function distEd(a, b) { const m = a.length, n = b.length; if (Math.abs(m - n) > 2) return 9; let p = Array.from({ length: n + 1 }, (x, j) => j); for (let i = 1; i <= m; i++) { const q = [i]; for (let j = 1; j <= n; j++) q[j] = Math.min(p[j] + 1, q[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); p = q; } return p[n]; }
+  function buscaEspecie(lista, q) {
+    const termos = norm(q).trim().split(/\s+/).filter(Boolean); if (!termos.length) return [];
+    const pontua = (e) => {
+      const ws = norm(e.cientifico + ' ' + (e.popular || '')).split(/[\s,;()-]+/).filter(Boolean); let tot = 0;
+      for (const t of termos) {
+        let best = 9; for (const w of ws) { if (w.startsWith(t)) { best = 0; break; } if (t.length >= 4) best = Math.min(best, distEd(t, w.slice(0, t.length)) + 0.5); }
+        if (best > (t.length >= 7 ? 2.5 : t.length >= 4 ? 1.5 : 0)) return -1; tot += best;
+      }
+      return tot;
+    };
+    return lista.map((e) => [e, pontua(e)]).filter((x) => x[1] >= 0).sort((a, b) => a[1] - b[1] || a[0].cientifico.localeCompare(b[0].cientifico)).map((x) => x[0]);
+  }
+  function dataCurta(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).replace(',', ''); }
   function dataAno(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }); }
   function dataBR(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return String(iso); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   function numBR(v) { return v == null || v === '' ? '' : String(v).replace('.', ','); }
@@ -38,7 +53,7 @@
       const aberto = Date.now();
       const veu = h('div', { class: 'veu', onclick: (e) => { if (e.target === veu && Date.now() - aberto > 400) fechar(null); } },
         h('div', { class: 'folha' }, titulo ? h('h3', null, titulo) : null, corpo,
-          botoes && botoes.length ? h('div', { class: 'linha-btn', style: 'margin-top:14px' }, botoes.map((b) => h('button', { class: 'btn ' + (b.classe || ''), onclick: () => fechar(b.valor) }, b.texto))) : null));
+          botoes && botoes.length ? h('div', { class: 'linha-btn' + (botoes.length > 3 ? ' col' : ''), style: 'margin-top:14px' }, botoes.map((b) => h('button', { class: 'btn ' + (b.classe || ''), onclick: () => fechar(b.valor) }, b.texto))) : null));
       document.body.append(veu);
     });
   }
@@ -333,8 +348,9 @@
         if (cur && !cur.__base) { cur.erroSync = e.message; if (recusaFinal(e.message)) cur.status = 'recusado'; await Store.salvarRegistro(cur); }
       }
     }
+    if (ok) { await Store.set('ultimoEnvio:' + S.projeto.id, Date.now()); const ue = document.getElementById('ult-envio'); if (ue) ue.textContent = 'Último envio às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
     if (S.expirada) return;
-    if (!silencioso || falhas || aviso) toast(falhas ? `Enviados ${ok}. Falharam ${falhas}: ${ultimoErro}` : aviso || `${ok} registro(s) enviados.`, falhas || aviso ? 5000 : 2600);
+    if (!silencioso || falhas || aviso) toast(falhas ? `Enviados ${ok}. Falharam ${falhas}: ${ultimoErro}` : aviso || `${pl(ok, 'registro enviado', 'registros enviados')}.`, falhas || aviso ? 5000 : 2600);
   }
   // traz do servidor como a coordenação avaliou os registros deste aparelho (validado, devolvido e motivo)
   async function atualizarSituacao() {
@@ -373,15 +389,44 @@
       h('main', null,
         S.expirada ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo'), ' Os registros continuam guardados aqui.') : null,
         h('button', { class: 'btn nova canto', onclick: novoRegistro }, ico('mais'), 'Nova árvore'),
+        h('div', { id: 'encerrar-face' }),
         h('div', { id: 'aviso-versao' }),
+        h('div', { id: 'continuar' }),
         h('div', { id: 'devolvidos' }),
         h('div', { id: 'os-equipe' }),
-        h('div', { class: 'resumo', id: 'stats' }),
+        h('div', { class: 'resumo', id: 'stats' }), h('small', { class: 'ult-envio', id: 'ult-envio' }),
         h('div', { class: 'busca-box' }, ico('busca'), busca),
         h('div', { id: 'lista', class: 'lista' })));
-    atualizarSync(); listarRegistros(); pintarAvisoVersao(); pintarOSEquipe();
+    atualizarSync(); listarRegistros(); pintarAvisoVersao(); pintarOSEquipe(); pintarEncerrarFace();
   }
 
+  // "Encerrar face": a face que a equipe está fazendo, com confirmação para não encerrar sem querer
+  async function pintarEncerrarFace() {
+    const el = document.getElementById('encerrar-face'); if (!el || !['coletor', 'revisor', 'admin'].includes(perfil())) return;
+    try {
+      const cam = await carregarQuadras(); if (!cam || S.qdTemFaces !== S.projeto.id || !document.body.contains(el)) return;
+      const sit = await carregarSitQd(false); const eq = minhaEquipe();
+      const minhas = [...(sit.faces || new Map()).values()].filter((f) => f.situacao === 'Em levantamento' && (!f.equipe || f.equipe === eq || ehCoord()));
+      if (!minhas.length || !document.body.contains(el)) return el.replaceChildren();
+      el.replaceChildren(h('button', { class: 'btn contorno encerrar-face', onclick: () => encerrarFace(minhas) }, ico('check'), minhas.length > 1 ? `Encerrar face (${minhas.length} em andamento)` : 'Encerrar face'));
+    } catch (e) { /* sem quadras */ }
+  }
+  async function encerrarFace(minhas) {
+    const idx = S.qdIdx; const achar = (id) => { const k = id.lastIndexOf('-'); const q = idx.porN.get(id.slice(0, k)); const f = q && q.f && q.f.find((y) => y.i === id.slice(k + 1)); return q && f ? { q, f, id } : null; };
+    let fs = minhas.map((x) => achar(x.numero)).filter(Boolean);
+    if (S.pos) { const d = (x) => { const c = Quadras.faceCoords(x.q, x.f); const m = c[Math.floor(c.length / 2)]; return Math.hypot((m[0] - S.pos.lon) * 104000, (m[1] - S.pos.lat) * 110540); }; fs.sort((a, b) => d(a) - d(b)); }
+    let alvo = fs[0];
+    if (fs.length > 1) {
+      const v = await modal('Qual face encerrar?', h('p', { class: 'dica' }, 'A mais perto de você está primeiro.'), fs.slice(0, 6).map((x) => ({ texto: `Face ${x.f.i} da quadra ${x.q.n} · ${x.f.r}`, classe: 'sec', valor: x.id })).concat([{ texto: 'Cancelar', classe: 'sec', valor: null }]));
+      if (!v) return; alvo = fs.find((x) => x.id === v);
+    }
+    if (!alvo) return;
+    const v = await modal('Encerrar face', h('p', null, `Deseja mesmo encerrar a face ${alvo.f.i} da quadra ${alvo.q.n} (${alvo.f.r}, ${fmtN(alvo.f.c)} m)?`),
+      [{ texto: 'Cancelar', classe: 'sec', valor: null }, { texto: 'Levantada, sem árvores (foto)', classe: 'sec', valor: 'sem' }, { texto: 'Sim, levantada', valor: 'ok' }]);
+    if (v === 'sem') return iniciarCalcadaFace(alvo.q, alvo.f);
+    if (v !== 'ok') return;
+    try { const r = await marcarQuadras([{ tipo: 'face', numero: alvo.id, situacao: 'Levantada', rua: alvo.f.r }]); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Face encerrada. Vai quando houver rede.' : `Face ${alvo.f.i} da quadra ${alvo.q.n} encerrada.`, 3500); pintarEncerrarFace(); } catch (e) { toast(e.message, 5000); }
+  }
   async function pintarOSEquipe() {
     const el = document.getElementById('os-equipe'); if (!el || perfil() !== 'coletor') return;
     try {
@@ -424,6 +469,11 @@
     const f = norm(filtro);
     const dev = todos.filter((r) => r.validacao === 'Devolvido');
     const box = document.getElementById('devolvidos');
+    const rasc = todos.filter((r) => r.status === 'rascunho' && r.mexido);
+    const cont = document.getElementById('continuar');
+    if (cont) cont.replaceChildren(rasc.length ? h('button', { class: 'faixa-cont', onclick: () => ir('#form/' + rasc[0].uuid) }, h('b', null, rasc.length > 1 ? `${rasc.length} cadastros não terminados` : '1 cadastro não terminado'), h('span', null, `${codigoDe(S.form, rasc[0].valores) || ''} · Continuar`)) : '');
+    const ult = await Store.get('ultimoEnvio:' + S.projeto.id); const ue = document.getElementById('ult-envio');
+    if (ue) ue.textContent = ult ? `Último envio às ${new Date(ult).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}${new Date(ult).toDateString() !== hoje ? ' de ' + new Date(ult).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : ''}` : '';
     if (box) box.replaceChildren(dev.length ? h('button', { class: 'faixa-dev', onclick: () => { const b = document.querySelector('.busca'); if (b) { b.value = 'devolvido'; listarRegistros('devolvido'); } } }, h('b', null, `${dev.length} registro${dev.length > 1 ? 's' : ''} devolvido${dev.length > 1 ? 's' : ''} pela coordenação`), h('span', null, 'Toque para ver e corrigir')) : '');
     const lista = f === 'devolvido' ? dev : todos.filter((r) => !f || norm(camposCodigo(S.form).map((k) => r.valores[k.nome]).join(' ') + ' ' + (ce && r.valores[ce.nome])).includes(f));
     if (!lista.length) return el.replaceChildren(h('div', { class: 'vazio-lista' }, filtro ? 'Nada encontrado.' : 'Nenhuma árvore cadastrada ainda neste aparelho.'));
@@ -450,7 +500,7 @@
       S.sessao.projetos.length > 1 ? it('Trocar projeto', trocarProjeto) : null,
       it('Mapa das árvores', () => ir('#mapa')),
       it('Ordens de serviço', () => ir('#ordens')),
-      S.form && S.form.campos.some((c) => c.auto === 'modocopa') ? it('Minhas preferências', () => ir('#preferencias')) : null,
+
       perfil() !== 'cliente' ? it('Enviar agora', () => sincronizar()) : null,
       perfil() !== 'coletor' ? it('Painel do projeto', () => ir('#painel')) : null,
       ehCoord() ? it('Validação dos registros', () => ir('#validacao')) : null,
@@ -575,7 +625,7 @@
       // (registros antigos sem modo de copa recebem a preferência ao abrir: ver telaForm)
     }
     if (S.pos && Date.now() - S.pos.t < 20000) Object.assign(r, { lat: S.pos.lat, lon: S.pos.lon, prec: S.pos.prec });
-    if (ex) { r.faceId = ex.faceId; r.faceRua = ex.faceRua; r.faceTxt = ex.faceTxt; r.valores[ex.cat[0]] = ex.cat[1]; }
+    if (ex) { r.faceId = ex.faceId; r.faceRua = ex.faceRua; r.faceTxt = ex.faceTxt; r.valores[ex.cat[0]] = ex.cat[1]; Object.assign(r.valores, ex.extra || {}); }
     await Store.salvarRegistro(r);
     Gps.agora();
     S.aba = 0; S.tentou = false;
@@ -583,7 +633,8 @@
   }
 
   // preferências de cada login neste aparelho
-  async function prefCopa() { return (await Store.get('pref:copa:' + (S.sessao && S.sessao.u))) || 'raios'; }
+  // a coordenação define no cadastro do usuário como a dupla mede a copa (4 raios ou área com trena a laser)
+  async function prefCopa() { const u = S.sessao && S.sessao.usuario; if (u && u.modo_copa) return u.modo_copa; return (await Store.get('pref:copa:' + (S.sessao && S.sessao.u))) || 'raios'; }
   async function telaPreferencias() {
     const atual = await prefCopa();
     const op = (v, t, d) => h('label', { class: 'pref-op' + (atual === v ? ' sel' : '') }, h('input', { type: 'radio', name: 'copa', value: v, checked: atual === v, onchange: async () => { await Store.set('pref:copa:' + S.sessao.u, v); toast('Preferência salva. Vale para os próximos cadastros.'); telaPreferencias(); } }), h('div', null, h('b', null, t), h('small', null, d)));
@@ -680,7 +731,7 @@
       else { await descartarEdicao(r); toast('A edição não terminada foi descartada: o registro está travado.', 5000); }
     }
     if (r.status !== 'rascunho' && !S.editando.has(r.uuid)) return telaFichaLocal(r);
-    if (!S.reg || S.reg.uuid !== r.uuid) { S.aba = 0; S.tentou = false; }
+    if (!S.reg || S.reg.uuid !== r.uuid) { S.aba = 0; S.tentou = false; S.tentouFim = false; S.abaMax = 0; }
     S.reg = r; r.valores = r.valores || {}; r.fotos = r.fotos || {};
     if (r.status !== 'rascunho' && !r.__base) { r.__base = JSON.stringify(r.valores); r.__baseFotos = JSON.stringify(r.fotos); r.__basePos = JSON.stringify({ lat: r.lat, lon: r.lon, prec: r.prec, posManual: r.posManual }); await Store.salvarRegistro(r); }
     if (abaParam != null) S.aba = +abaParam || 0;
@@ -716,14 +767,15 @@
     const btAnt = h('button', { class: 'btn sec quad', onclick: () => irAba(vizinha(S.aba, -1)), 'aria-label': 'Etapa anterior' }, ico('esq'));
     const btProx = h('button', { class: 'btn prox', onclick: () => { const k = vizinha(S.aba, 1); if (k >= 0) irAba(k); else concluir(); } });
     $app.replaceChildren(...[topo(r.faceId && r.status === 'rascunho' ? 'Calçada sem árvores' : r.status === 'rascunho' && !r.mexido ? 'Nova árvore' : (codigoDe(form, r.valores) || 'Árvore'), S.projeto.nome, voltar, gpsBtn), barraAbas,
-      r.faceId ? h('div', { class: 'faixa-face' }, h('b', null, 'Face sem árvores: ' + (r.faceTxt || r.faceId)), h('span', null, 'Tire a foto da calçada inteira, no sentido do comprimento, e meça a largura. Ao concluir, a face fica como levantada sem árvores.')) : null,
+      r.faceId ? h('div', { class: 'faixa-face' }, h('b', null, 'Face sem árvores: ' + (r.faceTxt || r.faceId)), h('span', null, 'Tire a foto da calçada inteira, no sentido do comprimento, e toque em Concluir registro. A face fica como levantada sem árvores.')) : null,
       conteudo, h('footer', { class: 'rodape' }, btAnt, btProx)].filter(Boolean));
 
     const calcEls = new Map();
     function estadoAba(a) {
       const cs = a.campos.map((x) => form.campos.find((c) => c.nome === x.campo)).filter((c) => c && c.tipo !== 'hidden' && !c.calculado && c.tipo !== 'bool' && !E[c.nome].oculto);
       const gFalta = gruposFaltando(form, r.valores, E).filter((g) => a.campos.some((x) => x.grupo === g));
-      if (S.tentou && (gFalta.length || cs.some((c) => E[c.nome].obrig && vazio(c, valorDe(r, c))))) return 'falta';
+      const idx = abas.indexOf(a); // etapa ainda não visitada fica cinza, não vermelha (até tentar concluir)
+      if (S.tentou && (S.tentouFim || idx <= (S.abaMax || 0)) && (gFalta.length || cs.some((c) => E[c.nome].obrig && vazio(c, valorDe(r, c))))) return 'falta';
       const n = cs.filter((c) => !vazio(c, valorDe(r, c))).length;
       if (!cs.length) return a.campos.some((x) => r.valores[x.campo] === true) ? 'cheio' : '';
       return n === cs.length ? 'cheio' : n ? 'meio' : '';
@@ -751,8 +803,9 @@
       if (!lista.length) { barraPend.replaceChildren(h('span', null, 'Tudo preenchido. Pode concluir.'), h('button', { class: 'btn peq', onclick: concluir }, ico('check'), 'Concluir')); barraPend.className = 'barra-pend ok'; return; }
       const prox = lista.find((x) => x.aba === S.aba) || lista[0];
       barraPend.className = 'barra-pend';
-      barraPend.replaceChildren(h('span', null, h('b', null, lista.length === 1 ? 'Falta 1 item' : `Faltam ${lista.length} itens`), ': ', prox.c.rotulo),
-        h('button', { class: 'btn peq', onclick: () => irPendente(lista.indexOf(prox)) }, 'Ir para o campo'));
+      const nEt = lista.filter((x) => x.aba === S.aba).length;
+      barraPend.replaceChildren(h('span', null, h('b', null, nEt ? `Faltam ${nEt} nesta etapa` : 'Esta etapa está completa'), lista.length > nEt ? ` · ${lista.length} no total` : '', h('br'), h('small', null, prox.c.rotulo)),
+        h('button', { class: 'btn peq', onclick: () => irPendente(lista.indexOf(prox)) }, 'Próximo que falta'));
     }
     function pintarAbas() {
       atualizarPend();
@@ -768,10 +821,20 @@
       const veu = h('div', { class: 'veu', onclick: (e) => e.target === veu && veu.remove() }, h('div', { class: 'folha' },
         h('h3', null, 'Etapas'),
         vis.map((i) => { const st = estadoAba(abas[i]); return h('button', { class: 'menu-it' + (i === S.aba ? ' at' : ''), onclick: () => { veu.remove(); irAba(i); } }, h('span', { class: 'seg-dot ' + st }), h('span', { style: 'flex:1' }, abas[i].nome), h('small', { class: 'dica' }, rot[st])); }),
-        h('div', { class: 'linha-btn', style: 'margin-top:14px' }, r.status !== 'enviado' ? h('button', { class: 'btn perigo', onclick: () => { veu.remove(); excluir(); } }, 'Excluir') : null, h('button', { class: 'btn', onclick: () => { veu.remove(); concluir(); } }, ico('check'), 'Concluir árvore'))));
+        h('div', { class: 'linha-btn', style: 'margin-top:14px' }, h('button', { class: 'btn cheio', onclick: () => { veu.remove(); concluir(); } }, ico('check'), 'Concluir registro')),
+        r.status !== 'enviado' ? h('button', { class: 'link-perigo', onclick: () => { veu.remove(); excluir(); } }, 'Excluir este registro') : null));
       document.body.append(veu);
     }
-    function irAba(i) { if (i < 0 || i >= abas.length) return; if (!abaVisivel(abas[i])) { const k = vizinha(i, 1) >= 0 ? vizinha(i, 1) : vizinha(i, -1); if (k < 0) return; i = k; } S.aba = i; history.replaceState(null, '', '#form/' + r.uuid + '/' + i); render(); window.scrollTo(0, 0); }
+    // Trava: sem nada preenchido dá para passear pelas etapas (bom para treinar); depois do primeiro campo preenchido,
+    // só avança com os obrigatórios da etapa completos. Voltar é sempre livre.
+    function irAba(i) {
+      if (i < 0 || i >= abas.length) return; if (!abaVisivel(abas[i])) { const k = vizinha(i, 1) >= 0 ? vizinha(i, 1) : vizinha(i, -1); if (k < 0) return; i = k; }
+      if (i > S.aba && r.mexido) {
+        const lista = pendOrdenadas(); const bloq = lista.find((x) => x.aba >= S.aba && x.aba < i && abaVisivel(abas[x.aba]));
+        if (bloq) { S.tentou = true; if (navigator.vibrate) navigator.vibrate(120); toast(`Complete "${abas[bloq.aba].nome}" antes de seguir. Falta: ${bloq.c.rotulo}.`, 3500); return irPendente(lista.indexOf(bloq)); }
+      }
+      S.aba = i; S.abaMax = Math.max(S.abaMax || 0, i); history.replaceState(null, '', '#form/' + r.uuid + '/' + i); render(); window.scrollTo(0, 0);
+    }
 
     function mudar(c, v) {
       r.valores[c.nome] = v; r.mexido = true; recalcular(r);
@@ -793,9 +856,15 @@
       if (!abaVisivel(abas[S.aba])) { const k = vizinha(S.aba, -1) >= 0 ? vizinha(S.aba, -1) : vizinha(S.aba, 1); if (k >= 0) S.aba = k; }
       pintarAbas(); calcEls.clear();
       const a = abas[S.aba];
-      const campos = a.campos.map((x) => ({ c: form.campos.find((f) => f.nome === x.campo), grupo: x.grupo })).filter((x) => x.c && x.c.tipo !== 'hidden' && !E[x.c.nome].oculto);
+      const campos0 = a.campos.map((x) => ({ c: form.campos.find((f) => f.nome === x.campo), grupo: x.grupo })).filter((x) => x.c && x.c.tipo !== 'hidden' && !E[x.c.nome].oculto);
+      // "Ausente" ou "Nenhum" (a resposta mais comum) vem primeiro em cada grupo
+      const campos = []; for (let i = 0; i < campos0.length;) { let j = i; while (j < campos0.length && campos0[j].grupo && campos0[j].grupo === campos0[i].grupo) j++; if (j === i) { campos.push(campos0[i]); i++; continue; } const run = campos0.slice(i, j); campos.push(...run.filter((x) => x.c.exclusivo), ...run.filter((x) => !x.c.exclusivo)); i = j; }
+      // código, data e equipe numa linha de resumo no topo (não se mexe neles)
+      const resumoAuto = campos.filter((x) => x.c.auto === 'codigo' || x.c.auto === 'coletor' || (x.c.agora && x.c.somenteLeitura));
       const blocos = []; let grupoAtual = null; let chips = null; let nums = null; let fotos = null;
+      if (resumoAuto.length) blocos.push(h('div', { class: 'resumo-auto' }, resumoAuto.map((x) => { const v = r.valores[x.c.nome]; return h('span', null, x.c.agora ? dataCurta(v) : (v || 'automático')); })));
       for (const { c, grupo } of campos) {
+        if (resumoAuto.some((x) => x.c === c)) continue;
         if (grupo !== grupoAtual) { grupoAtual = grupo; chips = nums = fotos = null; if (grupo) blocos.push(h('div', { class: 'grupo-tit' }, grupo === 'Manejo e mitigações' ? grupo : grupo)); }
         if (c.tipo === 'bool' && !c.calculado) {
           nums = fotos = null;
@@ -825,8 +894,9 @@
         }
         if (c.tipo === 'number' && !c.calculado) {
           chips = fotos = null;
-          if (!nums) { nums = h('div', { class: 'grade-num' }); blocos.push(nums); }
-          nums.append(campoEl(c)); continue;
+          const fam = c.nome.replace(/\d+/g, '#'); // Raio 1..4 juntos em 2x2; Altura na sua própria linha
+          if (!nums || nums.dataset.fam !== fam) { nums = h('div', { class: 'grade-num' + (fam.includes('#') ? ' grade-2x2' : ' grade-1') }); nums.dataset.fam = fam; blocos.push(nums); }
+          nums.append(campoEl(c, fam.includes('#') && nums.childElementCount > 0)); continue;
         }
         if (c.tipo === 'photo') {
           chips = nums = null;
@@ -843,7 +913,7 @@
       conteudo.replaceChildren(...blocos);
       btAnt.disabled = vizinha(S.aba, -1) < 0;
       const k = vizinha(S.aba, 1);
-      btProx.replaceChildren(...(k >= 0 ? [h('span', null, abas[k].nome), ico('dir')] : [ico('check'), h('span', null, 'Concluir árvore')]));
+      btProx.replaceChildren(...(k >= 0 ? [h('span', null, abas[k].nome), ico('dir')] : [ico('check'), h('span', null, 'Concluir registro')]));
       btProx.classList.toggle('fim', k < 0);
     }
 
@@ -852,11 +922,12 @@
       const bt = h('button', { type: 'button', class: 'ajuda-bt', 'aria-label': 'Ajuda', onclick: (e) => { e.preventDefault(); e.stopPropagation(); box.classList.toggle('oculto'); } }, '?');
       return [bt, box];
     }
-    function rotulo(c) {
-      const [bt, box] = c.ajuda ? caixaAjuda([['', c.ajuda]], c.ajudaImg) : [null, null];
+    function rotulo(c, semAjuda) {
+      const [bt, box] = c.ajuda && !semAjuda ? caixaAjuda([['', c.ajuda]], c.ajudaImg) : [null, null];
       return h('div', { class: 'rot-linha' }, h('label', { class: 'rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null, bt), box);
     }
-    function campoEl(c) {
+    function campoEl(c, semAjuda) {
+      const rotulo0 = rotulo; const rotulo = (k) => rotulo0(k, semAjuda); // nos raios 2 a 4 o "?" do raio 1 vale para todos
       const box = h('div', { class: 'campo' + (S.tentou && E[c.nome].obrig && vazio(c, valorDe(r, c)) ? ' falta' : ''), 'data-campo': c.nome });
       const v = r.valores[c.nome];
       if (c.auto) { box.append(rotulo(c), h('div', { class: 'calc' + (v ? '' : ' vazio') }, v || 'Automático')); return box; }
@@ -864,7 +935,9 @@
       switch (c.tipo) {
         case 'choice': {
           const longas = c.opcoes.some((o) => o.t.length > 24) || c.opcoes.length > 6;
-          const grade = h('div', { class: 'opcoes' + (longas ? ' longas' : '') });
+          // opções com explicação longa (risco): botões curtos em 2 colunas; a explicação aparece só na escolhida e no "?"
+          const compactas = c.opcoes.some((o) => /\(.{40,}\)\s*$/.test(o.t));
+          const grade = h('div', { class: 'opcoes' + (compactas ? ' compactas' : longas ? ' longas' : '') });
           for (const o of c.opcoes) {
             if (S.qdTemFaces === S.projeto.id && !r.faceId && String(v) !== String(o.v) && /categoria/i.test(norm(c.nome)) && /cal[cç]ada/i.test(o.t)) continue; // calçada sem árvores é marcada pela face, no mapa
             const m = o.t.match(/^([^(]+?)\s*\((.+)\)\s*$/);
@@ -879,6 +952,10 @@
             } }, m ? [m[1], h('small', null, m[2])] : o.t);
             grade.append(b);
           }
+          if (compactas) { // o "?" explica cada opção
+            const [bt, aj] = caixaAjuda([...(c.ajuda ? [['', c.ajuda]] : []), ...c.opcoes.map((o) => { const m = o.t.match(/^([^(]+?)\s*\((.+)\)\s*$/); return m ? [m[1], m[2]] : [o.t, '']; })]);
+            box.append(h('div', { class: 'rot-linha' }, h('label', { class: 'rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null, bt), aj), grade); break;
+          }
           box.append(rotulo(c), grade); break;
         }
         case 'bool': {
@@ -891,7 +968,10 @@
             const t = i.value.trim(); const n = paraNum(t); let m = '';
             if (t && n == null) m = 'Número inválido. Use só uma vírgula, ex.: 2,5';
             else if (n != null && c.min != null && n < c.min) m = c.limiteMsg ? `${c.rotulo.replace(/\s*\(.*\)/, '')}: ${c.limiteMsg}. Mude a categoria ou exclua o registro.` : `Abaixo do mínimo de ${numBR(c.min)}.`;
-            av.textContent = m; av.classList.toggle('oculto', !m); i.classList.toggle('invalido', !!m);
+            let alerta = '';
+            if (!m && n != null && c.avisoMax != null && n > c.avisoMax) alerta = `${numBR(n)} parece alto demais. Confira${n / 10 <= c.avisoMax && n >= 10 ? ` (quis dizer ${numBR(Math.round(n) / 10)}?)` : ''}.`;
+            else if (!m && n != null && c.avisoMin != null && n < c.avisoMin) alerta = `${numBR(n)} parece baixo demais. Confira.`;
+            av.textContent = m || alerta; av.classList.toggle('oculto', !m && !alerta); av.classList.toggle('amarelo', !m && !!alerta); i.classList.toggle('invalido', !!m);
           };
           const i = h('input', { class: 'entrada', inputmode: 'decimal', enterkeyhint: 'next', value: numBR(v), oninput: () => { checar(); mudar(c, c.inteiro ? (paraNum(i.value) == null ? null : Math.round(paraNum(i.value))) : paraNum(i.value)); } });
           box.append(rotulo(c), i, av); checar(); break;
@@ -919,6 +999,7 @@
         case 'species': box.append(rotulo(c), especieEl(c)); break;
         case 'textarea': { const t = h('textarea', { class: 'entrada', oninput: () => mudar(c, t.value) }); t.value = v || ''; box.append(rotulo(c), t); break; }
         case 'datetime': case 'date': {
+          if (c.somenteLeitura) { box.append(rotulo(c), h('div', { class: 'calc' }, v ? dataCurta(v) : 'Automático')); break; }
           const d = v ? new Date(v) : null;
           const loc = d && !isNaN(d) ? (c.tipo === 'date' ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`) : '';
           const i = h('input', { class: 'entrada', type: c.tipo === 'date' ? 'date' : 'datetime-local', value: loc, onchange: () => mudar(c, i.value ? new Date(i.value).toISOString() : null) });
@@ -940,22 +1021,24 @@
       const nova = h('div', { class: 'esp-nova oculto' }, 'Espécie fora da lista do projeto. Confira a grafia.');
       const conferir = () => { const v = (r.valores[c.nome] || '').trim(); nova.classList.toggle('oculto', !v || lista.some((e) => norm(e.cientifico) === norm(v))); };
       const escolher = (nome) => { i.value = nome; drop.classList.add('oculto'); mudar(c, nome); conferir(); };
+      // busca por semelhança: começo das palavras, sem acento, e aceita 1 ou 2 letras erradas; o campo nunca fecha
       i.addEventListener('input', () => {
-        const q = norm(i.value).trim(); mudar(c, i.value.replace(/\s+/g, ' ').trim());
-        if (!q) { drop.classList.add('oculto'); return conferir(); }
-        const termos = q.split(/\s+/);
-        const achados = lista.filter((e) => { const alvo = norm(e.cientifico + ' ' + (e.popular || '')); return termos.every((t) => alvo.split(/[\s,;-]+/).some((w) => w.startsWith(t))); }).slice(0, 30);
-        drop.replaceChildren(...achados.map((e) => h('button', { onmousedown: (ev) => ev.preventDefault(), onclick: () => escolher(e.cientifico) }, h('i', null, e.cientifico), e.popular ? h('small', null, e.popular) : null)));
-        drop.classList.toggle('oculto', !achados.length); conferir();
+        const q = norm(i.value).trim(); mudar(c, i.value.replace(/\s+/g, ' ').trim()); nova.classList.add('oculto');
+        if (!q) { drop.classList.add('oculto'); return; }
+        const achados = buscaEspecie(lista, q).slice(0, 20);
+        drop.replaceChildren(...achados.map((e) => h('button', { onmousedown: (ev) => ev.preventDefault(), onclick: () => escolher(e.cientifico) }, h('i', null, e.cientifico), e.popular ? h('small', null, e.popular) : null)),
+          h('div', { class: 'esp-livre' }, achados.length ? 'Não está aqui? Continue escrevendo o nome.' : 'Nenhuma espécie parecida. Pode escrever o nome como souber.'));
+        drop.classList.remove('oculto');
       });
-      i.addEventListener('blur', () => setTimeout(() => drop.classList.add('oculto'), 150));
+      i.addEventListener('blur', () => setTimeout(() => { drop.classList.add('oculto'); conferir(); }, 150)); // aviso "fora da lista" só ao sair do campo
+      const semId = h('button', { class: 'btn sec peq bt-semid', onclick: () => { escolher('Não identificada'); setTimeout(() => { const el = document.querySelector('[data-campo="Foto folha face superior"]'); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 150); } }, 'Sem ID');
       const rec = h('div', { class: 'esp-recentes' });
       Store.registros(S.projeto.id).then((regs) => {
         const vistos = []; for (const x of regs.sort((a, b) => (b.atualizado_em || '').localeCompare(a.atualizado_em || ''))) { const e = x.valores && x.valores[c.nome]; if (e && x.uuid !== r.uuid && !vistos.includes(e)) vistos.push(e); if (vistos.length >= 6) break; }
         rec.replaceChildren(...vistos.map((e) => h('button', { onclick: () => escolher(e) }, e)));
       });
       conferir();
-      return h('div', null, h('div', { class: 'esp-box' }, i, drop), nova, rec);
+      return h('div', null, h('div', { class: 'esp-linha' }, h('div', { class: 'esp-box' }, i, drop), semId), nova, rec);
     }
 
     function fotoEl(c) {
@@ -966,7 +1049,7 @@
         const f = r.fotos[c.nome];
         let u = null; if (f) { const b = await Store.foto(f.chave); if (b) u = URL.createObjectURL(b); }
         const opcoes = async () => {
-          const v = await modal(c.rotulo, u ? h('img', { src: u, style: 'width:100%;border-radius:12px;max-height:55vh;object-fit:contain;background:#000' }) : h('p', null, 'Foto já enviada ao Drive.'),
+          const v = await modal(c.rotulo, u ? h('img', { src: u, style: 'width:100%;border-radius:12px;max-height:55vh;object-fit:contain;background:#000' }) : h('p', null, 'Foto já enviada ao servidor.'),
             [{ texto: 'Remover', classe: 'perigo', valor: 'rm' }, { texto: 'Galeria', classe: 'sec', valor: 'gal' }, { texto: 'Tirar outra', valor: 'cam' }]);
           if (v === 'cam') cam.click(); else if (v === 'gal') gal.click();
           else if (v === 'rm' && await confirmar('Remover foto', 'Remover esta foto do registro?', 'Remover', 'perigo')) { delete r.fotos[c.nome]; mudar(c, r.valores[c.nome]); desenhar(); }
@@ -975,7 +1058,7 @@
           f ? h('button', { class: 'tile cheia', onclick: opcoes, style: u ? `background-image:url(${u})` : '' }, u ? null : ico('check'))
             : h('button', { class: 'tile', onclick: () => cam.click() }, ico('camera')),
           h('div', { class: 'tile-rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null),
-          ...(f ? [] : [h('button', { class: 'tile-gal', onclick: () => gal.click() }, 'Escolher da galeria')]), cam, gal);
+          ...(f ? [] : [h('button', { class: 'tile-gal link', onclick: () => gal.click() }, 'usar da galeria')]), cam, gal);
       };
       async function receber(inp) {
         const arq = inp.files && inp.files[0]; if (!arq) return;
@@ -1016,7 +1099,7 @@
     }
 
     async function concluir() {
-      S.tentou = true;
+      S.tentou = true; S.tentouFim = true;
       const f = faltando(r);
       if (f.length) { if (navigator.vibrate) navigator.vibrate(120); irPendente(0); return; }
       // grupos em que "Nenhum" precisa de confirmação (ex.: manejo)
@@ -1048,7 +1131,7 @@
       r.status = 'pendente'; r.gpsAuto = false; r.atualizado_em = agoraISO(); delete r.erroSync;
       await Store.salvarRegistro(r);
       Gps.ouvintes.delete(ouvinte); S.reg = null;
-      toast('Árvore salva.'); ir('#inicio'); sincronizar(true); quadraAutomatica(r);
+      toast(`${codigoDe(S.form, r.valores) || 'Registro'} salvo.` + (navigator.onLine ? '' : ' Vai quando houver rede.'), 3000); ir('#inicio'); sincronizar(true); quadraAutomatica(r);
     }
     // registro já concluído que foi alterado: guarda quem mudou o quê e quando
     function diferencas() {
@@ -1492,6 +1575,7 @@
       const em = h('input', { class: 'entrada', type: 'email', value: u.email || '', placeholder: 'opcional' });
       const pe = h('select', { class: 'entrada' }, PERFIS.map(([v, t]) => h('option', { value: v, selected: (u.perfil === 'campo' ? 'coletor' : u.perfil) === v }, t)));
       const at = h('input', { type: 'checkbox', checked: String(u.ativo || 'sim').toLowerCase() !== 'nao' });
+      const mc = h('select', { class: 'entrada' }, h('option', { value: 'raios', selected: (u.modo_copa || 'raios') === 'raios' }, '4 raios com trena (o app calcula a área)'), h('option', { value: 'area', selected: u.modo_copa === 'area' }, 'Área direto, com trena a laser'));
       const marcados = new Set(String(u.projeto || '').split(',').map((x) => x.trim()));
       const prj = h('div', { class: 'chips' }, projetos.map((p) => { const b = h('button', { class: 'chip' + (marcados.has(p.id) ? ' sel' : ''), onclick: () => { b.classList.toggle('sel'); if (marcados.has(p.id)) marcados.delete(p.id); else marcados.add(p.id); } }, p.nome); return b; }));
       const ok = await modal(novo ? 'Novo usuário' : 'Editar usuário', h('div', null,
@@ -1500,6 +1584,7 @@
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), no), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe'), eq)),
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Código da equipe'), cod), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Email'), em)),
         h('div', { class: 'dica' }, 'O código da equipe vira o prefixo dos códigos das árvores (E1 gera E1-0001, E1-0002...). Use um diferente para cada equipe.'),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Como mede a copa'), mc),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos liberados'), prj), h('label', null, at, ' Usuário ativo')),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
@@ -1508,7 +1593,7 @@
       if (se.value.trim() && se.value.trim().length < 8 && !Api.demo) return toast('A senha precisa ter pelo menos 8 caracteres.');
       if (novo && !se.value.trim()) return toast('Defina a senha.');
       if (novo && us.some((x) => x.login === login)) return toast('Esse usuário já existe.');
-      const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao' };
+      const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value };
       if (se.value.trim()) dados.senha = se.value.trim();
       if (pe.value === 'coletor' && !dados.codigo) return toast('Defina o código da equipe (ex.: E1).');
       if (pe.value === 'coletor' && us.some((x) => x.login !== login && x.codigo === dados.codigo && String(x.projeto).split(',').some((p) => dados.projeto.split(',').includes(p)))) return toast('Outra equipe deste projeto já usa o código ' + dados.codigo + '.');
@@ -1712,7 +1797,7 @@
         fichaConteudo(form, r.valores, fotos),
         secaoOSArvore(r.uuid, r.status === 'enviado'),
         (r.historico || []).length ? h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Histórico de alterações'), r.historico.map((x) => h('div', { class: 'hist' }, h('small', null, `${dataBR(x.em)} · ${x.por}`), h('ul', null, x.mud.map((m) => h('li', null, m)))))) : null,
-        h('div', { class: 'linha-btn', style: 'margin:8px 0 30px' }, h('button', { class: 'btn sec', onclick: () => ir('#inicio') }, 'Voltar'), pe.ok ? h('button', { class: 'btn', onclick: editar }, 'Editar registro') : null)));
+        h('div', { style: 'height:84px' })), h('footer', { class: 'rodape' }, h('button', { class: 'btn sec', style: 'flex:1', onclick: () => ir('#inicio') }, 'Voltar'), pe.ok ? h('button', { class: 'btn', style: 'flex:2', onclick: editar }, 'Editar registro') : null));
   }
 
   // ---------- Termo de uso e privacidade ----------
@@ -2561,7 +2646,8 @@
     if (!op) return toast('O formulário deste projeto não tem a categoria calçada sem árvores.', 5000);
     const id = q.n + '-' + f.i; const rasc = (await Store.registros(S.projeto.id)).find((r) => r.faceId === id && r.status === 'rascunho');
     if (rasc) { toast('Continuando o cadastro desta face que ficou guardado.', 3000); S.aba = 0; S.tentou = false; return ir('#form/' + rasc.uuid); }
-    await novoRegistro({ faceId: q.n + '-' + f.i, faceRua: f.r, faceTxt: `face ${f.i} da quadra ${q.n} (${f.r})`, cat: [cat.nome, op.v] });
+    const loc = S.form.campos.find((c) => c.tipo === 'choice' && /local do registro/i.test(norm(c.nome))); const opL = loc && loc.opcoes.find((o) => /cal[cç]ada|via p/i.test(o.t));
+    await novoRegistro({ faceId: q.n + '-' + f.i, faceRua: f.r, faceTxt: `face ${f.i} da quadra ${q.n} (${f.r})`, cat: [cat.nome, op.v], extra: opL ? { [loc.nome]: opL.v } : {} });
   }
   function resumoQd(cam, sit) {
     const tot = cam ? cam.quadras.length : 0; const por = { 'A levantar': 0, 'Em levantamento': 0, Levantada: 0 }; const eq = {};

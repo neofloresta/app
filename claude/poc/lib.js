@@ -3,7 +3,7 @@ const { spawn, execSync } = require('child_process');
 const fs = require('fs'); const path = require('path');
 const APP = process.env.APP || path.join(__dirname, '../..');
 const GS = process.env.GS || path.join(__dirname, '../../apps-script/Code.gs');
-const MOCK = 'http://localhost:8790/'; const WEB = 'http://localhost:8765/';
+const MOCK = 'http://localhost:' + (process.env.PORTA_MOCK || 8790) + '/'; const WEB = 'http://localhost:' + (process.env.PORTA_WEB || 8765) + '/'; // portas trocáveis: duas pastas podem testar ao mesmo tempo
 const FORM = JSON.parse(fs.readFileSync(path.join(APP, 'forms/divinopolis-inventario.json'), 'utf8'));
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 let senhaAdmin = null;
@@ -14,7 +14,7 @@ async function subir() {
   try { process.kill(+fs.readFileSync(path.join(__dirname, 'mock.pid'), 'utf8')); } catch (e) {}
   try { execSync(`fuser -k ${new URL(MOCK).port}/tcp`, { stdio: 'ignore' }); } catch (e) {}
   await espera(300);
-  const web = spawn('python3', ['-m', 'http.server', '8765'], { cwd: APP, stdio: 'ignore', detached: true }); web.unref();
+  const web = spawn('python3', ['-m', 'http.server', new URL(WEB).port], { cwd: APP, stdio: 'ignore', detached: true }); web.unref();
   const log = fs.openSync(path.join(__dirname, 'mock.log'), 'w');
   const m = spawn('node', ['mock.js', GS], { cwd: __dirname, stdio: ['ignore', log, log], detached: true, env: Object.assign({}, process.env, { PORTA: new URL(MOCK).port }) }); m.unref(); fs.writeFileSync(path.join(__dirname, 'mock.pid'), String(m.pid));
   for (let i = 0; i < 50; i++) { await espera(150); try { await fetch(MOCK); await fetch(WEB); break; } catch (e) {} }

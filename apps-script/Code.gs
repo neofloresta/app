@@ -12,7 +12,7 @@
 
 const PROPS = PropertiesService.getScriptProperties();
 const VERSAO_SCRIPT = '2.5';
-const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em'];
+const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa'];
 const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
@@ -298,7 +298,8 @@ function salvarUsuario(dados) {
   if (!dados || !dados.login) throw new Error('Informe o usuário.');
   if (!/^[a-z0-9._-]{2,40}$/i.test(dados.login)) throw new Error('Usuário só pode ter letras, números, ponto, hífen e sublinhado.');
   const o = { login: String(dados.login).trim().toLowerCase() };
-  ['nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo'].forEach((k) => { if (dados[k] != null) o[k] = String(dados[k]).trim(); });
+  ['nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'modo_copa'].forEach((k) => { if (dados[k] != null) o[k] = String(dados[k]).trim(); });
+  if (o.modo_copa && ['raios', 'area'].indexOf(o.modo_copa) < 0) o.modo_copa = 'raios';
   if (o.perfil) o.perfil = normalizarPerfil(o.perfil);
   const existe = buscarUsuario(o.login);
   if (dados.senha) { const sal = novoSal(); o.sal = sal; o.senha_hash = hashSenha(sal, validarSenhaNova(dados.senha)); o.senha = ''; o.tentativas = '0'; o.bloqueado_ate = ''; }
@@ -307,9 +308,9 @@ function salvarUsuario(dados) {
   salvarLinha('Usuarios', COLS_USUARIOS, 'login', o);
   if (dados.senha && existe) encerrarSessoesDe(o.login);
 }
-function publico(u) { return { login: u.login, nome: u.nome, perfil: normalizarPerfil(u.perfil), equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '' }; }
+function publico(u) { return { login: u.login, nome: u.nome, perfil: normalizarPerfil(u.perfil), equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', modo_copa: u.modo_copa || 'raios' }; }
 function paraAdmin(u) {
-  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'criado_em'].forEach((k) => (o[k] = u[k] || ''));
+  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'criado_em', 'modo_copa'].forEach((k) => (o[k] = u[k] || ''));
   o.perfil = normalizarPerfil(u.perfil);
   o.bloqueado = !!(u.bloqueado_ate && new Date(u.bloqueado_ate) > new Date());
   o.senha_antiga = !u.senha_hash;
@@ -970,8 +971,8 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     const f0 = por[id]; const f = Object.assign({}, f0 || { numero: id, quadra: qn, situacao: 'A levantar', equipe: '' }); // cópia: item recusado não muda nada
     if (it.situacao != null && SITUACOES_FACE.indexOf(it.situacao) < 0) { recusadas.push({ numero: id, motivo: 'Situação inválida.' }); return; }
     if (it.situacao === 'Levantada, sem árvores') {
-      const lt = String(it.largura == null ? '' : it.largura).trim(); const lg = +lt.replace(',', '.');
-      if (!/^[0-9a-f-]{8,60}$/i.test(String(it.registro || '')) || !/^\d{1,2}([.,]\d{1,3})?$/.test(lt) || !(lg > 0)) { recusadas.push({ numero: id, motivo: 'Face sem árvores precisa da foto e da largura da calçada (cadastro de calçada).' }); return; }
+      const lt = String(it.largura == null ? '' : it.largura).trim(); const lg = +lt.replace(',', '.'); // largura é opcional desde a 2.6 (só a foto)
+      if (!/^[0-9a-f-]{8,60}$/i.test(String(it.registro || '')) || (lt && (!/^\d{1,2}([.,]\d{1,3})?$/.test(lt) || !(lg > 0)))) { recusadas.push({ numero: id, motivo: 'Face sem árvores precisa da foto da calçada (cadastro de calçada).' }); return; }
     }
     if (!coord) {
       if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
@@ -985,11 +986,11 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     if (it.auto && (f.situacao || 'A levantar') !== 'A levantar') return;
     if (it.situacao != null && it.em && f.marcada_em && new Date(it.em) < new Date(f.marcada_em)) { recusadas.push({ numero: id, motivo: 'A face foi marcada depois por ' + f.marcada_por + ' (' + f.situacao.toLowerCase() + ').' }); return; }
     const txt = [];
-    const lgNova = it.situacao === 'Levantada, sem árvores' ? String(+String(it.largura).replace(',', '.')) : '';
+    const lgNova = it.situacao === 'Levantada, sem árvores' && it.largura != null && String(it.largura).trim() ? String(+String(it.largura).replace(',', '.')) : '';
     if (it.situacao === 'Levantada, sem árvores' && it.situacao === f.situacao && it.registro === f.registro && lgNova !== f.largura) { f.largura = lgNova; txt.push('largura da calçada ' + lgNova.replace('.', ',') + ' m'); } // cadastro corrigido depois
     else if (it.situacao != null && (it.situacao !== f.situacao || (it.situacao === 'Levantada, sem árvores' && it.registro !== f.registro))) {
       f.situacao = it.situacao; f.marcada_por = usr.login; f.marcada_em = dataAparelho(it.em); txt.push(it.situacao.toLowerCase());
-      if (it.situacao === 'Levantada, sem árvores') { f.registro = String(it.registro).slice(0, 60); f.largura = String(+String(it.largura).replace(',', '.')); } else { f.registro = ''; f.largura = ''; }
+      if (it.situacao === 'Levantada, sem árvores') { f.registro = String(it.registro).slice(0, 60); f.largura = lgNova; } else { f.registro = ''; f.largura = ''; }
     }
     if (coord && it.equipe != null) txt.push('equipe ' + (f.equipe || 'nenhuma'));
     if (it.obs != null) f.obs = String(it.obs).slice(0, 300);

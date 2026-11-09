@@ -7,8 +7,8 @@
 /* Cores do manual da marca Neofloresta: azul #00546E, laranja #CD834C, azul claro #12A6C8 e cinzas */
 :root {
   --laranja: #CD834C; --azul-claro: #12A6C8;
-  --teal: #00546E; --teal-2: #12A6C8; --tint: #E4F0F3; --fundo: #F4F7F7; --sup: #fff; --texto: #13262B; --suave: #60747A;
-  --linha: #E1E8EA; --ok: #2E7D32; --alerta: #E09B00; --erro: #C62828; --raio: 12px;
+  --teal: #00546E; --teal-2: #12A6C8; --tint: #E4F0F3; --fundo: #F4F7F7; --sup: #fff; --texto: #13262B; --suave: #4F6268; --acao: #A65A1E;
+  --linha: #C9D5D8; --ok: #2E7D32; --alerta: #E09B00; --erro: #C62828; --raio: 12px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; }
@@ -408,3 +408,45 @@ input[type=file]::file-selector-button { border: 0; border-radius: 10px; backgro
 .fuste-bloco { display: flex; flex-direction: column; }
 
 .faixa-off { margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #FFF4D6; color: #5C4000; font-size: 14px; font-weight: 500; }
+
+/* ---------- 2.6: revisão de usabilidade (campo, sol, luva) ---------- */
+.op, .chip { border-width: 1.5px; border-color: #8FA3A9; }
+.op.sel { position: relative; padding-right: 34px; }
+.op.sel::after { content: '✓'; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 700; }
+.chip::before { border-radius: 4px !important; } /* marcar várias: caixa quadrada */
+.chip.exclusivo { border-style: solid; background: #ECEFF1; font-weight: 600; }
+.chips .chip.exclusivo { order: -1; }
+.opcoes.compactas { grid-template-columns: 1fr 1fr; }
+.opcoes.compactas .op small { display: none; }
+.opcoes.compactas .op.sel small { display: block; }
+.opcoes.compactas .op.sel { grid-column: 1 / -1; }
+.resumo-auto { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--suave); font-size: 14px; margin: 0 0 14px; }
+.resumo-auto span + span::before { content: '· '; }
+.grade-num.grade-1 { grid-template-columns: 1fr; }
+.aviso-campo.amarelo { color: #5C4000; background: #FFF4D6; border-radius: 8px; padding: 6px 10px; }
+.tile-gal.link { border: 0; background: none; text-decoration: underline; font-size: 13px; min-height: 36px; color: var(--suave); }
+.link-perigo { display: block; margin: 28px auto 0; background: none; border: 0; color: var(--erro); text-decoration: underline; font-size: 15px; min-height: 44px; }
+.rodape .prox.fim { background: var(--acao); }
+.btn:disabled { opacity: 1 !important; background: #E1E8EA !important; color: #4F6268 !important; border-color: #E1E8EA !important; }
+.dica, .kpi small, .tab th { font-size: 14px; }
+.ajuda-bt { position: relative; }
+.ajuda-bt::after { content: ''; position: absolute; inset: -12px; }
+.subabas button, .btn.peq { min-height: 44px; }
+.leaflet-touch .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; }
+.barra-pend small { color: inherit; opacity: .9; }
+
+.esp-linha { display: flex; gap: 8px; align-items: flex-start; }
+.esp-linha .esp-box { flex: 1; min-width: 0; }
+.bt-semid { flex: none; min-height: 52px !important; }
+.esp-livre { padding: 10px 12px; font-size: 14px; color: var(--suave); }
+.esp-recentes button { min-height: 40px; font-size: 15px; }
+
+.faixa-cont { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin: 0 0 10px; padding: 12px 14px; border: 0; border-left: 4px solid var(--teal); background: var(--tint); color: var(--texto); border-radius: 10px; text-align: left; font-size: 15px; min-height: 56px; }
+.faixa-cont span { color: var(--teal); font-weight: 600; }
+.ult-envio { display: block; color: var(--suave); font-size: 13.5px; margin: -4px 0 8px; }
+
+.btn.contorno { background: var(--sup); color: var(--teal); border: 1.5px solid var(--teal); }
+.encerrar-face { width: 100%; margin: 0 0 12px; min-height: 48px; }
+
+.linha-btn.col { flex-direction: column; align-items: stretch; }
+.linha-btn.col .btn { width: 100%; }
