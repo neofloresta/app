@@ -115,7 +115,7 @@
   // ---------- Sessão e projeto ----------
   async function iniciar() {
     try { if (await Store.get('modoSol')) document.documentElement.classList.add('sol'); } catch (e) { /* segue */ }
-    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* segue */ } // pede ao navegador para não apagar os dados do app (fotos e cadastros)
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) { /* segue */ } // pede ao navegador para não apagar os dados do app (fotos e cadastros)
     const servidor = (await Store.get('servidor')) ?? window.NEO_CONFIG.servidor;
     Api.configurar(servidor);
     S.sessao = await Store.get('sessao');

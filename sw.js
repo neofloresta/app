@@ -16,7 +16,7 @@ self.addEventListener('fetch', (e) => {
       if (guardada) return guardada;
       const rede = fetch(e.request).then(async (resp) => {
         // guarda sem segurar a imagem (aparelho sem espaço não pode quebrar o mapa); só resposta legível (as opacas ocupariam muito espaço)
-        if (resp.ok && resp.type === 'cors') c.put(e.request, resp.clone()).then(() => { if (novasMapa++ % 100 === 0) aparar(); }).catch(() => {});
+        if (resp.ok && resp.type === 'cors') e.waitUntil(c.put(e.request, resp.clone()).then(() => { if (novasMapa++ % 100 === 0) return aparar(); }).catch(() => {}));
         return resp;
       });
       return rede; // imagem de mapa quase nunca muda: a guardada vale e não gasta internet
