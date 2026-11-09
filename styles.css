@@ -593,3 +593,7 @@ footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
 .carregando-esboco { height: 14px; border-radius: 6px; background: linear-gradient(90deg, #E4ECEE 25%, #F2F6F7 50%, #E4ECEE 75%); background-size: 200% 100%; animation: esboco 1.2s infinite; margin: 10px 0; }
 @keyframes esboco { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .carregando-esboco { animation: none; } }
+/* Login: erro em vermelho e mostrar senha */
+.erro-login { background: #FDECEA; color: #8C1D18; border-left: 4px solid #B3261E; border-radius: 8px; padding: 10px 12px; margin: 6px 0 10px; font-size: 15px; }
+.campo-senha { position: relative; } .campo-senha .entrada { padding-right: 92px; }
+.bt-olho { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); min-height: 40px; padding: 0 12px; border: 0; background: none; color: #00546E; font-weight: 600; cursor: pointer; }

@@ -230,6 +230,8 @@ function autenticarSenha(login, senha, legado) {
       const t = (+u.tentativas || 0) + 1;
       if (t >= MAX_TENTATIVAS) { atualizarUsuario(u.login, { tentativas: '0', bloqueado_ate: new Date(Date.now() + BLOQUEIO_MIN * 60000).toISOString() }); auditar(u.login, 'usuario_bloqueado', '', t + ' tentativas'); }
       else { atualizarUsuario(u.login, { tentativas: String(t) }); auditar(u.login, 'login_falhou', '', 'tentativa ' + t); }
+      if (t >= MAX_TENTATIVAS) throw new Error(`Usuário bloqueado por ${MAX_TENTATIVAS} senhas erradas. Tente de novo em ${BLOQUEIO_MIN} minutos ou peça desbloqueio à coordenação.`);
+      if (MAX_TENTATIVAS - t <= 2) throw new Error(erro + ` Mais ${MAX_TENTATIVAS - t} tentativa(s) erradas e o acesso fica bloqueado por ${BLOQUEIO_MIN} minutos.`);
       throw new Error(erro);
     }
     if (String(u.ativo).toLowerCase() === 'nao' || String(u.ativo).toLowerCase() === 'não') throw new Error('Usuário desativado. Fale com a coordenação.');
@@ -330,6 +332,7 @@ function comLinks(p) {
   const o = Object.assign({}, p);
   if (p.pasta_id) o.pasta_url = 'https://drive.google.com/drive/folders/' + p.pasta_id;
   if (p.planilha_id) o.planilha_url = 'https://docs.google.com/spreadsheets/d/' + p.planilha_id;
+  const qi = p.id ? infoQuadras(p.id) : null; if (qi) o.camada = { total: qi.total, faces: qi.faces || 0, em: qi.em }; // camada de quadras carregada (coluna em Projetos)
   return o;
 }
 function projeto(id) {

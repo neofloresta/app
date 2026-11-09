@@ -253,7 +253,8 @@
   function telaLogin() {
     const u = h('input', { class: 'entrada', autocomplete: 'username', autocapitalize: 'none', placeholder: 'Usuário' });
     const s = h('input', { class: 'entrada', type: 'password', autocomplete: 'current-password', placeholder: 'Senha' });
-    const erro = h('div', { class: 'aviso oculto' });
+    const olho = h('button', { class: 'bt-olho', type: 'button', 'aria-label': 'Mostrar a senha', 'aria-pressed': 'false', onclick: () => { const ver = s.type === 'password'; s.type = ver ? 'text' : 'password'; olho.textContent = ver ? 'Ocultar' : 'Mostrar'; olho.setAttribute('aria-pressed', ver ? 'true' : 'false'); olho.setAttribute('aria-label', ver ? 'Ocultar a senha' : 'Mostrar a senha'); s.focus(); } }, 'Mostrar');
+    const erro = h('div', { class: 'erro-login oculto', role: 'alert' });
     const btn = h('button', { class: 'btn cheio', onclick: entrar }, 'Entrar');
     async function entrar() {
       erro.classList.add('oculto'); btn.disabled = true; btn.textContent = 'Entrando...';
@@ -281,7 +282,8 @@
       h('div', { class: 'marca' }, h('img', { src: 'icons/logo-basica.png', alt: 'Neofloresta Serviços Ecossistêmicos' }), h('span', null, 'Inventário de arborização urbana')),
       S.expirada ? h('div', { class: 'aviso' }, 'Sua sessão expirou. Entre de novo: os registros guardados no aparelho continuam salvos e serão enviados.') : null,
       Api.demo ? h('div', { class: 'info' }, 'Modo demonstração: os dados ficam só neste aparelho. Usuários de teste (senha 1234): ', h('b', null, 'admin'), ', ', h('b', null, 'revisor'), ' e ', h('b', null, 'prefeitura'), '. Equipes de campo: ', h('b', null, 'equipe1 / 1111'), ' e ', h('b', null, 'equipe2 / 2222'), '.') : null,
-      h('div', { class: 'campo' }, u), h('div', { class: 'campo' }, s), erro, btn,
+      h('div', { class: 'campo' }, u), h('div', { class: 'campo campo-senha' }, s, olho), erro, btn,
+      h('p', { class: 'dica', style: 'text-align:center;margin:10px 0 0' }, 'Esqueceu a senha? Fale com a coordenação do projeto: ela cria uma senha nova.'),
       Api.demo || /[?&]config/.test(location.search) ? h('button', { class: 'btn linha cheio', style: 'margin-top:12px', onclick: configurarServidor }, 'Configurar servidor') : null,
       h('p', { class: 'dica', style: 'text-align:center;margin-top:18px' }, 'Versão ' + VERSAO, ' · ', h('a', { href: '#', class: 'link-termo', onclick: (e) => { e.preventDefault(); verTermo(); } }, 'Termo de uso e privacidade'), ' · ', h('a', { href: '#ajuda', class: 'link-ajuda' }, 'Ajuda'))), h('div', { class: 'padronagem', 'aria-hidden': 'true' })));
   }
@@ -467,13 +469,13 @@
         ehCoord() ? h('div', { class: 'linha-btn coord-atalhos' }, h('button', { class: 'btn sec', onclick: () => ir('#hoje') }, 'Hoje no campo'), h('button', { class: 'btn sec', onclick: () => ir('#painel') }, 'Panorama geral')) : null,
         h('div', { id: 'encerrar-face' }),
         h('div', { id: 'aviso-versao' }),
-        h('div', { id: 'turno' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'continuar' }),
+        h('div', { id: 'turno' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'continuar' }),
         h('div', { id: 'devolvidos' }),
         h('div', { id: 'os-equipe' }),
         h('div', { class: 'resumo', id: 'stats' }), h('small', { class: 'ult-envio', id: 'ult-envio' }),
         h('div', { class: 'busca-box' }, ico('busca'), busca),
         h('div', { id: 'lista', class: 'lista' })));
-    atualizarSync(); listarRegistros(); pintarAvisoVersao(); pintarOSEquipe(); pintarEncerrarFace(); pintarAvisoGps(); pintarDicaGps(); pintarTurno();
+    atualizarSync(); listarRegistros(); pintarAvisoVersao(); pintarOSEquipe(); pintarEncerrarFace(); pintarAvisoGps(); pintarDicaGps(); pintarTurno(); pintarEspaco();
   }
 
   // "Encerrar face": a face que a equipe está fazendo, com confirmação para não encerrar sem querer
@@ -552,7 +554,17 @@
     if (ue) ue.textContent = ult ? `Último envio às ${new Date(ult).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}${new Date(ult).toDateString() !== hoje ? ' de ' + new Date(ult).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : ''}` : '';
     if (box) box.replaceChildren(dev.length ? h('button', { class: 'faixa-dev', onclick: () => { const b = document.querySelector('.busca'); if (b) { b.value = 'devolvido'; listarRegistros('devolvido'); } } }, h('b', null, `${dev.length} registro${dev.length > 1 ? 's' : ''} devolvido${dev.length > 1 ? 's' : ''} pela coordenação`), h('span', null, 'Toque para ver e corrigir')) : '');
     const lista = f === 'devolvido' ? dev : todos.filter((r) => !f || norm(camposCodigo(S.form).map((k) => r.valores[k.nome]).join(' ') + ' ' + (ce && r.valores[ce.nome])).includes(f));
-    if (!lista.length) return el.replaceChildren(h('div', { class: 'vazio-lista' }, filtro ? 'Nada encontrado.' : 'Nenhuma árvore cadastrada ainda neste aparelho.'));
+    if (!lista.length) {
+      if (filtro || perfil() !== 'coletor') return el.replaceChildren(h('div', { class: 'vazio-lista' }, filtro ? 'Nada encontrado.' : 'Nenhuma árvore cadastrada ainda neste aparelho.'));
+      const instalado = window.matchMedia && matchMedia('(display-mode: standalone)').matches; const ios = /iphone|ipad/i.test(navigator.userAgent);
+      return el.replaceChildren(h('div', { class: 'cartao primeiros' }, h('h3', null, 'Primeiros passos'),
+        h('ol', null,
+          !instalado ? h('li', null, h('b', null, 'Instale o app. '), ios ? 'No Safari, toque em Compartilhar e em "Adicionar à Tela de Início".' : 'No Chrome, toque nos 3 pontinhos e em "Instalar app".') : null,
+          h('li', null, h('b', null, 'Permita a localização '), 'quando o celular perguntar, e ligue a "Precisão da localização do Google".'),
+          h('li', null, h('b', null, 'Teste o GPS: '), 'fique 1 minuto parado em lugar aberto antes da primeira árvore.'),
+          h('li', null, h('b', null, 'Toque em "Nova árvore" '), 'ao lado do tronco, do lado da rua, e siga as etapas.')),
+        h('a', { href: '#ajuda', class: 'btn sec peq' }, 'Ver a ajuda completa')));
+    }
     const itens = [];
     for (const r of lista.slice(0, 300)) {
       const img = await miniatura(r);
@@ -818,6 +830,12 @@
       if (S.pos) ouv(S.pos);
       const tm = setInterval(() => { Gps.ler(); if (!leituras.length && Date.now() - t0 > 12000) { btSem.classList.remove('oculto'); st.textContent = 'Sem sinal de GPS ainda. Vá para um lugar aberto ou continue sem GPS.'; } }, 1000);
     });
+  }
+  // aviso de pouco espaço: nada é apagado sozinho; a equipe libera as fotos já confirmadas em Preferências
+  async function pintarEspaco() {
+    const el = document.getElementById('aviso-espaco'); if (!el || !navigator.storage || !navigator.storage.estimate) return;
+    try { const e = await navigator.storage.estimate(); const livre = e.quota - e.usage; if (!(e.quota && (e.usage / e.quota > 0.8 || livre < 300e6)) || !document.body.contains(el)) return;
+      el.replaceChildren(h('button', { class: 'faixa-cont faixa-gps', onclick: () => ir('#preferencias') }, h('b', null, 'Pouco espaço para o app no celular'), h('span', null, 'Toque para liberar as fotos já confirmadas no servidor'))); } catch (e) { /* sem informação */ }
   }
   // aviso na tela inicial quando as últimas árvores saíram com erro alto
   async function pintarDicaGps() {
@@ -1918,8 +1936,9 @@
       try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value, face_gps: fg, face_dist: fd, face_folga: ff, responsavel: rt.value.trim(), registro_profissional: reg.value.trim(), art: art.value.trim(), tipos_os: tos.value.split('\n').map((x) => x.trim()).filter(Boolean).join('; ') })); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
     }
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Projetos'),
-      h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Projeto'), h('th', null, 'Formulário'), h('th', null, '')),
+      h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Projeto'), h('th', null, 'Formulário'), h('th', null, 'Camada de quadras'), h('th', null, '')),
         projetos.map((p) => h('tr', null, h('td', null, h('b', null, p.nome), h('br'), h('small', null, [p.id, p.municipio, p.meta ? 'meta ' + fmtN(+p.meta) : ''].filter(Boolean).join(' · '))), h('td', null, (forms.find((f) => f.id === p.formulario) || {}).nome || p.formulario),
+          h('td', null, p.camada ? [h('span', null, `${fmtN(p.camada.total)} quadras` + (p.camada.faces ? ` e ${fmtN(p.camada.faces)} faces` : '')), h('br'), h('small', { class: 'dica' }, 'carregada em ' + dataAno(p.camada.em))] : h('small', { class: 'dica' }, 'nenhuma')),
           h('td', null, h('button', { class: 'btn sec peq', onclick: () => editar(p) }, 'Editar'), Api.demo ? null : h('button', { class: 'btn sec peq', style: 'margin-left:6px', onclick: () => importarQuadrasTela(p) }, 'Quadras'))))),
       h('button', { class: 'btn', style: 'margin-top:12px', onclick: () => editar(null) }, '+ Novo projeto'),
       h('p', { class: 'dica' }, Api.demo ? '' : 'Cada projeto novo ganha uma pasta no Drive com a planilha e a subpasta DCIM das fotos.')));
