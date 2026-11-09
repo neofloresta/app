@@ -3,6 +3,8 @@ const path = require('path');
 const FOTO = path.join(__dirname, 'foto.jpg');
 const campo = (p, nome) => p.locator(`[data-campo="${nome}"]`);
 async function aba(p, nome) { await p.click('.prog-topo'); await p.click(`.folha .menu-it:has-text("${nome}")`); await p.waitForTimeout(120); }
+// passear pelas etapas sem a trava (como no treino, antes de preencher): para testes que só olham o que aparece
+async function abaLivre(p, nome) { await p.evaluate(() => { if (window.__app.S.reg) window.__app.S.reg.mexido = false; }); await aba(p, nome); }
 async function op(p, nomeCampo, texto) { await campo(p, nomeCampo).locator(`.op:has-text("${texto}")`).first().click(); }
 async function chip(p, rotulo) { await p.locator(`.chip:text-is("${rotulo}")`).first().click(); }
 async function num(p, nomeCampo, v) { await campo(p, nomeCampo).locator('input').first().fill(String(v)); }
@@ -37,5 +39,5 @@ async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, al
   if (await p.locator('.folha >> text=Salvar sem GPS').count()) { p.semGps = (p.semGps || 0) + 1; await p.click('.folha >> text=Salvar sem GPS'); await p.waitForTimeout(300); }
   return faltas(p);
 }
-async function excluir(p) { await p.click('.prog-topo'); await p.click('.folha button.perigo'); await p.waitForTimeout(200); await p.locator('.folha button.perigo').last().click(); await p.waitForTimeout(400); }
-module.exports = { excluir, campo, aba, op, chip, num, concluir, faltas, foto, arvoreCompleta, FOTO };
+async function excluir(p) { await p.click('.prog-topo'); await p.click('.folha .link-perigo'); await p.waitForTimeout(200); await p.locator('.folha button.perigo').last().click(); await p.waitForTimeout(400); }
+module.exports = { abaLivre, excluir, campo, aba, op, chip, num, concluir, faltas, foto, arvoreCompleta, FOTO };

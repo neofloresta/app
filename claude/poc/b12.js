@@ -30,7 +30,7 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
   ok('1.2', f.length >= 10 && rasc === 1 && !!barra && marcado > 0, `não salvou; voltou direto ao primeiro campo que falta (cursor em "${foco}"), ${marcado} campo(s) em vermelho na etapa e barra no topo: "${barra}"; ${f.length} pendências`);
 
   // 1.3 morta
-  await A.aba(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Morta'); await p.waitForTimeout(500); if (await p.locator('.folha button:has-text("Trocar")').count()) await p.click('.folha button:has-text("Trocar")'); await p.waitForTimeout(200);
+  await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Morta'); await p.waitForTimeout(500); if (await p.locator('.folha button:has-text("Trocar")').count()) await p.click('.folha button:has-text("Trocar")'); await p.waitForTimeout(200);
   const raioVisivel = await A.campo(p, 'Raio de copa 1 (m)').count();
   await A.concluir(p); f = await A.faltas(p);
   ok('1.3', raioVisivel === 0 && !f.includes('Especie') && !f.some((x) => /Raio|Qualidade/.test(x)), `raios ocultos=${raioVisivel === 0}; espécie opcional=${!f.some((x) => /Esp/.test(x))}`);
@@ -39,11 +39,14 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
   // 1.4 local de plantio / calçada
   await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Calçada sem árvores'); await p.waitForTimeout(150);
   const abas2 = await p.locator('.prog .seg').count(); await A.concluir(p); f = await A.faltas(p);
-  ok('1.4', !f.some((x) => /Esp|CAP|Altura/.test(x)) && f.some((x) => /Foto geral/.test(x)) && f.some((x) => /Largura/.test(x)), `calçada sem árvores: ${abas2} etapas; pede ${f.join(', ')}`);
+  ok('1.4', !f.some((x) => /Esp|CAP|Altura/.test(x)) && f.some((x) => /Foto geral/.test(x)) && !f.some((x) => /Largura/.test(x)), `calçada sem árvores (só a foto): ${abas2} etapas; pede ${f.join(', ')}`);
   await A.excluir(p);
 
   // 1.5 critério de inclusão 2 m
-  f = await A.arvoreCompleta(p, { altura: 1.2 }); rs = await regs(p);
+  // com a trava de etapas, a altura abaixo de 2 m já impede de seguir para a próxima etapa
+  await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Local do registro', 'Via pública'); await A.op(p, 'Categoria', 'Árvore'); await A.foto(p, 'Foto 1');
+  await A.aba(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva'); await A.campo(p, 'Especie').locator('input').first().fill('Moquilea tomentosa'); await A.campo(p, 'CAP (cm)').locator('input').first().fill('80'); await A.num(p, 'Altura total (m)', 1.2); await p.waitForTimeout(300);
+  await A.concluir(p); f = await A.faltas(p); rs = await regs(p);
   const baixa = rs.find((x) => x.valores['Altura total (m)'] === 1.2);
   const aviso = await p.locator('text=/abaixo de 2|inferior a 2|mínimo de 2|critério/i').count();
   ok('1.5', !!baixa && baixa.status === 'rascunho' && f.some((x) => /critério/.test(x)), `árvore de 1,2 m não foi concluída; mensagem: ${f.filter((x) => /critério/.test(x)).join('')}`);

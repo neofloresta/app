@@ -71,6 +71,20 @@
   }
 
   // ---------- GPS ----------
+  // O GPS só liga depois do termo aceito e, na primeira vez, com uma explicação antes do pedido do celular
+  async function ligarGps() {
+    if (Gps.id != null || !navigator.geolocation) return;
+    let estado = ''; try { estado = (await navigator.permissions.query({ name: 'geolocation' })).state; } catch (e) { /* navegador antigo */ }
+    if (estado !== 'granted' && !(await Store.get('gpsExplicado'))) {
+      await modal('Localização', h('div', null, h('p', null, 'O app usa o GPS do celular para marcar onde está cada árvore e o trajeto da equipe durante o trabalho.'), h('p', null, 'Na próxima tela, toque em ', h('b', null, 'Permitir'), '.')), [{ texto: 'Entendi', valor: true }]);
+      await Store.set('gpsExplicado', 1);
+    }
+    Gps.iniciar();
+  }
+  function pintarAvisoGps() {
+    const el = document.getElementById('aviso-gps'); if (!el) return;
+    el.replaceChildren(S.gpsNegado ? h('div', { class: 'aviso' }, h('b', null, 'O GPS está bloqueado para o app.'), h('br'), 'Android: toque no cadeado ao lado do endereço, em Permissões, Localização, Permitir. iPhone: Ajustes, Safari, Localização, Permitir. Depois feche e abra o app.') : '');
+  }
   const Gps = {
     id: null, ouvintes: new Set(),
     iniciar() {
@@ -78,10 +92,12 @@
       this.id = navigator.geolocation.watchPosition((p) => {
         S.pos = { lat: p.coords.latitude, lon: p.coords.longitude, prec: Math.round(p.coords.accuracy * 10) / 10, t: Date.now() };
         this.ouvintes.forEach((f) => f(S.pos));
-      }, (e) => { S.posErro = e.message; this.ouvintes.forEach((f) => f(null, e)); }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
+      }, (e) => { S.posErro = e.message; if (e.code === 1) { S.gpsNegado = true; pintarAvisoGps(); } this.ouvintes.forEach((f) => f(null, e)); }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
     },
     // pede uma leitura nova na hora. O watch só avisa quando a posição muda: com o celular parado ele fica quieto
     // e a árvore nova ficava sem GPS. Reiniciar o acompanhamento força o aparelho a entregar a posição atual.
+    // uma leitura nova, sem reiniciar o acompanhamento (a tela de marcação pede uma por segundo)
+    ler() { if (!navigator.geolocation) return; navigator.geolocation.getCurrentPosition((p) => { S.pos = { lat: p.coords.latitude, lon: p.coords.longitude, prec: Math.round(p.coords.accuracy * 10) / 10, t: Date.now() }; this.ouvintes.forEach((f) => f(S.pos)); }, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }); },
     agora() {
       if (!navigator.geolocation) return;
       if (this.id != null) { navigator.geolocation.clearWatch(this.id); this.id = null; this.iniciar(); }
@@ -95,6 +111,8 @@
 
   // ---------- Sessão e projeto ----------
   async function iniciar() {
+    try { if (await Store.get('modoSol')) document.documentElement.classList.add('sol'); } catch (e) { /* segue */ }
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* segue */ } // pede ao navegador para não apagar os dados do app (fotos e cadastros)
     const servidor = (await Store.get('servidor')) ?? window.NEO_CONFIG.servidor;
     Api.configurar(servidor);
     S.sessao = await Store.get('sessao');
@@ -111,7 +129,7 @@
       Api.credenciais(credDe(S.sessao));
       if (S.sessao.usuario.perfil === 'campo') S.sessao.usuario.perfil = 'coletor';
       if (S.sessao.usuario.perfil !== 'cliente') await abrirProjeto(S.sessao.projetoAtual); else await abrirProjetoCliente(S.sessao.projetoAtual);
-      if (S.sessao.usuario.perfil !== 'cliente') Gps.iniciar();
+      if (S.sessao.usuario.perfil !== 'cliente' && S.sessao.usuario.termo_aceito_em) ligarGps();
       atualizarSessao();
     }
     rota(); sincronizar(true);
@@ -241,7 +259,7 @@
         Api.credenciais(credDe(S.sessao)); S.expirada = false;
         await Store.set('sessao', S.sessao);
         for (const [fid, f] of Object.entries(r.formularios || {})) if (f && Array.isArray(f.campos)) { await Store.set('form:' + fid, f); S.formsEm = Date.now(); }
-        if (r.usuario.perfil === 'cliente') await abrirProjetoCliente(S.sessao.projetoAtual); else { await abrirProjeto(S.sessao.projetoAtual); Gps.iniciar(); }
+        if (r.usuario.perfil === 'cliente') await abrirProjetoCliente(S.sessao.projetoAtual); else { await abrirProjeto(S.sessao.projetoAtual); if (r.usuario.termo_aceito_em) ligarGps(); }
         ir(r.usuario.perfil === 'cliente' ? '#painel' : '#inicio'); rota();
       } catch (e) {
         erro.textContent = navigator.onLine ? e.message : 'Sem internet. O primeiro acesso precisa de conexão.'; erro.classList.remove('oculto');
@@ -278,13 +296,31 @@
 
   // ---------- Sincronização ----------
   const $sync = () => document.querySelector('.sync');
-  async function pendentes() { return (await Store.todosRegistros()).filter((r) => r.status === 'pendente' && !r.__base); }
+  const fotoFalta = (r) => Object.values(r.fotos || {}).some((f) => f && f.chave && !f.enviado);
+  // a enviar: registro pendente, ou registro já enviado com foto esperando (Wi-Fi ou falha)
+  async function pendentes() { return (await Store.todosRegistros()).filter((r) => !r.__base && (r.status === 'pendente' || (r.status === 'enviado' && fotoFalta(r)))); }
+  // fotos sobem só no Wi-Fi (padrão); os cadastros sobem sempre. "Mandar agora" libera no 4G até sair do app.
+  async function fotosSoWifi() { const v = await Store.get('fotosWifi'); return v == null ? true : !!v; }
+  async function podeFotos() {
+    if (S.fotosAgora || !(await fotosSoWifi())) return true;
+    const c = navigator.connection; if (!c || !c.type || c.type === 'unknown') return true; // sem como saber: manda
+    return c.type === 'wifi' || c.type === 'ethernet';
+  }
   async function atualizarSync() {
     const el = $sync(); if (!el) return;
-    const n = (await pendentes()).length + (await nFilaOS()) + (await nFilaQd());
-    el.className = 'sync' + (!navigator.onLine ? ' off' : n ? ' pend' : '');
+    const pend = await pendentes(); const nReg = pend.filter((r) => r.status === 'pendente').length;
+    const nFot = pend.reduce((a, r) => a + Object.values(r.fotos || {}).filter((f) => f && f.chave && !f.enviado).length, 0);
+    const n = nReg + (await nFilaOS()) + (await nFilaQd());
+    el.className = 'sync' + (!navigator.onLine ? ' off' : n || nFot ? ' pend' : '');
     if (S.expirada) { el.className = 'sync pend'; el.textContent = 'Entrar de novo'; return; }
-    el.textContent = S.sincronizando ? 'Enviando...' : !navigator.onLine ? (n ? `Sem rede · ${n}` : 'Sem rede') : n ? `${n} a enviar` : (Api.demo ? 'Demonstração' : 'Tudo enviado');
+    const esperaWifi = nFot && !(await podeFotos());
+    el.textContent = S.sincronizando ? 'Enviando...' : !navigator.onLine ? (n || nFot ? `Sem rede · ${n || nFot}` : 'Sem rede') : n ? `${n} a enviar` : nFot ? (esperaWifi ? `${pl(nFot, 'foto', 'fotos')} no Wi-Fi` : `${pl(nFot, 'foto', 'fotos')} a enviar`) : (Api.demo ? 'Demonstração' : 'Tudo enviado');
+    el.title = esperaWifi ? 'As fotos sobem quando o celular estiver no Wi-Fi. Toque para mandar agora pelo 4G.' : '';
+  }
+  async function tocarSync() {
+    const pend = await pendentes(); const nFot = pend.reduce((a, r) => a + Object.values(r.fotos || {}).filter((f) => f && f.chave && !f.enviado).length, 0);
+    if (nFot && !(await podeFotos()) && await confirmar('Mandar fotos agora', `${pl(nFot, 'foto está esperando', 'fotos estão esperando')} o Wi-Fi. Mandar agora pelo 4G? Gasta internet do plano.`, 'Mandar agora')) S.fotosAgora = true;
+    sincronizar();
   }
   async function sincronizar(silencioso) {
     if (S.expirada && !silencioso) return reentrar();
@@ -295,7 +331,34 @@
     garantirFaixa();
     if (S.expirada) return;
     await atualizarSituacao();
+    await conferirEnvio();
     if (location.hash === '' || location.hash === '#inicio') listarRegistros();
+  }
+  // Conferência: pergunta ao servidor se os registros enviados chegaram e se cada foto tem link.
+  // O que não chegou volta para a fila e é reenviado. A foto continua guardada no celular.
+  async function conferirEnvio() {
+    if (Api.demo || !navigator.onLine || !S.projeto || !['coletor', 'revisor'].includes(perfil())) return;
+    if (S.conferidoEm && Date.now() - S.conferidoEm < 5 * 60000) return; S.conferidoEm = Date.now();
+    try {
+      const alvo = (await Store.registros(S.projeto.id)).filter((r) => r.status === 'enviado' && !r.conferido && !r.__base && !fotoFalta(r)).slice(0, 300);
+      if (!alvo.length) return;
+      const ach = await Api.b.conferir(S.projeto.id, alvo.map((r) => r.uuid)); if (!ach) return;
+      let reenviar = 0;
+      for (const r0 of alvo) {
+        const r = await Store.registro(r0.uuid); if (!r || r.status !== 'enviado' || r.__base) continue;
+        const a = ach[r.uuid];
+        if (a && Object.keys(r.fotos || {}).every((k) => !r.fotos[k] || !r.fotos[k].chave || a.fotos[k])) { r.conferido = true; await Store.salvarRegistro(r); continue; }
+        r.tentConf = (r.tentConf || 0) + 1;
+        if (r.tentConf > 3) { r.conferido = true; r.erroSync = 'O servidor não confirmou este registro depois de 3 envios. Avise a coordenação.'; await Store.salvarRegistro(r); continue; }
+        if (!a) { r.status = 'pendente'; reenviar++; } // não está na planilha: manda de novo
+        else {
+          let falta = false; for (const [campo, f] of Object.entries(r.fotos || {})) if (f && f.chave && !a.fotos[campo]) { f.enviado = false; falta = true; }
+          if (falta) reenviar++; else r.conferido = true;
+        }
+        await Store.salvarRegistro(r);
+      }
+      if (reenviar) { S.conferidoEm = 0; setTimeout(() => sincronizar(true), 1000); }
+    } catch (e) { S.conferidoEm = 0; /* tenta na próxima */ }
   }
   // recusas definitivas do servidor (não adianta tentar de novo)
   const recusaFinal = (m) => /travado|validado pela coordena|outra equipe|perfil n[aã]o tem acesso/i.test(m || '');
@@ -317,17 +380,20 @@
     for (const r0 of lista) {
       const uid = r0.uuid;
       try {
-        let r = await Store.registro(uid); if (!r || r.status !== 'pendente' || r.__base) continue;
+        let r = await Store.registro(uid); if (!r || r.__base || !(r.status === 'pendente' || (r.status === 'enviado' && fotoFalta(r)))) continue;
         const p = S.sessao.projetos.find((x) => x.id === r.projeto);
         const form = S.projeto && r.projeto === S.projeto.id ? S.form : await carregarForm(p ? p.formulario : '', true);
-        for (const [campo, f] of Object.entries(r.fotos || {})) {
+        const fotosOk = await podeFotos(); const soFotos = r.status === 'enviado';
+        if (fotosOk) for (const [campo, f] of Object.entries(r.fotos || {})) {
           if (!f || f.enviado) continue;
           const blob = await Store.foto(f.chave);
           let res = null; if (blob) res = await Api.b.foto(r.projeto, f.nome.replace(/^DCIM\//, ''), blob);
           const cur = await Store.registro(uid); // grava só se a foto ainda é a mesma no registro
           if (cur && cur.fotos && cur.fotos[campo] && cur.fotos[campo].chave === f.chave) { Object.assign(cur.fotos[campo], { enviado: true, url: (res && res.url) || '', idDrive: (res && res.id) || '' }); await Store.salvarRegistro(cur); }
         }
-        r = await Store.registro(uid); if (!r || r.status !== 'pendente' || r.__base) continue;
+        r = await Store.registro(uid); if (!r || r.__base) continue;
+        if (soFotos) { if (!fotosOk || fotoFalta(r)) continue; } // registro já estava no servidor: reenvia só para gravar os links das fotos
+        else if (r.status !== 'pendente') continue;
         if (r.lat != null && !r.endereco && S.geocodificados < 20 && !Api.demo) {
           S.geocodificados++; const e = await enderecoDe(r.lat, r.lon);
           if (e) { const cur = await Store.registro(uid); if (cur && cur.atualizado_em === r.atualizado_em) { Object.assign(cur, e); await Store.salvarRegistro(cur); r = cur; } }
@@ -335,7 +401,7 @@
         const res = await Api.b.registro(r.projeto, Api.achatar(r, form));
         const atual = await Store.registro(uid);
         if (atual && atual.atualizado_em === r.atualizado_em && !atual.__base) {
-          atual.status = 'enviado'; delete atual.erroSync;
+          atual.status = 'enviado'; delete atual.erroSync; delete atual.conferido;
           if (res && res.validacao) atual.validacao = res.validacao;
           if (res && res.ignorado) { atual.conflito = 'A coordenação alterou este registro depois desta versão. A versão do aparelho não foi aplicada.'; aviso = atual.conflito; } else delete atual.conflito;
           await Store.salvarRegistro(atual);
@@ -382,7 +448,7 @@
 
   async function telaInicio() {
     const menu = h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu'));
-    const sync = h('button', { class: 'sync', onclick: () => sincronizar() }, '...');
+    const sync = h('button', { class: 'sync', onclick: tocarSync }, '...');
     const busca = h('input', { class: 'busca', placeholder: 'Buscar código ou espécie', oninput: () => listarRegistros(busca.value) });
     $app.replaceChildren(
       topo(S.projeto.nome, S.projeto.equipe || S.sessao.usuario.nome, menu, h('div', { class: 'topo-dir' }, h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')), sync)),
@@ -391,13 +457,13 @@
         h('button', { class: 'btn nova canto', onclick: novoRegistro }, ico('mais'), 'Nova árvore'),
         h('div', { id: 'encerrar-face' }),
         h('div', { id: 'aviso-versao' }),
-        h('div', { id: 'continuar' }),
+        h('div', { id: 'aviso-gps' }), h('div', { id: 'continuar' }),
         h('div', { id: 'devolvidos' }),
         h('div', { id: 'os-equipe' }),
         h('div', { class: 'resumo', id: 'stats' }), h('small', { class: 'ult-envio', id: 'ult-envio' }),
         h('div', { class: 'busca-box' }, ico('busca'), busca),
         h('div', { id: 'lista', class: 'lista' })));
-    atualizarSync(); listarRegistros(); pintarAvisoVersao(); pintarOSEquipe(); pintarEncerrarFace();
+    atualizarSync(); listarRegistros(); pintarAvisoVersao(); pintarOSEquipe(); pintarEncerrarFace(); pintarAvisoGps(); pintarDicaGps();
   }
 
   // "Encerrar face": a face que a equipe está fazendo, com confirmação para não encerrar sem querer
@@ -508,6 +574,7 @@
       perfil() === 'admin' ? it('Servidor', configurarServidor) : null,
       !Api.demo || true ? it('Trocar minha senha', trocarSenha) : null,
       S.novaVersao ? it(`Atualizar para a versão ${S.novaVersao.versao}`, atualizarApp) : it('Verificar atualização', () => verificarAtualizacao(true)),
+      it('Preferências', () => ir('#preferencias')),
       it('Sobre, termo de uso e privacidade', () => ir('#sobre')),
       it('Sair', () => sair()),
       h('p', { class: 'dica', style: 'margin-top:12px' }, `Versão ${VERSAO}${Api.demo ? ' · demonstração' : ''}`)));
@@ -627,22 +694,91 @@
     if (S.pos && Date.now() - S.pos.t < 20000) Object.assign(r, { lat: S.pos.lat, lon: S.pos.lon, prec: S.pos.prec });
     if (ex) { r.faceId = ex.faceId; r.faceRua = ex.faceRua; r.faceTxt = ex.faceTxt; r.valores[ex.cat[0]] = ex.cat[1]; Object.assign(r.valores, ex.extra || {}); }
     await Store.salvarRegistro(r);
-    Gps.agora();
     S.aba = 0; S.tentou = false;
+    await marcarPonto(r); // o ponto é travado aqui, antes de medir: não acompanha o celular enquanto a dupla dá a volta na árvore
     ir('#form/' + r.uuid);
+  }
+
+  // ---------- Marcação do ponto ----------
+  const ORIENTA_GPS = 'Marque o ponto fora da copa, do lado da rua, encostado no tronco, e não debaixo da copa.';
+  const DICAS_GPS = ['Ligue a "Precisão da localização do Google" em Configurações, Localização, Serviços de localização.', 'Ao começar o dia, espere 1 minuto parado em um lugar aberto antes da primeira árvore.', ORIENTA_GPS, 'Segure o celular na mão, com a tela para cima, não no bolso.', 'Se o erro não baixar, desligue e ligue a localização do celular.'];
+  function marcarPonto(r) {
+    return new Promise((fim) => {
+      const META = 5; const t0 = Date.now(); const leituras = []; let pronto = false;
+      const num = h('div', { class: 'mp-num' }, '...'); const st = h('div', { class: 'mp-st' }, 'Procurando o sinal do GPS...');
+      const det = h('small', { class: 'mp-det' });
+      const hojeK = 'gpsDia:' + new Date().toDateString();
+      const dicas = h('details', { class: 'mp-dicas' }, h('summary', null, 'Dicas para melhorar o GPS'), h('ul', null, DICAS_GPS.map((d) => h('li', null, d))));
+      Store.get(hojeK).then((v) => { if (!v) { dicas.open = true; Store.set(hojeK, 1); } }); // primeira marcação do dia: dicas abertas (teste do GPS do dia)
+      const btAgora = h('button', { class: 'btn cheio', disabled: true, onclick: () => travar(true) }, 'Marcar agora');
+      const btSem = h('button', { class: 'btn sec oculto', onclick: () => sair(false) }, 'Continuar sem GPS');
+      const veu = h('div', { class: 'veu mp-veu' }, h('div', { class: 'folha mp' }, h('h3', null, 'Marcando o ponto'),
+        h('div', { class: 'mp-orienta' }, ORIENTA_GPS), num, st, det, h('div', { class: 'mp-meta' }, `Espere o erro ficar em até ${META} m. O app marca sozinho quando estabilizar.`),
+        h('div', { class: 'linha-btn col' }, btAgora, btSem), dicas));
+      document.body.append(veu);
+      const dist = (a, b) => Math.hypot((a.lon - b.lon) * 111320 * Math.cos(a.lat * Math.PI / 180), (a.lat - b.lat) * 110540);
+      const media = () => { const melhor = Math.min(...leituras.map((x) => x.prec)); const us = leituras.filter((x) => x.prec <= melhor * 1.5); let sw = 0, la = 0, lo = 0; for (const x of us) { const w = 1 / (x.prec * x.prec); sw += w; la += x.lat * w; lo += x.lon * w; } return { lat: la / sw, lon: lo / sw, prec: Math.round(melhor * 10) / 10, n: us.length }; };
+      const ouv = (p, e) => {
+        if (pronto) return;
+        if (!p) { if (e && e.code === 1) { st.textContent = 'O GPS está bloqueado para o app.'; btSem.classList.remove('oculto'); } return; }
+        if (Date.now() - p.t > 3000) return;
+        leituras.push({ lat: p.lat, lon: p.lon, prec: p.prec }); if (leituras.length > 40) leituras.shift();
+        const pr = p.prec; num.textContent = '±' + (pr >= 10 ? Math.round(pr) : numBR(Math.round(pr * 10) / 10)) + ' m'; num.className = 'mp-num ' + (pr <= META ? 'bom' : pr <= 10 ? 'medio' : 'ruim');
+        btAgora.disabled = Date.now() - t0 < 2500;
+        const ult = leituras.slice(-3); const melhor = Math.min(...leituras.map((x) => x.prec));
+        const estavel = ult.length >= 3 && ult.every((x) => dist(x, ult[0]) <= Math.max(2, melhor)) && ult.every((x) => x.prec <= melhor + 1);
+        det.textContent = `${pl(leituras.length, 'leitura', 'leituras')} · melhor ±${numBR(melhor)} m`;
+        if (Date.now() - t0 >= 3000 && melhor <= META && estavel) return travar(false);
+        st.textContent = pr <= META ? 'Estabilizando...' : pr <= 10 ? 'Quase lá. Fique parado ao lado do tronco.' : 'Erro alto. Saia de baixo da copa, para o lado da rua.';
+        if (Date.now() - t0 > 25000 && melhor <= 15 && estavel) travar(false);
+      };
+      function travar(manual) {
+        if (pronto || !leituras.length) return; pronto = true;
+        const m = media(); Object.assign(r, { lat: m.lat, lon: m.lon, prec: m.prec, gpsAuto: false, marcadoEm: agoraISO(), leiturasGps: m.n });
+        Store.salvarRegistro(r);
+        num.className = 'mp-num ' + (m.prec <= META ? 'bom' : m.prec <= 10 ? 'medio' : 'ruim'); num.textContent = '±' + numBR(m.prec) + ' m';
+        st.textContent = manual ? 'Ponto marcado.' : 'Ponto marcado ✓'; btAgora.disabled = true;
+        setTimeout(() => sair(true), 700);
+      }
+      function sair() { clearInterval(tm); Gps.ouvintes.delete(ouv); veu.remove(); fim(); }
+      Gps.ouvintes.add(ouv); ligarGps();
+      if (S.pos) ouv(S.pos);
+      const tm = setInterval(() => { Gps.ler(); if (!leituras.length && Date.now() - t0 > 12000) { btSem.classList.remove('oculto'); st.textContent = 'Sem sinal de GPS ainda. Vá para um lugar aberto ou continue sem GPS.'; } }, 1000);
+    });
+  }
+  // aviso na tela inicial quando as últimas árvores saíram com erro alto
+  async function pintarDicaGps() {
+    const el = document.getElementById('aviso-gps'); if (!el || S.gpsNegado || !S.projeto) return;
+    const ult = (await Store.registros(S.projeto.id)).filter((r) => r.status !== 'rascunho' && r.prec != null).sort((a, b) => (b.criado_em || '').localeCompare(a.criado_em || '')).slice(0, 5);
+    if (ult.length < 3) return; const pr = ult.map((r) => +r.prec).sort((a, b) => a - b)[Math.floor(ult.length / 2)];
+    if (pr <= 7 || !document.body.contains(el)) return;
+    el.replaceChildren(h('button', { class: 'faixa-cont faixa-gps', onclick: () => modal('Dicas para melhorar o GPS', h('ul', null, DICAS_GPS.map((d) => h('li', null, d))), [{ texto: 'Entendi', valor: true }]) }, h('b', null, `A precisão do GPS caiu (±${numBR(pr)} m nas últimas árvores)`), h('span', null, 'Veja as dicas')));
   }
 
   // preferências de cada login neste aparelho
   // a coordenação define no cadastro do usuário como a dupla mede a copa (4 raios ou área com trena a laser)
   async function prefCopa() { const u = S.sessao && S.sessao.usuario; if (u && u.modo_copa) return u.modo_copa; return (await Store.get('pref:copa:' + (S.sessao && S.sessao.u))) || 'raios'; }
   async function telaPreferencias() {
-    const atual = await prefCopa();
-    const op = (v, t, d) => h('label', { class: 'pref-op' + (atual === v ? ' sel' : '') }, h('input', { type: 'radio', name: 'copa', value: v, checked: atual === v, onchange: async () => { await Store.set('pref:copa:' + S.sessao.u, v); toast('Preferência salva. Vale para os próximos cadastros.'); telaPreferencias(); } }), h('div', null, h('b', null, t), h('small', null, d)));
-    $app.replaceChildren(topo('Minhas preferências', S.sessao.usuario.nome || S.sessao.u, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), null),
-      h('main', null, h('div', { class: 'cartao' }, h('h3', null, 'Como medir a copa'),
-        op('raios', 'Quatro raios de copa', 'Mede quatro raios com trena; o app calcula a área.'),
-        op('area', 'Área de copa direto', 'Mede a área da projeção da copa com trena a laser e digita o valor.'),
-        h('p', { class: 'dica' }, 'Vale para as árvores que você cadastrar a partir de agora, neste aparelho. Os cadastros antigos continuam como foram feitos.'))));
+    const copa = await prefCopa(); const wifi = await fotosSoWifi(); const sol = !!(await Store.get('modoSol'));
+    let esp = ''; try { const e = await navigator.storage.estimate(); esp = `${(e.usage / 1e9).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} GB usados pelo app de ${(e.quota / 1e9).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} GB disponíveis.`; } catch (e) { /* sem informação */ }
+    const chave = (txt, det, v, fn) => h('label', { class: 'pref-op' + (v ? ' sel' : '') }, h('input', { type: 'checkbox', checked: v, onchange: async (ev) => { await fn(ev.target.checked); telaPreferencias(); } }), h('div', null, h('b', null, txt), h('small', null, det)));
+    $app.replaceChildren(topo('Preferências', S.sessao.usuario.nome || S.sessao.u, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), null),
+      h('main', null,
+        h('div', { class: 'cartao' }, h('h3', null, 'Fotos'), chave('Mandar fotos só no Wi-Fi', 'Os cadastros sobem na hora, pelo 4G. As fotos esperam o Wi-Fi (tocando no aviso de envio dá para mandar agora).', wifi, (v) => Store.set('fotosWifi', v)),
+          h('p', { class: 'dica' }, 'As fotos ficam na qualidade original e continuam guardadas no celular depois de enviadas. ' + esp),
+          h('button', { class: 'btn sec', onclick: liberarEspaco }, 'Liberar espaço: apagar do celular fotos já confirmadas no servidor há mais de 30 dias')),
+        h('div', { class: 'cartao' }, h('h3', null, 'Tela'), chave('Modo Sol (alto contraste)', 'Letras pretas, bordas mais fortes e texto maior, para ler no sol forte.', sol, async (v) => { await Store.set('modoSol', v); document.documentElement.classList.toggle('sol', v); })),
+        S.form && S.form.campos.some((c) => c.auto === 'modocopa') ? h('div', { class: 'cartao' }, h('h3', null, 'Como medir a copa'), h('p', null, copa === 'area' ? 'Área direto, com trena a laser.' : '4 raios com trena (o app calcula a área).'), h('p', { class: 'dica' }, 'Definido pela coordenação no seu usuário.')) : null));
+  }
+  async function liberarEspaco() {
+    const lim = Date.now() - 30 * 864e5; let n = 0;
+    if (!(await confirmar('Liberar espaço', 'Apaga do celular só as fotos que o servidor já confirmou, de cadastros de mais de 30 dias. Os cadastros continuam no celular.', 'Liberar'))) return;
+    for (const r of await Store.todosRegistros()) {
+      if (!r.conferido || r.status !== 'enviado' || new Date(r.atualizado_em || 0).getTime() > lim) continue;
+      let mudou = false; for (const f of Object.values(r.fotos || {})) if (f && f.chave && f.enviado && f.url) { await Store.apagarFoto(f.chave); f.chave = ''; mudou = true; n++; }
+      if (mudou) await Store.salvarRegistro(r);
+    }
+    toast(n ? `${pl(n, 'foto apagada', 'fotos apagadas')} do celular. Elas continuam no servidor.` : 'Nenhuma foto antiga confirmada para apagar.', 4000);
   }
   function recalcular(r) {
     for (let i = 0; i < 4; i++) for (const c of S.form.campos) if (c.calculado && c.expr) {
@@ -927,11 +1063,11 @@
       return h('div', { class: 'rot-linha' }, h('label', { class: 'rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null, bt), box);
     }
     function campoEl(c, semAjuda) {
-      const rotulo0 = rotulo; const rotulo = (k) => rotulo0(k, semAjuda); // nos raios 2 a 4 o "?" do raio 1 vale para todos
+      const rot = (k) => rotulo(k, semAjuda); // nos raios 2 a 4 o "?" do raio 1 vale para todos
       const box = h('div', { class: 'campo' + (S.tentou && E[c.nome].obrig && vazio(c, valorDe(r, c)) ? ' falta' : ''), 'data-campo': c.nome });
       const v = r.valores[c.nome];
-      if (c.auto) { box.append(rotulo(c), h('div', { class: 'calc' + (v ? '' : ' vazio') }, v || 'Automático')); return box; }
-      if (c.calculado) { const el = h('div', { class: 'calc' }); calcEls.set(c.nome, el); pintarCalc(el, c); box.append(rotulo(c), el); return box; }
+      if (c.auto) { box.append(rot(c), h('div', { class: 'calc' + (v ? '' : ' vazio') }, v || 'Automático')); return box; }
+      if (c.calculado) { const el = h('div', { class: 'calc' }); calcEls.set(c.nome, el); pintarCalc(el, c); box.append(rot(c), el); return box; }
       switch (c.tipo) {
         case 'choice': {
           const longas = c.opcoes.some((o) => o.t.length > 24) || c.opcoes.length > 6;
@@ -956,7 +1092,7 @@
             const [bt, aj] = caixaAjuda([...(c.ajuda ? [['', c.ajuda]] : []), ...c.opcoes.map((o) => { const m = o.t.match(/^([^(]+?)\s*\((.+)\)\s*$/); return m ? [m[1], m[2]] : [o.t, '']; })]);
             box.append(h('div', { class: 'rot-linha' }, h('label', { class: 'rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null, bt), aj), grade); break;
           }
-          box.append(rotulo(c), grade); break;
+          box.append(rot(c), grade); break;
         }
         case 'bool': {
           const b = h('button', { class: 'chip' + (v ? ' sel' : ''), onclick: () => { const nv = !r.valores[c.nome]; b.classList.toggle('sel', nv); mudar(c, nv); } }, c.rotulo);
@@ -974,7 +1110,7 @@
             av.textContent = m || alerta; av.classList.toggle('oculto', !m && !alerta); av.classList.toggle('amarelo', !m && !!alerta); i.classList.toggle('invalido', !!m);
           };
           const i = h('input', { class: 'entrada', inputmode: 'decimal', enterkeyhint: 'next', value: numBR(v), oninput: () => { checar(); mudar(c, c.inteiro ? (paraNum(i.value) == null ? null : Math.round(paraNum(i.value))) : paraNum(i.value)); } });
-          box.append(rotulo(c), i, av); checar(); break;
+          box.append(rot(c), i, av); checar(); break;
         }
         case 'multinumber': {
           const lista = h('div', { class: 'fustes' });
@@ -993,22 +1129,22 @@
           desenhar();
           const maisBt = h('button', { class: 'btn sec peq', style: 'margin-top:8px', onclick: () => { if (c.maxFustes && valores.length >= c.maxFustes) return; valores.push(''); desenhar(); lista.lastChild.querySelector('input').focus(); maisBt.classList.toggle('oculto', !!c.maxFustes && valores.length >= c.maxFustes); } }, /cap/i.test(c.nome) ? '+ caule' : '+ fuste');
           maisBt.classList.toggle('oculto', !!c.maxFustes && valores.length >= c.maxFustes);
-          box.append(rotulo(c), lista, maisBt);
+          box.append(rot(c), lista, maisBt);
           break;
         }
-        case 'species': box.append(rotulo(c), especieEl(c)); break;
-        case 'textarea': { const t = h('textarea', { class: 'entrada', oninput: () => mudar(c, t.value) }); t.value = v || ''; box.append(rotulo(c), t); break; }
+        case 'species': box.append(rot(c), especieEl(c)); break;
+        case 'textarea': { const t = h('textarea', { class: 'entrada', oninput: () => mudar(c, t.value) }); t.value = v || ''; box.append(rot(c), t); break; }
         case 'datetime': case 'date': {
-          if (c.somenteLeitura) { box.append(rotulo(c), h('div', { class: 'calc' }, v ? dataCurta(v) : 'Automático')); break; }
+          if (c.somenteLeitura) { box.append(rot(c), h('div', { class: 'calc' }, v ? dataCurta(v) : 'Automático')); break; }
           const d = v ? new Date(v) : null;
           const loc = d && !isNaN(d) ? (c.tipo === 'date' ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`) : '';
           const i = h('input', { class: 'entrada', type: c.tipo === 'date' ? 'date' : 'datetime-local', value: loc, onchange: () => mudar(c, i.value ? new Date(i.value).toISOString() : null) });
-          box.append(rotulo(c), i); break;
+          box.append(rot(c), i); break;
         }
         case 'photo': box.append(fotoEl(c)); break;
         default: {
           const i = h('input', { class: 'entrada', value: v ?? '', enterkeyhint: 'next', oninput: () => mudar(c, i.value) });
-          box.append(rotulo(c), i); if (c.incremento) box.append(h('div', { class: 'dica' }, 'Sugerido: último + 1. Confira a plaqueta.'));
+          box.append(rot(c), i); if (c.incremento) box.append(h('div', { class: 'dica' }, 'Sugerido: último + 1. Confira a plaqueta.'));
         }
       }
       return box;
@@ -1063,7 +1199,7 @@
       async function receber(inp) {
         const arq = inp.files && inp.files[0]; if (!arq) return;
         try {
-          const blob = await reduzir(arq, 2048, 0.85);
+          const blob = await reduzir(arq, 0, 0.92); // qualidade original
           const chave = r.uuid + ':' + c.nome + ':' + Date.now();
           await Store.salvarFoto(chave, blob);
           const antiga = r.fotos[c.nome]; const daBase = r.__baseFotos && (JSON.parse(r.__baseFotos)[c.nome] || {}).chave === (antiga && antiga.chave);
@@ -1298,7 +1434,7 @@
       for (const q of qdDados.quadras) { if (q.b[2] < b.getWest() || q.b[0] > b.getEast() || q.b[3] < b.getSouth() || q.b[1] > b.getNorth()) continue; if (++n > 400) break; L.marker(Quadras.centro(q), { interactive: false, keyboard: false, icon: L.divIcon({ className: 'qd-rot', html: h('span', null, q.n), iconSize: null }) }).addTo(rotulos); }
     }
     let zAnt = mapa.getZoom();
-    mapa.on('moveend zoomend', () => { sincQdVista(); pintarRotulos(); const z = mapa.getZoom(); if ((z >= ZOOM_FACES) !== (zAnt >= ZOOM_FACES)) legenda(); zAnt = z; }); window.__app.mapa = mapa;
+    mapa.on('moveend zoomend', () => setTimeout(() => { if (!document.body.contains(div)) return; sincQdVista(); pintarRotulos(); const z = mapa.getZoom(); if ((z >= ZOOM_FACES) !== (zAnt >= ZOOM_FACES)) legenda(); zAnt = z; }, 0)); window.__app.mapa = mapa;
     const podeMarcarQd = (s) => ehCoord() || (perfil() === 'coletor' && (!s.equipe || s.equipe === minhaEquipe()));
     function clicarQuadra(q, ll) {
       if (selecao) { if (selTipo !== 'qd') return toast('Toque nas linhas das faces para escolher.'); if (selecao.has(q.n)) selecao.delete(q.n); else selecao.add(q.n); pintarSelecao(); restilizar([q.n]); return; }
@@ -1824,7 +1960,7 @@
   function telaTermo() {
     const btn = h('button', { class: 'btn cheio', onclick: async () => {
       btn.disabled = true;
-      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch((e) => { if (!/desconhecida/i.test(e.message)) throw e; }); S.sessao.usuario.termo_aceito_em = agoraISO(); await Store.set('sessao', S.sessao); await Store.set('termo:' + S.sessao.u, S.sessao.usuario.termo_aceito_em); rota(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
+      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch((e) => { if (!/desconhecida/i.test(e.message)) throw e; }); S.sessao.usuario.termo_aceito_em = agoraISO(); await Store.set('sessao', S.sessao); await Store.set('termo:' + S.sessao.u, S.sessao.usuario.termo_aceito_em); rota(); if (perfil() !== 'cliente') ligarGps(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
     } }, 'Li e aceito');
     $app.replaceChildren(topo('Termo de uso e privacidade', 'Leia antes de começar', null, null), h('main', null, h('div', { class: 'cartao' }, textoTermo()), h('div', { style: 'margin-bottom:30px' }, btn, h('button', { class: 'btn linha cheio', style: 'margin-top:10px', onclick: () => sair(true) }, 'Não aceito, sair'))));
   }
@@ -2344,7 +2480,7 @@
     const cam = h('input', { type: 'file', accept: 'image/*', capture: 'environment', class: 'oculto', onchange: async () => {
       const arq = cam.files && cam.files[0]; if (!arq) return;
       try {
-        const blob = await reduzir(arq, 2048, 0.85); const chave = 'os-' + uuid();
+        const blob = await reduzir(arq, 0, 0.92); const chave = 'os-' + uuid();
         if (alvo[k] && alvo[k].chave) await Store.apagarFoto(alvo[k].chave);
         await Store.salvarFoto(chave, blob); alvo[k] = { chave, nome: `OS-${chave.slice(3, 11)}-${k === 'foto_antes' ? 'antes' : 'depois'}.jpg` };
         img.replaceWith(h('img', { class: 'os-foto', src: URL.createObjectURL(blob), alt: rotulo })); bloco.classList.remove('falta');
@@ -3039,9 +3175,11 @@
 
   // ---------- Fotos ----------
   async function reduzir(arq, max, q) {
+    if (!max && arq.type === 'image/jpeg') return arq; // qualidade original: nem abre a imagem
     let bmp;
     try { bmp = await createImageBitmap(arq, { imageOrientation: 'from-image' }); } catch (e) { bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('formato não suportado')); i.src = URL.createObjectURL(arq); }); }
-    const w = bmp.width, hh = bmp.height, k = Math.min(1, max / Math.max(w, hh));
+    // max 0: mantém a foto como a câmera tirou (só converte para JPEG o que não for JPEG, no tamanho original)
+    const w = bmp.width, hh = bmp.height, k = max ? Math.min(1, max / Math.max(w, hh)) : 1;
     if (k === 1 && arq.type === 'image/jpeg' && arq.size < 1.5e6) return arq;
     const cv = document.createElement('canvas'); cv.width = Math.round(w * k); cv.height = Math.round(hh * k);
     cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);

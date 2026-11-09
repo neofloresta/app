@@ -6,7 +6,7 @@ const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console
   const b = await chromium.launch(); const E = await L.celular(b, { viewport: { width: 360, height: 640 } }); const p = E.p;
   await L.logar(p, 'div-1', 'equipe01'); await p.waitForSelector('button.nova'); await p.waitForTimeout(800);
   // 1. espécie letra por letra
-  await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Árvore'); await A.aba(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva');
+  await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Árvore'); await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva');
   const inp = A.campo(p, 'Especie').locator('input').first(); await inp.click(); await inp.pressSequentially('hand', { delay: 120 });
   const st = await p.evaluate(() => { const i = document.querySelector('[data-campo="Especie"] input'); return { v: i.value, foco: document.activeElement === i, sug: document.querySelectorAll('[data-campo="Especie"] .esp-lista button').length, aberta: !document.querySelector('[data-campo="Especie"] .esp-lista').classList.contains('oculto') }; });
   await p.screenshot({ path: 'b251-especie.png' });

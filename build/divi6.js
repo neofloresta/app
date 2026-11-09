@@ -18,7 +18,7 @@ add({ nome: 'Codigo', rotulo: 'Código da árvore', tipo: 'text', auto: 'codigo'
 add({ nome: 'Data e hora', rotulo: 'Data e hora da avaliação', tipo: 'datetime', agora: true, somenteLeitura: true, ajuda: 'O app grava a hora em que o cadastro começou. Não dá para mudar.' });
 add({ nome: 'Coletor', rotulo: 'Coletor', tipo: 'text', auto: 'coletor', ajuda: 'Nome de quem está logado no app.' });
 ch('Local do registro', 'Local do registro', ['Via pública (calçada)', 'Canteiro central'], { obrigatorio: true, ajuda: 'Onde está o ponto: na calçada ou no canteiro central da via.' });
-ch('Categoria', 'Categoria', [['1', 'Árvore (altura igual ou superior a 2 m)'], ['2', 'Arbusto (altura igual ou superior a 2 m)'], ['3', 'Palmeira (altura igual ou superior a 2 m)'], ['5', 'Calçada sem árvores']], { obrigatorio: true, ajuda: 'Árvore, arbusto e palmeira entram a partir de 2 m de altura. Calçada sem árvores: trecho de calçada sem nenhum indivíduo.' });
+ch('Categoria', 'Categoria (a partir de 2 m de altura)', [['1', 'Árvore'], ['2', 'Arbusto'], ['3', 'Palmeira'], ['5', 'Calçada sem árvores']], { obrigatorio: true, ajuda: 'Árvore, arbusto e palmeira entram a partir de 2 m de altura. Calçada sem árvores: trecho de calçada sem nenhum indivíduo.' });
 foto('Foto 1', 'Foto geral', { obrigatorio: true, ajuda: 'Árvore, arbusto ou palmeira: o indivíduo inteiro, da base ao topo da copa. Calçada sem árvores: a calçada inteira, no sentido do comprimento.' });
 
 tab('Indivíduo');

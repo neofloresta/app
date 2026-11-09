@@ -20,7 +20,7 @@ const Api = (() => {
   function paraMapa(linhas, campos) { return { cab: campos, linhas: linhas.map((l) => campos.map((c) => l[c] ?? '')) }; }
   // listas da coordenação: a resposta vale por 1 minuto (trocar de aba fica instantâneo); qualquer gravação limpa
   const MEMO_LEITURA = ['usuarios_listar', 'projetos_listar', 'formularios_listar'];
-  const LEITURAS = ['sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', ...MEMO_LEITURA];
+  const LEITURAS = ['conferir', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', ...MEMO_LEITURA];
   let memo = new Map();
   async function chamar(acao, dados, semCred) {
     if (LEITURAS.indexOf(acao) < 0) memo = new Map();
@@ -114,6 +114,7 @@ const Api = (() => {
     async formulariosListar() { const b = await this.base(); return Object.values(b.formularios).map((f) => ({ id: f.id, nome: f.nome, campos: f.campos.length, versao: f.versao || '' })); },
     async quadrasCamada() { return { semCamada: true }; },
     async quadrasSituacao() { return { quadras: [], faces: [] }; },
+    async conferir() { return null; },
     async quadrasMarcar() { throw new Error('Quadras não disponíveis na demonstração.'); },
     async quadrasImportar() { throw new Error('Quadras não disponíveis na demonstração.'); },
     // ordens de serviço no modo demonstração (mesmas regras do servidor, guardadas no aparelho)
@@ -212,6 +213,7 @@ const Api = (() => {
     async quadrasCamada(projeto, versao) { return chamar('quadras_camada', { projeto, versao: versao || '' }); },
     async quadrasSituacao(projeto) { const j = await chamar('quadras_situacao', { projeto, faces: true }); return { quadras: j.quadras || [], faces: j.faces || [] }; },
     async quadrasMarcar(projeto, itens) { return chamar('quadras_marcar', { projeto, itens }); },
+    async conferir(projeto, uuids) { return (await chamar('conferir', { projeto, uuids })).achados; },
     async chaveCriar(nome, projeto) { return chamar('chave_criar', { nome, projeto }); },
     async chaveRevogar(id) { return chamar('chave_revogar', { id }); },
     async backupListar(projeto) { return (await chamar('backup_listar', { projeto })).copias; },

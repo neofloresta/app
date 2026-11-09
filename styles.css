@@ -450,3 +450,23 @@ input[type=file]::file-selector-button { border: 0; border-radius: 10px; backgro
 
 .linha-btn.col { flex-direction: column; align-items: stretch; }
 .linha-btn.col .btn { width: 100%; }
+
+.mp-veu { align-items: stretch; }
+.folha.mp { text-align: center; }
+.mp-orienta { background: #FFF4D6; color: #5C4000; border-radius: 10px; padding: 12px 14px; font-weight: 600; font-size: 16px; line-height: 1.35; margin: 4px 0 14px; text-align: left; }
+.mp-num { font-size: 56px; font-weight: 700; line-height: 1.1; margin: 8px 0 4px; font-variant-numeric: tabular-nums; }
+.mp-num.bom { color: #1B7F3B; } .mp-num.medio { color: #A65A1E; } .mp-num.ruim { color: #B3261E; }
+.mp-st { font-size: 17px; font-weight: 600; min-height: 24px; }
+.mp-det { display: block; color: var(--suave); margin: 4px 0 10px; }
+.mp-meta { color: var(--suave); font-size: 14px; margin-bottom: 12px; }
+.mp-dicas { text-align: left; margin-top: 14px; font-size: 15px; }
+.mp-dicas summary { font-weight: 600; color: var(--teal); min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.mp-dicas li { margin: 6px 0; }
+.faixa-gps { border-left-color: #A65A1E; background: #FFF4D6; }
+.faixa-gps span { color: #7A4100; }
+
+/* Modo Sol: alto contraste para sol forte */
+html.sol { --texto: #000; --suave: #263238; --linha: #4F6268; }
+html.sol body { font-size: 18px; }
+html.sol .op, html.sol .chip, html.sol .entrada { border-width: 2px; border-color: #4F6268; }
+html.sol .dica, html.sol small { color: #263238; }

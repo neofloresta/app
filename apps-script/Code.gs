@@ -102,6 +102,7 @@ function doPost(e) {
       case 'painel': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, painel(d.projeto, usr)));
       case 'foto_ver': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, verFoto(d.projeto, d.id, usr)));
       case 'situacao_meus': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, itens: situacaoMeus(d.projeto, usr) });
+      case 'conferir': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, achados: conferirEnvios(d.projeto, d.uuids, usr) });
       case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
       case 'quadras_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarQuadras(d.projeto, d.camada, usr)));
       case 'quadras_camada': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaQuadras(d.projeto, d.versao)));
@@ -473,6 +474,22 @@ function cabecalho(sh, garantir) {
 }
 const dia = (iso) => (iso ? Utilities.formatDate(new Date(iso), FUSO, 'yyyy-MM-dd') : '');
 
+// Conferência do envio: para cada registro do aparelho, diz se chegou e quais fotos têm link no servidor.
+// O aparelho reenvia o que faltar. Coletor só confere os seus.
+function conferirEnvios(projetoId, uuids, usr) {
+  if (!Array.isArray(uuids)) throw new Error('Lista inválida.'); uuids = uuids.slice(0, 500).map(String);
+  const sh = planilha(projetoId); const out = {}; if (sh.getLastRow() < 2) return out;
+  const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const iu = cab.indexOf('uuid'), ius = cab.indexOf('usuario'); const links = cab.map((c, i) => [c, i]).filter((x) => / link$/.test(x[0]));
+  const quero = {}; uuids.forEach((u) => { quero[u] = 1; });
+  const v = sh.getRange(2, 1, sh.getLastRow() - 1, cab.length).getValues();
+  v.forEach((l) => {
+    const u = String(l[iu]); if (!quero[u]) return;
+    if (usr.perfil === 'coletor' && ius >= 0 && String(l[ius]) !== usr.login) return;
+    const o = {}; links.forEach(([c, i]) => { if (l[i]) o[c.replace(/ link$/, '')] = 1; }); out[u] = { fotos: o };
+  });
+  return out;
+}
 function salvarRegistro(projetoId, linha, usr) {
   if (!linha || !linha.uuid) throw new Error('Registro sem identificador.');
   COLS_SISTEMA.forEach((c) => delete linha[c]); // o aparelho não escreve a validação

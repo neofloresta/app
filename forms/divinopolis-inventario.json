@@ -50,20 +50,20 @@
   {
    "armazenar": "text",
    "nome": "Categoria",
-   "rotulo": "Categoria",
+   "rotulo": "Categoria (a partir de 2 m de altura)",
    "tipo": "choice",
    "opcoes": [
     {
      "v": "1",
-     "t": "Árvore (altura igual ou superior a 2 m)"
+     "t": "Árvore"
     },
     {
      "v": "2",
-     "t": "Arbusto (altura igual ou superior a 2 m)"
+     "t": "Arbusto"
     },
     {
      "v": "3",
-     "t": "Palmeira (altura igual ou superior a 2 m)"
+     "t": "Palmeira"
     },
     {
      "v": "5",
