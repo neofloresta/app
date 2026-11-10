@@ -600,3 +600,19 @@ footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
 /* 2.7: Cancelar no topo do cadastro */
 .bt-cancelar { min-height: 40px; padding: 0 12px; border: 1.5px solid rgba(255,255,255,.7); border-radius: 20px; background: transparent; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
 .topo .topo-dir { display: flex; align-items: center; gap: 6px; }
+/* 2.7: mapa primeiro (equipe de campo) */
+.tela-mapa.modo-campo .mapa-bts { bottom: calc(var(--base-h, 64px) + 96px); }
+.mapa-mais { position: absolute; right: 12px; bottom: calc(var(--base-h, 64px) + 14px); z-index: 1001; width: 68px; height: 68px; min-height: 0; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.35); background: var(--acao, #A65A1E); }
+.mapa-mais .ico svg { width: 34px; height: 34px; }
+.campo-base { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1000; pointer-events: none; display: flex; flex-direction: column; }
+.campo-base > * { pointer-events: auto; }
+.campo-faixas { padding: 0 92px 6px 10px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.campo-faixas > div { pointer-events: auto; } .campo-faixas > div:empty { display: none; }
+.campo-faixas .faixa-cont, .campo-faixas .faixa-dev, .campo-faixas .faixa-turno, .campo-faixas .faixa-gps, .campo-faixas .encerrar-face, .campo-faixas button { margin: 0; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.campo-faixas .faixa-turno { min-height: 48px; padding: 8px 12px; }
+.campo-linha { background: #fff; border-top: 1px solid var(--linha); display: flex; align-items: center; gap: 8px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); }
+.campo-info { flex: 1; min-width: 0; } .campo-info .ult-envio { display: block; color: var(--suave); font-size: 13px; }
+.resumo.mini { display: flex; gap: 10px; flex-wrap: wrap; margin: 0; font-size: 14px; } .resumo.mini span { padding: 0; background: none; border: 0; }
+.tela-mapa.modo-campo .qd-selecao { z-index: 1002; }
+.tela-mapa.modo-campo.com-folha .mapa-mais, .tela-mapa.modo-campo.com-folha .campo-base { display: none; }
+.tela-mapa { isolation: isolate; } /* os controles do mapa (z-index 1000) não passam por cima das janelas e menus */

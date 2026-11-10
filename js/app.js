@@ -146,7 +146,7 @@
       const j = await (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' })).json();
       S.novaVersao = maiorVersao(j.versao, VERSAO) ? j : null;
       if (avisar && !S.novaVersao) toast('O app já está na versão mais nova (' + VERSAO + ').');
-      if (S.novaVersao && (location.hash === '' || location.hash === '#inicio')) pintarAvisoVersao();
+      if (S.novaVersao && (['', '#inicio', '#lista', '#mapa'].includes(location.hash))) pintarAvisoVersao();
       return S.novaVersao;
     } catch (e) { if (avisar) toast('Não foi possível verificar agora.'); return null; }
   }
@@ -237,6 +237,8 @@
     if (r === 'hoje' && ehCoord()) return telaHoje(a || null);
     if (r === 'relatorio' && pf !== 'coletor') return telaRelatorio();
     if (r === 'medicao' && pf !== 'coletor') return telaMedicao();
+    if (r === 'lista') return telaInicio();
+    if (pf === 'coletor' && (r === 'mapa' || r === 'inicio' || !r)) return telaMapa({ campo: true }); // equipe de campo: mapa primeiro
     if (r === 'mapa') return telaMapa();
     if (r === 'ordens') return telaOrdens();
     if (r === 'preferencias') return telaPreferencias();
@@ -346,7 +348,7 @@
     if (S.expirada) return;
     await atualizarSituacao();
     await conferirEnvio();
-    if (location.hash === '' || location.hash === '#inicio') listarRegistros();
+    if (['', '#inicio', '#lista', '#mapa'].includes(location.hash)) listarRegistros();
   }
   // Conferência: pergunta ao servidor se os registros enviados chegaram e se cada foto tem link.
   // O que não chegou volta para a fila e é reenviado. A foto continua guardada no celular.
@@ -443,7 +445,7 @@
         const o = it ? it.obs || '' : r.validacao_obs || '';
         if ((r.validacao || '') !== (v || '') || (r.validacao_obs || '') !== o) { r.validacao = v; r.validacao_obs = o; await Store.salvarRegistro(r); mudou = true; }
       }
-      if (mudou && (location.hash === '' || location.hash === '#inicio')) listarRegistros();
+      if (mudou && (['', '#inicio', '#lista', '#mapa'].includes(location.hash))) listarRegistros();
     } catch (e) { /* servidor antigo ou sem conexão */ }
   }
   async function reentrar() {
@@ -461,11 +463,12 @@
   function campoEspecie(form) { return form.campos.find((c) => c.tipo === 'species'); }
 
   async function telaInicio() {
-    const menu = h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu'));
+    const col = perfil() === 'coletor'; // para a equipe de campo esta é a lista "Meus registros" (a tela principal é o mapa)
+    const menu = col ? h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar ao mapa' }, ico('voltar')) : h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu'));
     const sync = h('button', { class: 'sync', onclick: tocarSync }, '...');
     const busca = h('input', { class: 'busca', placeholder: 'Buscar código ou espécie', oninput: () => listarRegistros(busca.value) });
     $app.replaceChildren(
-      topo(S.projeto.nome, S.projeto.equipe || S.sessao.usuario.nome, menu, h('div', { class: 'topo-dir' }, ajudaBt(''), h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')), sync)),
+      topo(col ? 'Meus registros' : S.projeto.nome, col ? S.projeto.nome : S.projeto.equipe || S.sessao.usuario.nome, menu, h('div', { class: 'topo-dir' }, ajudaBt(''), h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Mapa' }, ico('mapa')), sync)),
       h('main', null,
         S.expirada ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo'), ' Os registros continuam guardados aqui.') : null,
         h('button', { class: 'btn nova canto', onclick: novoRegistro }, ico('mais'), 'Nova árvore'),
@@ -536,7 +539,8 @@
   }
 
   async function listarRegistros(filtro) {
-    const el = document.getElementById('lista'); if (!el) return;
+    const el = document.getElementById('lista'); if (!el && !document.getElementById('stats')) return;
+    if (filtro == null && S.filtroLista) { filtro = S.filtroLista; S.filtroLista = null; const bx = document.querySelector('.busca'); if (bx) bx.value = filtro; }
     const todos = (await Store.registros(S.projeto.id)).sort((a, b) => (b.atualizado_em || '').localeCompare(a.atualizado_em || ''));
     const hoje = new Date().toDateString();
     const st = document.getElementById('stats');
@@ -555,7 +559,8 @@
     if (cont) cont.replaceChildren(rasc.length ? h('button', { class: 'faixa-cont', onclick: () => ir('#form/' + rasc[0].uuid) }, h('b', null, rasc.length > 1 ? `${rasc.length} cadastros não terminados` : '1 cadastro não terminado'), h('span', null, `${codigoDe(S.form, rasc[0].valores) || ''} · Continuar`)) : '');
     const ult = await Store.get('ultimoEnvio:' + S.projeto.id); const ue = document.getElementById('ult-envio');
     if (ue) ue.textContent = ult ? `Último envio às ${new Date(ult).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}${new Date(ult).toDateString() !== hoje ? ' de ' + new Date(ult).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : ''}` : '';
-    if (box) box.replaceChildren(dev.length ? h('button', { class: 'faixa-dev', onclick: () => { const b = document.querySelector('.busca'); if (b) { b.value = 'devolvido'; listarRegistros('devolvido'); } } }, h('b', null, `${dev.length} registro${dev.length > 1 ? 's' : ''} devolvido${dev.length > 1 ? 's' : ''} pela coordenação`), h('span', null, 'Toque para ver e corrigir')) : '');
+    if (box) box.replaceChildren(dev.length ? h('button', { class: 'faixa-dev', onclick: () => { const b = document.querySelector('.busca'); if (b) { b.value = 'devolvido'; listarRegistros('devolvido'); } else { S.filtroLista = 'devolvido'; ir('#lista'); } } }, h('b', null, `${dev.length} registro${dev.length > 1 ? 's' : ''} devolvido${dev.length > 1 ? 's' : ''} pela coordenação`), h('span', null, 'Toque para ver e corrigir')) : '');
+    if (!el) return; // no mapa (mapa primeiro) só as faixas e o resumo
     const lista = f === 'devolvido' ? dev : todos.filter((r) => !f || norm(camposCodigo(S.form).map((k) => r.valores[k.nome]).join(' ') + ' ' + (ce && r.valores[ce.nome])).includes(f));
     if (!lista.length) {
       if (filtro || perfil() !== 'coletor') return el.replaceChildren(h('div', { class: 'vazio-lista' }, filtro ? 'Nada encontrado.' : 'Nenhuma árvore cadastrada ainda neste aparelho.'));
@@ -599,7 +604,7 @@
       grupo('Projeto', it('Painel', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa')), it('Pedidos de serviço', () => ir('#ordens'))),
       grupo('Entregas', it('Relatório para imprimir ou PDF', () => ir('#relatorio')), it('Boletim de medição', () => ir('#medicao')), it('Baixar dados', () => exportarCliente())),
     ] : pf === 'coletor' ? [
-      grupo('Campo', it('Mapa das árvores', () => ir('#mapa')), it('Ordens de serviço', () => ir('#ordens')), it('Enviar agora', () => sincronizar())),
+      grupo('Campo', it('Meus registros', () => ir('#lista')), it('Ordens de serviço', () => ir('#ordens')), it('Enviar agora', () => sincronizar())),
     ] : [
       grupo('Acompanhar', coord ? it('Hoje no campo', () => ir('#hoje')) : null, it('Painel do projeto', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa'))),
       grupo('Agir', coord ? it('Validação dos registros', () => ir('#validacao')) : null, it('Ordens de serviço', () => ir('#ordens')), !admin ? it('Enviar agora', () => sincronizar()) : null),
@@ -1449,7 +1454,9 @@
   }
 
   // ---------- Mapa ----------
-  async function telaMapa() {
+  async function telaMapa(opc) {
+    // "mapa primeiro": para a equipe de campo, o mapa é a tela principal (botão + para nova árvore, toque na face para a calçada)
+    const campo = !!(opc && opc.campo);
     const div = h('div', { id: 'mapa' });
     const form = S.form;
     const cc = campoCodigo(form), ce = campoEspecie(form);
@@ -1509,8 +1516,17 @@
     const btCidade = h('button', { class: 'mapa-bt', onclick: () => verCidade(), 'aria-label': 'Ver a cidade', title: 'Ver a cidade' }, ico('cidade'), h('span', { class: 'so-leitor' }, 'Ver a cidade'));
     const btSel = h('button', { class: 'mapa-bt pilula oculto', onclick: () => iniciarSelecao(), 'aria-label': 'Selecionar quadras ou faces' }, ico('selecionar'), 'Selecionar');
     const bts = h('div', { class: 'mapa-bts' }, btSel, btCidade, btEu);
-    const telaM = h('div', { class: 'tela-mapa' }, topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, ajudaBt('mapa'))), barra, div, bts, barraSel);
+    const fab = campo ? h('button', { class: 'btn nova mapa-mais', onclick: () => novoRegistro(), 'aria-label': 'Nova árvore', title: 'Nova árvore' }, ico('mais'), h('span', { class: 'so-leitor' }, 'Nova árvore')) : null;
+    // faixa embaixo do mapa: o que antes ficava na tela inicial (envio, cadastro não terminado, turno, avisos, encerrar face, meus registros)
+    const base = campo ? h('div', { class: 'campo-base' },
+      h('div', { class: 'campo-faixas' }, h('div', { id: 'aviso-versao' }), h('div', { id: 'turno' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'continuar' }), h('div', { id: 'devolvidos' }), h('div', { id: 'os-equipe' }), h('div', { id: 'encerrar-face' })),
+      h('div', { class: 'campo-linha' }, h('div', { class: 'campo-info' }, h('div', { class: 'resumo mini', id: 'stats' }), h('small', { class: 'ult-envio', id: 'ult-envio' })), h('button', { class: 'btn sec peq', onclick: () => ir('#lista') }, 'Meus registros'))) : null;
+    const topoM = campo
+      ? topo(S.projeto.nome, S.projeto.equipe || S.sessao.usuario.nome, h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')), h('div', { class: 'topo-dir' }, ajudaBt('mapa'), h('button', { class: 'sync', onclick: tocarSync }, '...')))
+      : topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, ajudaBt('mapa')));
+    const telaM = h('div', { class: 'tela-mapa' + (campo ? ' modo-campo' : '') }, topoM, S.expirada && campo ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo')) : null, barra, div, bts, fab, base, barraSel);
     $app.replaceChildren(telaM);
+    if (campo) { atualizarSync(); listarRegistros(); pintarOSEquipe(); pintarAvisoVersao(); pintarEncerrarFace(); pintarAvisoGps(); pintarDicaGps(); pintarTurno(); pintarEspaco(); }
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
     const render = L.canvas({ padding: 0.3, tolerance: 8 });
     const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21, fadeAnimation: false, zoomControl: !celular }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4); // fadeAnimation desligada: a ficha que fecha não recebe mais toque
@@ -1779,7 +1795,7 @@
       conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos` + (rq ? ` · ${fmtN(rq.por.Levantada)} de ${fmtN(rq.tot)} quadras levantadas` : '') + minhasQ + (meu ? ` · Hoje: ${fmtN(hojeN)}` : '') + (porOS && osPorArv ? ` · ${[...osPorArv.values()].filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length + osSoltas.filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length} com ordem em aberto` : '') + (conta.dataset.qd ? ' · ' + conta.dataset.qd : '');
       legenda(); pintarTrajetos();
       if (ajustar && vis.length && !(porCidade && semFiltro())) {
-        if (vis.length === 1) { mapa.setView([vis[0].lat, vis[0].lon], 19); ficha(vis[0]); }
+        if (vis.length === 1 && busca.value.trim()) { mapa.setView([vis[0].lat, vis[0].lon], 19); ficha(vis[0]); }
         else mapa.fitBounds(L.latLngBounds(vis.map((o) => [o.lat, o.lon])), { padding: [30, 30], maxZoom: 19 });
       }
     }
