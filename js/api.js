@@ -22,7 +22,7 @@ const Api = (() => {
   function paraMapa(linhas, campos) { return { cab: campos, linhas: linhas.map((l) => campos.map((c) => l[c] ?? '')) }; }
   // listas da coordenação: a resposta vale por 1 minuto (trocar de aba fica instantâneo); qualquer gravação limpa
   const MEMO_LEITURA = ['usuarios_listar', 'projetos_listar', 'formularios_listar'];
-  const LEITURAS = ['conferir', 'trajetos', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', 'pessoas_listar', 'setores_camada', 'setores_situacao', ...MEMO_LEITURA];
+  const LEITURAS = ['conferir', 'trajetos', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', 'pessoas_listar', 'setores_camada', 'setores_situacao', 'producao', 'producao_minha', ...MEMO_LEITURA];
   let memo = new Map();
   async function chamar(acao, dados, semCred) {
     if (LEITURAS.indexOf(acao) < 0) memo = new Map();
@@ -121,7 +121,9 @@ const Api = (() => {
     async pessoasListar() { return (await this.base()).pessoas || []; },
     async pessoaSalvar(pe) { const b = await this.base(); b.pessoas = b.pessoas || []; const i = b.pessoas.findIndex((x) => x.id === pe.id); if (!pe.id) pe.id = 'P' + Date.now(); if (i >= 0) b.pessoas[i] = Object.assign(b.pessoas[i], pe); else b.pessoas.push(pe); await Store.set('demo:base', b); return { id: pe.id }; },
     async setoresCamada() { return { semCamada: true }; }, async setoresSituacao() { return []; },
-    async setoresImportar() { throw new Error('Setores não disponíveis na demonstração.'); }, async setoresAtribuir() { throw new Error('Setores não disponíveis na demonstração.'); },
+    async setoresImportar() { throw new Error('Setores não disponíveis na demonstração.'); },
+    async producao() { throw new Error('A produção precisa do servidor.'); }, async producaoMinha() { throw new Error('A produção precisa do servidor.'); },
+    async medicaoFechar() { throw new Error('A produção precisa do servidor.'); }, async auditoriaSortear() { throw new Error('A auditoria precisa do servidor.'); }, async auditoriaConferir() { throw new Error('A auditoria precisa do servidor.'); }, async setoresAtribuir() { throw new Error('Setores não disponíveis na demonstração.'); },
     async quadrasMarcar() { throw new Error('Quadras não disponíveis na demonstração.'); },
     async quadrasImportar() { throw new Error('Quadras não disponíveis na demonstração.'); },
     // ordens de serviço no modo demonstração (mesmas regras do servidor, guardadas no aparelho)
@@ -230,6 +232,11 @@ const Api = (() => {
     async setoresCamada(projeto, versao) { try { return await chamar('setores_camada', { projeto, versao: versao || '' }); } catch (e) { if (/desconhecida/i.test(e.message)) return { semCamada: true }; throw e; } },
     async setoresSituacao(projeto) { try { return (await chamar('setores_situacao', { projeto })).setores || []; } catch (e) { if (/desconhecida/i.test(e.message)) return []; throw e; } },
     async setoresAtribuir(projeto, itens) { return chamar('setores_atribuir', { projeto, itens }); },
+    async producao(projeto, de, ate) { return chamar('producao', { projeto, de, ate }); },
+    async producaoMinha(projeto, de, ate) { return chamar('producao_minha', { projeto, de, ate }); },
+    async medicaoFechar(projeto, de, ate) { return chamar('medicao_fechar', { projeto, de, ate }); },
+    async auditoriaSortear(projeto, setor) { return chamar('auditoria_sortear', { projeto, setor }); },
+    async auditoriaConferir(projeto, setor, uuid, resultado, motivo) { return chamar('auditoria_conferir', { projeto, setor, uuid, resultado, motivo }); },
     async chaveCriar(nome, projeto) { return chamar('chave_criar', { nome, projeto }); },
     async chaveRevogar(id) { return chamar('chave_revogar', { id }); },
     async backupListar(projeto) { return (await chamar('backup_listar', { projeto })).copias; },

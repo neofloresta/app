@@ -637,3 +637,17 @@ footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
 .chip-dupla span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip-dupla .ico { width: 18px; height: 18px; color: var(--teal); }
 .selo.selo-parceiro { background: #FBEBDD; color: var(--acao); }
+
+/* 2.7: produção e auditoria */
+.periodo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.periodo .entrada { width: auto; flex: 1 1 130px; min-width: 0; }
+.prod-linha { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 0; border-bottom: 1px solid var(--linha); font-size: 14.5px; }
+.prod-linha b { flex: 0 0 100%; font-size: 13px; color: var(--suave); }
+.prod-linha .ruim { color: var(--erro); }
+.meta-barra { height: 14px; border-radius: 7px; background: var(--tint); overflow: hidden; margin: 6px 0; }
+.meta-barra div { height: 100%; background: var(--ok); border-radius: 7px; }
+.aud-lista { display: grid; gap: 8px; }
+.aud-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; border-left: 4px solid var(--linha); }
+.aud-item.ok { border-left-color: var(--ok); }
+.aud-item.erro { border-left-color: var(--erro); }
+.aud-item small { color: var(--suave); }

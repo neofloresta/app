@@ -245,6 +245,9 @@
     if (r === 'os' && a) return telaOS(decodeURIComponent(a));
     if (r === 'os-nova') return telaNovaOS(a ? decodeURIComponent(a) : null);
     if (r === 'validacao' && ehCoord()) return telaValidacao();
+    if (r === 'producao' && pf === 'admin') return telaProducao();
+    if (r === 'producao' && pf === 'coletor') return telaMinhaProducao();
+    if (r === 'auditoria' && ehCoord()) return telaAuditoria(a ? decodeURIComponent(a) : null);
     if (r === 'ficha' && a && pf !== 'coletor') return telaFichaServidor(decodeURIComponent(a));
     if (pf === 'cliente') return telaPainel();
     if (r === 'form' && a) return telaForm(a, b);
@@ -604,10 +607,10 @@
       grupo('Projeto', it('Painel', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa')), it('Pedidos de serviço', () => ir('#ordens'))),
       grupo('Entregas', it('Relatório para imprimir ou PDF', () => ir('#relatorio')), it('Boletim de medição', () => ir('#medicao')), it('Baixar dados', () => exportarCliente())),
     ] : pf === 'coletor' ? [
-      grupo('Campo', it('Meus registros', () => ir('#lista')), it('Ordens de serviço', () => ir('#ordens')), it('Enviar agora', () => sincronizar())),
+      grupo('Campo', it('Meus registros', () => ir('#lista')), it('Minha produção', () => ir('#producao')), it('Ordens de serviço', () => ir('#ordens')), it('Enviar agora', () => sincronizar())),
     ] : [
       grupo('Acompanhar', coord ? it('Hoje no campo', () => ir('#hoje')) : null, it('Painel do projeto', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa'))),
-      grupo('Agir', coord ? it('Validação dos registros', () => ir('#validacao')) : null, it('Ordens de serviço', () => ir('#ordens')), !admin ? it('Enviar agora', () => sincronizar()) : null),
+      grupo('Agir', coord ? it('Validação dos registros', () => ir('#validacao')) : null, coord ? it('Auditoria por setor', () => ir('#auditoria')) : null, admin ? it('Produção e pagamento', () => ir('#producao')) : null, it('Ordens de serviço', () => ir('#ordens')), !admin ? it('Enviar agora', () => sincronizar()) : null),
       grupo('Entregar', it('Relatório para imprimir ou PDF', () => ir('#relatorio')), it('Boletim de medição', () => ir('#medicao')), admin ? it('Exportar dados', () => ir('#admin/exportar')) : null),
       admin ? grupo('Configurar projeto', it('Projetos', () => ir('#admin/projetos')), it('Equipes e usuários', () => ir('#admin/usuarios')), it('Pessoas das equipes', () => ir('#admin/pessoas')), it('Setores censitários', () => ir('#admin/setores')), it('Formulários', () => ir('#admin/formularios')), it('Importar inventário', () => ir('#admin/importar'))) : null,
       admin ? grupo('Administração', it('Segurança, cópias e servidor', () => ir('#admin/seguranca'))) : null,
@@ -2091,6 +2094,8 @@
       const cve = h('select', { class: 'entrada' }, h('option', { value: 'validados', selected: p.cliente_ve !== 'todos' }, 'Só registros validados'), h('option', { value: 'todos', selected: p.cliente_ve === 'todos' }, 'Todos, inclusive aguardando validação'));
       const num = (v, ph) => h('input', { class: 'entrada', inputmode: 'decimal', value: v || '', placeholder: ph });
       const fGps = num(p.face_gps, '10'), fDist = num(p.face_dist, '15'), fFolga = num(p.face_folga, '8');
+      const pV = num(p.prod_valor, '2,50'), pA = num(p.prod_avaliador_pct, '50'), pP = num(p.premio_valor, '1,50'), pM = num(p.premio_meta, '90'), pB = num(p.bonus_valor, '0'), pBe = num(p.bonus_erro_max, '2'), aP = num(p.auditoria_pct, '10'), aE = num(p.auditoria_erro_max, '5');
+      const pVe = h('select', { class: 'entrada' }, h('option', { value: 'sim', selected: p.parceiro_ve_valor !== 'não' }, 'Sim, o parceiro vê o valor estimado no celular'), h('option', { value: 'não', selected: p.parceiro_ve_valor === 'não' }, 'Não, só a coordenação'));
       const ok = await modal(novo ? 'Novo projeto' : 'Editar projeto', h('div', null,
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Identificador (sem espaços)'), id), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), nome),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Formulário'), fo), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Sistema de coordenadas da exportação'), ep),
@@ -2103,7 +2108,14 @@
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Tipos de serviço das ordens de serviço'), tos),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Faces de quadra: começo automático pelo GPS'),
           h('div', { class: 'grade3' }, h('div', null, h('small', null, 'Erro máximo do GPS (m)'), fGps), h('div', null, h('small', null, 'Distância até a face (m)'), fDist), h('div', null, h('small', null, 'Folga para a 2ª face (m)'), fFolga)),
-          h('div', { class: 'dica' }, 'Ao salvar uma árvore, a face da calçada passa a "em levantamento" sozinha só quando o erro do GPS é até o máximo, a face está mais perto que a distância e nenhuma outra face está a menos da folga. Em branco vale 10, 15 e 8.'))),
+          h('div', { class: 'dica' }, 'Ao salvar uma árvore, a face da calçada passa a "em levantamento" sozinha só quando o erro do GPS é até o máximo, a face está mais perto que a distância e nenhuma outra face está a menos da folga. Em branco vale 10, 15 e 8.')),
+        h('details', { class: 'campo' }, h('summary', { class: 'rot' }, 'Produção e auditoria'),
+          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Valor por árvore validada, parceiros (R$)'), pV), h('div', null, h('small', null, 'Parte do avaliador (%)'), pA)),
+          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Meta por dia por equipe (árvores)'), pM), h('div', null, h('small', null, 'Prêmio por árvore acima da meta, CLT (R$)'), pP)),
+          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Bônus de qualidade por árvore (R$)'), pB), h('div', null, h('small', null, 'Bônus se o erro da auditoria for abaixo de (%)'), pBe)),
+          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Amostra da auditoria por setor (%)'), aP), h('div', null, h('small', null, 'Erro que devolve o setor, acima de (%)'), aE)),
+          h('div', null, h('small', null, 'Parceiro vê o valor no celular'), pVe),
+          h('div', { class: 'dica' }, 'Em branco valem os números de exemplo. O prêmio é pago por cartão prêmio, fora da folha. Sem dados de pagamento no app.'))),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       const nOk = (x, a, b) => { const v = +String(x.value).replace(',', '.'); return x.value.trim() === '' ? '' : v >= a && v <= b ? String(v) : null; };
       if (!ok) return;
@@ -2111,7 +2123,9 @@
       if (novo && projetos.some((x) => x.id === pid)) return toast('Já existe projeto com esse identificador.');
       const fg = nOk(fGps, 1, 50), fd = nOk(fDist, 1, 50), ff = nOk(fFolga, 0, 50);
       if (fg == null || fd == null || ff == null) return toast('Faces de quadra: use números entre 1 e 50 metros (folga de 0 a 50).', 5000);
-      try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value, face_gps: fg, face_dist: fd, face_folga: ff, responsavel: rt.value.trim(), registro_profissional: reg.value.trim(), art: art.value.trim(), tipos_os: tos.value.split('\n').map((x) => x.trim()).filter(Boolean).join('; ') })); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
+      const prod = { prod_valor: nOk(pV, 0, 1000), prod_avaliador_pct: nOk(pA, 0, 100), premio_valor: nOk(pP, 0, 1000), premio_meta: nOk(pM, 0, 10000), bonus_valor: nOk(pB, 0, 1000), bonus_erro_max: nOk(pBe, 0, 100), auditoria_pct: nOk(aP, 1, 100), auditoria_erro_max: nOk(aE, 0, 100), parceiro_ve_valor: pVe.value };
+      if (Object.values(prod).some((v) => v == null)) return toast('Produção e auditoria: confira os números (porcentagens de 0 a 100).', 5000);
+      try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value, face_gps: fg, face_dist: fd, face_folga: ff, responsavel: rt.value.trim(), registro_profissional: reg.value.trim(), art: art.value.trim(), tipos_os: tos.value.split('\n').map((x) => x.trim()).filter(Boolean).join('; ') }, prod)); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
     }
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Projetos'),
       h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Projeto'), h('th', null, 'Formulário'), h('th', null, 'Camada de quadras'), h('th', null, '')),
@@ -2303,6 +2317,118 @@
     if (!ok) return; if (!lido) return toast('Escolha um arquivo válido.');
     const cam = Quadras.compactar(lido.feicoes, selN.value, []);
     try { toast('Enviando a camada...', 4000); const r = await Api.b.setoresImportar(p.id, JSON.stringify({ campo: cam.campo, total: cam.total, setores: cam.quadras.map((q) => ({ n: q.n, b: q.b, a: q.a })) })); S.stEm = null; S.stIdx = null; toast(`Camada importada: ${fmtN(r.total)} setores.`, 5000); if (/#admin\/setores/.test(location.hash)) telaAdmin('setores'); } catch (e) { toast(e.message, 6000); }
+  }
+
+  // ---------- Produção (painel da dupla e do gestor), auditoria por setor e fechamento ----------
+  const R$ = (v) => (v == null ? '-' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+  const isoDia = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const dBRc = (x) => (x ? x.split('-').reverse().join('/') : '');
+  // período de medição sugerido: quinzena (1 a 15, 16 ao fim do mês)
+  function quinzena(ref) { const d = ref ? new Date(ref + 'T12:00') : new Date(); const y = d.getFullYear(), m = d.getMonth(); return d.getDate() <= 15 ? [isoDia(new Date(y, m, 1)), isoDia(new Date(y, m, 15))] : [isoDia(new Date(y, m, 16)), isoDia(new Date(y, m + 1, 0))]; }
+  function seletorPeriodo(per, aoMudar) {
+    const de = h('input', { type: 'date', class: 'entrada', value: per[0] }), ate = h('input', { type: 'date', class: 'entrada', value: per[1] });
+    const mover = (k) => { const [a] = quinzena(per[0]); const d = new Date(a + 'T12:00'); d.setDate(k < 0 ? d.getDate() - 1 : d.getDate() + 16); const q = quinzena(isoDia(d)); aoMudar(q); };
+    return h('div', { class: 'periodo' }, h('button', { class: 'btn sec peq', onclick: () => mover(-1), 'aria-label': 'Quinzena anterior' }, ico('esq')), de, h('span', null, 'a'), ate, h('button', { class: 'btn sec peq', onclick: () => mover(1), 'aria-label': 'Próxima quinzena' }, ico('dir')), h('button', { class: 'btn peq', onclick: () => aoMudar([de.value, ate.value]) }, 'Ver'));
+  }
+  async function telaMinhaProducao() {
+    const corpo = h('main'); S.perProd = S.perProd || quinzena();
+    $app.replaceChildren(topo('Minha produção', S.projeto.equipe || '', h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Voltar ao mapa' }, ico('voltar')), null), corpo);
+    if (!navigator.onLine) return corpo.replaceChildren(h('div', { class: 'aviso' }, 'A produção vem da validação da coordenação: abra com internet.'));
+    corpo.replaceChildren(h('div', { class: 'info' }, 'Carregando...'));
+    const hoje = diaLocal(agoraISO()); const seg = (() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return isoDia(d); })();
+    let P, H, W; try { [P, H, W] = await Promise.all([Api.b.producaoMinha(S.projeto.id, S.perProd[0], S.perProd[1]), Api.b.producaoMinha(S.projeto.id, hoje, hoje), Api.b.producaoMinha(S.projeto.id, seg, hoje)]); } catch (e) { return corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
+    const Rg = P.regras; const dHoje = (H.dias || [])[0] || { validadas: 0 };
+    const linha = (t, x) => h('div', { class: 'prod-linha' }, h('b', null, t), h('span', null, `${fmtN(x.coletadas)} coletadas`), h('span', null, `${fmtN(x.validadas)} validadas`), h('span', null, `${fmtN(x.emValidacao)} em validação`), x.devolvidas ? h('span', { class: 'ruim' }, `${fmtN(x.devolvidas)} devolvidas`) : null);
+    const clt = (P.pessoas || []).some((x) => x.vinculo === 'CLT');
+    corpo.replaceChildren(
+      h('div', { class: 'cartao' }, h('h3', null, 'Árvores'), linha('Hoje', H.totais), linha('Semana', W.totais), linha(`${dBRc(P.de).slice(0, 5)} a ${dBRc(P.ate).slice(0, 5)}`, P.totais),
+        h('p', { class: 'dica' }, 'Conta como validada a árvore com 2 m de altura ou mais, foto, coordenada e aprovada pela coordenação.')),
+      clt || !(P.pessoas || []).length ? h('div', { class: 'cartao' }, h('h3', null, 'Meta do dia'), h('div', { class: 'meta-barra' }, h('div', { style: `width:${Math.min(100, (dHoje.validadas / Math.max(1, Rg.meta)) * 100)}%` })),
+        h('p', null, `${fmtN(dHoje.validadas)} de ${fmtN(Rg.meta)} árvores validadas hoje` + (dHoje.acima ? ` · ${fmtN(dHoje.acima)} acima da meta` : '')), h('p', { class: 'dica' }, `Prêmio de ${R$(Rg.premio)} por árvore validada acima da meta, pago no cartão prêmio. A validação pode chegar depois do dia de campo.`)) : null,
+      (P.pessoas || []).length ? h('div', { class: 'cartao' }, h('h3', null, 'Por pessoa no período'), seletorPeriodo(S.perProd, (q) => { S.perProd = q; telaMinhaProducao(); }),
+        h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Pessoa'), h('th', null, 'Validadas'), h('th', null, 'Pagas'), h('th', null, 'Estimado')),
+          P.pessoas.map((x) => h('tr', null, h('td', null, x.nome, h('br'), h('small', { class: 'dica' }, x.vinculo)), h('td', null, fmtN(x.validadas)), h('td', null, fmtN(x.pagas)),
+            h('td', null, x.vinculo === 'Parceiro' ? (x.valor != null ? R$(x.valor + (x.bonus || 0)) : 'com a coordenação') : `prêmio ${R$((x.premio || 0) + (x.bonus || 0))}`)))))) : null,
+      P.devolvidas && P.devolvidas.length ? h('div', { class: 'cartao' }, h('h3', null, 'Devolvidas para refazer'), h('ul', { class: 'lista-mud' }, P.devolvidas.map((x) => h('li', null, h('b', null, x.codigo || x.uuid.slice(0, 8)), ` ${x.especie || ''}: ${x.motivo}`))), h('p', { class: 'dica' }, 'Devolvida não conta até ser corrigida e validada de novo.')) : null);
+  }
+  async function telaProducao() {
+    const corpo = h('main'); S.perProd = S.perProd || quinzena();
+    $app.replaceChildren(topo('Produção e pagamento', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), null), corpo);
+    corpo.replaceChildren(h('div', { class: 'info' }, 'Calculando a produção...'));
+    let P; try { P = await Api.b.producao(S.projeto.id, S.perProd[0], S.perProd[1]); } catch (e) { return corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
+    const Rg = P.regras; let aba = S.abaProd || 'pessoas';
+    const tabela = (cab, linhas) => h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, cab.map((c) => h('th', null, c))), linhas));
+    const num = (x) => [h('td', null, fmtN(x.coletadas)), h('td', null, fmtN(x.validadas)), h('td', null, fmtN(x.emValidacao)), h('td', null, fmtN(x.devolvidas)), h('td', null, fmtN(x.pagas))];
+    const C = ['Coletadas', 'Validadas', 'Em validação', 'Devolvidas', 'Pagas'];
+    const conteudo = h('div');
+    const pintar = () => {
+      S.abaProd = aba; abas.querySelectorAll('button').forEach((b) => b.classList.toggle('at', b.dataset.a === aba));
+      if (aba === 'pessoas') conteudo.replaceChildren(P.pessoas.length ? tabela(['Pessoa', 'Vínculo', ...C, 'Por árvore', 'Prêmio', 'Bônus', 'Total'], P.pessoas.map((x) => h('tr', null, h('td', null, x.nome), h('td', null, x.vinculo), ...num(x), h('td', null, R$(x.valor)), h('td', null, R$(x.premio)), h('td', null, R$(x.bonus)), h('td', null, h('b', null, R$(x.total)))))) : h('p', { class: 'dica' }, 'Nenhum registro com dupla informada no período. A dupla do dia aparece depois que as pessoas são cadastradas em Coordenação, Pessoas.'));
+      if (aba === 'equipes') conteudo.replaceChildren(tabela(['Equipe', ...C, 'Por árvore', 'Prêmio', 'Bônus', 'Total'], P.equipes.map((x) => h('tr', null, h('td', null, x.equipe), ...num(x), h('td', null, R$(x.valor)), h('td', null, R$(x.premio)), h('td', null, R$(x.bonus)), h('td', null, h('b', null, R$(x.total)))))));
+      if (aba === 'setores') conteudo.replaceChildren(tabela(['Setor', 'Auditoria', ...C, 'Total'], P.setores.map((x) => h('tr', null, h('td', null, x.setor || 'sem setor'), h('td', null, x.situacao ? x.situacao + (x.erro_pct !== '' ? ` (${fmtN(x.erro_pct)}%)` : '') : ''), ...num(x), h('td', null, R$(x.total))))));
+      if (aba === 'dias') conteudo.replaceChildren(tabela(['Dia', 'Equipe', 'Validadas', 'Acima da meta', 'Prêmio (cartão)', 'CLT na dupla'], P.dias.map((x) => h('tr', null, h('td', null, dBRc(x.dia)), h('td', null, x.equipe), h('td', null, fmtN(x.validadas)), h('td', null, fmtN(x.acima)), h('td', null, R$(x.premio)), h('td', null, x.clt.join(', '))))));
+      if (aba === 'medicoes') conteudo.replaceChildren(P.medicoes.length ? tabela(['Período', 'Fechada em', 'Por', 'Árvores', 'Por árvore', 'Prêmio', 'Bônus', 'Total'], P.medicoes.map((m) => h('tr', null, h('td', null, `${dBRc(m.de)} a ${dBRc(m.ate)}`), h('td', null, dataAno(m.fechada_em)), h('td', null, m.fechada_por), h('td', null, fmtN(m.arvores)), h('td', null, R$(m.valor)), h('td', null, R$(m.premio)), h('td', null, R$(m.bonus)), h('td', null, h('b', null, R$(m.total)))))) : h('p', { class: 'dica' }, 'Nenhuma medição fechada ainda.'));
+    };
+    const abas = h('div', { class: 'subabas' }, [['pessoas', 'Por pessoa'], ['equipes', 'Por equipe'], ['setores', 'Por setor'], ['dias', 'Prêmio por dia'], ['medicoes', 'Medições fechadas']].map(([a, t]) => h('button', { 'data-a': a, onclick: () => { aba = a; pintar(); } }, t)));
+    const aPagar = P.pessoas.reduce((a, x) => a + x.arvoresPagar, 0);
+    async function fechar() {
+      if (!(await confirmar('Fechar a medição', `Fechar de ${dBRc(P.de)} a ${dBRc(P.ate)}? As árvores validadas do período ainda não pagas ficam marcadas como pagas nesta medição (total ${R$(P.totais.total)}). Exporte a planilha antes para pagar.`, 'Fechar medição'))) return;
+      try { const r = await Api.b.medicaoFechar(S.projeto.id, P.de, P.ate); toast(`Medição fechada: ${fmtN(r.medicao.arvores)} árvores marcadas como pagas.`, 5000); S.abaProd = 'medicoes'; telaProducao(); } catch (e) { toast(e.message, 6000); }
+    }
+    async function exportar() {
+      const din = (v) => Math.round((v || 0) * 100) / 100;
+      const b = await Arquivos.xlsx([
+        { nome: 'Por pessoa', cols: ['Pessoa', 'Vínculo', 'Coletadas', 'Validadas', 'Em validação', 'Devolvidas', 'Pagas', 'A pagar', 'Por árvore (R$)', 'Prêmio cartão (R$)', 'Bônus (R$)', 'Total (R$)'], linhas: P.pessoas.map((x) => ({ Pessoa: x.nome, 'Vínculo': x.vinculo, Coletadas: x.coletadas, Validadas: x.validadas, 'Em validação': x.emValidacao, Devolvidas: x.devolvidas, Pagas: x.pagas, 'A pagar': x.arvoresPagar, 'Por árvore (R$)': din(x.valor), 'Prêmio cartão (R$)': din(x.premio), 'Bônus (R$)': din(x.bonus), 'Total (R$)': din(x.total) })) },
+        { nome: 'Por equipe', cols: ['Equipe', 'Coletadas', 'Validadas', 'Em validação', 'Devolvidas', 'Pagas', 'Total (R$)'], linhas: P.equipes.map((x) => ({ Equipe: x.equipe, Coletadas: x.coletadas, Validadas: x.validadas, 'Em validação': x.emValidacao, Devolvidas: x.devolvidas, Pagas: x.pagas, 'Total (R$)': din(x.total) })) },
+        { nome: 'Por setor', cols: ['Setor', 'Auditoria', 'Erro (%)', 'Coletadas', 'Validadas', 'Total (R$)'], linhas: P.setores.map((x) => ({ Setor: x.setor, Auditoria: x.situacao, 'Erro (%)': x.erro_pct, Coletadas: x.coletadas, Validadas: x.validadas, 'Total (R$)': din(x.total) })) },
+        { nome: 'Prêmio por dia', cols: ['Dia', 'Equipe', 'Validadas', 'Meta', 'Acima da meta', 'Prêmio (R$)', 'CLT na dupla'], linhas: P.dias.map((x) => ({ Dia: dBRc(x.dia), Equipe: x.equipe, Validadas: x.validadas, Meta: x.meta, 'Acima da meta': x.acima, 'Prêmio (R$)': din(x.premio), 'CLT na dupla': x.clt.join(', ') })) },
+        { nome: 'Regras', cols: ['Regra', 'Valor'], linhas: [['Período', `${dBRc(P.de)} a ${dBRc(P.ate)}`], ['Valor por árvore validada (parceiros)', R$(Rg.valor)], ['Parte do avaliador', Rg.pctAvaliador + '%'], ['Meta por dia por equipe', String(Rg.meta)], ['Prêmio por árvore acima da meta (CLT, cartão prêmio)', R$(Rg.premio)], ['Bônus de qualidade por árvore', R$(Rg.bonus) + ` (setor aprovado com erro abaixo de ${Rg.bonusErroMax}%)`], ['Árvore que conta', 'validada, 2 m de altura ou mais, com foto e coordenada']].map(([a, b2]) => ({ Regra: a, Valor: b2 })) }]);
+      baixar(`producao_${S.projeto.id}_${P.de}_${P.ate}.xlsx`, b);
+    }
+    corpo.replaceChildren(
+      h('div', { class: 'cartao' }, seletorPeriodo([P.de, P.ate], (q) => { S.perProd = q; telaProducao(); }),
+        h('div', { class: 'kpis' }, kpi('Árvores que contam', fmtN(P.equipes.reduce((a, x) => a + x.validadas, 0)), `${fmtN(P.equipes.reduce((a, x) => a + x.emValidacao, 0))} em validação · ${fmtN(P.equipes.reduce((a, x) => a + x.devolvidas, 0))} devolvidas`),
+          kpi('Por árvore (parceiros)', R$(P.totais.valor), `${R$(Rg.valor)} por árvore, ${Rg.pctAvaliador}% avaliador`), kpi('Prêmio (cartão)', R$(P.totais.premio), `acima de ${fmtN(Rg.meta)} por dia`), kpi('Total do período', R$(P.totais.total), Rg.bonus ? `inclui bônus ${R$(P.totais.bonus)}` : 'sem bônus de qualidade')),
+        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: exportar }, 'Exportar planilha'), h('button', { class: 'btn', disabled: !aPagar, onclick: fechar }, aPagar ? `Fechar medição (${fmtN(aPagar)} a pagar)` : 'Nada a pagar no período'), h('button', { class: 'btn sec', onclick: () => ir('#auditoria') }, 'Auditoria por setor')),
+        h('p', { class: 'dica' }, 'Conta a árvore validada com 2 m de altura ou mais, foto e coordenada. Validadas que não contam: ' + fmtN(P.equipes.reduce((a, x) => a + x.naoContam, 0)) + '. As regras de valor ficam no cadastro do projeto.')),
+      abas, conteudo);
+    pintar();
+  }
+  const MOTIVOS_AUD = ['Espécie errada', 'CAP com diferença acima de 10%', 'Altura com diferença acima de 20%', 'Foto ruim ou sem a árvore', 'Ponto a mais de 5 m'];
+  async function telaAuditoria(setor) {
+    const corpo = h('main');
+    $app.replaceChildren(topo('Auditoria por setor', setor ? 'Setor ' + setor : S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(setor ? '#auditoria' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), null), corpo);
+    corpo.replaceChildren(h('div', { class: 'info' }, 'Carregando...'));
+    let sit, P; try { S.stSitEm = null; [sit, P] = await Promise.all([Setores.situacao(true), perfil() === 'admin' ? Api.b.producao(S.projeto.id, '', '') : Promise.resolve(null)]); } catch (e) { return corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
+    const cam = await Setores.camada();
+    if (!cam) return corpo.replaceChildren(h('div', { class: 'info' }, 'Este projeto ainda não tem a camada de setores censitários. Importe em Coordenação, Setores.'));
+    const por = new Map(sit.map((x) => [x.numero, x])); const prod = new Map(((P && P.setores) || []).map((x) => [x.setor, x]));
+    if (!setor) {
+      const ls = cam.setores.map((x) => ({ n: x.n, s: por.get(x.n) || {}, p: prod.get(x.n) })).filter((x) => x.s.equipe || x.p);
+      return corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Setores com coleta'), h('p', { class: 'dica' }, 'Sorteie a amostra quando o setor terminar. Erro acima do limite do projeto devolve o setor inteiro para correção, sem custo.'),
+        ls.length ? h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Setor'), h('th', null, 'Equipe'), h('th', null, 'Registros'), h('th', null, 'Situação'), h('th', null, '')),
+          ls.map((x) => h('tr', null, h('td', null, x.n), h('td', null, x.s.equipe || ''), h('td', null, x.p ? fmtN(x.p.coletadas) : '-'), h('td', null, (x.s.situacao || 'Em coleta') + (x.s.erro_pct !== undefined && x.s.erro_pct !== '' ? ` (erro ${fmtN(x.s.erro_pct)}%)` : '')),
+            h('td', null, h('button', { class: 'btn sec peq', onclick: () => ir('#auditoria/' + encodeURIComponent(x.n)) }, x.s.situacao === 'Em auditoria' ? 'Conferir' : 'Abrir')))))) : h('p', { class: 'dica' }, 'Nenhum setor com equipe ou com registros ainda.')));
+    }
+    const st = por.get(setor) || { numero: setor };
+    let am = {}; try { am = JSON.parse(st.amostra || '{}'); } catch (e) { am = {}; }
+    async function sortear() { try { const r = await Api.b.auditoriaSortear(S.projeto.id, setor); toast(`Amostra: ${r.amostra.length} de ${r.total} registros.`); telaAuditoria(setor); } catch (e) { toast(e.message, 6000); } }
+    async function marcar(uuid, res) {
+      let motivo = '';
+      if (res === 'erro') {
+        const ta = h('textarea', { class: 'entrada', rows: 2, placeholder: 'O que estava errado' });
+        const ok = await modal('Erro na conferência', h('div', null, h('div', { class: 'chips motivos' }, MOTIVOS_AUD.map((m) => h('button', { class: 'chip mini', type: 'button', onclick: () => { ta.value = ta.value ? ta.value + '; ' + m : m; } }, m))), ta), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Registrar erro', valor: true }]);
+        if (!ok) return; motivo = ta.value.trim(); if (!motivo) return toast('Diga qual foi o erro.');
+      }
+      try { const r = await Api.b.auditoriaConferir(S.projeto.id, setor, uuid, res, motivo); if (r.fim) toast(r.fim.situacao === 'Aprovado' ? `Setor aprovado: erro de ${fmtN(r.fim.erro_pct)}%.` : `Setor devolvido para correção: erro de ${fmtN(r.fim.erro_pct)}%. ${fmtN(r.fim.devolvidos || 0)} registros voltaram para a equipe.`, 7000); telaAuditoria(setor); } catch (e) { toast(e.message, 6000); }
+    }
+    const uuids = Object.keys(am); const feitos = uuids.filter((u) => am[u]).length;
+    const info = new Map(); if (uuids.length) try { const cc = S.form.campos.find((c) => c.auto === 'codigo'), ce = S.form.campos.find((c) => c.tipo === 'species'); const m = await Api.b.mapa(S.projeto.id, ['uuid', cc ? cc.nome : 'uuid', ce ? ce.nome : 'uuid', 'equipe']); m.linhas.forEach((l) => { if (l[0] in am) info.set(l[0], { cod: cc ? l[1] : '', esp: ce ? l[2] : '', eq: l[3] }); }); } catch (e) { /* mostra só o identificador */ }
+    corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, `Setor ${setor}`), h('p', null, [st.equipe ? 'Equipe ' + st.equipe.replace(/^Equipe /, '') : 'Sem equipe', st.situacao || 'Em coleta', st.erro_pct !== undefined && st.erro_pct !== '' ? `erro de ${fmtN(st.erro_pct)}%` : ''].filter(Boolean).join(' · ')),
+      st.situacao === 'Em auditoria' ? h('p', { class: 'dica' }, `Conferidos ${feitos} de ${uuids.length}. Abra cada registro, confira na rua (ou pelas fotos) e marque Certo ou Erro.`) : h('div', { class: 'linha-btn' }, h('button', { class: 'btn', onclick: sortear }, st.situacao ? 'Sortear nova amostra' : 'Sortear amostra')),
+      st.historico ? h('details', null, h('summary', null, 'Histórico'), h('p', { class: 'dica' }, st.historico.split(' | ').join('\n'))) : null),
+      uuids.length ? h('div', { class: 'aud-lista' }, uuids.map((u) => h('div', { class: 'cartao aud-item' + (am[u] === 'ok' ? ' ok' : am[u] ? ' erro' : '') }, h('div', null, h('b', null, (info.get(u) || {}).cod || u.slice(0, 8)), h('small', null, ' ' + [(info.get(u) || {}).esp, am[u] === 'ok' ? 'certo' : am[u]].filter(Boolean).join(' · '))),
+        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec peq', onclick: () => ir('#ficha/' + encodeURIComponent(u)) }, 'Abrir registro'), st.situacao === 'Em auditoria' ? [h('button', { class: 'btn peq', onclick: () => marcar(u, 'ok') }, 'Certo'), h('button', { class: 'btn sec peq perigo-txt', onclick: () => marcar(u, 'erro') }, 'Erro')] : null)))) : null);
   }
 
   async function adminFormularios(corpo) {

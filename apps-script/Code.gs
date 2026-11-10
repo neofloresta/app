@@ -13,7 +13,7 @@
 const PROPS = PropertiesService.getScriptProperties();
 const VERSAO_SCRIPT = '2.7';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso'];
-const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga'];
+const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga', 'prod_valor', 'prod_avaliador_pct', 'premio_valor', 'premio_meta', 'bonus_valor', 'bonus_erro_max', 'auditoria_pct', 'auditoria_erro_max', 'parceiro_ve_valor'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
 // pessoas das equipes (a dupla do dia é escolhida no celular): só o nome, a função e o vínculo, sem dados de pagamento
@@ -24,7 +24,7 @@ const COLS_CHAVES = ['id', 'nome', 'projeto', 'hash', 'criada_por', 'criada_em',
 const ACOES_INTEGRACAO = ['listar', 'mapa', 'painel', 'os_listar', 'formulario', 'sessao', 'quadras_camada', 'quadras_situacao'];
 const PERFIS = ['admin', 'revisor', 'coletor', 'cliente'];
 // Colunas que só o servidor escreve (validação). Um envio do aparelho nunca as apaga.
-const COLS_SISTEMA = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'numero_unico', 'servidor_em'];
+const COLS_SISTEMA = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'numero_unico', 'servidor_em', 'pagamento'];
 // Colunas internas que o perfil cliente não recebe
 const COLS_INTERNAS = ['usuario', 'validacao_obs', 'servidor_em'];
 // quem estava na dupla: fica com a Neofloresta, o cliente não recebe
@@ -35,7 +35,7 @@ const BLOQUEIO_MIN = 15;
 const FUSO = 'America/Sao_Paulo';
 const ITERACOES = 1000;
 const SENHA_MIN = 8;
-const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar', 'setores_importar', 'setores_atribuir'];
+const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar', 'setores_importar', 'setores_atribuir', 'auditoria_sortear', 'auditoria_conferir', 'medicao_fechar'];
 // texto que começaria uma fórmula na planilha vira texto puro
 function seguro(v) { v = v == null ? '' : String(v); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
 function hashToken(t) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'sessao|' + t, Utilities.Charset.UTF_8)); }
@@ -125,6 +125,11 @@ function doPost(e) {
       case 'setores_camada': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaSetores(d.projeto, d.versao)));
       case 'setores_situacao': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, setores: lerSetores(d.projeto) });
       case 'setores_atribuir': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, atribuirSetores(d.projeto, d.itens, usr)));
+      case 'auditoria_sortear': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, sortearAuditoria(d.projeto, d.setor, usr)));
+      case 'auditoria_conferir': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, conferirAuditoria(d.projeto, d.setor, d.uuid, d.resultado, d.motivo, usr)));
+      case 'producao': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producao(d.projeto, d.de, d.ate)));
+      case 'producao_minha': pode('coletor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producaoDaDupla(d.projeto, d.de, d.ate, usr)));
+      case 'medicao_fechar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, fecharMedicao(d.projeto, d.de, d.ate, usr)));
       case 'projetos_listar': pode(); return json({ ok: true, projetos: tabela('Projetos').map(comLinks) });
       case 'projeto_salvar': pode(); salvarProjeto(d.projeto_dados); auditar(usr.login, 'projeto_salvar', d.projeto_dados && d.projeto_dados.id, ''); return json({ ok: true });
       case 'usuarios_listar': pode(); return json({ ok: true, usuarios: tabela('Usuarios').map(paraAdmin) });
@@ -628,7 +633,7 @@ function clienteVeTodos(projetoId) { return String(projeto(projetoId).cliente_ve
 // colunas que o cliente não recebe: dados internos das equipes (quem coletou, histórico com logins)
 function ocultasCliente(projetoId) {
   let auto = []; try { auto = lerFormulario(projeto(projetoId).formulario).campos.filter((c) => c.auto === 'coletor').map((c) => c.nome); } catch (e) { /* sem formulário */ }
-  return COLS_INTERNAS.concat(['equipe', 'validado_por', 'historico', 'validacao_hist'], COLS_DUPLA, auto);
+  return COLS_INTERNAS.concat(['equipe', 'validado_por', 'historico', 'validacao_hist', 'pagamento'], COLS_DUPLA, auto);
 }
 function paraCliente(projetoId, linhas) {
   const todos = clienteVeTodos(projetoId); const oc = ocultasCliente(projetoId);
@@ -1113,13 +1118,165 @@ function atribuirSetores(projetoId, itens, usr) {
       const o = Object.assign({}, por[num] || { numero: num, situacao: 'Em coleta' }); if (o.equipe === eq) return;
       o.equipe = eq; o.atualizado_em = new Date().toISOString(); o.historico = (o.historico ? o.historico + ' | ' : '') + quando + ' ' + (usr.nome || usr.login) + ': ' + (eq ? 'equipe ' + eq : 'sem equipe');
       o.historico = String(o.historico).slice(-1500);
-      const linha = cab.map((c) => (o[c] == null ? '' : "'" + String(o[c])));
-      if (o.__linha) sh.getRange(o.__linha, 1, 1, cab.length).setValues([linha]); else { sh.getRange(sh.getLastRow() + 1, 1, 1, cab.length).setValues([linha]); o.__linha = sh.getLastRow(); }
-      por[num] = o; n++;
+      gravarSetor(sh, o); por[num] = o; n++;
     });
     if (n) auditar(usr.login, 'setores_atribuir', projetoId, n + ' setor(es)');
     return { alterados: n, recusados: recusados };
   } finally { lock.releaseLock(); }
+}
+function gravarSetor(sh, o) {
+  const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const linha = cab.map((c) => (o[c] == null ? '' : typeof o[c] === 'number' ? o[c] : "'" + String(o[c])));
+  if (o.__linha) sh.getRange(o.__linha, 1, 1, cab.length).setValues([linha]); else { sh.getRange(sh.getLastRow() + 1, 1, 1, cab.length).setValues([linha]); o.__linha = sh.getLastRow(); }
+}
+
+// ---------- Produção, auditoria por setor e fechamento da medição ----------
+// Árvore que conta: validada pela coordenação, com 2 m de altura ou mais, foto e coordenada.
+// Valor por árvore só para parceiros (dividido entre avaliador e auxiliar); CLT entra no prêmio por árvore acima da meta do dia
+// (pago por cartão prêmio, fora da folha); bônus de qualidade por árvore dos setores aprovados na auditoria com erro baixo.
+function regrasProducao(p) {
+  const n = (v, d) => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(x) && x >= 0 ? x : d; };
+  return { valor: n(p.prod_valor, 2.5), pctAvaliador: Math.min(100, n(p.prod_avaliador_pct, 50)), premio: n(p.premio_valor, 1.5), meta: n(p.premio_meta, 90), bonus: n(p.bonus_valor, 0), bonusErroMax: n(p.bonus_erro_max, 2),
+    auditoriaPct: Math.min(100, Math.max(1, n(p.auditoria_pct, 10))), auditoriaErroMax: n(p.auditoria_erro_max, 5), parceiroVeValor: String(p.parceiro_ve_valor || 'sim') !== 'não' };
+}
+function camposProducao(form) {
+  const alt = form.campos.find((c) => /altura total/i.test(c.nome)) || form.campos.find((c) => /altura/i.test(c.nome) && c.tipo !== 'photo');
+  const foto = form.campos.find((c) => c.tipo === 'photo'); const cod = form.campos.find((c) => c.auto === 'codigo'); const esp = form.campos.find((c) => c.tipo === 'species');
+  return { alt: alt && alt.nome, foto: foto && foto.nome, cod: cod && cod.nome, esp: esp && esp.nome };
+}
+const situacaoReg = (l) => (l.validacao === 'Descartado' ? 'Descartada' : l.pagamento ? 'Paga' : l.validacao === 'Validado' ? 'Validada' : l.validacao === 'Devolvido' ? 'Devolvida' : 'Em validação');
+function linhasProducao(projetoId) {
+  const p = projeto(projetoId); const form = lerFormulario(p.formulario); const F = camposProducao(form);
+  const campos = ['uuid', 'equipe', 'usuario', 'criado_em', 'validacao', 'validacao_obs', 'avaliador_id', 'avaliador', 'avaliador_vinculo', 'auxiliar_id', 'auxiliar', 'auxiliar_vinculo', 'setor', 'latitude', 'pagamento', F.alt, F.foto, F.foto ? F.foto + ' link' : null, F.cod, F.esp].filter(Boolean);
+  const c = colunas(projetoId, campos, { perfil: 'admin' });
+  return { p: p, F: F, linhas: c.linhas.map((l) => { const o = {}; campos.forEach((k, i) => { o[k] = l[i]; }); return o; }) };
+}
+function contaParaProducao(l, F) {
+  if (l.validacao !== 'Validado') return { conta: false };
+  const alt = valorNum(F.alt ? l[F.alt] : '', false); const foto = F.foto ? !!(l[F.foto] || l[F.foto + ' link']) : true; const coord = l.latitude !== '' && l.latitude != null;
+  const motivo = !(alt >= 2) ? 'altura abaixo de 2 m' : !foto ? 'sem foto' : !coord ? 'sem coordenada' : '';
+  return { conta: !motivo, motivo: motivo };
+}
+function producao(projetoId, de, ate, soLogin) {
+  const X = linhasProducao(projetoId); const R = regrasProducao(X.p); const F = X.F;
+  const st = {}; lerSetores(projetoId).forEach((x) => { st[x.numero] = x; });
+  const pessoas = {}, equipes = {}, setores = {}, dias = {}; const devolvidas = [];
+  const pes = (id, nome, vinc) => (pessoas[id] = pessoas[id] || { id: id, nome: nome, vinculo: vinc, coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0, arvoresPagar: 0 });
+  const zero = () => ({ coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0 });
+  X.linhas.forEach((l) => {
+    if (l.validacao === 'Descartado' || !l.criado_em) return; const d = dia(l.criado_em);
+    if ((de && d < de) || (ate && d > ate)) return; if (soLogin && String(l.usuario).toLowerCase() !== soLogin) return;
+    const sit = situacaoReg(l); const k = contaParaProducao(l, F); const e = l.equipe || '-';
+    const membros = [l.avaliador_id ? { id: l.avaliador_id, nome: l.avaliador, v: l.avaliador_vinculo, pct: l.auxiliar_id ? R.pctAvaliador : 100 } : null, l.auxiliar_id ? { id: l.auxiliar_id, nome: l.auxiliar, v: l.auxiliar_vinculo, pct: l.avaliador_id ? 100 - R.pctAvaliador : 100 } : null].filter(Boolean);
+    const E = equipes[e] = equipes[e] || Object.assign({ equipe: e }, zero());
+    const sn = l.setor || ''; const S_ = setores[sn] = setores[sn] || Object.assign({ setor: sn, situacao: (st[sn] || {}).situacao || '', erro_pct: (st[sn] || {}).erro_pct || '' }, zero());
+    const alvo = [E, S_].concat(membros.map((m) => pes(m.id, m.nome, m.v)));
+    alvo.forEach((a) => { a.coletadas++; if (sit === 'Em validação') a.emValidacao++; if (sit === 'Devolvida') a.devolvidas++; if (sit === 'Paga') a.pagas++; if (k.conta) a.validadas++; else if (l.validacao === 'Validado') a.naoContam++; });
+    if (sit === 'Devolvida') devolvidas.push({ uuid: l.uuid, codigo: F.cod ? l[F.cod] : '', especie: F.esp ? l[F.esp] : '', motivo: l.validacao_obs || '', dia: d });
+    if (!k.conta) return;
+    const aPagar = !l.pagamento; const sx = st[sn]; const comBonus = R.bonus > 0 && sx && sx.situacao === 'Aprovado' && sx.erro_pct !== '' && +sx.erro_pct < R.bonusErroMax;
+    membros.forEach((m) => { const P = pes(m.id, m.nome, m.v); const v = m.v === 'Parceiro' ? R.valor * m.pct / 100 : 0; const bn = comBonus ? R.bonus * m.pct / 100 : 0; P.valor += v; P.bonus += bn; E.valor += v; E.bonus += bn; S_.valor += v; S_.bonus += bn; if (aPagar) P.arvoresPagar++; });
+    const kd = d + '|' + e; const D = dias[kd] = dias[kd] || { dia: d, equipe: e, n: 0, clt: {} }; D.n++;
+    membros.forEach((m) => { if (m.v === 'CLT') D.clt[m.id] = { nome: m.nome }; });
+  });
+  const listaDias = Object.keys(dias).sort().map((kd) => {
+    const D = dias[kd]; const acima = Math.max(0, D.n - R.meta); const total = acima * R.premio; const ids = Object.keys(D.clt);
+    if (total && ids.length) ids.forEach((id) => { const P = pessoas[id]; if (P) P.premio += total / ids.length; }); if (equipes[D.equipe]) equipes[D.equipe].premio += ids.length ? total : 0;
+    return { dia: D.dia, equipe: D.equipe, validadas: D.n, meta: R.meta, acima: acima, premio: ids.length ? total : 0, clt: ids.map((id) => D.clt[id].nome) };
+  });
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const arred = (o) => { ['valor', 'premio', 'bonus'].forEach((k) => { o[k] = r2(o[k]); }); o.total = r2(o.valor + o.premio + o.bonus); return o; };
+  const ps = Object.keys(pessoas).map((k) => arred(pessoas[k])).sort((a, b) => a.nome.localeCompare(b.nome));
+  const tot = ps.reduce((a, x) => { a.valor += x.valor; a.premio += x.premio; a.bonus += x.bonus; return a; }, { valor: 0, premio: 0, bonus: 0 });
+  return { regras: R, de: de || '', ate: ate || '', pessoas: ps, equipes: Object.keys(equipes).map((k) => arred(equipes[k])), setores: Object.keys(setores).map((k) => arred(setores[k])), dias: listaDias, devolvidas: devolvidas.slice(-100),
+    totais: arred(tot), medicoes: lerMedicoes(projetoId) };
+}
+// painel da dupla: só os registros deste acesso; parceiro vê o valor se o projeto deixar
+function producaoDaDupla(projetoId, de, ate, usr) {
+  const r = producao(projetoId, de, ate, usr.login.toLowerCase());
+  const out = { regras: { meta: r.regras.meta, premio: r.regras.premio, parceiroVeValor: r.regras.parceiroVeValor }, de: r.de, ate: r.ate, dias: r.dias.map((d) => ({ dia: d.dia, validadas: d.validadas, meta: d.meta, acima: d.acima, premio: d.premio })), devolvidas: r.devolvidas,
+    pessoas: r.pessoas.map((x) => { const o = { id: x.id, nome: x.nome, vinculo: x.vinculo, coletadas: x.coletadas, validadas: x.validadas, emValidacao: x.emValidacao, devolvidas: x.devolvidas, pagas: x.pagas, naoContam: x.naoContam };
+      if (x.vinculo === 'Parceiro' && r.regras.parceiroVeValor) { o.valor = x.valor; o.bonus = x.bonus; } if (x.vinculo === 'CLT') { o.premio = x.premio; o.bonus = x.bonus; } return o; }) };
+  const t = r.equipes.reduce((a, e) => { ['coletadas', 'validadas', 'emValidacao', 'devolvidas', 'pagas'].forEach((k) => { a[k] += e[k]; }); return a; }, { coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0 });
+  out.totais = t; return out;
+}
+const COLS_MEDICOES = ['id', 'de', 'ate', 'fechada_em', 'fechada_por', 'arvores', 'valor', 'premio', 'bonus', 'total', 'resumo'];
+function abaMedicoes(projetoId) {
+  const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Medicoes');
+  if (!sh) { sh = ss.insertSheet('Medicoes'); sh.appendRow(COLS_MEDICOES); sh.setFrozenRows(1); }
+  return garantirCab(sh, COLS_MEDICOES);
+}
+function lerMedicoes(projetoId) { const sh = SpreadsheetApp.openById(projeto(projetoId).planilha_id).getSheetByName('Medicoes'); if (!sh || sh.getLastRow() < 2) return []; return lerOS(sh).map((m) => ({ id: m.id, de: m.de, ate: m.ate, fechada_em: m.fechada_em, fechada_por: m.fechada_por, arvores: +m.arvores || 0, valor: +m.valor || 0, premio: +m.premio || 0, bonus: +m.bonus || 0, total: +m.total || 0 })); }
+// fecha a medição: as árvores que contam e ainda não foram pagas no período ficam marcadas como pagas nesta medição
+function fecharMedicao(projetoId, de, ate, usr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(de || '')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(ate || '')) || de > ate) throw new Error('Período inválido.');
+  const id = 'M' + de.replace(/-/g, '') + '-' + ate.replace(/-/g, '');
+  if (lerMedicoes(projetoId).some((m) => m.id === id)) throw new Error('Esta medição já foi fechada.');
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const r = producao(projetoId, de, ate); const X = linhasProducao(projetoId); const marcar = {};
+    X.linhas.forEach((l) => { const d = l.criado_em ? dia(l.criado_em) : ''; if (d >= de && d <= ate && !l.pagamento && contaParaProducao(l, X.F).conta) marcar[l.uuid] = 1; });
+    const n = Object.keys(marcar).length; if (!n) throw new Error('Nenhuma árvore validada a pagar neste período.');
+    const sh = planilha(projetoId); const cab = cabecalho(sh, COLS_SISTEMA); const tot = sh.getLastRow() - 1;
+    const uu = sh.getRange(2, cab.indexOf('uuid') + 1, tot, 1).getValues(); const rg = sh.getRange(2, cab.indexOf('pagamento') + 1, tot, 1); const pg = rg.getValues();
+    const txt = 'Medição ' + de + ' a ' + ate; uu.forEach((u, i) => { if (marcar[String(u[0])]) pg[i] = [txt]; });
+    rg.setNumberFormat('@').setValues(pg);
+    const resumo = r.pessoas.filter((x) => x.arvoresPagar).map((x) => ({ nome: x.nome, vinculo: x.vinculo, arvores: x.arvoresPagar, valor: x.valor, premio: x.premio, bonus: x.bonus, total: x.total }));
+    const m = { id: id, de: de, ate: ate, fechada_em: new Date().toISOString(), fechada_por: usr.nome || usr.login, arvores: n, valor: r.totais.valor, premio: r.totais.premio, bonus: r.totais.bonus, total: r.totais.total, resumo: JSON.stringify(resumo).slice(0, 45000) };
+    gravarSetor(abaMedicoes(projetoId), m);
+    auditar(usr.login, 'medicao_fechar', projetoId, txt + ': ' + n + ' árvores');
+    CacheService.getScriptCache().remove('painel:' + projetoId + ':todos');
+    return { medicao: { id: id, arvores: n, total: m.total } };
+  } finally { lock.releaseLock(); }
+}
+// auditoria por amostragem: sorteia de 5 a 10% dos registros do setor; a coordenação confere cada um
+function sortearAuditoria(projetoId, setor, usr) {
+  const R = regrasProducao(projeto(projetoId)); const X = linhasProducao(projetoId); const sn = String(setor || '');
+  const regs = X.linhas.filter((l) => l.setor === sn && l.validacao !== 'Descartado');
+  if (!regs.length) throw new Error('Nenhum registro neste setor.');
+  const k = Math.max(1, Math.ceil(regs.length * R.auditoriaPct / 100));
+  for (let i = regs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = regs[i]; regs[i] = regs[j]; regs[j] = t; }
+  const amostra = {}; regs.slice(0, k).forEach((l) => { amostra[l.uuid] = ''; });
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = abaSetores(projetoId); const o = lerOS(sh).find((x) => x.numero === sn) || { numero: sn, equipe: '' };
+    if (o.situacao === 'Em auditoria' && o.amostra) throw new Error('Este setor já está em auditoria.');
+    const quando = Utilities.formatDate(new Date(), FUSO, 'dd/MM/yyyy HH:mm');
+    Object.assign(o, { situacao: 'Em auditoria', amostra: JSON.stringify(amostra), erros: '', erro_pct: '', auditado_por: usr.nome || usr.login, auditado_em: '', atualizado_em: new Date().toISOString() });
+    o.historico = String((o.historico ? o.historico + ' | ' : '') + quando + ' ' + (usr.nome || usr.login) + ': sorteou ' + k + ' de ' + regs.length + ' registros para a auditoria').slice(-1500);
+    gravarSetor(sh, o);
+  } finally { lock.releaseLock(); }
+  auditar(usr.login, 'auditoria_sortear', projetoId, sn + ': ' + k + ' de ' + regs.length);
+  return { setor: sn, amostra: Object.keys(amostra), total: regs.length };
+}
+function conferirAuditoria(projetoId, setor, uuid, resultado, motivo, usr) {
+  if (['ok', 'erro'].indexOf(resultado) < 0) throw new Error('Resultado inválido.');
+  if (resultado === 'erro' && !String(motivo || '').trim()) throw new Error('Informe o erro encontrado.');
+  const R = regrasProducao(projeto(projetoId)); const sn = String(setor || ''); let fim = null;
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = abaSetores(projetoId); const o = lerOS(sh).find((x) => x.numero === sn);
+    if (!o || o.situacao !== 'Em auditoria') throw new Error('Este setor não está em auditoria.');
+    let am; try { am = JSON.parse(o.amostra || '{}'); } catch (e) { am = {}; }
+    if (!(String(uuid) in am)) throw new Error('Registro fora da amostra.');
+    am[uuid] = resultado === 'ok' ? 'ok' : 'erro: ' + seguro(String(motivo).slice(0, 200));
+    o.amostra = JSON.stringify(am); o.atualizado_em = new Date().toISOString();
+    const vs = Object.keys(am).map((k) => am[k]);
+    if (vs.every(Boolean)) {
+      const erros = vs.filter((v) => v !== 'ok').length; const pct = Math.round((erros / vs.length) * 1000) / 10;
+      const devolve = pct > R.auditoriaErroMax; const quando = Utilities.formatDate(new Date(), FUSO, 'dd/MM/yyyy HH:mm');
+      Object.assign(o, { erros: erros, erro_pct: pct, auditado_em: new Date().toISOString(), auditado_por: usr.nome || usr.login, situacao: devolve ? 'Devolvido para correção' : 'Aprovado' });
+      o.historico = String((o.historico ? o.historico + ' | ' : '') + quando + ' ' + (usr.nome || usr.login) + ': auditoria com ' + erros + ' erro(s) em ' + vs.length + ' (' + pct + '%), ' + (devolve ? 'setor devolvido para correção' : 'setor aprovado')).slice(-1500);
+      fim = { erros: erros, n: vs.length, erro_pct: pct, situacao: o.situacao };
+    }
+    gravarSetor(sh, o);
+  } finally { lock.releaseLock(); }
+  if (fim && fim.situacao === 'Devolvido para correção') { // o setor inteiro volta para a equipe corrigir, sem custo
+    const X = linhasProducao(projetoId); const itens = X.linhas.filter((l) => l.setor === sn && l.validacao !== 'Descartado' && !l.pagamento).map((l) => ({ uuid: l.uuid, estado: 'Devolvido', obs: 'Setor ' + sn + ' devolvido na auditoria (erro de ' + fim.erro_pct + '% na amostra). Confira e corrija sem custo.' }));
+    for (let i = 0; i < itens.length; i += 1000) validar(projetoId, itens.slice(i, i + 1000), usr);
+    fim.devolvidos = itens.length;
+  }
+  return { fim: fim };
 }
 // ---------- Trajeto da equipe no turno ----------
 // cada envio é um trecho: pontos em polyline codificada (lat/lon com 5 casas), mais o resumo calculado no aparelho
