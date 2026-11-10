@@ -85,6 +85,8 @@ async function celular(b, extra = {}) {
   const ctx = await b.newContext({ ...devices['Pixel 7'], geolocation: { latitude: -20.1436, longitude: -44.8908, accuracy: 4 }, permissions: ['geolocation'], locale: 'pt-BR', ...extra });
   // os testes antigos cadastram muitas árvores no mesmo ponto: o aviso de árvore repetida (2.7) é respondido sozinho, salvo no teste dele
   if (!process.env.COM_DUPLICIDADE) await ctx.addInitScript(() => { new MutationObserver(() => { const f = document.querySelector('.folha'); if (f && /Árvore já cadastrada\?/.test(f.textContent)) { const bt = [...f.querySelectorAll('button')].find((x) => x.textContent === 'É outra árvore'); if (bt) bt.click(); } }).observe(document, { childList: true, subtree: true }); });
+  // primeiro acesso no aparelho (2.7): as 3 telas de configuração são puladas sozinhas, salvo no teste delas (b27)
+  if (!process.env.COM_CONFIGURAR) await ctx.addInitScript(() => { new MutationObserver(() => { const bt = document.querySelector('.tela-cfg .cfg-pular'); if (bt && !bt.__clicado) { bt.__clicado = true; setTimeout(() => bt.click(), 50); } }).observe(document, { childList: true, subtree: true }); });
   const p = await ctx.newPage(); p.erros = []; p.on('pageerror', (e) => p.erros.push(e.message));
   // GPS de celular de verdade entrega uma leitura por segundo mesmo parado; o emulado só avisa quando a posição muda.
   // Aqui a posição "treme" 1 cm a cada 700 ms para a tela de marcação receber leituras como no campo.
@@ -104,6 +106,6 @@ async function logar(p, u, s) {
   try { await p.waitForSelector('button:has-text("Li e aceito"), button.nova, .painel, .subabas, .cfg-pular', { timeout: 15000 }); } catch (e) { return; }
   if (await p.locator('button:has-text("Li e aceito")').count()) { await p.click('button:has-text("Li e aceito")'); await p.waitForTimeout(600); }
   // primeiro acesso no aparelho (2.7): configuração em 3 telas; os testes pulam (o teste próprio é o b27)
-  if (!process.env.COM_CONFIGURAR) for (let i = 0; i < 3; i++) { const bt = p.locator('.cfg-pular'); if (!(await bt.count())) { try { await p.waitForSelector('.cfg-pular', { timeout: 1500 }); } catch (e) { break; } } await p.click('.cfg-pular'); await p.waitForTimeout(250); }
+  if (!process.env.COM_CONFIGURAR) { await p.waitForTimeout(300); try { await p.waitForFunction(() => !document.querySelector('.tela-cfg'), null, { timeout: 8000 }); } catch (e) { /* segue */ } } // quem pula é o observador do celular()
 }
 module.exports = { subir, post, configurar, semear, gerar, cabecalho, stats, falhar, celular, logar, espera, FORM, MOCK, WEB, APP, senha: () => senhaAdmin };

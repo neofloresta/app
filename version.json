@@ -1,14 +1,13 @@
 {
- "versao": "2.6.0",
- "data": "2026-11-09",
+ "versao": "2.7.0",
+ "data": "2026-11-10",
  "notas": [
-  "Nova árvore abre a tela de marcação do ponto: o app mostra o erro do GPS e marca sozinho quando fica em até 5 m",
-  "Depois de começar a preencher, só avança de etapa com os obrigatórios da etapa preenchidos (e diz o que falta)",
-  "Espécie acha parecidos mesmo com erro de grafia; botão Sem ID leva direto às fotos de identificação",
-  "Fotos sobem na qualidade original pelo Wi-Fi; o app confere no servidor se tudo chegou e manda de novo o que faltar",
-  "Botão Encerrar face na tela inicial; calçada sem árvores é só a foto",
-  "Mapa com botões grandes embaixo, ficha que sobe de baixo, toque certo na calçada e pontos no tamanho da copa",
-  "Turno com trajeto (quando a coordenação liga), Modo Sol e ajuda com perguntas frequentes",
-  "Coordenação: tela Hoje no campo, validação com Desfazer, painel em abas e equipes criadas em série"
+  "O app abre no mapa: botão + no canto de baixo para nova árvore e toque na quadra ou na face para marcar",
+  "Primeiro acesso em telas próprias: localização, instalar o app e teste do GPS",
+  "Botão Cancelar registro no topo do cadastro; descrição do risco sempre à vista",
+  "Dupla do dia: avaliador habilitado e auxiliar escolhidos no primeiro cadastro, gravados em cada árvore",
+  "Aviso de árvore já cadastrada a menos de 2 m e de ponto fora dos setores da equipe",
+  "Minha produção: árvores de hoje, da semana e do período, validadas e devolvidas com o motivo",
+  "Coordenação: pessoas das equipes, setores censitários, auditoria por setor, produção por pessoa e fechamento da medição"
  ]
 }

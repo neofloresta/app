@@ -30,7 +30,7 @@ const PROIBIDO = /google|drive|planilha|servidor(es)? fora|controlador|operador|
   const srv = (await L.post('usuarios_listar', {}).catch(() => ({ usuarios: [] }))).usuarios || [];
   const u1 = srv.find((u) => u.login === 'div-1') || {};
   await p.reload(); await p.waitForTimeout(1500); const deNovo = await p.locator('button:has-text("Li e aceito")').count();
-  ok('A.5', deNovo === 0 && u1.termo_versao === '2026-11-b' && await p.locator('button.nova').count() === 1, `depois de aceitar, reabrir o app não pede de novo (${deNovo}); servidor guardou a versão "${u1.termo_versao}"`);
+  ok('A.5', deNovo === 0 && u1.termo_versao === require('fs').readFileSync(L.APP + '/js/app.js', 'utf8').match(/TERMO_VERSAO = '([^']+)'/)[1] && await p.locator('button.nova').count() === 1, `depois de aceitar, reabrir o app não pede de novo (${deNovo}); servidor guardou a versão "${u1.termo_versao}"`);
   // 3. "?" da tela inicial e ajuda do cadastro
   await p.click('.topo .ic[aria-label="Ajuda"]'); await p.waitForSelector('.ajuda-lista'); const abasAj = await p.locator('.subaba').count(); const temas = await p.locator('.ajuda-tema h3').allInnerTexts();
   ok('A.6', abasAj === 0 && temas.includes('GPS') && temas.includes('Faces de quadra') && !temas.includes('Validação'), `"?" da tela inicial abre a ajuda da equipe (abas ${abasAj}): ${temas.join(', ')}`);

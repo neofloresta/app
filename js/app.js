@@ -1,7 +1,7 @@
 // Neofloresta Inventário
 (() => {
-  const VERSAO = '2.6.0';
-  const TERMO_VERSAO = '2026-11-b';
+  const VERSAO = '2.7.0';
+  const TERMO_VERSAO = '2026-11-c';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
   { const rc = Element.prototype.replaceChildren; Element.prototype.replaceChildren = function (...k) { return rc.apply(this, k.flat(Infinity).filter((x) => x != null && x !== false)); }; }
@@ -2634,9 +2634,9 @@
       P('Como peço acesso, correção ou exclusão?', 'Fale ' + contato + '.'),
     ] : [
       P('O que é este app?', 'O app da Neofloresta para registrar o inventário da arborização urbana nos projetos contratados.'),
-      P('Quais dados meus o app usa?', 'Usuário, nome e equipe; data, hora e posição do celular quando você marca um ponto; o modelo do aparelho. Não usamos contatos, galeria pessoal nem arquivos do celular.'),
+      P('Quais dados meus o app usa?', 'Usuário, nome e equipe; quem estava na dupla do dia (nome, função, registro profissional do avaliador e vínculo); data, hora e posição do celular quando você marca um ponto; o modelo do aparelho. Não usamos contatos, galeria pessoal nem arquivos do celular, nem dados de pagamento.'),
       P('O app acompanha onde eu estou?', 'Só durante o trabalho e só com o app aberto: a posição na hora de marcar cada árvore e, quando a coordenação liga o trajeto do turno, o caminho da equipe até você tocar em "Encerrar turno". Fora disso, nada.'),
-      P('Para que servem esses dados?', 'Saber quem fez cada registro, conferir a qualidade e a localização das árvores, acompanhar o andamento do campo e cumprir o contrato com o cliente.'),
+      P('Para que servem esses dados?', 'Saber quem fez cada registro, conferir a qualidade e a localização das árvores, acompanhar o andamento do campo, calcular a produção de cada pessoa (árvores validadas, prêmio e bônus) e cumprir o contrato com o cliente. Para parceiros o app não registra jornada: só o começo e o fim de cada cadastro.'),
       P('Quem vê?', 'A coordenação da Neofloresta. O cliente recebe os dados das árvores, sem os dados das equipes.'),
       P('E as fotos?', 'Fotografe a árvore e o entorno. Evite pessoas, placas de veículos e o interior das casas; se aparecerem, a foto é usada só como registro técnico.'),
       P('Os dados estão protegidos?', 'Sim. Conexão criptografada, senha guardada de forma criptografada, bloqueio depois de senhas erradas e cópia de segurança diária.'),
@@ -2646,7 +2646,7 @@
     const longo = h('div', { class: 'termo-longo' },
       h('p', null, 'Este sistema é da Neofloresta Serviços Ecossistêmicos Ltda.' + (CONTATO.cnpj ? ' (CNPJ ' + CONTATO.cnpj + ')' : '') + ' e é usado para o inventário da arborização urbana nos projetos contratados pelo poder público ou por empresas.'),
       h('h4', null, 'Dados pessoais'),
-      h('p', null, cliente ? 'Tratamos o usuário, o nome, o email informado pelo contratante e o registro das ações no sistema (auditoria).' : 'Tratamos o usuário, o nome e a equipe de quem usa o app; data, hora e posição do aparelho no momento de cada registro; o trajeto da equipe durante o turno, quando ligado pela coordenação, sempre com aviso na tela e só com o app aberto; e o modelo do aparelho. Não coletamos contatos, arquivos pessoais nem a localização fora do trabalho de campo.'),
+      h('p', null, cliente ? 'Tratamos o usuário, o nome, o email informado pelo contratante e o registro das ações no sistema (auditoria).' : 'Tratamos o usuário, o nome e a equipe de quem usa o app; o nome, a função, o registro profissional (avaliadores) e o vínculo de quem está na dupla do dia, gravados em cada registro para calcular a produção; data, hora e posição do aparelho no momento de cada registro; o trajeto da equipe durante o turno, quando ligado pela coordenação, sempre com aviso na tela e só com o app aberto; e o modelo do aparelho. Não coletamos contatos, arquivos pessoais nem a localização fora do trabalho de campo.'),
       h('h4', null, 'Finalidade e base legal'),
       h('p', null, 'Identificar quem fez cada registro, garantir a qualidade e a rastreabilidade do inventário (histórico de alterações e auditoria), acompanhar o andamento e a segurança do trabalho de campo e cumprir o contrato. O tratamento se apoia na execução do contrato e no legítimo interesse, nos termos da Lei Geral de Proteção de Dados Pessoais.'),
       h('h4', null, 'Guarda e compartilhamento'),
