@@ -3,17 +3,21 @@ const { chromium } = require('playwright'); const L = require('./lib'); const fs
 const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
 const PJ = 'divinopolis';
 const quadrado = (n, x0, y0, x1, y1) => ({ n, b: [x0, y0, x1, y1], a: [[x0, y0, x1, y0, x1, y1, x0, y1, x0, y0]] });
-const ANA = { avaliador_id: 'P-ana', avaliador: 'Ana Souza', avaliador_vinculo: 'CLT', avaliador_registro: 'CRBio 1', auxiliar_id: 'P-joao', auxiliar: 'João Lima', auxiliar_vinculo: 'Parceiro' };
-const BRUNO = { avaliador_id: 'P-bruno', avaliador: 'Bruno Alves', avaliador_vinculo: 'Parceiro', avaliador_registro: 'CREA 2' };
+let ANA, BRUNO;
 (async () => {
   await L.subir(); await L.configurar();
   const prj = (await L.post('projetos_listar', {})).projetos.find((x) => x.id === PJ);
   await L.post('projeto_salvar', { projeto_dados: Object.assign({}, prj, { bonus_valor: '0.5', bonus_erro_max: '2', auditoria_pct: '10', auditoria_erro_max: '5' }) });
+  const nova = async (pe) => (await L.post('pessoa_salvar', { pessoa: Object.assign({ projeto: PJ }, pe) })).id;
+  const idAna = await nova({ nome: 'Ana Souza', funcao: 'Avaliador', registro: 'CRBio 1', vinculo: 'CLT', equipe: 'Equipe 1' }); const idJoao = await nova({ nome: 'João Lima', funcao: 'Auxiliar', vinculo: 'Parceiro', equipe: 'Equipe 1' }); const idBruno = await nova({ nome: 'Bruno Alves', funcao: 'Avaliador', registro: 'CREA 2', vinculo: 'Parceiro', equipe: 'Equipe 2' });
+  // o celular manda vínculo errado de propósito: o servidor confere com o cadastro
+  ANA = { avaliador_id: idAna, avaliador: 'Ana', avaliador_vinculo: 'Parceiro', auxiliar_id: idJoao, auxiliar: 'João Lima', auxiliar_vinculo: 'Parceiro' };
+  BRUNO = { avaliador_id: idBruno, avaliador: 'Bruno Alves', avaliador_vinculo: 'Parceiro' };
   await L.post('setores_importar', { projeto: PJ, camada: JSON.stringify({ setores: [quadrado('S1', -44.9, -20.2, -44.8, -20.1), quadrado('S2', -44.8, -20.2, -44.7, -20.1)] }) });
   await L.post('setores_atribuir', { projeto: PJ, itens: [{ numero: 'S1', equipe: 'Equipe 1' }, { numero: 'S2', equipe: 'Equipe 2' }] });
   // registros: Equipe 1 no dia 03/11 (Ana CLT + João parceiro), Equipe 2 no dia 04/11 (Bruno parceiro sozinho)
   const enviar = async (u, s, k, dia, extra, equipe) => { const uuid = `${u}-${dia}-${k}`; const t = `2026-11-${dia}T${String(11 + Math.floor(k / 60)).padStart(2, '0')}:${String(k % 60).padStart(2, '0')}:00.000Z`;
-    await L.post('registro', { projeto: PJ, linha: Object.assign({ uuid, projeto: PJ, equipe, criado_em: t, atualizado_em: t, concluido_em: t, latitude: -20.15, longitude: -44.85, 'Altura total (m)': 5, 'Foto 1': 'DCIM/x.jpg', 'Codigo': 'C' + k }, extra) }, u, s); return uuid; };
+    await L.post('registro', { projeto: PJ, linha: Object.assign({ uuid, projeto: PJ, equipe, criado_em: t, atualizado_em: t, concluido_em: t, latitude: -20.15, longitude: equipe === 'Equipe 2' ? -44.75 : -44.85, 'Altura total (m)': 5, 'Foto 1': 'DCIM/x.jpg', 'Foto 1 link': 'https://drive.google.com/file/d/abcdefghijklmnopqrstuvwxyz/view', 'Codigo': 'C' + k }, extra) }, u, s); return uuid; };
   const e1 = []; for (let k = 0; k < 95; k++) e1.push(await enviar('div-1', 'equipe01', k, '03', Object.assign({ setor: 'S1' }, ANA), 'Equipe 1'));
   const baixa = await enviar('div-1', 'equipe01', 95, '03', Object.assign({ setor: 'S1', 'Altura total (m)': 1.5 }, ANA), 'Equipe 1');
   const dev = await enviar('div-1', 'equipe01', 96, '03', Object.assign({ setor: 'S1' }, ANA), 'Equipe 1');
@@ -45,11 +49,21 @@ const BRUNO = { avaliador_id: 'P-bruno', avaliador: 'Bruno Alves', avaliador_vin
   // 4. fechamento da medição
   const f1 = await L.post('medicao_fechar', { projeto: PJ, de: '2026-11-01', ate: '2026-11-15' });
   const f2 = await L.post('medicao_fechar', { projeto: PJ, de: '2026-11-01', ate: '2026-11-15' }).then(() => 'aceitou').catch((e) => e.message);
+  const fake = await L.post('auditoria_sortear', { projeto: PJ, setor: '' }).then(() => 'aceitou').catch((e) => e.message);
+  const devPaga = await L.post('validar', { projeto: PJ, itens: [{ uuid: e2[0], estado: 'Devolvido', obs: 'teste' }] });
   const P3 = await L.post('producao', { projeto: PJ, de: '2026-11-01', ate: '2026-11-15' }); const b3 = P3.pessoas.find((x) => x.nome === 'Bruno Alves') || {};
   const M2 = await L.post('producao_minha', { projeto: PJ, de: '2026-11-01', ate: '2026-11-15' }, 'div-2', 'equipe02');
   const lis = (await L.post('listar', { projeto: PJ })).linhas.filter((l) => l.pagamento);
-  ok('F.5', f1.medicao.arvores === 10 && f1.medicao.total === 30 && /já foi fechada/.test(f2) && b3.pagas === 10 && b3.arvoresPagar === 0 && P3.medicoes.length === 1 && M2.totais.pagas === 10 && lis.length === 10 && /Medição 2026-11-01 a 2026-11-15/.test(lis[0].pagamento),
-    `medição fechada com ${f1.medicao.arvores} árvores (${f1.medicao.total}); fechar de novo: "${f2}"; Bruno com ${b3.pagas} pagas e nada a pagar; a dupla vê ${M2.totais.pagas} pagas; planilha marca "${(lis[0] || {}).pagamento}"`);
+  ok('F.5', f1.medicao.arvores === 10 && f1.medicao.total === 30 && /Nenhuma árvore validada a pagar/.test(f2) && /setor da camada/.test(fake) && devPaga.pagos === 1 && devPaga.alterados === 0 && b3.pagas === 10 && b3.arvoresPagar === 0 && P3.medicoes.length === 1 && M2.totais.pagas === 10 && lis.length === 10 && /Medição 2026-11-01 a 2026-11-15/.test(lis[0].pagamento),
+    `medição fechada com ${f1.medicao.arvores} árvores (${f1.medicao.total}); fechar de novo: "${f2}"; pago não volta como devolvido (${devPaga.pagos}); setor vazio recusado; Bruno com ${b3.pagas} pagas e nada a pagar; a dupla vê ${M2.totais.pagas} pagas; planilha marca "${(lis[0] || {}).pagamento}"`);
+  // 4b. validação tardia de um dia já fechado entra na medição seguinte, sem pagar de novo o que já foi pago
+  const tard = await enviar('div-2', 'equipe02', 50, '04', Object.assign({ setor: 'S1', fora_do_setor: '' }, BRUNO), 'Equipe 2');
+  await L.post('validar', { projeto: PJ, itens: [{ uuid: tard, estado: 'Validado' }] });
+  const f3 = await L.post('medicao_fechar', { projeto: PJ, de: '2026-11-16', ate: '2026-11-30' });
+  // registro forjado: pessoa que não existe e vínculo trocado
+  const fj = await enviar('div-1', 'equipe01', 99, '05', { avaliador_id: 'P_FAKE', avaliador: 'Fantasma', avaliador_vinculo: 'Parceiro', auxiliar_id: ANA.avaliador_id, auxiliar: 'X', auxiliar_vinculo: 'Parceiro', setor: 'S2' }, 'Equipe 1');
+  const lf = (await L.post('listar', { projeto: PJ })).linhas.find((l) => l.uuid === fj) || {};
+  ok('F.9', f3.medicao.arvores === 1 && f3.medicao.total === 3 && lf.avaliador === '' && lf.auxiliar === 'Ana Souza' && lf.auxiliar_vinculo === 'CLT', `árvore validada depois do fechamento entra na medição seguinte sozinha (${f3.medicao.arvores} árvore, ${f3.medicao.total}); pessoa inexistente apagada ("${lf.avaliador}"), vínculo vem do cadastro (${lf.auxiliar} ${lf.auxiliar_vinculo})`);
   // 5. telas
   const b = await chromium.launch();
   const C = await L.celular(b, { viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false }); const q = C.p;
@@ -60,11 +74,11 @@ const BRUNO = { avaliador_id: 'P-bruno', avaliador: 'Bruno Alves', avaliador_vin
   await q.goto(L.WEB + '#auditoria'); await q.waitForSelector('text=Setores com coleta', { timeout: 20000 }); const aud = await q.locator('main').innerText();
   await q.goto(L.WEB + '#auditoria/S1'); await q.waitForSelector('.aud-item', { timeout: 20000 }); const nAud = await q.locator('.aud-item').count(); const aud1 = await q.locator('.aud-item').first().innerText();
   await q.screenshot({ path: 'b27f-auditoria.png', fullPage: true });
-  ok('F.6', /Total do período/.test(kp) && linhasP >= 4 && /Devolvido para correção/.test(aud) && /Aprovado/.test(aud) && nAud === 10 && /C\d+/.test(aud1), `painel do gestor: ${kp.replace(/\s+/g, ' ').slice(0, 160)}; ${linhasP - 1} pessoas; auditoria lista S1 devolvido e S2 aprovado; amostra de S1 com ${nAud} itens ("${aud1.replace(/\s+/g, ' ').slice(0, 60)}")`);
+  ok('F.6', /A pagar/.test(kp) && linhasP >= 4 && /Devolvido para correção/.test(aud) && /Aprovado/.test(aud) && nAud === 10 && /C\d+/.test(aud1), `painel do gestor: ${kp.replace(/\s+/g, ' ').slice(0, 160)}; ${linhasP - 1} pessoas; auditoria lista S1 devolvido e S2 aprovado; amostra de S1 com ${nAud} itens ("${aud1.replace(/\s+/g, ' ').slice(0, 60)}")`);
   const E = await L.celular(b); const p = E.p; await L.logar(p, 'div-2', 'equipe02'); await p.waitForSelector('.mapa-mais', { timeout: 20000 });
   await p.evaluate(() => { window.__app.S.perProd = ['2026-11-01', '2026-11-15']; }); await p.goto(L.WEB + '#producao'); await p.waitForSelector('.prod-linha', { timeout: 20000 }); await p.waitForTimeout(500);
   const tp = await p.locator('main').innerText(); await p.screenshot({ path: 'b27f-dupla.png', fullPage: true });
-  ok('F.7', /Bruno Alves/.test(tp) && /R\$\s?30,00/.test(tp) && /2 m de altura/.test(tp), `painel da dupla no celular: ${tp.replace(/\s+/g, ' ').slice(0, 200)}`);
+  ok('F.7', /Bruno Alves/.test(tp) && /R\$\s?33,00/.test(tp) && /2 m de altura/.test(tp), `painel da dupla no celular: ${tp.replace(/\s+/g, ' ').slice(0, 200)}`);
   const erros = [...p.erros, ...q.erros]; ok('F.8', !erros.length, erros.length ? erros.join(' | ') : 'sem erros de JavaScript');
   fs.writeFileSync(__dirname + '/res-b27f.json', JSON.stringify(R, null, 1));
   const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);

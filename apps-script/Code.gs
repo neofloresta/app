@@ -123,7 +123,7 @@ function doPost(e) {
       case 'pessoa_salvar': pode(); { const id = salvarPessoa(d.pessoa || {}); auditar(usr.login, 'pessoa_salvar', id, (d.pessoa && d.pessoa.funcao) || ''); return json({ ok: true, id: id }); }
       case 'setores_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarSetores(d.projeto, d.camada, usr)));
       case 'setores_camada': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaSetores(d.projeto, d.versao)));
-      case 'setores_situacao': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, setores: lerSetores(d.projeto) });
+      case 'setores_situacao': pode('coletor', 'revisor'); exigeProjeto(d.projeto); { const st = lerSetores(d.projeto); return json({ ok: true, setores: usr.perfil === 'coletor' ? st.map((x) => ({ numero: x.numero, equipe: x.equipe, situacao: x.situacao })) : st }); }
       case 'setores_atribuir': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, atribuirSetores(d.projeto, d.itens, usr)));
       case 'auditoria_sortear': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, sortearAuditoria(d.projeto, d.setor, usr)));
       case 'auditoria_conferir': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, conferirAuditoria(d.projeto, d.setor, d.uuid, d.resultado, d.motivo, usr)));
@@ -523,6 +523,7 @@ function salvarRegistro(projetoId, linha, usr) {
   Object.keys(linha).forEach((k) => { if (/ link$/.test(k) && linha[k] && !/^https:\/\/drive\.google\.com\//.test(String(linha[k]))) linha[k] = ''; });
   if (linha.atualizado_em && new Date(linha.atualizado_em) > new Date(Date.now() + 10 * 60000)) throw new Error('Data do aparelho adiantada. Acerte a data e a hora do celular e envie de novo.');
   if (usr.perfil === 'coletor') linha.usuario = usr.login;
+  conferirDupla(linha, projetoId);
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
     const sh = planilha(projetoId);
@@ -590,6 +591,7 @@ function validar(projetoId, itens, usr) {
     // cada coluna é lida e gravada de uma vez, pelo nome (rápido mesmo com milhares de registros)
     const nomes = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist'];
     const col = {}; nomes.forEach((c) => (col[c] = sh.getRange(2, cab.indexOf(c) + 1, n, 1).getValues()));
+    const iPg = cab.indexOf('pagamento'); const colPg = iPg >= 0 ? sh.getRange(2, iPg + 1, n, 1).getValues() : null; let pagos = 0;
     const quando = Utilities.formatDate(new Date(), FUSO, 'dd/MM/yyyy HH:mm');
     for (const it of itens) {
       if (estados.indexOf(it.estado) < 0) throw new Error('Situação inválida: ' + it.estado);
@@ -597,6 +599,7 @@ function validar(projetoId, itens, usr) {
       const desfazer = it.desfazer && typeof it.desfazer === 'object' && recente; // só desfaz a própria decisão dos últimos 30 minutos // "Desfazer": volta exatamente ao que estava (motivo, quem e quando)
       if (it.estado === 'Devolvido' && !desfazer && !String(it.obs || '').trim()) throw new Error('Informe o motivo da devolução.');
       const k = pos[String(it.uuid)]; if (k == null) continue;
+      if (colPg && texto(colPg[k][0]) && ['Devolvido', 'Descartado', 'Pendente'].indexOf(it.estado) >= 0) { pagos++; continue; } // já pago numa medição: não volta
       const obs = seguro(String(it.obs || '').slice(0, 500));
       if (desfazer) { const dz = it.desfazer; const dt = String(dz.validado_em || ''); col.validacao[k] = [it.estado]; col.validacao_obs[k] = [seguro(String(dz.validacao_obs || '').slice(0, 500))]; col.validado_por[k] = [seguro(String(dz.validado_por || '').slice(0, 80))]; col.validado_em[k] = [/^\d{4}-\d{2}-\d{2}T/.test(dt) ? dt : '']; }
       else { col.validacao[k] = [it.estado]; col.validacao_obs[k] = [obs]; col.validado_por[k] = [usr.nome || usr.login]; col.validado_em[k] = [agora]; }
@@ -607,7 +610,7 @@ function validar(projetoId, itens, usr) {
     if (alterados) nomes.forEach((c) => sh.getRange(2, cab.indexOf(c) + 1, n, 1).setNumberFormat('@').setValues(col[c]));
     if (alterados) auditar(usr.login, 'validar', projetoId, alterados + ' registro(s): ' + itens.map((i) => i.estado).filter((x, i, a) => a.indexOf(x) === i).join(', '));
     CacheService.getScriptCache().remove('painel:' + projetoId + ':cliente'); CacheService.getScriptCache().remove('painel:' + projetoId + ':todos');
-    return { alterados: alterados };
+    return { alterados: alterados, pagos: pagos };
   } finally { lock.releaseLock(); }
 }
 // O aparelho do coletor pergunta como estão os registros dele (validado, devolvido e motivo)
@@ -627,6 +630,7 @@ function listarPagina(projetoId, de, n, usr) {
   const linhas = sh.getRange(2 + de, 1, n, cab.length).getValues().map((l) => linhaObj(cab, l));
   const proximo = de + n < total ? de + n : null;
   if (usr && usr.perfil === 'cliente') return { linhas: paraCliente(projetoId, linhas), total: null, proximo: proximo };
+  if (usr && usr.perfil === 'revisor') linhas.forEach((l) => { delete l.pagamento; });
   return { linhas: linhas, total: total, proximo: proximo };
 }
 function clienteVeTodos(projetoId) { return String(projeto(projetoId).cliente_ve || '').toLowerCase() === 'todos'; }
@@ -647,7 +651,7 @@ function colunas(projetoId, campos, usr) {
   const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   const pedir = (cliente ? campos.slice(0, 30).concat(['validacao']) : campos.slice(0, 30));
   const ocC = cliente ? ocultasCliente(projetoId) : [];
-  const proibida = (c) => (cliente && ocC.indexOf(c) >= 0) || (coletor && (COLS_INTERNAS.indexOf(c) >= 0 || COLS_SISTEMA.indexOf(c) >= 0));
+  const proibida = (c) => (cliente && ocC.indexOf(c) >= 0) || (coletor && (COLS_INTERNAS.indexOf(c) >= 0 || COLS_SISTEMA.indexOf(c) >= 0 || COLS_DUPLA.indexOf(c) >= 0)) || (usr && usr.perfil === 'revisor' && c === 'pagamento');
   const cols = pedir.map((c, k) => { const i = cab.indexOf(c); return i < 0 || (proibida(c) && !(cliente && k === pedir.length - 1)) ? null : sh.getRange(2, i + 1, total, 1).getValues(); });
   const todos = cliente && clienteVeTodos(projetoId);
   const linhas = [];
@@ -669,7 +673,7 @@ function painel(projetoId, usr) {
   let linhas = listarPagina(projetoId, 0, 0, usr).linhas;
   const out = indicadores(form, linhas, p);
   if (usr.perfil === 'cliente') { // dados das equipes ficam só com a Neofloresta
-    delete out.diario; delete out.tempos.porEquipe; delete out.equipes;
+    delete out.diario; delete out.tempos.porEquipe; delete out.equipes; out.tempos.int = null;
     const pd = {}; Object.keys(out.porDia).forEach((k) => { pd[k] = { Total: Object.values(out.porDia[k]).reduce((a, b) => a + b, 0) }; }); out.porDia = pd;
   }
   try { cache.put(chave, JSON.stringify(out), 300); } catch (e) { /* grande demais para o cache */ }
@@ -1042,11 +1046,25 @@ function lerSitFaces(projetoId) { return lerOS(abaFaces(projetoId)); }
 // ---------- Pessoas das equipes ----------
 function listarPessoas(usr) {
   const t = tabela('Pessoas');
-  if (usr.perfil !== 'coletor') return t;
+  if (usr.perfil === 'admin') return t;
+  const meus = usr.projetos; const tudo = usr.projeto === '*'; const doProjeto = (p) => tudo || pessoaNoProjeto(p, meus);
+  if (usr.perfil !== 'coletor') return t.filter(doProjeto).map((p) => ({ id: p.id, nome: p.nome, funcao: p.funcao, registro: p.registro || '', vinculo: p.vinculo, equipe: p.equipe || '', ativo: p.ativo }));
   // equipe de campo: só quem está ativo nos projetos dela, sem dados internos
-  const meus = usr.projetos; const tudo = usr.projeto === '*';
-  return t.filter((p) => p.ativo !== 'não' && (tudo || p.projeto === '*' || !p.projeto || String(p.projeto).split(',').some((x) => meus.indexOf(x.trim()) >= 0)))
+  return t.filter((p) => p.ativo !== 'não' && doProjeto(p))
     .map((p) => ({ id: p.id, nome: p.nome, funcao: p.funcao, registro: p.registro || '', vinculo: p.vinculo, equipe: p.equipe || '' }));
+}
+function pessoaNoProjeto(p, projetos) { return p.projeto === '*' || !p.projeto || String(p.projeto).split(',').some((x) => projetos.indexOf(x.trim()) >= 0); }
+// a dupla que vem do celular é conferida com o cadastro: nome, registro e vínculo saem da aba Pessoas, nunca do aparelho
+function conferirDupla(linha, projetoId) {
+  const ps = {}; tabela('Pessoas').forEach((p) => { ps[p.id] = p; });
+  [['avaliador', 'Avaliador'], ['auxiliar', 'Auxiliar']].forEach(([k, f]) => {
+    const id = String(linha[k + '_id'] || ''); const p = Object.prototype.hasOwnProperty.call(ps, id) ? ps[id] : null;
+    const ok = p && pessoaNoProjeto(p, [projetoId]) && (p.funcao === f || (k === 'auxiliar' && p.funcao === 'Avaliador'));
+    if (!('avaliador_id' in linha) && !('auxiliar_id' in linha)) return;
+    linha[k + '_id'] = ok ? p.id : ''; linha[k] = ok ? p.nome : ''; linha[k + '_vinculo'] = ok ? p.vinculo : '';
+    if (k === 'avaliador') linha.avaliador_registro = ok ? p.registro || '' : '';
+  });
+  if ('setor' in linha) linha.setor = String(linha.setor || '').slice(0, 40); if ('fora_do_setor' in linha) linha.fora_do_setor = linha.fora_do_setor === 'sim' ? 'sim' : '';
 }
 function salvarPessoa(d) {
   const txt = (v, n) => String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' ').trim().slice(0, n);
@@ -1106,7 +1124,7 @@ function lerSetores(projetoId) { const ss = SpreadsheetApp.openById(projeto(proj
 function atribuirSetores(projetoId, itens, usr) {
   if (!Array.isArray(itens) || !itens.length) throw new Error('Nenhum setor informado.'); if (itens.length > 5000) throw new Error('Setores demais de uma vez.');
   const info = infoSetores(projetoId); if (!info) throw new Error('Este projeto ainda não tem camada de setores.');
-  const existe = {}; JSON.parse(DriveApp.getFileById(info.id).getBlob().getDataAsString()).setores.forEach((x) => { existe[x.n] = 1; });
+  const existe = Object.create(null); JSON.parse(DriveApp.getFileById(info.id).getBlob().getDataAsString()).setores.forEach((x) => { existe[x.n] = 1; });
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
     const sh = abaSetores(projetoId); const v = lerOS(sh); const por = {}; v.forEach((x) => { por[x.numero] = x; });
@@ -1137,7 +1155,7 @@ function gravarSetor(sh, o) {
 function regrasProducao(p) {
   const n = (v, d) => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(x) && x >= 0 ? x : d; };
   return { valor: n(p.prod_valor, 2.5), pctAvaliador: Math.min(100, n(p.prod_avaliador_pct, 50)), premio: n(p.premio_valor, 1.5), meta: n(p.premio_meta, 90), bonus: n(p.bonus_valor, 0), bonusErroMax: n(p.bonus_erro_max, 2),
-    auditoriaPct: Math.min(100, Math.max(1, n(p.auditoria_pct, 10))), auditoriaErroMax: n(p.auditoria_erro_max, 5), parceiroVeValor: String(p.parceiro_ve_valor || 'sim') !== 'não' };
+    auditoriaPct: Math.min(100, Math.max(1, n(p.auditoria_pct, 10))), auditoriaErroMax: n(p.auditoria_erro_max, 5), parceiroVeValor: !/^n[aã]o$/i.test(String(p.parceiro_ve_valor || 'sim').trim()) };
 }
 function camposProducao(form) {
   const alt = form.campos.find((c) => /altura total/i.test(c.nome)) || form.campos.find((c) => /altura/i.test(c.nome) && c.tipo !== 'photo');
@@ -1147,13 +1165,22 @@ function camposProducao(form) {
 const situacaoReg = (l) => (l.validacao === 'Descartado' ? 'Descartada' : l.pagamento ? 'Paga' : l.validacao === 'Validado' ? 'Validada' : l.validacao === 'Devolvido' ? 'Devolvida' : 'Em validação');
 function linhasProducao(projetoId) {
   const p = projeto(projetoId); const form = lerFormulario(p.formulario); const F = camposProducao(form);
-  const campos = ['uuid', 'equipe', 'usuario', 'criado_em', 'validacao', 'validacao_obs', 'avaliador_id', 'avaliador', 'avaliador_vinculo', 'auxiliar_id', 'auxiliar', 'auxiliar_vinculo', 'setor', 'latitude', 'pagamento', F.alt, F.foto, F.foto ? F.foto + ' link' : null, F.cod, F.esp].filter(Boolean);
-  const c = colunas(projetoId, campos, { perfil: 'admin' });
-  return { p: p, F: F, linhas: c.linhas.map((l) => { const o = {}; campos.forEach((k, i) => { o[k] = l[i]; }); return o; }) };
+  const campos = ['uuid', 'equipe', 'usuario', 'criado_em', 'validacao', 'validacao_obs', 'avaliador_id', 'avaliador', 'avaliador_vinculo', 'auxiliar_id', 'auxiliar', 'auxiliar_vinculo', 'setor', 'latitude', 'longitude', 'pagamento', F.alt, F.foto, F.foto ? F.foto + ' link' : null, F.cod, F.esp].filter(Boolean);
+  const c = colunas(projetoId, campos, { perfil: 'admin' }); const ix = indiceSetores(projetoId);
+  return { p: p, F: F, linhas: c.linhas.map((l) => { const o = {}; campos.forEach((k, i) => { o[k] = l[i]; }); if (ix) o.setor = o.latitude !== '' && o.latitude != null ? ix(+o.longitude, +o.latitude) : ''; return o; }) }; // o setor sai da coordenada, não do aparelho
+}
+// setor de um ponto pela camada do projeto (dentro do polígono); null quando o projeto não tem setores
+function indiceSetores(projetoId) {
+  const info = infoSetores(projetoId); if (!info) return null;
+  const sts = JSON.parse(DriveApp.getFileById(info.id).getBlob().getDataAsString()).setores; const passo = 0.01; const g = {};
+  sts.forEach((q, i) => { for (let x = Math.floor(q.b[0] / passo); x <= Math.floor(q.b[2] / passo); x++) for (let y = Math.floor(q.b[1] / passo); y <= Math.floor(q.b[3] / passo); y++) (g[x + ':' + y] = g[x + ':' + y] || []).push(i); });
+  const dentro = (lon, lat, q) => { if (lon < q.b[0] || lon > q.b[2] || lat < q.b[1] || lat > q.b[3]) return false; let d = false; q.a.forEach((a) => { for (let i = 0, j = a.length - 2; i < a.length; j = i, i += 2) { const xi = a[i], yi = a[i + 1], xj = a[j], yj = a[j + 1]; if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) d = !d; } }); return d; };
+  return (lon, lat) => { if (!isFinite(lon) || !isFinite(lat)) return ''; const l = g[Math.floor(lon / passo) + ':' + Math.floor(lat / passo)] || []; for (const i of l) if (dentro(lon, lat, sts[i])) return sts[i].n; return ''; };
 }
 function contaParaProducao(l, F) {
+  if (l.pagamento) return { conta: true, motivo: '' }; // árvore paga numa medição continua contando como foi paga
   if (l.validacao !== 'Validado') return { conta: false };
-  const alt = valorNum(F.alt ? l[F.alt] : '', false); const foto = F.foto ? !!(l[F.foto] || l[F.foto + ' link']) : true; const coord = l.latitude !== '' && l.latitude != null;
+  const alt = valorNum(F.alt ? l[F.alt] : '', false); const foto = F.foto ? !!l[F.foto + ' link'] : true; const coord = l.latitude !== '' && l.latitude != null; // a foto precisa ter chegado
   const motivo = !(alt >= 2) ? 'altura abaixo de 2 m' : !foto ? 'sem foto' : !coord ? 'sem coordenada' : '';
   return { conta: !motivo, motivo: motivo };
 }
@@ -1161,39 +1188,45 @@ function producao(projetoId, de, ate, soLogin) {
   const X = linhasProducao(projetoId); const R = regrasProducao(X.p); const F = X.F;
   const st = {}; lerSetores(projetoId).forEach((x) => { st[x.numero] = x; });
   const pessoas = {}, equipes = {}, setores = {}, dias = {}; const devolvidas = [];
-  const pes = (id, nome, vinc) => (pessoas[id] = pessoas[id] || { id: id, nome: nome, vinculo: vinc, coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0, arvoresPagar: 0 });
+  const pes = (id, nome, vinc) => (pessoas[id] = pessoas[id] || { id: id, nome: nome, vinculo: vinc, coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0, arvoresPagar: 0, valorPagar: 0, premioPagar: 0, bonusPagar: 0 });
   const zero = () => ({ coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0 });
+  let arvoresPagar = 0;
   X.linhas.forEach((l) => {
     if (l.validacao === 'Descartado' || !l.criado_em) return; const d = dia(l.criado_em);
-    if ((de && d < de) || (ate && d > ate)) return; if (soLogin && String(l.usuario).toLowerCase() !== soLogin) return;
-    const sit = situacaoReg(l); const k = contaParaProducao(l, F); const e = l.equipe || '-';
+    if (ate && d > ate) return; if (soLogin && String(l.usuario).toLowerCase() !== soLogin) return;
+    const noPeriodo = !de || d >= de; const k = contaParaProducao(l, F);
+    if (!noPeriodo && !(k.conta && !l.pagamento)) return; // antes do período só entra o que ficou sem pagar (validação tardia)
+    const sit = situacaoReg(l); const e = l.equipe || '-';
     const membros = [l.avaliador_id ? { id: l.avaliador_id, nome: l.avaliador, v: l.avaliador_vinculo, pct: l.auxiliar_id ? R.pctAvaliador : 100 } : null, l.auxiliar_id ? { id: l.auxiliar_id, nome: l.auxiliar, v: l.auxiliar_vinculo, pct: l.avaliador_id ? 100 - R.pctAvaliador : 100 } : null].filter(Boolean);
     const E = equipes[e] = equipes[e] || Object.assign({ equipe: e }, zero());
     const sn = l.setor || ''; const S_ = setores[sn] = setores[sn] || Object.assign({ setor: sn, situacao: (st[sn] || {}).situacao || '', erro_pct: (st[sn] || {}).erro_pct || '' }, zero());
     const alvo = [E, S_].concat(membros.map((m) => pes(m.id, m.nome, m.v)));
-    alvo.forEach((a) => { a.coletadas++; if (sit === 'Em validação') a.emValidacao++; if (sit === 'Devolvida') a.devolvidas++; if (sit === 'Paga') a.pagas++; if (k.conta) a.validadas++; else if (l.validacao === 'Validado') a.naoContam++; });
-    if (sit === 'Devolvida') devolvidas.push({ uuid: l.uuid, codigo: F.cod ? l[F.cod] : '', especie: F.esp ? l[F.esp] : '', motivo: l.validacao_obs || '', dia: d });
+    if (noPeriodo) alvo.forEach((a) => { a.coletadas++; if (sit === 'Em validação') a.emValidacao++; if (sit === 'Devolvida') a.devolvidas++; if (sit === 'Paga') a.pagas++; if (k.conta) a.validadas++; else if (l.validacao === 'Validado') a.naoContam++; });
+    if (sit === 'Devolvida' && noPeriodo) devolvidas.push({ uuid: l.uuid, codigo: F.cod ? l[F.cod] : '', especie: F.esp ? l[F.esp] : '', motivo: l.validacao_obs || '', dia: d });
     if (!k.conta) return;
-    const aPagar = !l.pagamento; const sx = st[sn]; const comBonus = R.bonus > 0 && sx && sx.situacao === 'Aprovado' && sx.erro_pct !== '' && +sx.erro_pct < R.bonusErroMax;
-    membros.forEach((m) => { const P = pes(m.id, m.nome, m.v); const v = m.v === 'Parceiro' ? R.valor * m.pct / 100 : 0; const bn = comBonus ? R.bonus * m.pct / 100 : 0; P.valor += v; P.bonus += bn; E.valor += v; E.bonus += bn; S_.valor += v; S_.bonus += bn; if (aPagar) P.arvoresPagar++; });
-    const kd = d + '|' + e; const D = dias[kd] = dias[kd] || { dia: d, equipe: e, n: 0, clt: {} }; D.n++;
+    const aPagar = !l.pagamento; if (aPagar) arvoresPagar++; const sx = st[sn]; const comBonus = R.bonus > 0 && sx && sx.situacao === 'Aprovado' && sx.erro_pct !== '' && +sx.erro_pct < R.bonusErroMax;
+    membros.forEach((m) => { const P = pes(m.id, m.nome, m.v); const v = m.v === 'Parceiro' ? R.valor * m.pct / 100 : 0; const bn = comBonus ? R.bonus * m.pct / 100 : 0; if (noPeriodo) { P.valor += v; P.bonus += bn; E.valor += v; E.bonus += bn; S_.valor += v; S_.bonus += bn; } if (aPagar) { P.arvoresPagar++; P.valorPagar += v; P.bonusPagar += bn; } });
+    const kd = d + '|' + e; const D = dias[kd] = dias[kd] || { dia: d, equipe: e, n: 0, nPagar: 0, clt: {}, noPeriodo: noPeriodo }; D.n++; if (aPagar) D.nPagar++;
     membros.forEach((m) => { if (m.v === 'CLT') D.clt[m.id] = { nome: m.nome }; });
   });
-  const listaDias = Object.keys(dias).sort().map((kd) => {
+  // dia anterior ao período só aparece se ganhou árvore validada depois (o prêmio já pago sai da conta)
+  const listaDias = Object.keys(dias).sort().filter((kd) => dias[kd].noPeriodo || dias[kd].nPagar).map((kd) => {
     const D = dias[kd]; const acima = Math.max(0, D.n - R.meta); const total = acima * R.premio; const ids = Object.keys(D.clt);
-    if (total && ids.length) ids.forEach((id) => { const P = pessoas[id]; if (P) P.premio += total / ids.length; }); if (equipes[D.equipe]) equipes[D.equipe].premio += ids.length ? total : 0;
+    const jaPago = Math.max(0, D.n - D.nPagar - R.meta) * R.premio; const pagar = Math.max(0, total - jaPago);
+    if (total && ids.length) ids.forEach((id) => { const P = pessoas[id]; if (P) { if (D.noPeriodo) P.premio += total / ids.length; P.premioPagar += pagar / ids.length; } }); if (equipes[D.equipe] && D.noPeriodo) equipes[D.equipe].premio += ids.length ? total : 0;
     return { dia: D.dia, equipe: D.equipe, validadas: D.n, meta: R.meta, acima: acima, premio: ids.length ? total : 0, clt: ids.map((id) => D.clt[id].nome) };
   });
   const r2 = (x) => Math.round(x * 100) / 100;
-  const arred = (o) => { ['valor', 'premio', 'bonus'].forEach((k) => { o[k] = r2(o[k]); }); o.total = r2(o.valor + o.premio + o.bonus); return o; };
+  const arred = (o) => { ['valor', 'premio', 'bonus', 'valorPagar', 'premioPagar', 'bonusPagar'].forEach((k) => { if (k in o) o[k] = r2(o[k]); }); o.total = r2(o.valor + o.premio + o.bonus); if ('valorPagar' in o) o.totalPagar = r2(o.valorPagar + o.premioPagar + o.bonusPagar); return o; };
   const ps = Object.keys(pessoas).map((k) => arred(pessoas[k])).sort((a, b) => a.nome.localeCompare(b.nome));
-  const tot = ps.reduce((a, x) => { a.valor += x.valor; a.premio += x.premio; a.bonus += x.bonus; return a; }, { valor: 0, premio: 0, bonus: 0 });
+  const tot = ps.reduce((a, x) => { ['valor', 'premio', 'bonus', 'valorPagar', 'premioPagar', 'bonusPagar'].forEach((k) => { a[k] += x[k]; }); return a; }, { valor: 0, premio: 0, bonus: 0, valorPagar: 0, premioPagar: 0, bonusPagar: 0 });
   return { regras: R, de: de || '', ate: ate || '', pessoas: ps, equipes: Object.keys(equipes).map((k) => arred(equipes[k])), setores: Object.keys(setores).map((k) => arred(setores[k])), dias: listaDias, devolvidas: devolvidas.slice(-100),
-    totais: arred(tot), medicoes: lerMedicoes(projetoId) };
+    totais: Object.assign(arred(tot), { arvoresPagar: arvoresPagar }), medicoes: lerMedicoes(projetoId) };
 }
 // painel da dupla: só os registros deste acesso; parceiro vê o valor se o projeto deixar
 function producaoDaDupla(projetoId, de, ate, usr) {
-  const r = producao(projetoId, de, ate, usr.login.toLowerCase());
+  const r = producao(projetoId, de, ate, usr.login.toLowerCase()); const tudo = producao(projetoId, de, ate); // meta e prêmio são da equipe no dia, com todas as duplas
+  const eq = usr.equipe || ''; const premioDe = {}; tudo.pessoas.forEach((x) => { premioDe[x.id] = x.premio; }); r.pessoas.forEach((x) => { if (x.id in premioDe) x.premio = premioDe[x.id]; }); r.dias = tudo.dias.filter((d) => d.equipe === eq);
   const out = { regras: { meta: r.regras.meta, premio: r.regras.premio, parceiroVeValor: r.regras.parceiroVeValor }, de: r.de, ate: r.ate, dias: r.dias.map((d) => ({ dia: d.dia, validadas: d.validadas, meta: d.meta, acima: d.acima, premio: d.premio })), devolvidas: r.devolvidas,
     pessoas: r.pessoas.map((x) => { const o = { id: x.id, nome: x.nome, vinculo: x.vinculo, coletadas: x.coletadas, validadas: x.validadas, emValidacao: x.emValidacao, devolvidas: x.devolvidas, pagas: x.pagas, naoContam: x.naoContam };
       if (x.vinculo === 'Parceiro' && r.regras.parceiroVeValor) { o.valor = x.valor; o.bonus = x.bonus; } if (x.vinculo === 'CLT') { o.premio = x.premio; o.bonus = x.bonus; } return o; }) };
@@ -1210,19 +1243,20 @@ function lerMedicoes(projetoId) { const sh = SpreadsheetApp.openById(projeto(pro
 // fecha a medição: as árvores que contam e ainda não foram pagas no período ficam marcadas como pagas nesta medição
 function fecharMedicao(projetoId, de, ate, usr) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(de || '')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(ate || '')) || de > ate) throw new Error('Período inválido.');
-  const id = 'M' + de.replace(/-/g, '') + '-' + ate.replace(/-/g, '');
-  if (lerMedicoes(projetoId).some((m) => m.id === id)) throw new Error('Esta medição já foi fechada.');
+  const id = 'M' + de.replace(/-/g, '') + '-' + ate.replace(/-/g, '') + '-' + Utilities.formatDate(new Date(), FUSO, 'yyyyMMddHHmmss');
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
+    // paga tudo o que conta e ainda não foi pago até o fim do período (inclui validação tardia de dias anteriores)
     const r = producao(projetoId, de, ate); const X = linhasProducao(projetoId); const marcar = {};
-    X.linhas.forEach((l) => { const d = l.criado_em ? dia(l.criado_em) : ''; if (d >= de && d <= ate && !l.pagamento && contaParaProducao(l, X.F).conta) marcar[l.uuid] = 1; });
-    const n = Object.keys(marcar).length; if (!n) throw new Error('Nenhuma árvore validada a pagar neste período.');
+    X.linhas.forEach((l) => { const d = l.criado_em ? dia(l.criado_em) : ''; if (d && d <= ate && l.validacao !== 'Descartado' && !l.pagamento && contaParaProducao(l, X.F).conta) marcar[l.uuid] = 1; });
+    const n = Object.keys(marcar).length; if (!n) throw new Error('Nenhuma árvore validada a pagar até o fim deste período.');
     const sh = planilha(projetoId); const cab = cabecalho(sh, COLS_SISTEMA); const tot = sh.getLastRow() - 1;
     const uu = sh.getRange(2, cab.indexOf('uuid') + 1, tot, 1).getValues(); const rg = sh.getRange(2, cab.indexOf('pagamento') + 1, tot, 1); const pg = rg.getValues();
     const txt = 'Medição ' + de + ' a ' + ate; uu.forEach((u, i) => { if (marcar[String(u[0])]) pg[i] = [txt]; });
     rg.setNumberFormat('@').setValues(pg);
-    const resumo = r.pessoas.filter((x) => x.arvoresPagar).map((x) => ({ nome: x.nome, vinculo: x.vinculo, arvores: x.arvoresPagar, valor: x.valor, premio: x.premio, bonus: x.bonus, total: x.total }));
-    const m = { id: id, de: de, ate: ate, fechada_em: new Date().toISOString(), fechada_por: usr.nome || usr.login, arvores: n, valor: r.totais.valor, premio: r.totais.premio, bonus: r.totais.bonus, total: r.totais.total, resumo: JSON.stringify(resumo).slice(0, 45000) };
+    const semDupla = n - r.totais.arvoresPagar; // conferência: árvores sem dupla informada também ficam pagas (sem valor a ninguém)
+    const resumo = r.pessoas.filter((x) => x.arvoresPagar || x.totalPagar).map((x) => ({ nome: x.nome, vinculo: x.vinculo, arvores: x.arvoresPagar, valor: x.valorPagar, premio: x.premioPagar, bonus: x.bonusPagar, total: x.totalPagar }));
+    const T = r.totais; const m = { id: id, de: de, ate: ate, fechada_em: new Date().toISOString(), fechada_por: usr.nome || usr.login, arvores: n, valor: T.valorPagar, premio: T.premioPagar, bonus: T.bonusPagar, total: T.totalPagar, resumo: JSON.stringify({ pessoas: resumo, sem_dupla: Math.max(0, semDupla) }).slice(0, 45000) }; // só o que ainda não foi pago
     gravarSetor(abaMedicoes(projetoId), m);
     auditar(usr.login, 'medicao_fechar', projetoId, txt + ': ' + n + ' árvores');
     CacheService.getScriptCache().remove('painel:' + projetoId + ':todos');
@@ -1231,7 +1265,10 @@ function fecharMedicao(projetoId, de, ate, usr) {
 }
 // auditoria por amostragem: sorteia de 5 a 10% dos registros do setor; a coordenação confere cada um
 function sortearAuditoria(projetoId, setor, usr) {
-  const R = regrasProducao(projeto(projetoId)); const X = linhasProducao(projetoId); const sn = String(setor || '');
+  const R = regrasProducao(projeto(projetoId)); const sn = String(setor || '').slice(0, 40);
+  const info = infoSetores(projetoId); if (!sn || !info) throw new Error('Escolha um setor da camada do projeto.');
+  if (!JSON.parse(DriveApp.getFileById(info.id).getBlob().getDataAsString()).setores.some((x) => x.n === sn)) throw new Error('Setor não existe na camada.');
+  const X = linhasProducao(projetoId);
   const regs = X.linhas.filter((l) => l.setor === sn && l.validacao !== 'Descartado');
   if (!regs.length) throw new Error('Nenhum registro neste setor.');
   const k = Math.max(1, Math.ceil(regs.length * R.auditoriaPct / 100));
@@ -1241,6 +1278,7 @@ function sortearAuditoria(projetoId, setor, usr) {
   try {
     const sh = abaSetores(projetoId); const o = lerOS(sh).find((x) => x.numero === sn) || { numero: sn, equipe: '' };
     if (o.situacao === 'Em auditoria' && o.amostra) throw new Error('Este setor já está em auditoria.');
+    if (o.situacao === 'Aprovado') throw new Error('Este setor já foi aprovado na auditoria.'); // nova amostra só depois de devolvido e corrigido
     const quando = Utilities.formatDate(new Date(), FUSO, 'dd/MM/yyyy HH:mm');
     Object.assign(o, { situacao: 'Em auditoria', amostra: JSON.stringify(amostra), erros: '', erro_pct: '', auditado_por: usr.nome || usr.login, auditado_em: '', atualizado_em: new Date().toISOString() });
     o.historico = String((o.historico ? o.historico + ' | ' : '') + quando + ' ' + (usr.nome || usr.login) + ': sorteou ' + k + ' de ' + regs.length + ' registros para a auditoria').slice(-1500);
@@ -1258,7 +1296,7 @@ function conferirAuditoria(projetoId, setor, uuid, resultado, motivo, usr) {
     const sh = abaSetores(projetoId); const o = lerOS(sh).find((x) => x.numero === sn);
     if (!o || o.situacao !== 'Em auditoria') throw new Error('Este setor não está em auditoria.');
     let am; try { am = JSON.parse(o.amostra || '{}'); } catch (e) { am = {}; }
-    if (!(String(uuid) in am)) throw new Error('Registro fora da amostra.');
+    if (!am || typeof am !== 'object' || !Object.prototype.hasOwnProperty.call(am, String(uuid))) throw new Error('Registro fora da amostra.');
     am[uuid] = resultado === 'ok' ? 'ok' : 'erro: ' + seguro(String(motivo).slice(0, 200));
     o.amostra = JSON.stringify(am); o.atualizado_em = new Date().toISOString();
     const vs = Object.keys(am).map((k) => am[k]);
