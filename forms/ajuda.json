@@ -1,10 +1,10 @@
 {
- "versao": "2.6",
+ "versao": "2.7",
  "passos": {
   "campo": [
    [
     "Instale o app",
-    "No Android, abra o app no Chrome, toque nos 3 pontinhos e em \"Instalar app\" (ou \"Adicionar à tela inicial\"). No iPhone, abra no Safari, toque em Compartilhar e em \"Adicionar à Tela de Início\"."
+    "Se a coordenação mandou o arquivo do app (APK), toque nele e siga \"Instalar\". Sem o arquivo: no Android, abra o app no Chrome, toque nos 3 pontinhos e em \"Instalar app\" (ou \"Adicionar à tela inicial\"). No iPhone, abra no Safari, toque em Compartilhar e em \"Adicionar à Tela de Início\"."
    ],
    [
     "Permita a localização",
@@ -611,6 +611,96 @@
    "chave": "hoje",
    "p": "Como vejo o trajeto das equipes?",
    "r": "Ligue o trajeto no cadastro do usuário (\"Registrar o trajeto do turno\"). No mapa, toque no atalho Trajetos: aparece o caminho do dia escolhido no filtro de dia. Em \"Hoje no campo\", cada equipe mostra os km a pé, de carro e o tempo parado."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Conta e app",
+   "chave": "conta",
+   "p": "Como instalo o app pelo arquivo APK?",
+   "r": "Abra o arquivo que a coordenação mandou e toque em Instalar. Se o Android avisar de fonte desconhecida, toque em Configurações, ligue \"Permitir desta fonte\" e volte. Depois abra pelo ícone da Neofloresta. O app se atualiza sozinho pela internet: não precisa instalar de novo."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Mapa",
+   "chave": "mapa",
+   "p": "Onde fica o botão de nova árvore?",
+   "r": "O app abre no mapa. O botão redondo com + no canto de baixo, à direita, marca o ponto e abre o cadastro. Toque na quadra ou na face para marcar levantada ou sem árvores. Seus cadastros ficam em \"Meus registros\", embaixo do mapa."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "O app pergunta quem está na dupla. O que escolho?",
+   "r": "No primeiro cadastro do dia, escolha o avaliador habilitado e o auxiliar que estão no campo. Sem avaliador a coleta não é liberada. Para trocar no meio do dia, toque nos nomes da dupla embaixo do mapa."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Apareceu \"Árvore já cadastrada?\"",
+   "r": "Já existe um cadastro a menos de 2 m. Se for a mesma árvore, toque em \"Não cadastrar\": árvore repetida é descartada na validação. Se for outra (vizinha, no mesmo canteiro), toque em \"É outra árvore\"."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "GPS",
+   "chave": "gps",
+   "p": "Apareceu \"Fora dos setores da equipe\"",
+   "r": "O ponto caiu num setor que não é da sua equipe. Confira o GPS e marque de novo. Se a árvore é mesmo daí, siga: a coordenação vê o aviso."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Cadastro",
+   "chave": "cadastro",
+   "p": "Onde vejo minha produção?",
+   "r": "No menu, Campo, \"Minha produção\": árvores de hoje, da semana e do período, validadas, em validação e devolvidas com o motivo. Conta como validada a árvore com 2 m de altura ou mais, foto, coordenada e aprovada pela coordenação."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Equipes e quadras",
+   "chave": "equipes",
+   "p": "Como cadastro as pessoas das equipes?",
+   "r": "Em Coordenação, Pessoas: nome, função (avaliador habilitado com o registro profissional, ou auxiliar) e vínculo (CLT ou parceiro). O acesso continua por dupla: no celular a dupla escolhe quem está no campo no dia. Sem pessoas cadastradas o app funciona como antes."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Equipes e quadras",
+   "chave": "equipes",
+   "p": "Como uso os setores censitários?",
+   "r": "Em Coordenação, Setores: importe a malha do IBGE recortada para o município e escolha a equipe de cada setor. A equipe é avisada quando marca ponto fora dos setores dela, e cada árvore guarda o setor."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Validação",
+   "chave": "validacao",
+   "p": "Como funciona a auditoria por setor?",
+   "r": "Em Auditoria por setor, sorteie a amostra quando o setor terminar (a porcentagem fica no cadastro do projeto). Abra cada registro, confira e marque Certo ou Erro. Com erro acima do limite, o setor inteiro volta para a equipe corrigir, sem custo."
+  },
+  {
+   "perfis": [
+    "coordenacao"
+   ],
+   "tema": "Painel e entrega",
+   "chave": "painel",
+   "p": "Como fecho a medição e pago a produção?",
+   "r": "Em Produção e pagamento, escolha o período (quinzena), confira por pessoa, equipe, setor e o prêmio por dia, e exporte a planilha. \"Fechar medição\" marca as árvores do período como pagas. O prêmio dos CLT é pago no cartão prêmio. Os valores ficam no cadastro do projeto, em Produção e auditoria."
   }
  ]
 }

@@ -2,6 +2,7 @@
   "name": "Neofloresta Inventário",
   "short_name": "Neofloresta",
   "description": "Coleta de campo da arborização urbana",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
