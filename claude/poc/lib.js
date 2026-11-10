@@ -83,6 +83,8 @@ async function falhar(acao, n) { await fetch(MOCK + '__falhar', { method: 'POST'
 async function celular(b, extra = {}) {
   const { devices } = require('playwright');
   const ctx = await b.newContext({ ...devices['Pixel 7'], geolocation: { latitude: -20.1436, longitude: -44.8908, accuracy: 4 }, permissions: ['geolocation'], locale: 'pt-BR', ...extra });
+  // os testes antigos cadastram muitas árvores no mesmo ponto: o aviso de árvore repetida (2.7) é respondido sozinho, salvo no teste dele
+  if (!process.env.COM_DUPLICIDADE) await ctx.addInitScript(() => { new MutationObserver(() => { const f = document.querySelector('.folha'); if (f && /Árvore já cadastrada\?/.test(f.textContent)) { const bt = [...f.querySelectorAll('button')].find((x) => x.textContent === 'É outra árvore'); if (bt) bt.click(); } }).observe(document, { childList: true, subtree: true }); });
   const p = await ctx.newPage(); p.erros = []; p.on('pageerror', (e) => p.erros.push(e.message));
   // GPS de celular de verdade entrega uma leitura por segundo mesmo parado; o emulado só avisa quando a posição muda.
   // Aqui a posição "treme" 1 cm a cada 700 ms para a tela de marcação receber leituras como no campo.

@@ -626,3 +626,14 @@ footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
 .cfg-txt { font-size: 17px; margin: 0; } .cfg-lista { padding-left: 22px; margin: 4px 0; font-size: 16px; } .cfg-lista li { margin-bottom: 8px; }
 .cfg-rodape { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); } .cfg-pular { justify-content: center; }
 .cfg-gps { font-size: 56px; font-weight: 700; text-align: center; margin: 18px 0 4px; color: #4F6268; } .cfg-gps.bom { color: #1B7F3B; } .cfg-gps.medio { color: #8A5A00; } .cfg-gps.ruim { color: #B3261E; }
+
+/* 2.7: dupla do dia */
+.dupla h4 { margin: 14px 0 6px; font-size: 14px; color: var(--suave); font-weight: 600; }
+.dupla-ops { display: grid; gap: 6px; }
+.dupla-op { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 1.5px solid var(--linha); background: var(--sup); border-radius: 10px; padding: 10px 12px; min-height: 52px; }
+.dupla-op small { color: var(--suave); font-size: 12.5px; }
+.dupla-op.sel { border-color: var(--teal); background: var(--tint); box-shadow: inset 4px 0 0 var(--teal); }
+.chip-dupla { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--linha); background: var(--sup); border-radius: 18px; padding: 6px 10px; font-size: 13px; max-width: 46vw; }
+.chip-dupla span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-dupla .ico { width: 18px; height: 18px; color: var(--teal); }
+.selo.selo-parceiro { background: #FBEBDD; color: var(--acao); }

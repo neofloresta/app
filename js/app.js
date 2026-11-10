@@ -60,6 +60,7 @@
   const confirmar = (titulo, texto, ok = 'Confirmar', classe = '', nao = 'Cancelar') => modal(titulo, h('p', null, texto), [{ texto: nao, classe: 'sec', valor: false }, { texto: ok, classe, valor: true }]);
   function baixar(nome, dados, tipo) { const b = dados instanceof Blob ? dados : new Blob([dados], { type: tipo }); const a = h('a', { href: URL.createObjectURL(b), download: nome }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
   const ICONES = {
+    pessoas: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3.2 2.5-5.5 5.5-5.5s5.5 2.3 5.5 5.5"/><circle cx="16.5" cy="9" r="2.6"/><path d="M15.5 13.8c2.9-.4 5 1.8 5 4.7"/>',
     alvo: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
     cidade: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', selecionar: '<path d="M5 5h4M15 5h4M5 19h4M15 19h4M5 5v4M19 5v4M5 15v4M19 15v4"/><path d="M10 12l2 2 3-4"/>', fechar: '<path d="M6 6l12 12M18 6L6 18"/>',
     ajuda: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
@@ -190,7 +191,7 @@
     if (!p) { if (S.sessao.usuario.perfil === 'admin') { S.projeto = null; S.form = null; return; } throw new Error('Nenhum projeto liberado para este usuário.'); }
     S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
     S.form = await carregarForm(p.formulario);
-    Turno.carregar().catch(() => {});
+    Dupla.carregar().then(() => Turno.carregar()).catch(() => {});
     // a numeração dos códigos se prepara em segundo plano: a tela abre na hora
     S.prepCodigosOk = false;
     S.prepCodigos = (async () => { await Promise.race([sincronizarSequencia(), new Promise((r) => setTimeout(r, 8000))]); await Promise.race([garantirFaixa(), new Promise((r) => setTimeout(r, 8000))]); S.prepCodigosOk = true; })();
@@ -608,7 +609,7 @@
       grupo('Acompanhar', coord ? it('Hoje no campo', () => ir('#hoje')) : null, it('Painel do projeto', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa'))),
       grupo('Agir', coord ? it('Validação dos registros', () => ir('#validacao')) : null, it('Ordens de serviço', () => ir('#ordens')), !admin ? it('Enviar agora', () => sincronizar()) : null),
       grupo('Entregar', it('Relatório para imprimir ou PDF', () => ir('#relatorio')), it('Boletim de medição', () => ir('#medicao')), admin ? it('Exportar dados', () => ir('#admin/exportar')) : null),
-      admin ? grupo('Configurar projeto', it('Projetos', () => ir('#admin/projetos')), it('Equipes e usuários', () => ir('#admin/usuarios')), it('Formulários', () => ir('#admin/formularios')), it('Importar inventário', () => ir('#admin/importar'))) : null,
+      admin ? grupo('Configurar projeto', it('Projetos', () => ir('#admin/projetos')), it('Equipes e usuários', () => ir('#admin/usuarios')), it('Pessoas das equipes', () => ir('#admin/pessoas')), it('Setores censitários', () => ir('#admin/setores')), it('Formulários', () => ir('#admin/formularios')), it('Importar inventário', () => ir('#admin/importar'))) : null,
       admin ? grupo('Administração', it('Segurança, cópias e servidor', () => ir('#admin/seguranca'))) : null,
     ];
     const veu = h('div', { class: 'veu', onclick: (e) => e.target === veu && veu.remove() }, h('div', { class: 'folha menu-lateral' },
@@ -718,8 +719,9 @@
     try { return await novoRegistro2(ex); } finally { S.abrindoNova = false; }
   }
   async function novoRegistro2(ex) {
+    if (!(await Dupla.garantir())) return;
     const r = {
-      uuid: uuid(), projeto: S.projeto.id, equipe: S.projeto.equipe || '', usuario: S.sessao.u,
+      uuid: uuid(), projeto: S.projeto.id, equipe: S.projeto.equipe || '', usuario: S.sessao.u, dupla: S.dupla && S.dupla.av ? { av: S.dupla.av, ax: S.dupla.ax } : undefined,
       criado_em: agoraISO(), atualizado_em: agoraISO(), status: 'rascunho', valores: {}, fotos: {},
       lat: null, lon: null, prec: null, gpsAuto: true, mexido: false,
     };
@@ -740,6 +742,8 @@
     const marcou = await marcarPonto(r); // o ponto é travado aqui, antes de medir: não acompanha o celular enquanto a dupla dá a volta na árvore
     S.abrindoNova = false;
     if (marcou === false) { await Store.apagarRegistro(r.uuid); return; } // saiu da tela no meio da marcação: não deixa rascunho vazio
+    if (!(await conferirPonto(r))) { await Store.apagarRegistro(r.uuid); toast('Cadastro não aberto.'); return; }
+    await Store.salvarRegistro(r);
     ir('#form/' + r.uuid);
   }
 
@@ -760,10 +764,11 @@
   }
   const Turno = {
     chave: () => 'turno:' + (S.sessao ? S.sessao.u : '') + ':' + (S.projeto ? S.projeto.id : ''),
-    liberado: () => !!(S.sessao && S.sessao.usuario.trajeto === 'sim' && perfil() === 'coletor' && S.projeto),
+    liberado: () => !!(S.sessao && S.sessao.usuario.trajeto === 'sim' && perfil() === 'coletor' && S.projeto && !S.duplaParceiro), // parceiro: o app não registra jornada
     est: null, lock: null, salvarT: null,
     async carregar() { this.est = this.liberado() ? (await Store.get(this.chave())) : null; if (this.est && this.est.dia !== diaLocal(agoraISO())) { await this.encerrar(true); } if (this.est && this.est.ativo) this.ligar(); },
     async comecar() {
+      if (!(await Dupla.garantir())) return; if (!this.liberado()) { pintarTurno(); return toast('Dupla com parceiro: o app não grava trajeto nem horário do dia.', 5000); }
       // turno anterior ainda não enviado (sem rede) vai para a fila antes de começar outro: nada é gravado por cima
       if (this.est && this.est.pts.length > this.est.env) { const k = this.chave() + ':fila'; const f = (await Store.get(k)) || []; this.est.ativo = false; f.push(this.est); await Store.set(k, f); }
       this.est = { ativo: true, dia: diaLocal(agoraISO()), inicio: agoraISO(), pts: [], env: 0, id: uuid().slice(0, 8) }; await Store.set(this.chave(), this.est); this.ligar(); pintarTurno(); toast('Turno começou. O trajeto fica ligado enquanto o app estiver aberto.', 4000); },
@@ -806,6 +811,118 @@
     const e = Turno.est;
     if (e && e.ativo) el.replaceChildren(h('div', { class: 'faixa-turno ativo' }, h('span', { class: 'selo-trajeto' }, h('i'), 'Trajeto ligado'), h('small', null, `desde ${new Date(e.inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${numBR(Math.round(Turno.km() * 10) / 10)} km`), h('button', { class: 'btn sec peq', onclick: async () => { if (await confirmar('Encerrar turno', 'Encerrar o turno desliga o trajeto até amanhã (ou até tocar em Começar turno de novo).', 'Encerrar turno')) Turno.encerrar(); } }, 'Encerrar turno')));
     else el.replaceChildren(h('button', { class: 'faixa-turno', onclick: () => Turno.comecar() }, h('b', null, 'Começar turno'), h('span', null, 'Liga o trajeto e mantém a tela acesa enquanto o app está aberto')));
+  }
+
+  // ---------- Dupla do dia ----------
+  // o login é da dupla; no primeiro cadastro do dia a dupla diz quem está no campo (avaliador habilitado e auxiliar).
+  // Só vale quando a coordenação cadastrou as pessoas do projeto; sem cadastro o app segue como antes.
+  const Dupla = {
+    chave: () => 'dupla:' + S.sessao.u + ':' + S.projeto.id,
+    async pessoas(forcar) {
+      const k = 'pessoas:' + S.projeto.id; let l = await Store.get(k);
+      if (!Api.demo && navigator.onLine && !S.expirada && (forcar || !l || !S.pessoasEm || S.pessoasEm.p !== S.projeto.id || Date.now() - S.pessoasEm.t > 600000)) {
+        try { l = await Api.b.pessoasListar(); await Store.set(k, l); S.pessoasEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { /* sem conexão: fica a lista do aparelho */ }
+      }
+      if (Api.demo) l = await Api.b.pessoasListar();
+      return (l || []).filter((x) => x.ativo !== 'não');
+    },
+    async hoje() { if (!S.sessao || !S.projeto) return null; const d = await Store.get(this.chave()); return d && d.dia === diaLocal(agoraISO()) ? d : null; },
+    async carregar() { const d = await this.hoje(); S.dupla = d; S.duplaParceiro = !!(d && [d.av, d.ax].some((x) => x && x.vinculo === 'Parceiro')); },
+    // true quando pode coletar
+    async garantir() {
+      if (perfil() !== 'coletor') return true;
+      const ps = await this.pessoas(); if (!ps.some((x) => x.funcao === 'Avaliador')) return true;
+      const d = await this.hoje(); if (d && d.av) { S.dupla = d; return true; }
+      return this.escolher(ps);
+    },
+    async escolher(ps) {
+      ps = ps || (await this.pessoas());
+      const minha = minhaEquipe(); const ord = (a, b) => (b.equipe === minha) - (a.equipe === minha) || a.nome.localeCompare(b.nome, 'pt');
+      const atual = (await this.hoje()) || {}; let av = atual.av ? atual.av.id : '', ax = atual.ax ? atual.ax.id : '';
+      const op = (lista, sel, fn, nenhum) => { const box = h('div', { class: 'dupla-ops' }); const pintar = () => box.replaceChildren(...lista.map((x) => h('button', { class: 'dupla-op' + (sel() === x.id ? ' sel' : ''), type: 'button', onclick: () => { fn(sel() === x.id && nenhum ? '' : x.id); pintar(); } }, h('b', null, x.nome), h('small', null, [x.funcao === 'Avaliador' ? x.registro : 'Auxiliar', x.vinculo].filter(Boolean).join(' · ')))), nenhum ? h('button', { class: 'dupla-op' + (!sel() ? ' sel' : ''), type: 'button', onclick: () => { fn(''); pintar(); } }, h('b', null, nenhum)) : null); pintar(); return box; };
+      const avs = ps.filter((x) => x.funcao === 'Avaliador').sort(ord); const axs = ps.filter((x) => x.funcao === 'Auxiliar').sort(ord);
+      const boxAv = op(avs, () => av, (v) => { av = v; if (ax === v) ax = ''; }); const boxAx = op(axs, () => ax, (v) => { ax = v; }, 'Sem auxiliar hoje');
+      for (;;) {
+        const ok = await modal('Quem está na dupla hoje?', h('div', { class: 'dupla' }, h('p', { class: 'dica' }, 'Cada árvore fica registrada com quem avaliou e quem auxiliou. Dá para trocar depois, tocando na dupla embaixo do mapa.'),
+          h('h4', null, 'Avaliador habilitado'), boxAv, h('h4', null, 'Auxiliar'), boxAx), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Confirmar dupla', valor: true }]);
+        if (!ok) return false;
+        if (!av) { toast('Escolha o avaliador habilitado. Sem ele a coleta não é liberada.', 5000, null, true); continue; }
+        break;
+      }
+      const pub = (id) => { const x = ps.find((y) => y.id === id); return x ? { id: x.id, nome: x.nome, registro: x.registro || '', vinculo: x.vinculo } : null; };
+      const d = { dia: diaLocal(agoraISO()), av: pub(av), ax: pub(ax), em: agoraISO() }; await Store.set(this.chave(), d); await this.carregar();
+      if (S.duplaParceiro && Turno.est && Turno.est.ativo) await Turno.encerrar(true); // parceiro: sem trajeto
+      pintarTurno(); pintarDupla(); return true;
+    },
+  };
+  function pintarDupla() {
+    const el = document.getElementById('dupla-hoje'); if (!el) return; const d = S.dupla;
+    if (!d || !d.av || perfil() !== 'coletor') return el.replaceChildren();
+    el.replaceChildren(h('button', { class: 'chip-dupla', onclick: () => Dupla.escolher(), 'aria-label': 'Trocar a dupla de hoje' }, ico('pessoas'), h('span', null, [d.av.nome, d.ax && d.ax.nome].filter(Boolean).map((n) => n.split(' ')[0]).join(' + '))));
+  }
+
+  // ---------- Setores censitários ----------
+  // camada do IBGE importada pela coordenação; cada setor tem a equipe responsável (aba Setores do projeto)
+  const Setores = {
+    async camada() {
+      if (!S.projeto) return null; const k = 'st:' + S.projeto.id; let c = await Store.get(k);
+      if (!Api.demo && navigator.onLine && !S.expirada && (!S.stEm || S.stEm.p !== S.projeto.id || Date.now() - S.stEm.t > 600000)) {
+        try { const j = await Api.b.setoresCamada(S.projeto.id, c && c.versao); S.stEm = { p: S.projeto.id, t: Date.now() }; if (j.semCamada) { c = null; await Store.del(k); } else if (!j.igual) { c = { versao: j.versao, camada: JSON.parse(j.camada) }; await Store.set(k, c); } } catch (e) { /* sem conexão: cópia do aparelho */ }
+      }
+      if (!c) { S.stIdx = null; return null; }
+      if (!S.stIdx || S.stIdx.v !== c.versao || S.stIdx.p !== S.projeto.id) S.stIdx = { p: S.projeto.id, v: c.versao, idx: Quadras.indice(c.camada.setores, 0.01) };
+      return c.camada;
+    },
+    async situacao(forcar) {
+      const k = 'stsit:' + S.projeto.id; let l = await Store.get(k);
+      if (!Api.demo && navigator.onLine && !S.expirada && (forcar || !l || !S.stSitEm || S.stSitEm.p !== S.projeto.id || Date.now() - S.stSitEm.t > 120000)) {
+        try { l = await Api.b.setoresSituacao(S.projeto.id); await Store.set(k, l); S.stSitEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { /* sem conexão */ }
+      }
+      return l || [];
+    },
+    // setor do ponto e se é da minha equipe; null quando o projeto não tem setores
+    async doPonto(lon, lat) {
+      try {
+        if (!(await this.camada())) return null;
+        const q = S.stIdx.idx.achar(+lon, +lat, 0); const sit = await this.situacao();
+        const meus = sit.filter((x) => x.equipe && x.equipe === minhaEquipe()).map((x) => x.numero);
+        return { n: q ? q.n : '', temMeus: meus.length > 0, fora: perfil() === 'coletor' && meus.length > 0 && !(q && meus.includes(q.n)) };
+      } catch (e) { return null; }
+    },
+  };
+  // pontos já cadastrados perto (deste aparelho e os do mapa guardados), do mais perto para o mais longe
+  async function pontosPerto(r, raio) {
+    const out = []; const vistos = new Set([r.uuid]); const cc = S.form.campos.find((c) => c.auto === 'codigo'); const ce = S.form.campos.find((c) => c.tipo === 'species');
+    const d = (la, lo) => Math.hypot((lo - r.lon) * 111320 * Math.cos(r.lat * Math.PI / 180), (la - r.lat) * 110540);
+    for (const x of await Store.registros(S.projeto.id)) { if (vistos.has(x.uuid) || x.status === 'rascunho' || x.lat == null || x.faceId) continue; vistos.add(x.uuid); const m = d(+x.lat, +x.lon); if (m <= raio) out.push({ uuid: x.uuid, m, cod: cc ? x.valores[cc.nome] || '' : '', esp: ce ? x.valores[ce.nome] || '' : '', local: true }); }
+    const mp = await Store.get('mapapts:' + S.projeto.id + ':' + S.sessao.u);
+    if (mp) for (const l of mp.linhas || []) { if (vistos.has(l[0]) || l[1] === '' || l[1] == null) continue; vistos.add(l[0]); const m = d(+l[1], +l[2]); if (m <= raio) out.push({ uuid: l[0], m, cod: l[4] || '', esp: l[5] || '' }); }
+    return out.sort((a, b) => a.m - b.m);
+  }
+  // depois de marcar o ponto: árvore repetida (até 2 m) e ponto fora dos setores da equipe
+  async function conferirPonto(r) {
+    for (;;) {
+      if (r.lat == null || r.lat === '') return true;
+      const st = await Setores.doPonto(r.lon, r.lat);
+      if (st) { r.setor = st.n; r.foraSetor = st.fora; }
+      if (st && st.fora) {
+        const v = await modal('Fora dos setores da equipe', h('p', null, st.n ? `Este ponto fica no setor ${st.n}, que não é da sua equipe. Confira o GPS: se a árvore é mesmo daqui, siga e a coordenação vai ver o aviso.` : 'Este ponto fica fora dos setores censitários do projeto. Confira o GPS antes de seguir.'),
+          [{ texto: 'Marcar o ponto de novo', classe: 'sec', valor: 'refazer' }, { texto: 'Seguir assim mesmo', valor: 'seguir' }]);
+        if (v === 'refazer') { if ((await marcarPonto(r)) === false) return false; await Store.salvarRegistro(r); continue; }
+        if (v == null) return false;
+      }
+      if (!r.faceId) {
+        const pr = await pontosPerto(r, 2);
+        if (pr.length) {
+          const x = pr[0]; const qual = [x.cod, x.esp].filter(Boolean).join(', ');
+          const v = await modal('Árvore já cadastrada?', h('div', null, h('p', null, `Já existe um cadastro a ${numBR(Math.round(x.m * 10) / 10)} m deste ponto${qual ? ' (' + qual + ')' : ''}.`), h('p', { class: 'dica' }, 'A mesma árvore cadastrada duas vezes é descartada na validação. Se for outra árvore (vizinha, no mesmo canteiro), siga normalmente.')),
+            [{ texto: 'Não cadastrar', classe: 'sec', valor: 'cancelar' }, { texto: 'É outra árvore', valor: 'seguir' }]);
+          if (v !== 'seguir') return false;
+          r.perto = x.cod || x.uuid.slice(0, 8);
+        }
+      }
+      return true;
+    }
   }
 
   // ---------- Marcação do ponto ----------
@@ -1384,6 +1501,7 @@
       recalcular(r);
       anotarHistorico();
       if (!r.concluido_em) r.concluido_em = agoraISO();
+      if (r.lat != null && r.lat !== '') { const st = await Setores.doPonto(r.lon, r.lat); if (st) { r.setor = st.n; if (perfil() === 'coletor') r.foraSetor = st.fora; } }
       if (r.validacao === 'Devolvido') r.validacao = 'Corrigido';
       S.editando.delete(r.uuid);
       r.status = 'pendente'; r.gpsAuto = false; r.atualizado_em = agoraISO(); delete r.erroSync;
@@ -1519,13 +1637,13 @@
     // faixa embaixo do mapa: o que antes ficava na tela inicial (envio, cadastro não terminado, turno, avisos, encerrar face, meus registros)
     const base = campo ? h('div', { class: 'campo-base' },
       h('div', { class: 'campo-faixas' }, h('div', { id: 'aviso-versao' }), h('div', { id: 'turno' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'continuar' }), h('div', { id: 'devolvidos' }), h('div', { id: 'os-equipe' }), h('div', { id: 'encerrar-face' })),
-      h('div', { class: 'campo-linha' }, h('div', { class: 'campo-info' }, h('div', { class: 'resumo mini', id: 'stats' }), h('small', { class: 'ult-envio', id: 'ult-envio' })), h('button', { class: 'btn sec peq', onclick: () => ir('#lista') }, 'Meus registros'))) : null;
+      h('div', { class: 'campo-linha' }, h('div', { class: 'campo-info' }, h('div', { class: 'resumo mini', id: 'stats' }), h('small', { class: 'ult-envio', id: 'ult-envio' })), h('div', { id: 'dupla-hoje' }), h('button', { class: 'btn sec peq', onclick: () => ir('#lista') }, 'Meus registros'))) : null;
     const topoM = campo
       ? topo(S.projeto.nome, S.projeto.equipe || S.sessao.usuario.nome, h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')), h('div', { class: 'topo-dir' }, ajudaBt('mapa'), h('button', { class: 'sync', onclick: tocarSync }, '...')))
       : topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, ajudaBt('mapa')));
     const telaM = h('div', { class: 'tela-mapa' + (campo ? ' modo-campo' : '') }, topoM, S.expirada && campo ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo')) : null, barra, div, bts, fab, base, barraSel);
     $app.replaceChildren(telaM);
-    if (campo) { atualizarSync(); listarRegistros(); pintarOSEquipe(); pintarAvisoVersao(); pintarEncerrarFace(); pintarAvisoGps(); pintarDicaGps(); pintarTurno(); pintarEspaco(); }
+    if (campo) { atualizarSync(); listarRegistros(); pintarOSEquipe(); pintarAvisoVersao(); pintarEncerrarFace(); pintarAvisoGps(); pintarDicaGps(); pintarTurno(); pintarEspaco(); Dupla.carregar().then(pintarDupla); }
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
     const render = L.canvas({ padding: 0.3, tolerance: 8 });
     const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21, fadeAnimation: false, zoomControl: !celular }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4); // fadeAnimation desligada: a ficha que fecha não recebe mais toque
@@ -1541,6 +1659,12 @@
     const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; if (opCalc && String(o.cat) === String(opCalc.v)) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
     if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, bairro: r.bairro || '', dia: diaLocal(r.criado_em), cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: cRisco ? r.valores[cRisco.nome] : '', cat: cCat ? r.valores[cCat.nome] : '', rm: raioCopa(cArea ? r.valores[cArea.nome] : 0), foto: '', local: true });
     // quadras: desenhadas antes dos pontos, no mesmo canvas, para o toque no ponto ter prioridade
+    // setores censitários (quando o projeto tem): os da minha equipe com borda forte, os outros finos; não pegam o toque
+    const stCamada = L.layerGroup().addTo(mapa);
+    if (perfil() !== 'cliente') Setores.camada().then(async (cam) => {
+      if (!cam || !document.body.contains(div)) return; const meus = new Set((await Setores.situacao()).filter((x) => x.equipe && x.equipe === minhaEquipe()).map((x) => x.numero));
+      for (const st of cam.setores) { const meu = meus.has(st.n); L.polygon(st.a.map((an) => { const o = []; for (let i = 0; i < an.length; i += 2) o.push([an[i + 1], an[i]]); return o; }), { renderer: render, interactive: false, fill: false, color: meu ? '#00546E' : '#7A8C92', weight: meu ? 3 : 1.2, dashArray: meu ? null : '6 5', opacity: meu ? 0.9 : 0.6 }).addTo(stCamada); }
+    }).catch(() => {});
     const qdCamada = L.layerGroup().addTo(mapa); const rotulos = L.layerGroup().addTo(mapa);
     const corQd = (q) => { const s = qdSit.get(q.n) || {}; if (selQd.value === 'eq') return s.equipe ? corEq(s.equipe) : '#9AA9B0'; return COR_QD[s.situacao || 'A levantar']; };
     const qdLayers = new Map();
@@ -1919,7 +2043,7 @@
     const voltar = S.projeto ? h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')) : h('button', { class: 'ic', onclick: abrirMenuAdmin, 'aria-label': 'Menu' }, ico('menu'));
     $app.replaceChildren(...[topo('Coordenação', Api.demo ? 'Modo demonstração' : (S.projeto ? S.projeto.nome : 'Neofloresta Inventário'), voltar, null),
       !S.projeto ? h('main', { style: 'padding-bottom:0' }, h('div', { class: 'info' }, 'Primeiros passos: 1) em Formulários, instale ou importe um formulário; 2) em Projetos, crie o projeto; 3) em Equipes e usuários, crie os acessos de campo.')) : null,
-      h('main', { style: 'padding-bottom:0' }, h('div', { class: 'subabas' }, it('exportar', 'Exportar'), it('importar', 'Importar'), it('projetos', 'Projetos'), it('usuarios', 'Usuários'), it('formularios', 'Formulários'), it('seguranca', 'Segurança')),
+      h('main', { style: 'padding-bottom:0' }, h('div', { class: 'subabas' }, it('exportar', 'Exportar'), it('importar', 'Importar'), it('projetos', 'Projetos'), it('usuarios', 'Usuários'), it('pessoas', 'Pessoas'), it('setores', 'Setores'), it('formularios', 'Formulários'), it('seguranca', 'Segurança')),
         S.projeto ? h('div', { class: 'linha-btn', style: 'margin:8px 0 0' }, h('button', { class: 'btn sec peq', onclick: () => ir('#painel') }, 'Painel'), h('button', { class: 'btn sec peq', onclick: () => ir('#validacao') }, 'Validação'), h('button', { class: 'btn sec peq', onclick: () => ir('#mapa') }, 'Mapa')) : null), corpo].filter(Boolean));
     corpo.style.paddingTop = '0';
     // as listas das outras abas vêm em segundo plano: trocar de aba fica instantâneo
@@ -1928,6 +2052,8 @@
       if (sub === 'exportar') await adminExportar(corpo);
       else if (sub === 'projetos') await adminProjetos(corpo);
       else if (sub === 'usuarios') await adminUsuarios(corpo);
+      else if (sub === 'pessoas') await adminPessoas(corpo);
+      else if (sub === 'setores') await adminSetores(corpo);
       else if (sub === 'formularios') await adminFormularios(corpo);
       else if (sub === 'importar') await adminImportar(corpo);
       else if (sub === 'seguranca') await adminSeguranca(corpo);
@@ -2089,6 +2215,94 @@
             h('details', { class: 'us-mais' }, h('summary', { 'aria-label': 'Mais ações' }, '···'), h('button', { class: 'link-perigo', onclick: () => remover(u) }, 'Excluir usuário'))));
       })),
       h('p', { class: 'dica' }, 'Equipe de campo coleta; revisão técnica valida ou devolve registros; cliente só consulta painel, mapa e relatório dos dados validados; coordenação faz tudo. Prefira desativar a excluir: o histórico continua ligado ao usuário. Senhas ficam guardadas de forma criptografada e o usuário é bloqueado por 15 minutos após 5 senhas erradas.')));
+  }
+
+  // pessoas das equipes: avaliadores habilitados e auxiliares, com o vínculo (CLT ou parceiro). Sem dados de pagamento.
+  async function adminPessoas(corpo) {
+    const [ps, us, projetos] = await Promise.all([Api.b.pessoasListar(), Api.b.usuariosListar(), Api.b.projetosListar()]);
+    const equipes = [...new Set(us.filter((u) => u.perfil === 'coletor' && u.equipe).map((u) => u.equipe))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true }));
+    async function editar(pe, dig) {
+      const novo = !pe; pe = Object.assign({ nome: '', funcao: 'Auxiliar', registro: '', vinculo: 'CLT', empresa: '', equipe: '', projeto: S.projeto ? S.projeto.id : '', ativo: 'sim' }, pe || {}, dig || {});
+      const no = h('input', { class: 'entrada', value: pe.nome, placeholder: 'Nome completo' });
+      const fu = h('select', { class: 'entrada' }, ['Avaliador', 'Auxiliar'].map((v) => h('option', { value: v, selected: pe.funcao === v }, v === 'Avaliador' ? 'Avaliador habilitado' : 'Auxiliar')));
+      const rg = h('input', { class: 'entrada', value: pe.registro, placeholder: 'ex.: CRBio 12345/04-D, CREA-MG 123456' });
+      const vi = h('select', { class: 'entrada' }, [['CLT', 'CLT'], ['Parceiro', 'Parceiro (pessoa física, MEI ou empresa)']].map(([v, t]) => h('option', { value: v, selected: pe.vinculo === v }, t)));
+      const em = h('input', { class: 'entrada', value: pe.empresa, placeholder: 'ex.: MEI, ou nome da empresa júnior' });
+      const eq = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Sem equipe fixa'), equipes.map((e) => h('option', { value: e, selected: pe.equipe === e }, e)));
+      const marcados = new Set(String(pe.projeto || '').split(',').map((x) => x.trim()).filter(Boolean));
+      const prj = h('div', { class: 'chips' }, projetos.map((p) => { const b = h('button', { class: 'chip' + (marcados.has(p.id) ? ' sel' : ''), type: 'button', onclick: () => { b.classList.toggle('sel'); if (marcados.has(p.id)) marcados.delete(p.id); else marcados.add(p.id); } }, p.nome); return b; }));
+      const cReg = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Formação e registro profissional'), rg); const cEmp = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Parceiro como'), em);
+      const ver = () => { cReg.classList.toggle('oculto', fu.value !== 'Avaliador'); cEmp.classList.toggle('oculto', vi.value !== 'Parceiro'); }; fu.onchange = ver; vi.onchange = ver; ver();
+      const ok = await modal(novo ? 'Nova pessoa' : 'Editar pessoa', h('div', null,
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), no),
+        h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Função'), fu), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Vínculo'), vi)),
+        cReg, cEmp, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe de costume'), eq, h('div', { class: 'dica' }, 'Aparece primeiro na escolha da dupla. A dupla do dia é escolhida no celular e pode misturar vínculos.')),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos'), prj)),
+        [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
+      if (!ok) return;
+      const d = { id: pe.id, nome: no.value.trim(), funcao: fu.value, registro: fu.value === 'Avaliador' ? rg.value.trim() : '', vinculo: vi.value, empresa: vi.value === 'Parceiro' ? em.value.trim() : '', equipe: eq.value, projeto: [...marcados].join(','), ativo: pe.ativo || 'sim' };
+      const erro = (m) => { toast(m, 5000, null, true); return editar(novo ? null : pe, d); };
+      if (!d.nome) return erro('Informe o nome.');
+      if (d.funcao === 'Avaliador' && !d.registro) return erro('Avaliador precisa do registro profissional (ex.: CRBio 12345/04-D, CREA-MG 123456).');
+      try { await Api.b.pessoaSalvar(d); toast('Pessoa salva.'); telaAdmin('pessoas'); } catch (e) { erro(e.message); }
+    }
+    async function alternar(pe) { try { await Api.b.pessoaSalvar(Object.assign({}, pe, { ativo: pe.ativo === 'não' ? 'sim' : 'não' })); telaAdmin('pessoas'); } catch (e) { toast(e.message, 5000); } }
+    const nomeP = (ids) => String(ids || '').split(',').filter(Boolean).map((i) => (projetos.find((p) => p.id === i.trim()) || {}).nome || i).join(', ') || 'Todos os projetos';
+    const card = (pe) => { const inat = pe.ativo === 'não'; return h('div', { class: 'us-card' + (inat ? ' inativo' : '') },
+      h('div', { class: 'us-cab' }, h('b', null, pe.nome), h('span', { class: 'selo' + (pe.vinculo === 'Parceiro' ? ' selo-parceiro' : '') }, pe.vinculo), inat ? h('span', { class: 'tag-cinza' }, 'desativada') : null),
+      h('small', null, [pe.funcao === 'Avaliador' ? pe.registro : 'Auxiliar', pe.vinculo === 'Parceiro' && pe.empresa ? pe.empresa : '', pe.equipe].filter(Boolean).join(' · ')), h('small', null, nomeP(pe.projeto)),
+      h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec peq', onclick: () => editar(pe) }, 'Editar'), h('button', { class: 'btn sec peq', onclick: () => alternar(pe) }, inat ? 'Reativar' : 'Desativar'))); };
+    const grupo = (t, f) => { const l = ps.filter((x) => x.funcao === f).sort((a, b) => (a.ativo === 'não') - (b.ativo === 'não') || a.nome.localeCompare(b.nome, 'pt')); return h('div', null, h('h4', null, `${t} (${l.filter((x) => x.ativo !== 'não').length})`), l.length ? h('div', { class: 'us-lista' }, l.map(card)) : h('p', { class: 'dica' }, 'Ninguém cadastrado.')); };
+    corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Pessoas das equipes'),
+      h('p', { class: 'dica' }, 'O acesso continua por dupla. No primeiro cadastro do dia o celular pergunta quem está na dupla: sem avaliador habilitado a coleta não é liberada, e cada árvore guarda quem avaliou e quem auxiliou. Duplas com parceiro não têm trajeto nem horário do dia registrados, só o tempo de cada cadastro. Sem pessoas cadastradas o app funciona como antes.'),
+      h('button', { class: 'btn', style: 'margin-bottom:10px', onclick: () => editar(null) }, '+ Nova pessoa'),
+      grupo('Avaliadores habilitados', 'Avaliador'), grupo('Auxiliares', 'Auxiliar')));
+  }
+  // setores censitários: importar a camada do IBGE e dizer qual equipe coleta cada setor
+  async function adminSetores(corpo) {
+    if (!S.projeto) return corpo.replaceChildren(h('div', { class: 'info' }, 'Abra um projeto primeiro.'));
+    const p = S.projeto; corpo.replaceChildren(h('div', { class: 'info' }, 'Carregando os setores...'));
+    S.stEm = null; const [cam, sit, us] = await Promise.all([Setores.camada(), Setores.situacao(true), Api.b.usuariosListar()]);
+    const equipes = [...new Set(us.filter((u) => u.perfil === 'coletor' && u.equipe && String(u.projeto).split(',').includes(p.id)).map((u) => u.equipe))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true }));
+    const btImp = h('button', { class: cam ? 'btn sec' : 'btn', onclick: () => importarSetoresTela(p) }, cam ? 'Importar de novo' : 'Importar camada de setores');
+    if (!cam) return corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Setores censitários'), h('p', { class: 'dica' }, 'Importe a malha de setores censitários do IBGE (shapefile .zip, GeoPackage, KML ou GeoJSON) recortada para o município. Depois escolha a equipe de cada setor: a equipe é avisada quando marca um ponto fora dos setores dela, e cada árvore guarda o setor (base da auditoria por setor).'), btImp));
+    const por = new Map(sit.map((x) => [x.numero, x])); const sel = new Set();
+    const busca = h('input', { class: 'entrada', placeholder: 'Buscar setor ou equipe', oninput: () => pintar() });
+    const eqSel = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Sem equipe'), equipes.map((e) => h('option', { value: e }, e)));
+    const lista = h('div', { class: 'tab-rolagem' }); const nSel = h('span');
+    const pintar = () => {
+      const q = norm(busca.value.trim()); const ls = cam.setores.filter((x) => !q || norm(x.n + ' ' + ((por.get(x.n) || {}).equipe || '')).includes(q)).slice(0, 600);
+      lista.replaceChildren(h('table', { class: 'tab' }, h('tr', null, h('th', null, ''), h('th', null, 'Setor'), h('th', null, 'Equipe'), h('th', null, 'Situação')),
+        ls.map((x) => { const st = por.get(x.n) || {}; const cb = h('input', { type: 'checkbox', checked: sel.has(x.n), onchange: () => { if (cb.checked) sel.add(x.n); else sel.delete(x.n); nSel.textContent = sel.size ? `${sel.size} selecionado(s)` : ''; } });
+          return h('tr', null, h('td', null, cb), h('td', null, x.n), h('td', null, st.equipe || h('small', { class: 'dica' }, 'sem equipe')), h('td', null, st.situacao || 'Em coleta')); })));
+    };
+    async function atribuir() {
+      if (!sel.size) return toast('Marque os setores na lista.');
+      try { const r = await Api.b.setoresAtribuir(p.id, [...sel].map((n) => ({ numero: n, equipe: eqSel.value }))); toast(`${r.alterados} setor(es) atualizados.`); S.stSitEm = null; telaAdmin('setores'); } catch (e) { toast(e.message, 5000); }
+    }
+    const tot = cam.setores.length; const comEq = cam.setores.filter((x) => (por.get(x.n) || {}).equipe).length;
+    corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Setores censitários'),
+      h('p', null, `${fmtN(tot)} setores na camada · ${fmtN(comEq)} com equipe`),
+      h('div', { class: 'grade2' }, busca, h('div', { class: 'linha-btn', style: 'margin:0' }, eqSel, h('button', { class: 'btn', onclick: atribuir }, 'Atribuir'))), nSel,
+      lista, h('div', { class: 'linha-btn' }, btImp), h('p', { class: 'dica' }, 'Equipe vazia libera o setor. A equipe só é avisada (não bloqueada) quando marca um ponto fora dos setores dela, porque o GPS pode errar perto da divisa.')));
+    pintar();
+  }
+  async function importarSetoresTela(p) {
+    const arq = h('input', { type: 'file', accept: '.zip,.gpkg,.kml,.geojson,.json', class: 'entrada' });
+    const info = h('div'); const selN = h('select', { class: 'entrada' }); let lido = null;
+    arq.addEventListener('change', async () => {
+      const f = arq.files && arq.files[0]; if (!f) return; lido = null; info.replaceChildren(h('div', { class: 'info' }, 'Lendo o arquivo...'));
+      try {
+        lido = await Quadras.lerArquivo(f.name, await f.arrayBuffer()); const sug = lido.campos.find((c) => /^cd_?setor$|^cd_?geocodi$/i.test(c)) || lido.campos.find((c) => /setor|geocod/i.test(c)) || lido.campos[0];
+        selN.replaceChildren(lido.campos.map((c) => h('option', { value: c, selected: c === sug }, `${c} (ex.: ${String(lido.feicoes[0].props[c] ?? '').slice(0, 30)})`)));
+        info.replaceChildren(h('div', { class: 'info' }, `${fmtN(lido.feicoes.length)} polígonos encontrados.` + (lido.semPrj ? ' O arquivo não tem .prj: as coordenadas foram lidas como graus.' : '')));
+      } catch (e) { info.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
+    });
+    const ok = await modal('Setores censitários: ' + p.nome, h('div', null, h('p', { class: 'dica' }, 'Malha de setores do IBGE recortada para o município, em SIRGAS 2000. Importar de novo substitui a camada; as equipes dos setores com o mesmo código continuam valendo.'),
+      arq, info, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Campo com o código do setor'), selN)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Importar', valor: true }]);
+    if (!ok) return; if (!lido) return toast('Escolha um arquivo válido.');
+    const cam = Quadras.compactar(lido.feicoes, selN.value, []);
+    try { toast('Enviando a camada...', 4000); const r = await Api.b.setoresImportar(p.id, JSON.stringify({ campo: cam.campo, total: cam.total, setores: cam.quadras.map((q) => ({ n: q.n, b: q.b, a: q.a })) })); S.stEm = null; S.stIdx = null; toast(`Camada importada: ${fmtN(r.total)} setores.`, 5000); if (/#admin\/setores/.test(location.hash)) telaAdmin('setores'); } catch (e) { toast(e.message, 6000); }
   }
 
   async function adminFormularios(corpo) {
@@ -2588,10 +2802,10 @@
         kpi('Precisão do GPS', meds('gps') != null ? fmtN(Math.round(meds('gps') * 10) / 10) + ' m' : '-', 'mediana do erro', meds('gps') > 7 ? 'alerta' : '')),
       lista.length ? h('div', { class: 'hoje-equipes' }, lista.map(([e, v]) => h('div', { class: 'cartao hoje-eq' },
         h('div', { class: 'hoje-eq-cab' }, h('b', null, e), h('span', { class: 'hoje-n' }, fmtN(v.n))),
-        h('small', null, sel === hoje ? `Começou às ${v.ini} · último registro às ${v.fim}` : `Das ${v.ini} às ${v.fim}`),
+        h('small', null, v.parceiro ? 'Dupla com parceiro: sem horário do dia, só o tempo de cada cadastro' : sel === hoje ? `Começou às ${v.ini} · último registro às ${v.fim}` : `Das ${v.ini} às ${v.fim}`),
         h('dl', { class: 'hoje-dl' },
           h('dt', null, 'Tempo por amostra'), h('dd', null, fmtMin(v.dur)),
-          h('dt', null, 'Intervalo'), h('dd', null, fmtMin(v.int)),
+          v.parceiro ? null : [h('dt', null, 'Intervalo'), h('dd', null, fmtMin(v.int))],
           h('dt', null, 'GPS'), h('dd', { class: v.gps > 7 ? 'ruim' : '' }, v.gps != null ? '±' + fmtN(v.gps) + ' m' : '-'),
           v.aguardando != null ? [h('dt', null, 'Aguardando validação'), h('dd', null, fmtN(v.aguardando))] : null,
           v.devolvidos ? [h('dt', null, 'Devolvidos'), h('dd', { class: 'ruim' }, fmtN(v.devolvidos))] : null),
@@ -3767,6 +3981,6 @@
     return new Promise((res) => cv.toBlob(res, 'image/jpeg', q));
   }
 
-  window.__app = { S, Store, sincronizar, proximoCodigo, marcarQuadras, conferirEnvio }; // usados pelos testes de estresse
+  window.__app = { S, Store, Api, sincronizar, proximoCodigo, marcarQuadras, conferirEnvio }; // usados pelos testes de estresse
   iniciar().catch((e) => { $app.replaceChildren(h('div', { class: 'login' }, h('div', { class: 'aviso' }, 'Erro ao iniciar: ' + e.message), h('button', { class: 'btn', onclick: () => sair(true) }, 'Voltar ao login'))); });
 })();

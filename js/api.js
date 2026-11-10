@@ -8,6 +8,8 @@ const Api = (() => {
       criado_em: r.criado_em, atualizado_em: r.atualizado_em, concluido_em: r.concluido_em || '',
       latitude: r.lat ?? '', longitude: r.lon ?? '', precisao_gps_m: r.prec ?? '',
       endereco_aprox: r.endereco || '', bairro_aprox: r.bairro || '',
+      ...(r.dupla ? { avaliador: r.dupla.av ? r.dupla.av.nome : '', avaliador_id: r.dupla.av ? r.dupla.av.id : '', avaliador_registro: r.dupla.av ? r.dupla.av.registro || '' : '', avaliador_vinculo: r.dupla.av ? r.dupla.av.vinculo : '', auxiliar: r.dupla.ax ? r.dupla.ax.nome : '', auxiliar_id: r.dupla.ax ? r.dupla.ax.id : '', auxiliar_vinculo: r.dupla.ax ? r.dupla.ax.vinculo : '' } : {}),
+      ...(r.setor != null ? { setor: r.setor || '', fora_do_setor: r.foraSetor ? 'sim' : '' } : {}),
       historico: (r.historico || []).map((x) => `${String(x.em).slice(0, 16).replace('T', ' ')} ${x.por}: ${x.mud.join('; ')}`).join(' | '),
     };
     for (const c of form.campos) {
@@ -20,7 +22,7 @@ const Api = (() => {
   function paraMapa(linhas, campos) { return { cab: campos, linhas: linhas.map((l) => campos.map((c) => l[c] ?? '')) }; }
   // listas da coordenação: a resposta vale por 1 minuto (trocar de aba fica instantâneo); qualquer gravação limpa
   const MEMO_LEITURA = ['usuarios_listar', 'projetos_listar', 'formularios_listar'];
-  const LEITURAS = ['conferir', 'trajetos', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', ...MEMO_LEITURA];
+  const LEITURAS = ['conferir', 'trajetos', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', 'pessoas_listar', 'setores_camada', 'setores_situacao', ...MEMO_LEITURA];
   let memo = new Map();
   async function chamar(acao, dados, semCred) {
     if (LEITURAS.indexOf(acao) < 0) memo = new Map();
@@ -116,6 +118,10 @@ const Api = (() => {
     async quadrasSituacao() { return { quadras: [], faces: [] }; },
     async conferir() { return null; },
     async trajetoSalvar() { return { ok: true }; }, async trajetos() { return []; },
+    async pessoasListar() { return (await this.base()).pessoas || []; },
+    async pessoaSalvar(pe) { const b = await this.base(); b.pessoas = b.pessoas || []; const i = b.pessoas.findIndex((x) => x.id === pe.id); if (!pe.id) pe.id = 'P' + Date.now(); if (i >= 0) b.pessoas[i] = Object.assign(b.pessoas[i], pe); else b.pessoas.push(pe); await Store.set('demo:base', b); return { id: pe.id }; },
+    async setoresCamada() { return { semCamada: true }; }, async setoresSituacao() { return []; },
+    async setoresImportar() { throw new Error('Setores não disponíveis na demonstração.'); }, async setoresAtribuir() { throw new Error('Setores não disponíveis na demonstração.'); },
     async quadrasMarcar() { throw new Error('Quadras não disponíveis na demonstração.'); },
     async quadrasImportar() { throw new Error('Quadras não disponíveis na demonstração.'); },
     // ordens de serviço no modo demonstração (mesmas regras do servidor, guardadas no aparelho)
@@ -217,6 +223,13 @@ const Api = (() => {
     async conferir(projeto, uuids) { return (await chamar('conferir', { projeto, uuids })).achados; },
     async trajetoSalvar(projeto, trecho) { return chamar('trajeto_salvar', { projeto, trecho }); },
     async trajetos(projeto, dia) { return (await chamar('trajetos', { projeto, dia })).trechos; },
+    // servidor antigo (sem pessoas nem setores): lista vazia, o app segue como antes
+    async pessoasListar() { try { return (await chamar('pessoas_listar')).pessoas || []; } catch (e) { if (/desconhecida/i.test(e.message)) return []; throw e; } },
+    async pessoaSalvar(pessoa) { return chamar('pessoa_salvar', { pessoa }); },
+    async setoresImportar(projeto, camada) { return chamar('setores_importar', { projeto, camada }); },
+    async setoresCamada(projeto, versao) { try { return await chamar('setores_camada', { projeto, versao: versao || '' }); } catch (e) { if (/desconhecida/i.test(e.message)) return { semCamada: true }; throw e; } },
+    async setoresSituacao(projeto) { try { return (await chamar('setores_situacao', { projeto })).setores || []; } catch (e) { if (/desconhecida/i.test(e.message)) return []; throw e; } },
+    async setoresAtribuir(projeto, itens) { return chamar('setores_atribuir', { projeto, itens }); },
     async chaveCriar(nome, projeto) { return chamar('chave_criar', { nome, projeto }); },
     async chaveRevogar(id) { return chamar('chave_revogar', { id }); },
     async backupListar(projeto) { return (await chamar('backup_listar', { projeto })).copias; },

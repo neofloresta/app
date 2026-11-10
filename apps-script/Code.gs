@@ -11,11 +11,15 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.6';
+const VERSAO_SCRIPT = '2.7';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso'];
 const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
+// pessoas das equipes (a dupla do dia é escolhida no celular): só o nome, a função e o vínculo, sem dados de pagamento
+const COLS_PESSOAS = ['id', 'nome', 'funcao', 'registro', 'vinculo', 'empresa', 'projeto', 'equipe', 'ativo', 'criado_em', 'atualizado_em'];
+const FUNCOES = ['Avaliador', 'Auxiliar'];
+const VINCULOS = ['CLT', 'Parceiro'];
 const COLS_CHAVES = ['id', 'nome', 'projeto', 'hash', 'criada_por', 'criada_em', 'ativa'];
 const ACOES_INTEGRACAO = ['listar', 'mapa', 'painel', 'os_listar', 'formulario', 'sessao', 'quadras_camada', 'quadras_situacao'];
 const PERFIS = ['admin', 'revisor', 'coletor', 'cliente'];
@@ -23,13 +27,15 @@ const PERFIS = ['admin', 'revisor', 'coletor', 'cliente'];
 const COLS_SISTEMA = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'numero_unico', 'servidor_em'];
 // Colunas internas que o perfil cliente não recebe
 const COLS_INTERNAS = ['usuario', 'validacao_obs', 'servidor_em'];
+// quem estava na dupla: fica com a Neofloresta, o cliente não recebe
+const COLS_DUPLA = ['avaliador', 'avaliador_id', 'avaliador_registro', 'avaliador_vinculo', 'auxiliar', 'auxiliar_id', 'auxiliar_vinculo', 'fora_do_setor'];
 const SESSAO_DIAS = 30;
 const MAX_TENTATIVAS = 5;
 const BLOQUEIO_MIN = 15;
 const FUSO = 'America/Sao_Paulo';
 const ITERACOES = 1000;
 const SENHA_MIN = 8;
-const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar'];
+const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar', 'setores_importar', 'setores_atribuir'];
 // texto que começaria uma fórmula na planilha vira texto puro
 function seguro(v) { v = v == null ? '' : String(v); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
 function hashToken(t) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'sessao|' + t, Utilities.Charset.UTF_8)); }
@@ -113,6 +119,12 @@ function doPost(e) {
       case 'os_listar': exigeProjeto(d.projeto); return json({ ok: true, ordens: listarOS(d.projeto, usr), tipos: tiposOS(d.projeto) });
       case 'os_salvar': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarOS(d.projeto, d.os || {}, usr)));
       case 'os_andamento': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, andamentoOS(d.projeto, d.id, d.etapa, d.dados || {}, usr)));
+      case 'pessoas_listar': pode('coletor', 'revisor'); return json({ ok: true, pessoas: listarPessoas(usr) });
+      case 'pessoa_salvar': pode(); { const id = salvarPessoa(d.pessoa || {}); auditar(usr.login, 'pessoa_salvar', id, (d.pessoa && d.pessoa.funcao) || ''); return json({ ok: true, id: id }); }
+      case 'setores_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarSetores(d.projeto, d.camada, usr)));
+      case 'setores_camada': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaSetores(d.projeto, d.versao)));
+      case 'setores_situacao': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, setores: lerSetores(d.projeto) });
+      case 'setores_atribuir': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, atribuirSetores(d.projeto, d.itens, usr)));
       case 'projetos_listar': pode(); return json({ ok: true, projetos: tabela('Projetos').map(comLinks) });
       case 'projeto_salvar': pode(); salvarProjeto(d.projeto_dados); auditar(usr.login, 'projeto_salvar', d.projeto_dados && d.projeto_dados.id, ''); return json({ ok: true });
       case 'usuarios_listar': pode(); return json({ ok: true, usuarios: tabela('Usuarios').map(paraAdmin) });
@@ -616,7 +628,7 @@ function clienteVeTodos(projetoId) { return String(projeto(projetoId).cliente_ve
 // colunas que o cliente não recebe: dados internos das equipes (quem coletou, histórico com logins)
 function ocultasCliente(projetoId) {
   let auto = []; try { auto = lerFormulario(projeto(projetoId).formulario).campos.filter((c) => c.auto === 'coletor').map((c) => c.nome); } catch (e) { /* sem formulário */ }
-  return COLS_INTERNAS.concat(['equipe', 'validado_por', 'historico', 'validacao_hist'], auto);
+  return COLS_INTERNAS.concat(['equipe', 'validado_por', 'historico', 'validacao_hist'], COLS_DUPLA, auto);
 }
 function paraCliente(projetoId, linhas) {
   const todos = clienteVeTodos(projetoId); const oc = ocultasCliente(projetoId);
@@ -700,17 +712,19 @@ function tempos(form, ativos) {
     const dur = l.concluido_em ? (new Date(l.concluido_em) - new Date(l.criado_em)) / 60000 : null;
     const cat = cCat ? String(l[cCat.nome] || '') : '';
     if (dur != null && dur > 0 && dur <= 60) { (durCat[cat] = durCat[cat] || []).push(dur); (durEq[e] = durEq[e] || []).push(dur); }
-    const k = d + '|' + e; (grupos[k] = grupos[k] || []).push({ t: new Date(fim).getTime(), fim, dur, cat, prec: +l.precisao_gps_m || 0, val: l.validacao || 'Pendente' });
+    const parc = l.avaliador_vinculo === 'Parceiro' || l.auxiliar_vinculo === 'Parceiro';
+    const k = d + '|' + e; (grupos[k] = grupos[k] || []).push({ t: new Date(fim).getTime(), fim, dur, cat, parc, prec: +l.precisao_gps_m || 0, val: l.validacao || 'Pendente' });
   });
   const diario = {};
   Object.keys(grupos).forEach((k) => {
     const [d, e] = k.split('|'); const g = grupos[k].sort((a, b) => a.t - b.t);
-    const ints = []; for (let i = 1; i < g.length; i++) { const m = (g[i].t - g[i - 1].t) / 60000; if (m > 0 && m <= 30) ints.push(m); }
+    const parc = g.some((x) => x.parc); // dupla com parceiro: sem horário do dia nem intervalo entre amostras (fica só o tempo de cada cadastro)
+    const ints = []; if (!parc) for (let i = 1; i < g.length; i++) { const m = (g[i].t - g[i - 1].t) / 60000; if (m > 0 && m <= 30) ints.push(m); }
     (intEq[e] = intEq[e] || []).push(...ints);
     if (d < limite) return;
     const cats = {}; g.forEach((x) => { if (x.cat) cats[x.cat] = (cats[x.cat] || 0) + 1; });
     diario[d] = diario[d] || {};
-    diario[d][e] = { n: g.length, ini: hora(g[0].fim), fim: hora(g[g.length - 1].fim), dur: med(g.map((x) => x.dur).filter((x) => x != null && x > 0 && x <= 60)), int: med(ints), gps: med(g.map((x) => x.prec).filter((x) => x > 0)), cat: cats, aguardando: g.filter((x) => x.val === 'Pendente').length, devolvidos: g.filter((x) => x.val === 'Devolvido').length };
+    diario[d][e] = { n: g.length, ini: parc ? '' : hora(g[0].fim), fim: parc ? '' : hora(g[g.length - 1].fim), parceiro: parc, dur: med(g.map((x) => x.dur).filter((x) => x != null && x > 0 && x <= 60)), int: med(ints), gps: med(g.map((x) => x.prec).filter((x) => x > 0)), cat: cats, aguardando: g.filter((x) => x.val === 'Pendente').length, devolvidos: g.filter((x) => x.val === 'Devolvido').length };
   });
   const porCat = {}; Object.keys(durCat).forEach((c) => (porCat[c] = { dur: med(durCat[c]), n: durCat[c].length }));
   const porEq = {}; Object.keys(Object.assign({}, durEq, intEq)).forEach((e) => (porEq[e] = { dur: med(durEq[e] || []), int: med(intEq[e] || []) }));
@@ -1020,6 +1034,93 @@ function abaFaces(projetoId) {
   return garantirCab(sh, COLS_FACES);
 }
 function lerSitFaces(projetoId) { return lerOS(abaFaces(projetoId)); }
+// ---------- Pessoas das equipes ----------
+function listarPessoas(usr) {
+  const t = tabela('Pessoas');
+  if (usr.perfil !== 'coletor') return t;
+  // equipe de campo: só quem está ativo nos projetos dela, sem dados internos
+  const meus = usr.projetos; const tudo = usr.projeto === '*';
+  return t.filter((p) => p.ativo !== 'não' && (tudo || p.projeto === '*' || !p.projeto || String(p.projeto).split(',').some((x) => meus.indexOf(x.trim()) >= 0)))
+    .map((p) => ({ id: p.id, nome: p.nome, funcao: p.funcao, registro: p.registro || '', vinculo: p.vinculo, equipe: p.equipe || '' }));
+}
+function salvarPessoa(d) {
+  const txt = (v, n) => String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' ').trim().slice(0, n);
+  const o = { nome: txt(d.nome, 80), funcao: txt(d.funcao, 20), registro: txt(d.registro, 40), vinculo: txt(d.vinculo, 20), empresa: txt(d.empresa, 80), projeto: txt(d.projeto, 200), equipe: txt(d.equipe, 60), ativo: d.ativo === 'não' ? 'não' : 'sim', atualizado_em: new Date().toISOString() };
+  if (!o.nome) throw new Error('Informe o nome.');
+  if (FUNCOES.indexOf(o.funcao) < 0) throw new Error('Escolha a função: Avaliador ou Auxiliar.');
+  if (VINCULOS.indexOf(o.vinculo) < 0) throw new Error('Escolha o vínculo: CLT ou Parceiro.');
+  if (o.funcao === 'Avaliador' && !o.registro) throw new Error('Avaliador precisa do registro profissional (ex.: CRBio 12345/04-D, CREA-MG 123456).');
+  if (o.vinculo === 'CLT') o.empresa = '';
+  Object.keys(o).forEach((k) => { o[k] = seguro(o[k]); });
+  garantirAba('Pessoas', COLS_PESSOAS);
+  let id = String(d.id || '');
+  if (id) { if (!tabela('Pessoas', true).some((p) => p.id === id)) throw new Error('Pessoa não encontrada.'); }
+  else { id = 'P' + Utilities.getUuid().replace(/-/g, '').slice(0, 10); o.criado_em = new Date().toISOString(); }
+  o.id = id; salvarLinha('Pessoas', COLS_PESSOAS, 'id', o); return id;
+}
+// ---------- Setores censitários ----------
+// camada no mesmo formato compacto das quadras (número, caixa e anéis); a equipe de cada setor fica na aba Setores do projeto
+const COLS_SETORES = ['numero', 'equipe', 'situacao', 'amostra', 'erros', 'erro_pct', 'auditado_por', 'auditado_em', 'obs', 'historico', 'atualizado_em'];
+const SITUACOES_SETOR = ['Em coleta', 'Em auditoria', 'Aprovado', 'Devolvido para correção'];
+function infoSetores(projetoId) { try { return JSON.parse(PROPS.getProperty('ST_' + projetoId) || 'null'); } catch (e) { return null; } }
+function importarSetores(projetoId, camada, usr) {
+  const txt = String(camada || ''); if (txt.length > 15e6) throw new Error('Camada grande demais (limite de 15 MB). Recorte os setores do município antes de importar.');
+  let j; try { j = JSON.parse(txt); } catch (e) { throw new Error('Camada inválida.'); }
+  const lista = j && (j.setores || j.quadras);
+  if (!Array.isArray(lista) || !lista.length) throw new Error('A camada não tem setores.');
+  if (lista.length > 20000) throw new Error('Mais de 20 mil setores: recorte só o município do projeto.');
+  const nums = Object.create(null);
+  const limpos = lista.map((q) => {
+    if (!q || typeof q.n !== 'string' || !Array.isArray(q.b) || q.b.length !== 4 || !Array.isArray(q.a) || !q.a.length) throw new Error('Setor com formato inválido.');
+    const n = q.n.replace(/[\t\r\n]+/g, ' ').trim().slice(0, 40); if (!n) throw new Error('Setor sem número.'); if (nums[n]) throw new Error('Número de setor repetido: ' + n); nums[n] = 1;
+    if (!q.b.every((x) => typeof x === 'number' && isFinite(x)) || q.b[1] < -34 || q.b[3] > 6 || q.b[0] < -74 || q.b[2] > -28) throw new Error('Setor ' + n + ' fora do Brasil ou com coordenada inválida.');
+    q.a.forEach((a) => { if (!Array.isArray(a) || a.length < 6 || a.length > 40000 || !a.every((x) => typeof x === 'number' && isFinite(x))) throw new Error('Polígono inválido no setor ' + n + '.'); });
+    return { n: n, b: q.b, a: q.a };
+  });
+  const p = projeto(projetoId); const pasta = DriveApp.getFolderById(p.pasta_id); const ant = infoSetores(projetoId);
+  const arq = pasta.createFile('Setores - ' + p.nome + '.json', JSON.stringify({ campo: String(j.campo || '').slice(0, 40), total: limpos.length, setores: limpos }), 'application/json');
+  if (ant && ant.id) try { DriveApp.getFileById(ant.id).setTrashed(true); } catch (e) { /* já removido */ }
+  const info = { id: arq.getId(), em: new Date().toISOString(), total: limpos.length };
+  PROPS.setProperty('ST_' + projetoId, JSON.stringify(info));
+  auditar(usr.login, 'setores_importar', projetoId, info.total + ' setores');
+  return { total: info.total, versao: info.em };
+}
+function camadaSetores(projetoId, versao) {
+  const info = infoSetores(projetoId); if (!info) return { semCamada: true };
+  if (versao && versao === info.em) return { igual: true, versao: info.em };
+  return { versao: info.em, total: info.total, camada: DriveApp.getFileById(info.id).getBlob().getDataAsString() };
+}
+function abaSetores(projetoId) {
+  const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Setores');
+  if (!sh) { sh = ss.insertSheet('Setores'); sh.appendRow(COLS_SETORES); sh.setFrozenRows(1); }
+  if (!sh.getLastRow()) sh.appendRow(COLS_SETORES);
+  return garantirCab(sh, COLS_SETORES);
+}
+function lerSetores(projetoId) { const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); const sh = ss.getSheetByName('Setores'); if (!sh || sh.getLastRow() < 2) return []; return lerOS(sh).map(publicoOS); }
+// coordenação define a equipe de cada setor (equipe vazia libera o setor)
+function atribuirSetores(projetoId, itens, usr) {
+  if (!Array.isArray(itens) || !itens.length) throw new Error('Nenhum setor informado.'); if (itens.length > 5000) throw new Error('Setores demais de uma vez.');
+  const info = infoSetores(projetoId); if (!info) throw new Error('Este projeto ainda não tem camada de setores.');
+  const existe = {}; JSON.parse(DriveApp.getFileById(info.id).getBlob().getDataAsString()).setores.forEach((x) => { existe[x.n] = 1; });
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = abaSetores(projetoId); const v = lerOS(sh); const por = {}; v.forEach((x) => { por[x.numero] = x; });
+    const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+    const quando = Utilities.formatDate(new Date(), FUSO, 'dd/MM/yyyy HH:mm'); let n = 0; const recusados = [];
+    itens.forEach((it) => {
+      const num = String(it && it.numero || '').slice(0, 40); if (!existe[num]) { recusados.push({ numero: num, motivo: 'Setor não existe na camada.' }); return; }
+      const eq = String(it.equipe == null ? '' : it.equipe).trim().slice(0, 60);
+      const o = Object.assign({}, por[num] || { numero: num, situacao: 'Em coleta' }); if (o.equipe === eq) return;
+      o.equipe = eq; o.atualizado_em = new Date().toISOString(); o.historico = (o.historico ? o.historico + ' | ' : '') + quando + ' ' + (usr.nome || usr.login) + ': ' + (eq ? 'equipe ' + eq : 'sem equipe');
+      o.historico = String(o.historico).slice(-1500);
+      const linha = cab.map((c) => (o[c] == null ? '' : "'" + String(o[c])));
+      if (o.__linha) sh.getRange(o.__linha, 1, 1, cab.length).setValues([linha]); else { sh.getRange(sh.getLastRow() + 1, 1, 1, cab.length).setValues([linha]); o.__linha = sh.getLastRow(); }
+      por[num] = o; n++;
+    });
+    if (n) auditar(usr.login, 'setores_atribuir', projetoId, n + ' setor(es)');
+    return { alterados: n, recusados: recusados };
+  } finally { lock.releaseLock(); }
+}
 // ---------- Trajeto da equipe no turno ----------
 // cada envio é um trecho: pontos em polyline codificada (lat/lon com 5 casas), mais o resumo calculado no aparelho
 const COLS_TRAJETOS = ['id', 'dia', 'equipe', 'usuario', 'inicio', 'fim', 'pontos', 'km_pe', 'km_carro', 'min_parado', 'n', 'recebido_em'];
