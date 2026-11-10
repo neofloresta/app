@@ -192,6 +192,7 @@
     S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
     S.form = await carregarForm(p.formulario);
     Dupla.carregar().then(() => Turno.carregar()).catch(() => {});
+    if (perfil() === 'coletor') Dupla.pessoas(true).catch(() => {}); // fica no aparelho: o primeiro + do dia sem internet também pergunta a dupla
     // a numeração dos códigos se prepara em segundo plano: a tela abre na hora
     S.prepCodigosOk = false;
     S.prepCodigos = (async () => { await Promise.race([sincronizarSequencia(), new Promise((r) => setTimeout(r, 8000))]); await Promise.race([garantirFaixa(), new Promise((r) => setTimeout(r, 8000))]); S.prepCodigosOk = true; })();
@@ -463,6 +464,7 @@
   }
   function campoCodigo(form) { return camposCodigo(form)[0]; }
   function codigoDe(form, vals) { const c = camposCodigo(form).find((k) => vals[k.nome] != null && vals[k.nome] !== ''); return c ? `${c.rotulo}: ${vals[c.nome]}` : ''; }
+  const codigoSo = (form, vals) => { const c = camposCodigo(form).find((k) => vals[k.nome] != null && vals[k.nome] !== ''); return c ? String(vals[c.nome]) : ''; }; // no topo do cadastro: só o código, cabe em tela pequena
   function campoEspecie(form) { return form.campos.find((c) => c.tipo === 'species'); }
 
   async function telaInicio() {
@@ -1143,7 +1145,7 @@
     const vizinha = (i, passo) => { for (let k = i + passo; k >= 0 && k < abas.length; k += passo) if (abaVisivel(abas[k])) return k; return -1; };
     const btAnt = h('button', { class: 'btn sec quad', onclick: () => irAba(vizinha(S.aba, -1)), 'aria-label': 'Etapa anterior' }, ico('esq'));
     const btProx = h('button', { class: 'btn prox', onclick: () => { const k = vizinha(S.aba, 1); if (k >= 0) irAba(k); else concluir(); } });
-    $app.replaceChildren(...[topo(r.faceId && r.status === 'rascunho' ? 'Calçada sem árvores' : r.status === 'rascunho' && !r.mexido ? 'Nova árvore' : (codigoDe(form, r.valores) || 'Árvore'), S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, btCancelar, gpsBtn)), barraAbas,
+    $app.replaceChildren(...[topo(r.faceId && r.status === 'rascunho' ? 'Calçada sem árvores' : r.status === 'rascunho' && !r.mexido ? 'Nova árvore' : (codigoSo(form, r.valores) || 'Árvore'), S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, btCancelar, gpsBtn)), barraAbas,
       r.faceId ? h('div', { class: 'faixa-face' }, h('b', null, 'Face sem árvores: ' + (r.faceTxt || r.faceId)), h('span', null, 'Tire a foto da calçada inteira, no sentido do comprimento, e toque em Concluir registro. A face fica como levantada sem árvores.')) : null,
       conteudo, h('footer', { class: 'rodape' }, btAnt, btProx)].filter(Boolean));
 
@@ -1646,7 +1648,8 @@
       : topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, ajudaBt('mapa')));
     const telaM = h('div', { class: 'tela-mapa' + (campo ? ' modo-campo' : '') }, topoM, S.expirada && campo ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo')) : null, barra, div, bts, fab, base, barraSel);
     $app.replaceChildren(telaM);
-    if (campo) { atualizarSync(); listarRegistros(); pintarOSEquipe(); pintarAvisoVersao(); pintarEncerrarFace(); pintarAvisoGps(); pintarDicaGps(); pintarTurno(); pintarEspaco(); Dupla.carregar().then(pintarDupla); }
+    if (campo) { atualizarSync(); listarRegistros(); pintarOSEquipe(); pintarAvisoVersao(); pintarEncerrarFace(); pintarAvisoGps(); pintarDicaGps(); pintarTurno(); pintarEspaco(); Dupla.carregar().then(() => { pintarDupla(); pintarTurno(); }).catch(() => {});
+      const linhaB = base.querySelector('.campo-linha'); if (linhaB && window.ResizeObserver) new ResizeObserver(() => telaM.style.setProperty('--base-h', linhaB.offsetHeight + 'px')).observe(linhaB); }
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
     const render = L.canvas({ padding: 0.3, tolerance: 8 });
     const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21, fadeAnimation: false, zoomControl: !celular }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4); // fadeAnimation desligada: a ficha que fecha não recebe mais toque

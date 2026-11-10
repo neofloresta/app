@@ -651,3 +651,8 @@ footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
 .aud-item.ok { border-left-color: var(--ok); }
 .aud-item.erro { border-left-color: var(--erro); }
 .aud-item small { color: var(--suave); }
+
+/* 2.7: faixas do mapa não tomam a tela pequena; aviso de versão compacto */
+.campo-faixas { max-height: 38vh; overflow-y: auto; }
+.campo-faixas .faixa-versao ul { display: none; }
+@media (max-width: 380px) { .resumo.mini { gap: 6px; font-size: 13px; } .chip-dupla { max-width: 34vw; } }
