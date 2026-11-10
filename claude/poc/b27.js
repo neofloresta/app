@@ -30,7 +30,16 @@ const regs = (p) => p.evaluate(async () => Store.todosRegistros());
   await p.click('.topo .ic[aria-label="Voltar ao mapa"]'); await p.waitForSelector('.tela-mapa.modo-campo', { timeout: 20000 });
   await p.screenshot({ path: 'b27-mapa-primeiro.png' });
   ok('C.3', temMapa >= 1 && pos.w >= 60 && pos.dir < 30 && f.length === 0 && /1\s*hoje/.test(stats) && /Meus registros/.test(tit) && lista.length > 10, `abre no mapa com o + de ${Math.round(pos.w)} px no canto inferior direito; depois de concluir volta ao mapa ("${stats.replace(/\s+/g, ' ')}"); "Meus registros" lista o cadastro e volta ao mapa`);
-  const erros = p.erros; ok('C.9', !erros.length, erros.length ? erros.join(' | ') : 'sem erros de JavaScript');
+  // 4. primeiro acesso em telas próprias (outro celular, sem pular)
+  process.env.COM_CONFIGURAR = '1'; const E2 = await L.celular(b); const q = E2.p; await L.logar(q, 'div-2', 'equipe02'); delete process.env.COM_CONFIGURAR;
+  await q.waitForSelector('.tela-cfg', { timeout: 15000 }); const t1 = await q.locator('.cfg-cab h1').innerText(); const semModal = await q.locator('.veu').count();
+  await q.click('.cfg-rodape .btn.cheio'); await q.waitForTimeout(1500); const t2 = await q.locator('.cfg-cab h1').innerText().catch(() => '');
+  await q.click('.cfg-rodape .btn.cheio'); await q.waitForTimeout(2500); const t3 = await q.locator('.cfg-cab h1').innerText().catch(() => ''); const gps = await q.locator('.cfg-gps').innerText().catch(() => '');
+  await q.screenshot({ path: 'b27-config.png' });
+  await q.click('.cfg-rodape .btn.cheio'); await q.waitForSelector('.tela-mapa.modo-campo', { timeout: 20000 });
+  await q.reload(); await q.waitForSelector('.tela-mapa.modo-campo, .tela-cfg', { timeout: 20000 }); const deNovo = await q.locator('.tela-cfg').count();
+  ok('C.4', t1 === 'Localização' && !semModal && t2 === 'Instalar o app' && t3 === 'Teste do GPS' && /±\s*4/.test(gps) && !deNovo, `primeiro acesso: ${t1} → ${t2} → ${t3} (${gps}) → mapa, sem janela no meio; ao reabrir não pede de novo (${deNovo})`);
+  const erros = [...p.erros, ...q.erros]; ok('C.9', !erros.length, erros.length ? erros.join(' | ') : 'sem erros de JavaScript');
   fs.writeFileSync(__dirname + '/res-b27.json', JSON.stringify(R, null, 1));
   const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);
 })().catch((e) => { console.error('ERRO', e); process.exit(1); });

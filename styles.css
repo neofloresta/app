@@ -616,3 +616,13 @@ footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
 .tela-mapa.modo-campo .qd-selecao { z-index: 1002; }
 .tela-mapa.modo-campo.com-folha .mapa-mais, .tela-mapa.modo-campo.com-folha .campo-base { display: none; }
 .tela-mapa { isolation: isolate; } /* os controles do mapa (z-index 1000) não passam por cima das janelas e menus */
+/* 2.7: primeiro acesso em telas próprias */
+.tela-cfg { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; background: var(--fundo, #F4F7F8); }
+.cfg-cab { background: #00546E; color: #fff; padding: calc(18px + env(safe-area-inset-top)) 20px 18px; text-align: center; }
+.cfg-cab h1 { margin: 10px 0 2px; font-size: 22px; } .cfg-cab small { opacity: .8; }
+.cfg-logo { height: 34px; filter: brightness(0) invert(1); }
+.cfg-pontos { display: flex; justify-content: center; gap: 8px; margin-top: 12px; } .cfg-pontos span { width: 28px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.35); } .cfg-pontos .at { background: #fff; } .cfg-pontos .feito { background: #8FD3C1; }
+.cfg { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 10px; max-width: 560px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+.cfg-txt { font-size: 17px; margin: 0; } .cfg-lista { padding-left: 22px; margin: 4px 0; font-size: 16px; } .cfg-lista li { margin-bottom: 8px; }
+.cfg-rodape { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); } .cfg-pular { justify-content: center; }
+.cfg-gps { font-size: 56px; font-weight: 700; text-align: center; margin: 18px 0 4px; color: #4F6268; } .cfg-gps.bom { color: #1B7F3B; } .cfg-gps.medio { color: #8A5A00; } .cfg-gps.ruim { color: #B3261E; }

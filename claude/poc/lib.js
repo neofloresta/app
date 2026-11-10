@@ -99,7 +99,9 @@ async function logar(p, u, s) {
   }
   await p.fill('input[placeholder=Usuário]', u); await p.fill('input[placeholder=Senha]', s); await p.click('text=Entrar');
   // primeiro acesso: aceita o termo de uso
-  try { await p.waitForSelector('button:has-text("Li e aceito"), button.nova, .painel, .subabas', { timeout: 15000 }); } catch (e) { return; }
+  try { await p.waitForSelector('button:has-text("Li e aceito"), button.nova, .painel, .subabas, .cfg-pular', { timeout: 15000 }); } catch (e) { return; }
   if (await p.locator('button:has-text("Li e aceito")').count()) { await p.click('button:has-text("Li e aceito")'); await p.waitForTimeout(600); }
+  // primeiro acesso no aparelho (2.7): configuração em 3 telas; os testes pulam (o teste próprio é o b27)
+  if (!process.env.COM_CONFIGURAR) for (let i = 0; i < 3; i++) { const bt = p.locator('.cfg-pular'); if (!(await bt.count())) { try { await p.waitForSelector('.cfg-pular', { timeout: 1500 }); } catch (e) { break; } } await p.click('.cfg-pular'); await p.waitForTimeout(250); }
 }
 module.exports = { subir, post, configurar, semear, gerar, cabecalho, stats, falhar, celular, logar, espera, FORM, MOCK, WEB, APP, senha: () => senhaAdmin };

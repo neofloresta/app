@@ -78,10 +78,7 @@
   async function ligarGps() {
     if (Gps.id != null || !navigator.geolocation) return;
     let estado = ''; try { estado = (await navigator.permissions.query({ name: 'geolocation' })).state; } catch (e) { /* navegador antigo */ }
-    if (estado !== 'granted' && !(await Store.get('gpsExplicado'))) {
-      await modal('Localização', h('div', null, h('p', null, 'O app usa o GPS do celular para marcar onde está cada árvore e o trajeto da equipe durante o trabalho.'), h('p', null, 'Na próxima tela, toque em ', h('b', null, 'Permitir'), '.')), [{ texto: 'Entendi', valor: true }]);
-      await Store.set('gpsExplicado', 1);
-    }
+    void estado; // a explicação da localização fica na configuração do primeiro acesso (telaConfigurar)
     Gps.iniciar();
   }
   function pintarAvisoGps() {
@@ -129,7 +126,7 @@
     setInterval(() => verificarAtualizacao(), 30 * 60000); verificarAtualizacao();
     Api.aoExpirar(() => { if (!S.expirada) { S.expirada = true; toast('Sua sessão expirou. Entre de novo para continuar enviando. Nada do aparelho foi perdido.', 6000); atualizarSync(); } });
     if (S.sessao) {
-      Api.credenciais(credDe(S.sessao)); S.termoLocal = await Store.get('termoV:' + S.sessao.u);
+      Api.credenciais(credDe(S.sessao)); S.termoLocal = await Store.get('termoV:' + S.sessao.u); S.configurado = !!(await Store.get('configurado:' + S.sessao.u));
       if (S.sessao.usuario.perfil === 'campo') S.sessao.usuario.perfil = 'coletor';
       if (S.sessao.usuario.perfil !== 'cliente') await abrirProjeto(S.sessao.projetoAtual); else await abrirProjetoCliente(S.sessao.projetoAtual);
       if (S.sessao.usuario.perfil !== 'cliente' && termoEmDia()) ligarGps();
@@ -229,6 +226,8 @@
     if (!S.sessao) return telaLogin();
     if (!termoEmDia()) return telaTermo(true);
     const [r, a, b] = location.hash.replace(/^#/, '').split('/');
+    if (r === 'configurar') return telaConfigurar(+a || 0);
+    if (perfil() === 'coletor' && S.projeto && !S.configurado) return telaConfigurar(0); // primeiro acesso no aparelho: configuração curta antes do mapa
     const pf = perfil();
     if (r === 'sobre') return telaSobre();
     if (r === 'admin' && pf === 'admin') return telaAdmin(a);
@@ -269,7 +268,7 @@
         if (!r.projetos.length && r.usuario.perfil !== 'admin') throw new Error('Este usuário não tem projeto liberado.');
         S.sessao = { u: usuario, t: r.token || '', usuario: r.usuario, projetos: r.projetos, projetoAtual: r.projetos.length ? r.projetos[0].id : null, servidor: Api.servidor || '', versaoScript: r.versaoScript || '' };
         if (!r.token) S.sessao.s = senha; // servidor antigo ou demonstração: sem sessão, guarda a senha como antes
-        Api.credenciais(credDe(S.sessao)); S.expirada = false; S.termoLocal = await Store.get('termoV:' + usuario);
+        Api.credenciais(credDe(S.sessao)); S.expirada = false; S.termoLocal = await Store.get('termoV:' + usuario); S.configurado = !!(await Store.get('configurado:' + usuario));
         await Store.set('sessao', S.sessao);
         for (const [fid, f] of Object.entries(r.formularios || {})) if (f && Array.isArray(f.campos)) { await Store.set('form:' + fid, f); S.formsEm = Date.now(); }
         if (r.usuario.perfil === 'cliente') await abrirProjetoCliente(S.sessao.projetoAtual); else { await abrirProjeto(S.sessao.projetoAtual); if (termoEmDia()) ligarGps(); }
@@ -2335,6 +2334,46 @@
       mudou ? h('div', { class: 'info' }, 'Atualizamos o termo de uso e privacidade. Seus registros continuam guardados; é só ler e aceitar para seguir.') : null,
       h('div', { class: 'cartao' }, textoTermo()), h('div', { style: 'margin-bottom:30px' }, btn, h('button', { class: 'btn linha cheio', style: 'margin-top:10px', onclick: () => sair(true) }, 'Não aceito, sair'))));
   }
+  // ---------- Primeiro acesso: configuração em telas próprias (localização, instalar, teste de GPS) ----------
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.pedidoInstalar = e; });
+  async function concluirConfiguracao() { S.configurado = true; await Store.set('configurado:' + S.sessao.u, agoraISO()); ir('#inicio'); }
+  async function telaConfigurar(passo) {
+    const PASSOS = ['Localização', 'Instalar o app', 'Teste do GPS'];
+    const instalado = window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches);
+    const ios = /iphone|ipad/i.test(navigator.userAgent);
+    if (passo === 1 && instalado) passo = 2;
+    const prox = () => (passo >= PASSOS.length - 1 ? concluirConfiguracao() : telaConfigurar(passo + 1 === 1 && instalado ? 2 : passo + 1));
+    const pontos = h('div', { class: 'cfg-pontos', 'aria-label': `Passo ${passo + 1} de ${PASSOS.length}` }, PASSOS.map((t, k) => h('span', { class: k === passo ? 'at' : k < passo ? 'feito' : '' })));
+    const corpo = h('main', { class: 'cfg' });
+    const rodape = (principal, rot, extra) => h('div', { class: 'cfg-rodape' }, principal, extra || null, h('button', { class: 'link-ajuda-form cfg-pular', onclick: () => (passo >= PASSOS.length - 1 ? concluirConfiguracao() : prox()) }, rot || 'Pular este passo'));
+    $app.replaceChildren(h('div', { class: 'tela-cfg' }, h('div', { class: 'cfg-cab' }, h('img', { src: 'icons/logo-horizontal.png', alt: 'Neofloresta', class: 'cfg-logo' }), pontos, h('h1', null, PASSOS[passo]), h('small', null, `Passo ${passo + 1} de ${PASSOS.length}`)), corpo));
+    if (passo === 0) {
+      const st = h('div', { class: 'cfg-estado' });
+      let estado = ''; try { estado = (await navigator.permissions.query({ name: 'geolocation' })).state; } catch (e) { /* navegador antigo */ }
+      const pintar = () => st.replaceChildren(estado === 'granted' ? h('div', { class: 'info' }, ico('check'), ' Localização permitida.') : estado === 'denied' || S.gpsNegado ? h('div', { class: 'aviso' }, h('b', null, 'A localização está bloqueada.'), h('br'), 'Android: toque no cadeado ao lado do endereço (ou em Configurações, Apps, Neofloresta), Permissões, Localização, Permitir. iPhone: Ajustes, Privacidade, Serviços de Localização, Safari, Ao Usar o App. Depois volte aqui.') : null);
+      const bt = h('button', { class: 'btn cheio', onclick: () => {
+        if (estado === 'granted') return prox();
+        bt.disabled = true; bt.textContent = 'Aguardando a sua resposta...';
+        navigator.geolocation.getCurrentPosition(() => { estado = 'granted'; Gps.iniciar(); pintar(); setTimeout(prox, 500); }, (e) => { if (e.code === 1) { estado = 'denied'; S.gpsNegado = true; } bt.disabled = false; bt.textContent = 'Tentar de novo'; pintar(); }, { enableHighAccuracy: true, timeout: 30000 });
+      } }, estado === 'granted' ? 'Continuar' : 'Permitir localização');
+      corpo.replaceChildren(h('p', { class: 'cfg-txt' }, 'O app usa o GPS do celular para marcar onde está cada árvore e mostrar você no mapa.'),
+        h('ul', { class: 'cfg-lista' }, h('li', null, 'Só com o app aberto.'), h('li', null, 'Quando o celular perguntar, toque em ', h('b', null, 'Permitir'), ' (ou ', h('b', null, 'Durante o uso do app'), ').'), h('li', null, 'Ligue também a ', h('b', null, 'Precisão da localização do Google'), ' nas configurações do celular.')),
+        st, rodape(bt));
+      pintar();
+    } else if (passo === 1) {
+      const bt = S.pedidoInstalar ? h('button', { class: 'btn cheio', onclick: async () => { const e = S.pedidoInstalar; S.pedidoInstalar = null; e.prompt(); try { await e.userChoice; } catch (er) { /* segue */ } prox(); } }, 'Instalar o app') : h('button', { class: 'btn cheio', onclick: prox }, 'Já instalei, continuar');
+      corpo.replaceChildren(h('p', { class: 'cfg-txt' }, 'Instalado, o app abre em tela cheia pelo ícone, como os outros apps do celular, e funciona sem internet.'),
+        S.pedidoInstalar ? null : h('ol', { class: 'cfg-lista' }, ios ? [h('li', null, 'No Safari, toque em ', h('b', null, 'Compartilhar'), ' (o quadrado com a seta).'), h('li', null, 'Toque em ', h('b', null, 'Adicionar à Tela de Início'), '.')] : [h('li', null, 'No Chrome, toque nos ', h('b', null, '3 pontinhos'), ' no canto de cima.'), h('li', null, 'Toque em ', h('b', null, 'Instalar app'), ' (ou ', h('b', null, 'Adicionar à tela inicial'), ').')], h('li', null, 'Depois abra pelo ícone da Neofloresta.')),
+        rodape(bt));
+    } else {
+      const num = h('div', { class: 'cfg-gps' }, '...'); const dica = h('p', { class: 'dica', style: 'text-align:center' }, 'Fique parado em lugar aberto, longe de prédios e de copas fechadas.');
+      const bt = h('button', { class: 'btn cheio', onclick: concluirConfiguracao }, 'Começar a coletar');
+      const ouv = (p) => { if (!document.body.contains(num)) return Gps.ouvintes.delete(ouv); if (!p) return; num.textContent = '±' + numBR(p.prec) + ' m'; num.className = 'cfg-gps ' + (p.prec <= 5 ? 'bom' : p.prec <= 10 ? 'medio' : 'ruim'); dica.textContent = p.prec <= 5 ? 'GPS bom para marcar as árvores.' : 'Espere o número baixar para até 5 m. Ele melhora nos primeiros minutos com o céu aberto.'; };
+      corpo.replaceChildren(h('p', { class: 'cfg-txt' }, 'Erro do GPS agora:'), num, dica, rodape(bt, 'Fazer o teste depois')); // na tela antes de ouvir: o ouvinte sai sozinho quando o número some
+      Gps.ouvintes.add(ouv); ligarGps(); if (S.pos) ouv(S.pos); Gps.ler(); const tm = setInterval(() => { if (!document.body.contains(num)) return clearInterval(tm); Gps.ler(); }, 1500);
+    }
+  }
+
   // ---------- Ajuda ----------
   // conteúdo em forms/ajuda.json (guardado pelo app para funcionar sem internet); "?" de cada tela abre no tema dela
   const ajudaBt = (chave) => h('button', { class: 'ic', onclick: () => ir('#ajuda/' + chave), 'aria-label': 'Ajuda' }, ico('ajuda'));
