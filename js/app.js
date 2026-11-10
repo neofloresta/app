@@ -57,7 +57,7 @@
       document.body.append(veu);
     });
   }
-  const confirmar = (titulo, texto, ok = 'Confirmar', classe = '') => modal(titulo, h('p', null, texto), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: ok, classe, valor: true }]);
+  const confirmar = (titulo, texto, ok = 'Confirmar', classe = '', nao = 'Cancelar') => modal(titulo, h('p', null, texto), [{ texto: nao, classe: 'sec', valor: false }, { texto: ok, classe, valor: true }]);
   function baixar(nome, dados, tipo) { const b = dados instanceof Blob ? dados : new Blob([dados], { type: tipo }); const a = h('a', { href: URL.createObjectURL(b), download: nome }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
   const ICONES = {
     alvo: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
@@ -1008,6 +1008,8 @@
 
     const cc = campoCodigo(form);
     const voltar = h('button', { class: 'ic', onclick: sairForm, 'aria-label': 'Voltar' }, ico('voltar'));
+    // cancelar à vista: apaga o cadastro em andamento (novo) ou descarta a edição (já enviado)
+    const btCancelar = r.status === 'enviado' && !r.__base ? null : h('button', { class: 'bt-cancelar', onclick: () => cancelarRegistro() }, 'Cancelar');
     const barraAbas = h('nav', { class: 'prog' });
     const barraPend = h('div', { class: 'barra-pend oculto', role: 'alert' });
     const conteudo = h('main');
@@ -1017,7 +1019,7 @@
     const vizinha = (i, passo) => { for (let k = i + passo; k >= 0 && k < abas.length; k += passo) if (abaVisivel(abas[k])) return k; return -1; };
     const btAnt = h('button', { class: 'btn sec quad', onclick: () => irAba(vizinha(S.aba, -1)), 'aria-label': 'Etapa anterior' }, ico('esq'));
     const btProx = h('button', { class: 'btn prox', onclick: () => { const k = vizinha(S.aba, 1); if (k >= 0) irAba(k); else concluir(); } });
-    $app.replaceChildren(...[topo(r.faceId && r.status === 'rascunho' ? 'Calçada sem árvores' : r.status === 'rascunho' && !r.mexido ? 'Nova árvore' : (codigoDe(form, r.valores) || 'Árvore'), S.projeto.nome, voltar, gpsBtn), barraAbas,
+    $app.replaceChildren(...[topo(r.faceId && r.status === 'rascunho' ? 'Calçada sem árvores' : r.status === 'rascunho' && !r.mexido ? 'Nova árvore' : (codigoDe(form, r.valores) || 'Árvore'), S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, btCancelar, gpsBtn)), barraAbas,
       r.faceId ? h('div', { class: 'faixa-face' }, h('b', null, 'Face sem árvores: ' + (r.faceTxt || r.faceId)), h('span', null, 'Tire a foto da calçada inteira, no sentido do comprimento, e toque em Concluir registro. A face fica como levantada sem árvores.')) : null,
       conteudo, h('footer', { class: 'rodape' }, btAnt, btProx)].filter(Boolean));
 
@@ -1187,8 +1189,8 @@
       switch (c.tipo) {
         case 'choice': {
           const longas = c.opcoes.some((o) => o.t.length > 24) || c.opcoes.length > 6;
-          // opções com explicação longa (risco): botões curtos em 2 colunas; a explicação aparece só na escolhida e no "?"
-          const compactas = c.opcoes.some((o) => /\(.{40,}\)\s*$/.test(o.t));
+          // opções com explicação longa (risco da ISA): uma por linha, com a explicação sempre visível embaixo (pedido do Ciro na 2.7)
+          const compactas = false;
           const grade = h('div', { class: 'opcoes' + (compactas ? ' compactas' : longas ? ' longas' : '') });
           for (const o of c.opcoes) {
             if (S.qdTemFaces === S.projeto.id && !r.faceId && String(v) !== String(o.v) && /categoria/i.test(norm(c.nome)) && /cal[cç]ada/i.test(o.t)) continue; // calçada sem árvores é marcada pela face, no mapa
@@ -1426,6 +1428,17 @@
       S.reg = null; ir('#inicio');
     }
 
+    async function cancelarRegistro() {
+      if (r.__base) { // edição de registro já concluído: volta ao que estava
+        if (!(await confirmar('Cancelar a edição', 'Descartar as alterações e voltar o registro como estava?', 'Descartar alterações', 'perigo'))) return;
+        clearTimeout(salvarTimer); await descartarEdicao(r); S.editando.delete(r.uuid); Gps.ouvintes.delete(ouvinte); S.reg = null; return ir('#form/' + r.uuid);
+      }
+      const nf = Object.values(r.fotos || {}).filter((f) => f && f.chave).length;
+      if (!(await confirmar('Cancelar registro', `Cancelar ${r.faceId ? 'este cadastro de calçada' : 'esta árvore'}? ${nf ? `O que foi preenchido e ${nf === 1 ? 'a foto serão apagados' : `as ${nf} fotos serão apagados`}` : 'O que foi preenchido será apagado'} do celular. Isso não pode ser desfeito.`, 'Cancelar registro', 'perigo', 'Continuar preenchendo'))) return;
+      clearTimeout(salvarTimer); Gps.ouvintes.delete(ouvinte);
+      for (const f of Object.values(r.fotos)) if (f && f.chave) await Store.apagarFoto(f.chave);
+      await Store.apagarRegistro(r.uuid); S.reg = null; toast('Registro cancelado.'); ir('#inicio');
+    }
     async function excluir() {
       if (!(await confirmar('Excluir', 'Excluir este registro do aparelho? Isso não pode ser desfeito.', 'Excluir', 'perigo'))) return;
       clearTimeout(salvarTimer); Gps.ouvintes.delete(ouvinte);

@@ -597,3 +597,6 @@ footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
 .erro-login { background: #FDECEA; color: #8C1D18; border-left: 4px solid #B3261E; border-radius: 8px; padding: 10px 12px; margin: 6px 0 10px; font-size: 15px; }
 .campo-senha { position: relative; } .campo-senha .entrada { padding-right: 92px; }
 .bt-olho { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); min-height: 40px; padding: 0 12px; border: 0; background: none; color: #00546E; font-weight: 600; cursor: pointer; }
+/* 2.7: Cancelar no topo do cadastro */
+.bt-cancelar { min-height: 40px; padding: 0 12px; border: 1.5px solid rgba(255,255,255,.7); border-radius: 20px; background: transparent; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.topo .topo-dir { display: flex; align-items: center; gap: 6px; }
