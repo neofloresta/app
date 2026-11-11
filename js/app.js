@@ -836,7 +836,9 @@
     // true quando pode coletar
     async garantir() {
       if (perfil() !== 'coletor') return true;
-      const ps = await this.pessoas(); if (!ps.some((x) => x.funcao === 'Avaliador')) return true;
+      // lista do aparelho na hora (atualizada em segundo plano): o + não espera o servidor
+      let ps = (await Store.get('pessoas:' + S.projeto.id)) || null; if (!ps || Api.demo) ps = (await Promise.race([this.pessoas(), new Promise((r) => setTimeout(() => r(null), 700))])) || []; else this.pessoas().catch(() => {}); // sem a lista guardada, espera no máximo 0,7 s
+      ps = ps.filter((x) => x.ativo !== 'não'); if (!ps.some((x) => x.funcao === 'Avaliador')) return true;
       const d = await this.hoje(); if (d && d.av) { S.dupla = d; return true; }
       return this.escolher(ps);
     },
@@ -2549,7 +2551,8 @@
   // ---------- Ficha (leitura) e trava de registros concluídos ----------
   function rotuloOpcao(c, v) { if (v == null || v === '') return ''; const o = (c.opcoes || []).find((x) => String(x.v) === String(v)); return o ? o.t : String(v); }
   // dia no fuso de Brasília, igual ao servidor
-  const diaLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; try { return d.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }); } catch (e) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; } };
+  let FMT_DIA = null; try { FMT_DIA = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }); } catch (e) { /* navegador sem fuso */ }
+  const diaLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; return FMT_DIA ? FMT_DIA.format(d) : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }; // formatador criado uma vez: com milhares de pontos no mapa, criar um por ponto travava o celular
   function distM(a1, o1, a2, o2) { const R = 6371000, t = Math.PI / 180; const dA = (a2 - a1) * t, dO = (o2 - o1) * t; const x = Math.sin(dA / 2) ** 2 + Math.cos(a1 * t) * Math.cos(a2 * t) * Math.sin(dO / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); }
   // volta o registro como estava antes da edição e apaga as fotos novas que não foram confirmadas
   async function descartarEdicao(r) {
