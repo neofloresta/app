@@ -13,6 +13,8 @@ let ANA, BRUNO;
   // o celular manda vínculo errado de propósito: o servidor confere com o cadastro
   ANA = { avaliador_id: idAna, avaliador: 'Ana', avaliador_vinculo: 'Parceiro', auxiliar_id: idJoao, auxiliar: 'João Lima', auxiliar_vinculo: 'Parceiro' };
   BRUNO = { avaliador_id: idBruno, avaliador: 'Bruno Alves', avaliador_vinculo: 'Parceiro' };
+  // 2.8: a dupla é a do acesso, definida pela coordenação
+  await L.post('usuario_salvar', { usuario_dados: { login: 'div-1', avaliador_id: idAna, auxiliar_id: idJoao } }); await L.post('usuario_salvar', { usuario_dados: { login: 'div-2', avaliador_id: idBruno } });
   await L.post('setores_importar', { projeto: PJ, camada: JSON.stringify({ setores: [quadrado('S1', -44.9, -20.2, -44.8, -20.1), quadrado('S2', -44.8, -20.2, -44.7, -20.1)] }) });
   await L.post('setores_atribuir', { projeto: PJ, itens: [{ numero: 'S1', equipe: 'Equipe 1' }, { numero: 'S2', equipe: 'Equipe 2' }] });
   // registros: Equipe 1 no dia 03/11 (Ana CLT + João parceiro), Equipe 2 no dia 04/11 (Bruno parceiro sozinho)
@@ -63,10 +65,12 @@ let ANA, BRUNO;
   // registro forjado: pessoa que não existe e vínculo trocado
   const fj = await enviar('div-1', 'equipe01', 99, '05', { avaliador_id: 'P_FAKE', avaliador: 'Fantasma', avaliador_vinculo: 'Parceiro', auxiliar_id: ANA.avaliador_id, auxiliar: 'X', auxiliar_vinculo: 'Parceiro', setor: 'S2' }, 'Equipe 1');
   const lf = (await L.post('listar', { projeto: PJ })).linhas.find((l) => l.uuid === fj) || {};
-  ok('F.9', f3.medicao.arvores === 1 && f3.medicao.total === 3 && lf.avaliador === '' && lf.auxiliar === 'Ana Souza' && lf.auxiliar_vinculo === 'CLT', `árvore validada depois do fechamento entra na medição seguinte sozinha (${f3.medicao.arvores} árvore, ${f3.medicao.total}); pessoa inexistente apagada ("${lf.avaliador}"), vínculo vem do cadastro (${lf.auxiliar} ${lf.auxiliar_vinculo})`);
+  ok('F.9', f3.medicao.arvores === 1 && f3.medicao.total === 3 && lf.avaliador === 'Ana Souza' && lf.avaliador_vinculo === 'CLT' && lf.auxiliar === 'João Lima', `árvore validada depois do fechamento entra na medição seguinte sozinha (${f3.medicao.arvores} árvore, ${f3.medicao.total}); o celular mandou outra dupla e o servidor gravou a do acesso (${lf.avaliador} ${lf.avaliador_vinculo} + ${lf.auxiliar})`);
   // meta por dupla: duas duplas da mesma equipe no mesmo dia com 50 cada não passam da meta de 90
   const idDavi = await nova({ nome: 'Davi Rocha', funcao: 'Avaliador', registro: 'CRBio 3', vinculo: 'CLT', equipe: 'Equipe 1' });
-  const d6 = []; for (let k = 0; k < 50; k++) { d6.push(await enviar('div-1', 'equipe01', 200 + k, '06', Object.assign({}, ANA), 'Equipe 1')); d6.push(await enviar('div-1', 'equipe01', 300 + k, '06', { avaliador_id: idDavi }, 'Equipe 1')); }
+  const d6 = []; for (let k = 0; k < 50; k++) d6.push(await enviar('div-1', 'equipe01', 200 + k, '06', {}, 'Equipe 1'));
+  await L.post('usuario_salvar', { usuario_dados: { login: 'div-1', avaliador_id: idDavi, auxiliar_id: '' } });
+  for (let k = 0; k < 50; k++) d6.push(await enviar('div-1', 'equipe01', 300 + k, '06', {}, 'Equipe 1'));
   await L.post('validar', { projeto: PJ, itens: d6.map((uuid) => ({ uuid, estado: 'Validado' })) });
   const P6 = await L.post('producao', { projeto: PJ, de: '2026-11-06', ate: '2026-11-06' });
   ok('F.10', P6.dias.length === 2 && P6.dias.every((x) => x.validadas === 50 && x.acima === 0 && x.premio === 0), `dia 06/11: ${P6.dias.map((x) => `${x.dupla} ${x.validadas} árvores, ${x.acima} acima da meta`).join('; ')}`);
@@ -81,7 +85,7 @@ let ANA, BRUNO;
   await q.goto(L.WEB + '#auditoria/S1'); await q.waitForSelector('.aud-item', { timeout: 20000 }); const nAud = await q.locator('.aud-item').count(); const aud1 = await q.locator('.aud-item').first().innerText();
   await q.screenshot({ path: 'b27f-auditoria.png', fullPage: true });
   ok('F.6', /A pagar/.test(kp) && linhasP >= 4 && /Devolvido para correção/.test(aud) && /Aprovado/.test(aud) && nAud === 10 && /C\d+/.test(aud1), `painel do gestor: ${kp.replace(/\s+/g, ' ').slice(0, 160)}; ${linhasP - 1} pessoas; auditoria lista S1 devolvido e S2 aprovado; amostra de S1 com ${nAud} itens ("${aud1.replace(/\s+/g, ' ').slice(0, 60)}")`);
-  const E = await L.celular(b); const p = E.p; await L.logar(p, 'div-2', 'equipe02'); await p.waitForSelector('.mapa-mais', { timeout: 20000 });
+  const E = await L.celular(b); const p = E.p; await L.logar(p, 'div-2', 'equipe02'); await p.waitForSelector('button.nova', { timeout: 20000 });
   await p.evaluate(() => { window.__app.S.perProd = ['2026-11-01', '2026-11-15']; }); await p.goto(L.WEB + '#producao'); await p.waitForSelector('.prod-linha', { timeout: 20000 }); await p.waitForTimeout(500);
   const tp = await p.locator('main').innerText(); await p.screenshot({ path: 'b27f-dupla.png', fullPage: true });
   ok('F.7', /Bruno Alves/.test(tp) && /R\$\s?33,00/.test(tp) && /2 m de altura/.test(tp), `painel da dupla no celular: ${tp.replace(/\s+/g, ' ').slice(0, 200)}`);

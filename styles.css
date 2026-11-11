@@ -656,3 +656,37 @@ footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
 .campo-faixas { max-height: 38vh; overflow-y: auto; }
 .campo-faixas .faixa-versao ul { display: none; }
 @media (max-width: 380px) { .resumo.mini { gap: 6px; font-size: 13px; } .chip-dupla { max-width: 34vw; } }
+
+/* 2.8: tela de coleta limpa (equipe de campo) */
+.tela-mapa.modo-campo .mapa-bts .mapa-bt:not(.grande) { display: none !important; }
+.tela-mapa.modo-campo .mapa-bts { bottom: calc(96px + env(safe-area-inset-bottom)); }
+.bt-principal { position: absolute; left: 12px; right: 12px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 1001; height: 64px; min-height: 64px; border-radius: 32px; font-size: 19px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.35); margin: 0; width: auto; }
+.bt-principal.nova { background: var(--acao); color: #fff; }
+.bt-principal.comecar-dia { background: var(--teal); color: #fff; }
+.bt-principal .ico { width: 28px; height: 28px; }
+.campo-base { position: static; display: contents; }
+.campo-pills { position: absolute; left: 10px; right: 64px; top: calc(68px + env(safe-area-inset-top)); z-index: 1000; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; pointer-events: none; }
+.campo-pills > * { pointer-events: auto; }
+.pill-dia, .gps-pill { border: 0; border-radius: 20px; padding: 9px 13px; min-height: 40px; font-size: 14.5px; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.28); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.pill-dia { background: #fff; color: var(--texto); }
+.pill-dia i { width: 9px; height: 9px; border-radius: 50%; background: #8A969C; }
+.pill-dia.trajeto i { background: #D81B60; }
+.gps-pill { color: #fff; background: #5F6F75; }
+.gps-pill.bom { background: #2E7D32; } .gps-pill.medio { background: #B26A00; } .gps-pill.ruim { background: #C62828; }
+.tela-mapa.modo-campo #continuar { position: absolute; left: 12px; right: 84px; bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 1000; }
+.tela-mapa.modo-campo #continuar > * { margin: 0; box-shadow: 0 2px 8px rgba(0,0,0,.28); }
+.tela-mapa.modo-campo.com-folha .bt-principal, .tela-mapa.modo-campo.com-folha .campo-pills, .tela-mapa.modo-campo.com-folha #continuar { display: none; }
+.bt-sino { position: relative; }
+.selo-sino { position: absolute; top: 4px; right: 2px; background: var(--laranja); color: #fff; font-size: 11px; font-weight: 700; border-radius: 10px; min-width: 19px; height: 19px; display: grid; place-items: center; border: 2px solid var(--teal); }
+.avisos-veu { z-index: 1100; }
+.avisos-lista { display: flex; flex-direction: column; gap: 8px; } .avisos-lista > div:empty { display: none; }
+.avisos-lista > div > * { margin: 0; }
+.avisos-veu .sem-avisos { display: none; } .avisos-veu.vazio .sem-avisos { display: block; }
+.avisos-lista .faixa-versao ul { display: block; }
+.dia-num { font-size: 16px; color: var(--suave); } .dia-num b { font-size: 36px; color: var(--teal); margin-right: 4px; }
+.dia-tres { display: flex; gap: 8px; } .dia-tres div { flex: 1; background: var(--tint); border-radius: 10px; padding: 10px 6px; text-align: center; font-size: 12.5px; color: var(--suave); } .dia-tres b { display: block; font-size: 20px; color: var(--texto); }
+.dia-lin { display: flex; justify-content: space-between; align-items: center; width: 100%; } .dia-lin small { color: var(--suave); }
+.tela-mapa.modo-campo #continuar .faixa-cont { background: #fff; border: 1.5px solid var(--teal); border-radius: 22px; min-height: 46px; padding: 8px 16px; width: auto; max-width: 100%; }
+.tela-mapa.modo-campo .leaflet-bottom.leaflet-left { display: none; }
+.tela-mapa.modo-campo .leaflet-bottom.leaflet-right { bottom: calc(84px + env(safe-area-inset-bottom)); right: 76px; }
+.avisos-lista > div:not(:has(*)) { display: none; }

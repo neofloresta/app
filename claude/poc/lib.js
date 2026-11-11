@@ -87,6 +87,8 @@ async function celular(b, extra = {}) {
   if (!process.env.COM_DUPLICIDADE) await ctx.addInitScript(() => { new MutationObserver(() => { const f = document.querySelector('.folha'); if (f && /Árvore já cadastrada\?/.test(f.textContent)) { const bt = [...f.querySelectorAll('button')].find((x) => x.textContent === 'É outra árvore'); if (bt) bt.click(); } }).observe(document, { childList: true, subtree: true }); });
   // primeiro acesso no aparelho (2.7): as 3 telas de configuração são puladas sozinhas, salvo no teste delas (b27)
   if (!process.env.COM_CONFIGURAR) await ctx.addInitScript(() => { new MutationObserver(() => { const bt = document.querySelector('.tela-cfg .cfg-pular'); if (bt && !bt.__clicado) { bt.__clicado = true; setTimeout(() => bt.click(), 50); } }).observe(document, { childList: true, subtree: true }); });
+  // 2.8: os testes antigos começam o dia sozinhos (o teste próprio é o b28)
+  if (!process.env.COM_DIA) await ctx.addInitScript(() => { new MutationObserver(() => { const bt = document.querySelector('button.comecar-dia'); if (bt && !bt.__clicado) { bt.__clicado = true; setTimeout(() => bt.click(), 30); } }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }); });
   const p = await ctx.newPage(); p.erros = []; p.on('pageerror', (e) => p.erros.push(e.message));
   // GPS de celular de verdade entrega uma leitura por segundo mesmo parado; o emulado só avisa quando a posição muda.
   // Aqui a posição "treme" 1 cm a cada 700 ms para a tela de marcação receber leituras como no campo.

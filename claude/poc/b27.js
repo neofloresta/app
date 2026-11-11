@@ -20,16 +20,16 @@ const regs = (p) => p.evaluate(async () => Store.todosRegistros());
   const desc = await p.evaluate(() => [...document.querySelectorAll('[data-campo="Probabilidade de falha"] .op')].map((b) => ({ t: b.textContent, small: !!b.querySelector('small'), vis: b.querySelector('small') ? getComputedStyle(b.querySelector('small')).display !== 'none' : false })));
   await p.screenshot({ path: 'b27-risco.png', fullPage: true });
   ok('C.2', desc.length >= 4 && desc.every((d) => d.small && d.vis), `Probabilidade de falha: ${desc.length} opções, todas com a descrição visível sem tocar (${desc.map((d) => d.t.slice(0, 30)).join(' | ')})`);
-  // 3. mapa primeiro: a tela principal da equipe é o mapa, com o + e a faixa embaixo
-  await p.goto(L.WEB + '#inicio'); await p.waitForSelector('.tela-mapa.modo-campo .mapa-mais', { timeout: 20000 });
-  const pos = await p.evaluate(() => { const r = document.querySelector('.mapa-mais').getBoundingClientRect(); return { dir: window.innerWidth - r.right, baixo: window.innerHeight - r.bottom, w: r.width }; });
+  // 3. tela de coleta limpa (2.8): mapa inteiro, botão largo, nada de busca, filtros ou números na frente
+  await p.goto(L.WEB + '#inicio'); await p.waitForSelector('.tela-mapa.modo-campo .bt-principal.nova', { timeout: 20000 }); await p.waitForTimeout(800);
+  const pos = await p.evaluate(() => { const r = document.querySelector('.bt-principal').getBoundingClientRect(); const vis = (q) => [...document.querySelectorAll(q)].filter((e) => e.offsetParent !== null && e.getBoundingClientRect().width > 0).length; return { w: r.width, baixo: window.innerHeight - r.bottom, alt: r.height, busca: vis('.mapa-filtros'), chips: vis('.chip-rapido'), sel: vis('.mapa-bt.pilula'), stats: vis('#stats'), botoes: vis('.mapa-bts .mapa-bt') }; });
   const temMapa = await p.locator('#mapa .leaflet-container, #mapa.leaflet-container').count();
   const f = await A.arvoreCompleta(p, { fotos: 1 }); await p.waitForSelector('.tela-mapa.modo-campo', { timeout: 20000 }); await p.waitForTimeout(800);
-  const stats = await p.locator('#stats').innerText();
-  await p.click('.campo-linha button:has-text("Meus registros")'); await p.waitForTimeout(800); const lista = await p.locator('#lista').innerText(); const tit = await p.locator('.topo h1').innerText();
-  await p.click('.topo .ic[aria-label="Voltar ao mapa"]'); await p.waitForSelector('.tela-mapa.modo-campo', { timeout: 20000 });
   await p.screenshot({ path: 'b27-mapa-primeiro.png' });
-  ok('C.3', temMapa >= 1 && pos.w >= 60 && pos.dir < 30 && f.length === 0 && /1\s*hoje/.test(stats) && /Meus registros/.test(tit) && lista.length > 10, `abre no mapa com o + de ${Math.round(pos.w)} px no canto inferior direito; depois de concluir volta ao mapa ("${stats.replace(/\s+/g, ' ')}"); "Meus registros" lista o cadastro e volta ao mapa`);
+  await p.click('.topo .ic[aria-label="Menu"]'); await p.click('.menu-it:has-text("Meu dia")'); await p.waitForSelector('.dia-num', { timeout: 10000 }); const stats = await p.locator('.dia-num').innerText();
+  await p.click('.dia-lin:has-text("Meus registros")'); await p.waitForTimeout(800); const lista = await p.locator('#lista').innerText(); const tit = await p.locator('.topo h1').innerText();
+  await p.click('.topo .ic[aria-label="Voltar ao mapa"]'); await p.waitForSelector('.tela-mapa.modo-campo', { timeout: 20000 });
+  ok('C.3', temMapa >= 1 && pos.w >= 300 && pos.alt >= 60 && pos.baixo < 40 && !pos.busca && !pos.chips && !pos.sel && !pos.stats && pos.botoes === 1 && f.length === 0 && /^1/.test(stats.trim()) && /Meus registros/.test(tit) && lista.length > 10, `coleta: botão "Nova árvore" de ${Math.round(pos.w)} x ${Math.round(pos.alt)} px embaixo; busca ${pos.busca}, atalhos ${pos.chips}, Selecionar ${pos.sel}, números ${pos.stats}, botões redondos ${pos.botoes}; "Meu dia" mostra "${stats.replace(/\s+/g, ' ')}"; "Meus registros" lista o cadastro e volta ao mapa`);
   // 4. primeiro acesso em telas próprias (outro celular, sem pular)
   process.env.COM_CONFIGURAR = '1'; const E2 = await L.celular(b); const q = E2.p; await L.logar(q, 'div-2', 'equipe02'); delete process.env.COM_CONFIGURAR;
   await q.waitForSelector('.tela-cfg', { timeout: 15000 }); const t1 = await q.locator('.cfg-cab h1').innerText(); const semModal = await q.locator('.veu').count();

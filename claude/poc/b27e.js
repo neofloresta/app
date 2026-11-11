@@ -14,28 +14,26 @@ const quadrado = (n, x0, y0, x1, y1) => ({ n, b: [x0, y0, x1, y1], a: [[x0, y0, 
   const lc = (await L.post('pessoas_listar', {}, 'div-1', 'equipe01')).pessoas;
   ok('E.1', /registro profissional/.test(semReg) && lc.length === 2 && lc.every((x) => !('empresa' in x) && !('ativo' in x)), `avaliador sem registro recusado ("${semReg.slice(0, 70)}"); a equipe recebe só as ${lc.length} pessoas do projeto dela, sem dados internos`);
 
+  // 2. dupla fixa do acesso, definida pela coordenação (2.8): o celular não pergunta nada
+  const ps = (await L.post('pessoas_listar', {})).pessoas; const idAna = ps.find((x) => x.nome === 'Ana Souza').id, idJoao = ps.find((x) => x.nome === 'João Lima').id;
+  const errAux = await L.post('usuario_salvar', { usuario_dados: { login: 'div-1', avaliador_id: idJoao } }).then(() => 'aceitou').catch((e) => e.message);
+  await L.post('usuario_salvar', { usuario_dados: { login: 'div-1', avaliador_id: idAna, auxiliar_id: idJoao } });
   const b = await chromium.launch();
-  process.env.COM_DUPLICIDADE = '1'; const E = await L.celular(b); const p = E.p; delete process.env.COM_DUPLICIDADE;
-  await L.logar(p, 'div-1', 'equipe01'); await p.waitForSelector('.mapa-mais', { timeout: 20000 }); await p.waitForTimeout(1000);
-  const turnoAntes = await p.locator('button.faixa-turno:has-text("Começar turno")').count();
-  // 2. dupla do dia: pedida no primeiro +, sem avaliador não libera
-  await p.click('.mapa-mais'); await p.waitForSelector('.folha:has-text("Quem está na dupla hoje?")', { timeout: 15000 });
-  const ops = await p.locator('.dupla-op').allInnerTexts();
-  await p.click('.folha button:has-text("Confirmar dupla")'); await p.waitForTimeout(400);
-  const erroAv = await p.locator('.toast.erro').innerText().catch(() => ''); const reabriu = await p.locator('.folha:has-text("Quem está na dupla hoje?")').count();
-  await p.click('.dupla-op:has-text("Ana Souza")'); await p.click('.dupla-op:has-text("João Lima")'); await p.click('.folha button:has-text("Confirmar dupla")');
-  await p.waitForSelector('.prog', { timeout: 40000 });
-  ok('E.2', ops.some((t) => /Ana Souza/.test(t) && /CRBio/.test(t)) && /avaliador habilitado/i.test(erroAv) && reabriu === 1 && turnoAntes === 1, `escolha da dupla no primeiro +: ${ops.map((t) => t.replace(/\s+/g, ' ')).join(' | ')}; sem avaliador: "${erroAv}"`);
+  process.env.COM_DUPLICIDADE = '1'; process.env.COM_DIA = '1'; const E = await L.celular(b); const p = E.p; delete process.env.COM_DUPLICIDADE; delete process.env.COM_DIA;
+  await L.logar(p, 'div-1', 'equipe01'); await p.waitForSelector('button.comecar-dia', { timeout: 20000 }); await p.waitForTimeout(800);
+  const sub = await p.locator('.topo h1 small').innerText().catch(() => '');
+  await p.click('button.comecar-dia'); await p.waitForSelector('button.nova', { timeout: 10000 }); await p.waitForTimeout(500);
+  const trajeto = await p.locator('.pill-dia.trajeto').count(); const pill = await p.locator('.pill-dia').innerText().catch(() => '');
+  await p.click('button.nova'); await p.waitForSelector('.prog', { timeout: 40000 }); const perguntou = await p.locator('.folha:has-text("dupla")').count();
+  ok('E.2', /habilitado/.test(errAux) && /Ana \+ João/.test(sub) && !perguntou, `auxiliar não pode ser o responsável ("${errAux.slice(0, 70)}"); o topo mostra "${sub}"; Começar o dia e Nova árvore sem nenhuma pergunta de dupla (${perguntou})`);
   await p.click('.topo .bt-cancelar'); await p.click('.folha button:has-text("Cancelar registro")'); await p.waitForTimeout(800);
-  // árvore completa já com a dupla escolhida (não pergunta de novo no mesmo dia)
   const f = await A.arvoreCompleta(p, { fotos: 1 }); await p.waitForSelector('.tela-mapa.modo-campo', { timeout: 20000 }); await p.waitForTimeout(3500);
-  const chip = await p.locator('.chip-dupla').innerText().catch(() => ''); const turnoDepois = await p.locator('.faixa-turno').count();
   const linhas = (await L.post('listar', { projeto: PJ })).linhas; const l0 = linhas[0] || {};
-  ok('E.3', f.length === 0 && l0.avaliador === 'Ana Souza' && l0.avaliador_registro === 'CRBio 12345/04-D' && l0.auxiliar === 'João Lima' && l0.auxiliar_vinculo === 'Parceiro' && /Ana \+ João/.test(chip), `registro no servidor com avaliador "${l0.avaliador}" (${l0.avaliador_registro}) e auxiliar "${l0.auxiliar}" (${l0.auxiliar_vinculo}); faixa do mapa mostra "${chip}"`);
-  ok('E.4', turnoDepois === 0, `dupla com parceiro: botão de turno/trajeto some (${turnoDepois}); antes da dupla aparecia (${turnoAntes})`);
+  ok('E.3', f.length === 0 && l0.avaliador === 'Ana Souza' && l0.avaliador_registro === 'CRBio 12345/04-D' && l0.auxiliar === 'João Lima' && l0.auxiliar_vinculo === 'Parceiro', `registro no servidor com avaliador "${l0.avaliador}" (${l0.avaliador_registro}) e auxiliar "${l0.auxiliar}" (${l0.auxiliar_vinculo})`);
+  ok('E.4', trajeto === 0 && /Dia desde/.test(pill), `dupla com parceiro: dia começado sem trajeto (marca de trajeto ${trajeto}), etiqueta "${pill}"`);
   // 3. árvore repetida: mesmo ponto
   const n0 = (await p.evaluate(async () => (await window.__app.Store.registros('divinopolis')).length));
-  await p.click('.mapa-mais'); await p.waitForSelector('.folha:has-text("Árvore já cadastrada?")', { timeout: 40000 }); const txtRep = await p.locator('.folha').innerText();
+  await p.click('button.nova'); await p.waitForSelector('.folha:has-text("Árvore já cadastrada?")', { timeout: 40000 }); const txtRep = await p.locator('.folha').innerText();
   await p.click('.folha button:has-text("Não cadastrar")'); await p.waitForTimeout(800);
   const n1 = (await p.evaluate(async () => (await window.__app.Store.registros('divinopolis')).length)); const semForm = await p.locator('.prog').count();
   ok('E.5', /a 0(,\d)? m deste ponto/.test(txtRep) && n1 === n0 && !semForm, `aviso: "${txtRep.replace(/\s+/g, ' ').slice(0, 110)}"; "Não cadastrar" não deixa rascunho (${n0} → ${n1})`);
@@ -44,8 +42,8 @@ const quadrado = (n, x0, y0, x1, y1) => ({ n, b: [x0, y0, x1, y1], a: [[x0, y0, 
   const atr = await L.post('setores_atribuir', { projeto: PJ, itens: [{ numero: '312470105000002', equipe: 'Equipe 1' }, { numero: '999', equipe: 'Equipe 1' }] });
   const negado = await L.post('setores_atribuir', { projeto: PJ, itens: [{ numero: '312470105000001', equipe: 'Equipe 1' }] }, 'div-1', 'equipe01').then(() => 'liberado').catch((e) => e.message);
   ok('E.6', imp.total === 2 && atr.alterados === 1 && atr.recusados.length === 1 && negado !== 'liberado', `camada com ${imp.total} setores; atribuído ${atr.alterados}, recusado o que não existe; equipe de campo não atribui ("${negado.slice(0, 60)}")`);
-  await p.reload(); await p.waitForSelector('.mapa-mais', { timeout: 20000 }); await E.ctx.setGeolocation({ latitude: -20.14385, longitude: -44.8908, accuracy: 4 }); await p.waitForTimeout(2500);
-  await p.click('.mapa-mais'); await p.waitForSelector('.folha:has-text("Fora dos setores da equipe")', { timeout: 40000 }); const txtSt = await p.locator('.folha').innerText();
+  await p.reload(); await p.waitForSelector('button.nova', { timeout: 20000 }); await E.ctx.setGeolocation({ latitude: -20.14385, longitude: -44.8908, accuracy: 4 }); await p.waitForTimeout(2500);
+  await p.click('button.nova'); await p.waitForSelector('.folha:has-text("Fora dos setores da equipe")', { timeout: 40000 }); const txtSt = await p.locator('.folha').innerText();
   await p.click('.folha button:has-text("Seguir assim mesmo")'); await p.waitForSelector('.prog', { timeout: 20000 });
   const reg = await p.evaluate(() => { const r = window.__app.S.reg; const l = window.__app.Api.achatar(r, window.__app.S.form); return { setor: l.setor, fora: l.fora_do_setor, av: l.avaliador }; });
   ok('E.7', /setor 312470105000001/.test(txtSt) && reg.setor === '312470105000001' && reg.fora === 'sim' && reg.av === 'Ana Souza', `aviso "${txtSt.replace(/\s+/g, ' ').slice(0, 100)}"; o registro leva setor ${reg.setor}, fora_do_setor=${reg.fora}, avaliador ${reg.av}`);

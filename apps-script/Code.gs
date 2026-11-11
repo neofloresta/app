@@ -11,8 +11,8 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.7';
-const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso'];
+const VERSAO_SCRIPT = '2.8';
+const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id'];
 const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga', 'prod_valor', 'prod_avaliador_pct', 'premio_valor', 'premio_meta', 'bonus_valor', 'bonus_erro_max', 'auditoria_pct', 'auditoria_erro_max', 'parceiro_ve_valor'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
@@ -322,7 +322,10 @@ function salvarUsuario(dados) {
   if (!dados || !dados.login) throw new Error('Informe o usuário.');
   if (!/^[a-z0-9._-]{2,40}$/i.test(dados.login)) throw new Error('Usuário só pode ter letras, números, ponto, hífen e sublinhado.');
   const o = { login: String(dados.login).trim().toLowerCase() };
-  ['nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'modo_copa', 'trajeto'].forEach((k) => { if (dados[k] != null) o[k] = String(dados[k]).trim(); });
+  ['nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'modo_copa', 'trajeto', 'avaliador_id', 'auxiliar_id'].forEach((k) => { if (dados[k] != null) o[k] = String(dados[k]).trim(); });
+  // dupla fixa do acesso: avaliador responsável e auxiliar, escolhidos do cadastro de pessoas
+  ['avaliador_id', 'auxiliar_id'].forEach((k) => { if (o[k]) { const pe = tabela('Pessoas').find((x) => x.id === o[k]); if (!pe) throw new Error('Pessoa não encontrada no cadastro.'); if (k === 'avaliador_id' && pe.funcao !== 'Avaliador') throw new Error('O responsável precisa ser um avaliador habilitado.'); } });
+  if (o.avaliador_id && o.avaliador_id === o.auxiliar_id) throw new Error('Avaliador e auxiliar precisam ser pessoas diferentes.');
   if (o.trajeto) o.trajeto = o.trajeto === 'sim' ? 'sim' : '';
   if (o.modo_copa && ['raios', 'area'].indexOf(o.modo_copa) < 0) o.modo_copa = 'raios';
   if (o.perfil) o.perfil = normalizarPerfil(o.perfil);
@@ -333,9 +336,13 @@ function salvarUsuario(dados) {
   salvarLinha('Usuarios', COLS_USUARIOS, 'login', o);
   if (dados.senha && existe) encerrarSessoesDe(o.login);
 }
-function publico(u) { return { login: u.login, nome: u.nome, perfil: normalizarPerfil(u.perfil), equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: u.modo_copa || 'raios', trajeto: u.trajeto === 'sim' ? 'sim' : '' }; }
+function publico(u) { return { login: u.login, nome: u.nome, perfil: normalizarPerfil(u.perfil), equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: u.modo_copa || 'raios', trajeto: u.trajeto === 'sim' ? 'sim' : '', dupla: duplaDoUsuario(u) }; }
+function duplaDoUsuario(u) {
+  if (!u.avaliador_id && !u.auxiliar_id) return null; const ps = tabela('Pessoas'); const de = (id) => { const p = id ? ps.find((x) => x.id === id) : null; return p ? { id: p.id, nome: p.nome, registro: p.registro || '', vinculo: p.vinculo } : null; };
+  return { av: de(u.avaliador_id), ax: de(u.auxiliar_id) };
+}
 function paraAdmin(u) {
-  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'termo_versao', 'criado_em', 'modo_copa', 'trajeto', 'ultimo_acesso'].forEach((k) => (o[k] = u[k] || ''));
+  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'termo_versao', 'criado_em', 'modo_copa', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id'].forEach((k) => (o[k] = u[k] || ''));
   o.perfil = normalizarPerfil(u.perfil);
   o.bloqueado = !!(u.bloqueado_ate && new Date(u.bloqueado_ate) > new Date());
   o.senha_antiga = !u.senha_hash;
@@ -522,7 +529,7 @@ function salvarRegistro(projetoId, linha, usr) {
   COLS_SISTEMA.forEach((c) => delete linha[c]); // o aparelho não escreve a validação
   Object.keys(linha).forEach((k) => { if (/ link$/.test(k) && linha[k] && !/^https:\/\/drive\.google\.com\//.test(String(linha[k]))) linha[k] = ''; });
   if (linha.atualizado_em && new Date(linha.atualizado_em) > new Date(Date.now() + 10 * 60000)) throw new Error('Data do aparelho adiantada. Acerte a data e a hora do celular e envie de novo.');
-  if (usr.perfil === 'coletor') linha.usuario = usr.login;
+  if (usr.perfil === 'coletor') { linha.usuario = usr.login; if (usr.avaliador_id || usr.auxiliar_id || 'avaliador_id' in linha) { linha.avaliador_id = usr.avaliador_id || ''; linha.auxiliar_id = usr.auxiliar_id || ''; } } // a dupla é a do acesso, definida pela coordenação
   conferirDupla(linha, projetoId);
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
@@ -542,6 +549,7 @@ function salvarRegistro(projetoId, linha, usr) {
       if (usr.perfil === 'coletor' && atual.atualizado_em && linha.atualizado_em && String(atual.atualizado_em) > String(linha.atualizado_em)) return soLinks.length && mesmoDono ? gravarLinks('versao_antiga') : { ignorado: 'versao_antiga' };
       if (usr.perfil === 'coletor') {
         linha.concluido_em = atual.concluido_em || linha.concluido_em; linha.criado_em = atual.criado_em || linha.criado_em; linha.usuario = atual.usuario || usr.login;
+        ['avaliador', 'avaliador_id', 'avaliador_registro', 'avaliador_vinculo', 'auxiliar', 'auxiliar_id', 'auxiliar_vinculo'].forEach((c) => { if (c in atual) linha[c] = atual[c]; }); // quem coletou não muda ao reenviar
         if (!mesmoDono) throw new Error('Este registro é de outra equipe. Só a coordenação pode alterá-lo.');
         const v = String(atual.validacao || '');
         if (v === 'Validado') { if (soLinks.length) return gravarLinks('validado'); throw new Error('Registro já validado pela coordenação. Para alterar, peça à coordenação.'); }

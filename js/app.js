@@ -1,7 +1,7 @@
 // Neofloresta Inventário
 (() => {
-  const VERSAO = '2.7.1';
-  const TERMO_VERSAO = '2026-11-c';
+  const VERSAO = '2.8.0';
+  const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
   { const rc = Element.prototype.replaceChildren; Element.prototype.replaceChildren = function (...k) { return rc.apply(this, k.flat(Infinity).filter((x) => x != null && x !== false)); }; }
@@ -60,6 +60,7 @@
   const confirmar = (titulo, texto, ok = 'Confirmar', classe = '', nao = 'Cancelar') => modal(titulo, h('p', null, texto), [{ texto: nao, classe: 'sec', valor: false }, { texto: ok, classe, valor: true }]);
   function baixar(nome, dados, tipo) { const b = dados instanceof Blob ? dados : new Blob([dados], { type: tipo }); const a = h('a', { href: URL.createObjectURL(b), download: nome }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
   const ICONES = {
+    sino: '<path d="M6 8a6 6 0 0112 0c0 6 3 7 3 8H3c0-1 3-2 3-8zM10 20a2 2 0 004 0"/>',
     pessoas: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3.2 2.5-5.5 5.5-5.5s5.5 2.3 5.5 5.5"/><circle cx="16.5" cy="9" r="2.6"/><path d="M15.5 13.8c2.9-.4 5 1.8 5 4.7"/>',
     alvo: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
     cidade: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', selecionar: '<path d="M5 5h4M15 5h4M5 19h4M15 19h4M5 5v4M19 5v4M5 15v4M19 15v4"/><path d="M10 12l2 2 3-4"/>', fechar: '<path d="M6 6l12 12M18 6L6 18"/>',
@@ -192,7 +193,6 @@
     S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
     S.form = await carregarForm(p.formulario);
     Dupla.carregar().then(() => Turno.carregar()).catch(() => {});
-    if (perfil() === 'coletor') Dupla.pessoas(true).catch(() => {}); // fica no aparelho: o primeiro + do dia sem internet também pergunta a dupla
     // a numeração dos códigos se prepara em segundo plano: a tela abre na hora
     S.prepCodigosOk = false;
     S.prepCodigos = (async () => { await Promise.race([sincronizarSequencia(), new Promise((r) => setTimeout(r, 8000))]); await Promise.race([garantirFaixa(), new Promise((r) => setTimeout(r, 8000))]); S.prepCodigosOk = true; })();
@@ -239,6 +239,8 @@
     if (r === 'relatorio' && pf !== 'coletor') return telaRelatorio();
     if (r === 'medicao' && pf !== 'coletor') return telaMedicao();
     if (r === 'lista') return telaInicio();
+    if (r === 'meudia' && pf === 'coletor') return telaMeuDia();
+    if (r === 'consulta') return telaMapa();
     if (pf === 'coletor' && (r === 'mapa' || r === 'inicio' || !r)) return telaMapa({ campo: true }); // equipe de campo: mapa primeiro
     if (r === 'mapa') return telaMapa();
     if (r === 'ordens') return telaOrdens();
@@ -544,7 +546,7 @@
   }
 
   async function listarRegistros(filtro) {
-    const el = document.getElementById('lista'); if (!el && !document.getElementById('stats')) return;
+    const el = document.getElementById('lista'); if (!el && !document.getElementById('stats') && !document.getElementById('continuar')) return;
     if (filtro == null && S.filtroLista) { filtro = S.filtroLista; S.filtroLista = null; const bx = document.querySelector('.busca'); if (bx) bx.value = filtro; }
     const todos = (await Store.registros(S.projeto.id)).sort((a, b) => (b.atualizado_em || '').localeCompare(a.atualizado_em || ''));
     const hoje = new Date().toDateString();
@@ -609,7 +611,7 @@
       grupo('Projeto', it('Painel', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa')), it('Pedidos de serviço', () => ir('#ordens'))),
       grupo('Entregas', it('Relatório para imprimir ou PDF', () => ir('#relatorio')), it('Boletim de medição', () => ir('#medicao')), it('Baixar dados', () => exportarCliente())),
     ] : pf === 'coletor' ? [
-      grupo('Campo', it('Meus registros', () => ir('#lista')), it('Minha produção', () => ir('#producao')), it('Ordens de serviço', () => ir('#ordens')), it('Enviar agora', () => sincronizar())),
+      grupo('Campo', it('Meu dia', () => ir('#meudia')), it('Meus registros', () => ir('#lista')), it('Minha produção', () => ir('#producao')), it('Ordens de serviço', () => ir('#ordens')), it('Consultar o mapa', () => ir('#consulta')), it('Enviar agora', () => sincronizar()), it('Encerrar o dia', async () => { if (await Dia.aberto()) Dia.encerrar(); else toast('O dia ainda não foi começado.'); })),
     ] : [
       grupo('Acompanhar', coord ? it('Hoje no campo', () => ir('#hoje')) : null, it('Painel do projeto', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa'))),
       grupo('Agir', coord ? it('Validação dos registros', () => ir('#validacao')) : null, coord ? it('Auditoria por setor', () => ir('#auditoria')) : null, admin ? it('Produção e pagamento', () => ir('#producao')) : null, it('Ordens de serviço', () => ir('#ordens')), !admin ? it('Enviar agora', () => sincronizar()) : null),
@@ -724,7 +726,6 @@
     try { return await novoRegistro2(ex); } finally { S.abrindoNova = false; }
   }
   async function novoRegistro2(ex) {
-    if (!(await Dupla.garantir())) return;
     const r = {
       uuid: uuid(), projeto: S.projeto.id, equipe: S.projeto.equipe || '', usuario: S.sessao.u, dupla: S.dupla && S.dupla.av ? { av: S.dupla.av, ax: S.dupla.ax } : undefined,
       criado_em: agoraISO(), atualizado_em: agoraISO(), status: 'rascunho', valores: {}, fotos: {},
@@ -773,10 +774,10 @@
     est: null, lock: null, salvarT: null,
     async carregar() { this.est = this.liberado() ? (await Store.get(this.chave())) : null; if (this.est && this.est.dia !== diaLocal(agoraISO())) { await this.encerrar(true); } if (this.est && this.est.ativo) this.ligar(); },
     async comecar() {
-      if (!(await Dupla.garantir())) return; if (!this.liberado()) { pintarTurno(); return toast('Dupla com parceiro: o app não grava trajeto nem horário do dia.', 5000); }
+      if (!this.liberado()) return;
       // turno anterior ainda não enviado (sem rede) vai para a fila antes de começar outro: nada é gravado por cima
       if (this.est && this.est.pts.length > this.est.env) { const k = this.chave() + ':fila'; const f = (await Store.get(k)) || []; this.est.ativo = false; f.push(this.est); await Store.set(k, f); }
-      this.est = { ativo: true, dia: diaLocal(agoraISO()), inicio: agoraISO(), pts: [], env: 0, id: uuid().slice(0, 8) }; await Store.set(this.chave(), this.est); this.ligar(); pintarTurno(); toast('Turno começou. O trajeto fica ligado enquanto o app estiver aberto.', 4000); },
+      this.est = { ativo: true, dia: diaLocal(agoraISO()), inicio: agoraISO(), pts: [], env: 0, id: uuid().slice(0, 8) }; await Store.set(this.chave(), this.est); this.ligar(); pintarTurno(); },
     ligar() { Gps.ouvintes.add(this.ouv); ligarGps(); this.pedirTela(); document.addEventListener('visibilitychange', this.vis); },
     vis: () => { if (document.visibilityState === 'visible' && Turno.est && Turno.est.ativo) Turno.pedirTela(); },
     async pedirTela() { try { if ('wakeLock' in navigator && document.visibilityState === 'visible') { this.lock = await navigator.wakeLock.request('screen'); } } catch (e) { /* sem tela acesa: segue gravando enquanto aberto */ } },
@@ -789,7 +790,7 @@
     async encerrar(silencioso) {
       const e = this.est; if (!e) return; e.ativo = false; e.fim = agoraISO(); await Store.set(this.chave(), e);
       Gps.ouvintes.delete(this.ouv); document.removeEventListener('visibilitychange', this.vis); try { if (this.lock) await this.lock.release(); } catch (er) { /* já solta */ } this.lock = null;
-      await this.enviar(); if (!silencioso) { pintarTurno(); toast('Turno encerrado.'); }
+      await this.enviar(); if (!silencioso) pintarTurno();
     },
     async enviar() {
       if (Api.demo || !navigator.onLine || !S.projeto || !S.sessao) return;
@@ -811,61 +812,44 @@
     },
     km() { const e = this.est; if (!e) return 0; const r = resumoTrajeto(e.pts); return r.km_pe + r.km_carro; },
   };
-  function pintarTurno() {
-    const el = document.getElementById('turno'); if (!el) return; if (!Turno.liberado()) return el.replaceChildren();
-    const e = Turno.est;
-    if (e && e.ativo) el.replaceChildren(h('div', { class: 'faixa-turno ativo' }, h('span', { class: 'selo-trajeto' }, h('i'), 'Trajeto ligado'), h('small', null, `desde ${new Date(e.inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${numBR(Math.round(Turno.km() * 10) / 10)} km`), h('button', { class: 'btn sec peq', onclick: async () => { if (await confirmar('Encerrar turno', 'Encerrar o turno desliga o trajeto até amanhã (ou até tocar em Começar turno de novo).', 'Encerrar turno')) Turno.encerrar(); } }, 'Encerrar turno')));
-    else el.replaceChildren(h('button', { class: 'faixa-turno', onclick: () => Turno.comecar() }, h('b', null, 'Começar turno'), h('span', null, 'Liga o trajeto e mantém a tela acesa enquanto o app está aberto')));
-  }
+  function pintarTurno() { pintarDia(); }
 
-  // ---------- Dupla do dia ----------
-  // o login é da dupla; no primeiro cadastro do dia a dupla diz quem está no campo (avaliador habilitado e auxiliar).
-  // Só vale quando a coordenação cadastrou as pessoas do projeto; sem cadastro o app segue como antes.
+  // ---------- Dupla da equipe e dia de coleta ----------
+  // a dupla é fixa: a coordenação define o avaliador responsável e o auxiliar de cada acesso (o servidor grava nos registros)
   const Dupla = {
-    chave: () => 'dupla:' + S.sessao.u + ':' + S.projeto.id,
-    async pessoas(forcar) {
-      const k = 'pessoas:' + S.projeto.id; let l = await Store.get(k);
-      if (!Api.demo && navigator.onLine && !S.expirada && (forcar || !l || !S.pessoasEm || S.pessoasEm.p !== S.projeto.id || Date.now() - S.pessoasEm.t > 600000)) {
-        try { l = await Api.b.pessoasListar(); await Store.set(k, l); S.pessoasEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { /* sem conexão: fica a lista do aparelho */ }
-      }
-      if (Api.demo) l = await Api.b.pessoasListar();
-      return (l || []).filter((x) => x.ativo !== 'não');
+    async carregar() { const d = S.sessao && S.sessao.usuario && S.sessao.usuario.dupla; S.dupla = d && d.av ? d : null; S.duplaParceiro = !!(d && [d.av, d.ax].some((x) => x && x.vinculo === 'Parceiro')); },
+    nomes() { const d = S.dupla; return d ? [d.av && d.av.nome, d.ax && d.ax.nome].filter(Boolean).map((n) => n.split(' ')[0]).join(' + ') : ''; },
+  };
+  // dia de coleta: "Começar o dia" libera o botão de nova árvore (e liga o trajeto, quando a coordenação liberou); "Encerrar o dia" envia o que falta
+  const Dia = {
+    chave: () => 'dia:' + S.sessao.u + ':' + S.projeto.id,
+    async aberto() { if (!S.sessao || !S.projeto) return null; const d = await Store.get(this.chave()); return d && d.dia === diaLocal(agoraISO()) ? d : null; },
+    async comecar() {
+      await Store.set(this.chave(), { dia: diaLocal(agoraISO()), inicio: agoraISO() }); await Dupla.carregar();
+      if (Turno.liberado() && !(Turno.est && Turno.est.ativo)) await Turno.comecar();
+      pintarDia(); ligarGps();
     },
-    async hoje() { if (!S.sessao || !S.projeto) return null; const d = await Store.get(this.chave()); return d && d.dia === diaLocal(agoraISO()) ? d : null; },
-    async carregar() { const d = await this.hoje(); S.dupla = d; S.duplaParceiro = !!(d && [d.av, d.ax].some((x) => x && x.vinculo === 'Parceiro')); },
-    // true quando pode coletar
-    async garantir() {
-      if (perfil() !== 'coletor') return true;
-      // lista do aparelho na hora (atualizada em segundo plano): o + não espera o servidor
-      let ps = (await Store.get('pessoas:' + S.projeto.id)) || null; if (!ps || Api.demo) ps = (await Promise.race([this.pessoas(), new Promise((r) => setTimeout(() => r(null), 700))])) || []; else this.pessoas().catch(() => {}); // sem a lista guardada, espera no máximo 0,7 s
-      ps = ps.filter((x) => x.ativo !== 'não'); if (!ps.some((x) => x.funcao === 'Avaliador')) return true;
-      const d = await this.hoje(); if (d && d.av) { S.dupla = d; return true; }
-      return this.escolher(ps);
-    },
-    async escolher(ps) {
-      ps = ps || (await this.pessoas());
-      const minha = minhaEquipe(); const ord = (a, b) => (b.equipe === minha) - (a.equipe === minha) || a.nome.localeCompare(b.nome, 'pt');
-      const atual = (await this.hoje()) || {}; let av = atual.av ? atual.av.id : '', ax = atual.ax ? atual.ax.id : '';
-      const op = (lista, sel, fn, nenhum) => { const box = h('div', { class: 'dupla-ops' }); const pintar = () => box.replaceChildren(...lista.map((x) => h('button', { class: 'dupla-op' + (sel() === x.id ? ' sel' : ''), type: 'button', onclick: () => { fn(sel() === x.id && nenhum ? '' : x.id); pintar(); } }, h('b', null, x.nome), h('small', null, [x.funcao === 'Avaliador' ? x.registro : 'Auxiliar', x.vinculo].filter(Boolean).join(' · ')))), nenhum ? h('button', { class: 'dupla-op' + (!sel() ? ' sel' : ''), type: 'button', onclick: () => { fn(''); pintar(); } }, h('b', null, nenhum)) : null); pintar(); return box; };
-      const avs = ps.filter((x) => x.funcao === 'Avaliador').sort(ord); const axs = ps.filter((x) => x.funcao === 'Auxiliar').sort(ord);
-      const boxAv = op(avs, () => av, (v) => { av = v; if (ax === v) ax = ''; }); const boxAx = op(axs, () => ax, (v) => { ax = v; }, 'Sem auxiliar hoje');
-      for (;;) {
-        const ok = await modal('Quem está na dupla hoje?', h('div', { class: 'dupla' }, h('p', { class: 'dica' }, 'Cada árvore fica registrada com quem avaliou e quem auxiliou. Dá para trocar depois, tocando na dupla embaixo do mapa.'),
-          h('h4', null, 'Avaliador habilitado'), boxAv, h('h4', null, 'Auxiliar'), boxAx), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Confirmar dupla', valor: true }]);
-        if (!ok) return false;
-        if (!av) { toast('Escolha o avaliador habilitado. Sem ele a coleta não é liberada.', 5000, null, true); continue; }
-        break;
-      }
-      const pub = (id) => { const x = ps.find((y) => y.id === id); return x ? { id: x.id, nome: x.nome, registro: x.registro || '', vinculo: x.vinculo } : null; };
-      const d = { dia: diaLocal(agoraISO()), av: pub(av), ax: pub(ax), em: agoraISO() }; await Store.set(this.chave(), d); await this.carregar();
-      if (S.duplaParceiro && Turno.est && Turno.est.ativo) await Turno.encerrar(true); // parceiro: sem trajeto
-      pintarTurno(); pintarDupla(); return true;
+    async encerrar() {
+      const rasc = (await Store.registros(S.projeto.id)).filter((r) => r.status === 'rascunho' && r.usuario === S.sessao.u).length;
+      if (!(await confirmar('Encerrar o dia', (rasc ? `Você tem ${rasc} cadastro(s) não terminado(s): eles ficam guardados para amanhã. ` : '') + 'O app envia o que falta e volta para "Começar o dia".', 'Encerrar o dia'))) return;
+      if (Turno.est && Turno.est.ativo) await Turno.encerrar(true);
+      await Store.del(this.chave()); pintarDia(); sincronizar(true); toast(navigator.onLine ? 'Dia encerrado. Enviando o que falta.' : 'Dia encerrado. O envio sai quando houver internet.', 4000);
     },
   };
-  function pintarDupla() {
-    const el = document.getElementById('dupla-hoje'); if (!el) return; const d = S.dupla;
-    if (!d || !d.av || perfil() !== 'coletor') return el.replaceChildren();
-    el.replaceChildren(h('button', { class: 'chip-dupla', onclick: () => Dupla.escolher(), 'aria-label': 'Trocar a dupla de hoje' }, ico('pessoas'), h('span', null, [d.av.nome, d.ax && d.ax.nome].filter(Boolean).map((n) => n.split(' ')[0]).join(' + '))));
+  // botão principal e etiqueta do dia na tela de coleta
+  async function pintarDia() {
+    const bt = document.getElementById('bt-principal'); const et = document.getElementById('turno'); if (!bt) return;
+    const d = await Dia.aberto(); if (!document.body.contains(bt)) return;
+    if (d) { bt.className = 'btn nova bt-principal'; bt.replaceChildren(ico('mais'), 'Nova árvore'); bt.onclick = () => novoRegistro(); }
+    else { bt.className = 'btn comecar-dia bt-principal'; bt.replaceChildren('Começar o dia'); bt.onclick = () => Dia.comecar(); }
+    if (et) { const traj = !!(Turno.est && Turno.est.ativo);
+      et.replaceChildren(d ? h('button', { class: 'pill-dia' + (traj ? ' trajeto' : ''), onclick: () => Dia.encerrar(), 'aria-label': 'Encerrar o dia' }, h('i'), `Dia desde ${new Date(d.inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`) : ''); }
+    const c = document.getElementById('continuar'); if (c) c.classList.toggle('oculto', !d);
+  }
+  function pintarGpsPill(p) {
+    const el = document.getElementById('gps-pill'); if (!el) return; p = p || S.pos; const velho = !p || Date.now() - p.t > 30000;
+    const [cls, txt] = S.gpsNegado ? ['ruim', 'GPS bloqueado'] : velho ? ['sem', 'Procurando GPS'] : p.prec <= 5 ? ['bom', `GPS bom ±${numBR(Math.round(p.prec))} m`] : p.prec <= 10 ? ['medio', `GPS médio ±${numBR(Math.round(p.prec))} m`] : ['ruim', `GPS fraco ±${numBR(Math.round(p.prec))} m`];
+    el.className = 'gps-pill ' + cls; el.textContent = txt;
   }
 
   // ---------- Setores censitários ----------
@@ -1640,18 +1624,26 @@
     const btCidade = h('button', { class: 'mapa-bt', onclick: () => verCidade(), 'aria-label': 'Ver a cidade', title: 'Ver a cidade' }, ico('cidade'), h('span', { class: 'so-leitor' }, 'Ver a cidade'));
     const btSel = h('button', { class: 'mapa-bt pilula oculto', onclick: () => iniciarSelecao(), 'aria-label': 'Selecionar quadras ou faces' }, ico('selecionar'), 'Selecionar');
     const bts = h('div', { class: 'mapa-bts' }, btSel, btCidade, btEu);
-    const fab = campo ? h('button', { class: 'btn nova mapa-mais', onclick: () => novoRegistro(), 'aria-label': 'Nova árvore', title: 'Nova árvore' }, ico('mais'), h('span', { class: 'so-leitor' }, 'Nova árvore')) : null;
+    const fab = campo ? h('button', { class: 'btn bt-principal', id: 'bt-principal' }, '...') : null; // "Começar o dia" ou "Nova árvore" (pintarDia)
     // faixa embaixo do mapa: o que antes ficava na tela inicial (envio, cadastro não terminado, turno, avisos, encerrar face, meus registros)
-    const base = campo ? h('div', { class: 'campo-base' },
-      h('div', { class: 'campo-faixas' }, h('div', { id: 'aviso-versao' }), h('div', { id: 'turno' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'continuar' }), h('div', { id: 'devolvidos' }), h('div', { id: 'os-equipe' }), h('div', { id: 'encerrar-face' })),
-      h('div', { class: 'campo-linha' }, h('div', { class: 'campo-info' }, h('div', { class: 'resumo mini', id: 'stats' }), h('small', { class: 'ult-envio', id: 'ult-envio' })), h('div', { id: 'dupla-hoje' }), h('button', { class: 'btn sec peq', onclick: () => ir('#lista') }, 'Meus registros'))) : null;
+    // tela de coleta limpa: só a etiqueta do dia, a do GPS e o cadastro não terminado; os avisos ficam atrás do sino
+    const avisos = campo ? h('div', { class: 'avisos-lista' }, h('div', { id: 'aviso-versao' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'devolvidos' }), h('div', { id: 'os-equipe' })) : null;
+    const seloSino = h('span', { class: 'selo-sino oculto' });
+    // os avisos são pintados num canto escondido e vão para a janela só quando a dupla toca no sino
+    const guardaAvisos = campo ? h('div', { class: 'oculto' }, avisos) : null;
+    const contarAvisos = () => { const n = [...avisos.children].filter((x) => x.textContent.trim()).length; seloSino.textContent = n; seloSino.classList.toggle('oculto', !n); return n; };
+    if (campo && window.MutationObserver) new MutationObserver(contarAvisos).observe(avisos, { childList: true, subtree: true });
+    const abrirAvisos = async () => { const n = contarAvisos(); await modal('Avisos', h('div', null, avisos, n ? null : h('p', { class: 'dica' }, 'Nenhum aviso agora.')), [{ texto: 'Fechar', classe: 'sec', valor: true }]); if (document.body.contains(guardaAvisos)) guardaAvisos.append(avisos); };
+    const btSino = h('button', { class: 'ic bt-sino', onclick: abrirAvisos, 'aria-label': 'Avisos' }, ico('sino'), seloSino);
+    const base = campo ? h('div', { class: 'campo-base' }, h('div', { class: 'campo-pills' }, h('div', { id: 'turno' }), h('button', { id: 'gps-pill', class: 'gps-pill sem', onclick: () => { if (S.gpsNegado) ir('#configurar/0'); else toast(ORIENTA_GPS, 5000); } }, 'Procurando GPS')), h('div', { id: 'continuar' })) : null;
     const topoM = campo
-      ? topo(S.projeto.nome, S.projeto.equipe || S.sessao.usuario.nome, h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')), h('div', { class: 'topo-dir' }, ajudaBt('mapa'), h('button', { class: 'sync', onclick: tocarSync }, '...')))
+      ? topo(S.projeto.nome, [S.projeto.equipe || S.sessao.usuario.nome, Dupla.nomes()].filter(Boolean).join(' · '), h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')), h('div', { class: 'topo-dir' }, btSino, h('button', { class: 'sync', onclick: tocarSync }, '...')))
       : topo('Mapa', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir(perfil() === 'cliente' ? '#painel' : '#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), h('div', { class: 'topo-dir' }, ajudaBt('mapa')));
-    const telaM = h('div', { class: 'tela-mapa' + (campo ? ' modo-campo' : '') }, topoM, S.expirada && campo ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo')) : null, barra, div, bts, fab, base, barraSel);
+    const telaM = h('div', { class: 'tela-mapa' + (campo ? ' modo-campo' : '') }, topoM, S.expirada && campo ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo')) : null, barra, div, bts, fab, base, barraSel, guardaAvisos);
+    if (campo) barra.classList.add('oculto');
     $app.replaceChildren(telaM);
-    if (campo) { atualizarSync(); listarRegistros(); pintarOSEquipe(); pintarAvisoVersao(); pintarEncerrarFace(); pintarAvisoGps(); pintarDicaGps(); pintarTurno(); pintarEspaco(); Dupla.carregar().then(() => { pintarDupla(); pintarTurno(); }).catch(() => {});
-      const linhaB = base.querySelector('.campo-linha'); if (linhaB && window.ResizeObserver) new ResizeObserver(() => telaM.style.setProperty('--base-h', linhaB.offsetHeight + 'px')).observe(linhaB); }
+    if (campo) { Dupla.carregar(); atualizarSync(); listarRegistros(); pintarOSEquipe(); pintarAvisoVersao(); pintarAvisoGps(); pintarEspaco(); pintarDia(); pintarGpsPill();
+      const ouvP = (p) => { if (!document.body.contains(telaM)) return Gps.ouvintes.delete(ouvP); pintarGpsPill(p); }; Gps.ouvintes.add(ouvP); const tmP = setInterval(() => { if (!document.body.contains(telaM)) return clearInterval(tmP); pintarGpsPill(); }, 10000); }
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
     const render = L.canvas({ padding: 0.3, tolerance: 8 });
     const mapa = L.map(div, { preferCanvas: true, renderer: render, maxZoom: 21, fadeAnimation: false, zoomControl: !celular }).setView(S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9], S.pos ? 18 : 4); // fadeAnimation desligada: a ficha que fecha não recebe mais toque
@@ -2142,7 +2134,8 @@
   }
 
   async function adminUsuarios(corpo) {
-    const [us, projetos] = await Promise.all([Api.b.usuariosListar(), Api.b.projetosListar()]);
+    const [us, projetos, pessoas] = await Promise.all([Api.b.usuariosListar(), Api.b.projetosListar(), Api.b.pessoasListar().catch(() => [])]);
+    const nomePe = (id) => (pessoas.find((x) => x.id === id) || {}).nome || '';
     const PERFIS = [['coletor', 'Equipe de campo (coleta)'], ['revisor', 'Revisão técnica (valida registros)'], ['cliente', 'Cliente (consulta painel, mapa e relatório)'], ['admin', 'Coordenação (acesso total)']];
     // código sugerido: o próximo E<n> livre no projeto
     const proxCodigo = (proj) => { const usados = new Set(us.filter((x) => String(x.projeto).split(',').some((pp) => String(proj).split(',').includes(pp))).map((x) => String(x.codigo || '').toUpperCase())); let n = 1; while (usados.has('E' + n)) n++; return 'E' + n; };
@@ -2160,6 +2153,10 @@
       const at = h('input', { type: 'checkbox', checked: String(u.ativo || 'sim').toLowerCase() !== 'nao' });
       const mc = h('select', { class: 'entrada' }, h('option', { value: 'raios', selected: (u.modo_copa || 'raios') === 'raios' }, '4 raios com trena (o app calcula a área)'), h('option', { value: 'area', selected: u.modo_copa === 'area' }, 'Área direto, com trena a laser'));
       const tj = h('input', { type: 'checkbox', checked: u.trajeto === 'sim' });
+      // dupla fixa do acesso: avaliador responsável e auxiliar (cadastro de Pessoas)
+      const opPe = (f, sel) => pessoas.filter((x) => (!f || x.funcao === f) && (x.ativo !== 'não' || x.id === sel)).sort((a, b) => a.nome.localeCompare(b.nome, 'pt')).map((x) => h('option', { value: x.id, selected: x.id === sel }, `${x.nome} (${x.funcao === 'Avaliador' ? x.registro || 'avaliador' : 'auxiliar'}, ${x.vinculo})`));
+      const sAv = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Sem avaliador definido'), opPe('Avaliador', u.avaliador_id)); const sAx = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Sem auxiliar'), opPe('', u.auxiliar_id));
+      const cDupla = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Dupla deste acesso'), pessoas.length ? h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Avaliador responsável'), sAv), h('div', null, h('small', null, 'Auxiliar'), sAx)) : h('div', { class: 'dica' }, 'Cadastre antes as pessoas em Coordenação, Pessoas.'), h('div', { class: 'dica' }, 'Cada árvore deste acesso fica gravada com esta dupla. Se alguém mudar, troque aqui.'));
       const marcados = new Set(String(u.projeto || '').split(',').map((x) => x.trim()));
       const prj = h('div', { class: 'chips' }, projetos.map((p) => { const b = h('button', { class: 'chip' + (marcados.has(p.id) ? ' sel' : ''), onclick: () => { b.classList.toggle('sel'); if (marcados.has(p.id)) marcados.delete(p.id); else marcados.add(p.id); } }, p.nome); return b; }));
       const ok = await modal(novo ? 'Novo usuário' : 'Editar usuário', h('div', null,
@@ -2169,18 +2166,18 @@
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Código da equipe'), cod), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Email'), em)),
         h('div', { class: 'dica' }, 'O código da equipe vira o prefixo dos códigos das árvores (E1 gera E1-0001, E1-0002...). Use um diferente para cada equipe.'),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Como mede a copa'), mc),
-        h('label', { class: 'campo' }, tj, ' Registrar o trajeto do turno (a equipe liga em "Começar turno", só com o app aberto)'),
+        cDupla, h('label', { class: 'campo' }, tj, ' Registrar o trajeto do dia (liga em "Começar o dia", só com o app aberto; não vale para dupla com parceiro)'),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos liberados'), prj), h('label', null, at, ' Usuário ativo')),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
       const login = lo.value.trim().toLowerCase();
-      const digitado = () => ({ login: lo.value.trim().toLowerCase(), nome: no.value, perfil: pe.value, projeto: [...marcados].filter(Boolean).join(','), equipe: eq.value, codigo: cod.value, email: em.value, ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '' });
+      const digitado = () => ({ login: lo.value.trim().toLowerCase(), nome: no.value, perfil: pe.value, projeto: [...marcados].filter(Boolean).join(','), equipe: eq.value, codigo: cod.value, email: em.value, ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '', avaliador_id: sAv.value, auxiliar_id: sAx.value });
       const erro = (m) => { toast(m, 5000, null, true); return editar(digitado(), novo, se.value); }; // o formulário volta com o que foi digitado
       if (!login) return erro('Preencha o usuário.');
       if (se.value.trim() && se.value.trim().length < 8 && !Api.demo) return erro('A senha precisa ter pelo menos 8 caracteres.');
       if (novo && !se.value.trim()) return erro('Defina a senha.');
       if (novo && us.some((x) => x.login === login)) return erro('Esse usuário já existe.');
-      const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '' };
+      const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '', avaliador_id: pe.value === 'coletor' ? sAv.value : '', auxiliar_id: pe.value === 'coletor' ? sAx.value : '' };
       if (se.value.trim()) dados.senha = se.value.trim();
       if (pe.value === 'coletor' && !dados.codigo) return erro('Defina o código da equipe (ex.: E1).');
       if (pe.value === 'coletor' && us.some((x) => x.login !== login && x.codigo === dados.codigo && String(x.projeto).split(',').some((p) => dados.projeto.split(',').includes(p)))) return erro('Outra equipe deste projeto já usa o código ' + dados.codigo + '.');
@@ -2229,6 +2226,7 @@
         return h('div', { class: 'us-card' + (inativo ? ' inativo' : '') },
           h('div', { class: 'us-cab' }, h('b', null, u.login), u.codigo ? h('span', { class: 'selo' }, u.codigo) : null, u.bloqueado ? h('span', { class: 'tag-alerta' }, 'bloqueado') : null, inativo ? h('span', { class: 'tag-cinza' }, 'desativado') : null),
           h('small', null, `${u.nome || ''} · ${rotP(u.perfil)}`), h('small', null, nomeP(u.projeto)),
+          u.perfil === 'coletor' && pessoas.length ? h('small', { class: u.avaliador_id ? '' : 'tag-alerta' }, u.avaliador_id ? 'Dupla: ' + [nomePe(u.avaliador_id), nomePe(u.auxiliar_id)].filter(Boolean).join(' + ') : 'sem avaliador definido') : null,
           h('small', { class: 'dica' }, `Último acesso: ${quando(u.ultimo_acesso)}`), u.senha_antiga ? h('small', { class: 'dica' }, 'senha ainda no formato antigo: é convertida no próximo acesso') : null,
           h('div', { class: 'linha-btn' }, u.bloqueado ? h('button', { class: 'btn peq', onclick: () => desbloquear(u) }, 'Desbloquear') : null, h('button', { class: 'btn sec peq', onclick: () => editar(u) }, 'Editar'), h('button', { class: 'btn sec peq', onclick: () => alternarAtivo(u) }, inativo ? 'Reativar' : 'Desativar'),
             h('details', { class: 'us-mais' }, h('summary', { 'aria-label': 'Mais ações' }, '···'), h('button', { class: 'link-perigo', onclick: () => remover(u) }, 'Excluir usuário'))));
@@ -2255,7 +2253,7 @@
       const ok = await modal(novo ? 'Nova pessoa' : 'Editar pessoa', h('div', null,
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), no),
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Função'), fu), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Vínculo'), vi)),
-        cReg, cEmp, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe de costume'), eq, h('div', { class: 'dica' }, 'Aparece primeiro na escolha da dupla. A dupla do dia é escolhida no celular e pode misturar vínculos.')),
+        cReg, cEmp, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe de costume'), eq, h('div', { class: 'dica' }, 'Só para organizar a lista. A dupla de cada acesso é escolhida em Usuários e pode misturar vínculos.')),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos'), prj)),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
@@ -2273,7 +2271,7 @@
       h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec peq', onclick: () => editar(pe) }, 'Editar'), h('button', { class: 'btn sec peq', onclick: () => alternar(pe) }, inat ? 'Reativar' : 'Desativar'))); };
     const grupo = (t, f) => { const l = ps.filter((x) => x.funcao === f).sort((a, b) => (a.ativo === 'não') - (b.ativo === 'não') || a.nome.localeCompare(b.nome, 'pt')); return h('div', null, h('h4', null, `${t} (${l.filter((x) => x.ativo !== 'não').length})`), l.length ? h('div', { class: 'us-lista' }, l.map(card)) : h('p', { class: 'dica' }, 'Ninguém cadastrado.')); };
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Pessoas das equipes'),
-      h('p', { class: 'dica' }, 'O acesso continua por dupla. No primeiro cadastro do dia o celular pergunta quem está na dupla: sem avaliador habilitado a coleta não é liberada, e cada árvore guarda quem avaliou e quem auxiliou. Duplas com parceiro não têm trajeto nem horário do dia registrados, só o tempo de cada cadastro. Sem pessoas cadastradas o app funciona como antes.'),
+      h('p', { class: 'dica' }, 'Cadastre aqui os avaliadores habilitados e os auxiliares. Depois, em Usuários, escolha a dupla de cada acesso: cada árvore fica gravada com o avaliador responsável e o auxiliar. Duplas com parceiro não têm trajeto nem horário do dia registrados, só o tempo de cada cadastro.'),
       h('button', { class: 'btn', style: 'margin-bottom:10px', onclick: () => editar(null) }, '+ Nova pessoa'),
       grupo('Avaliadores habilitados', 'Avaliador'), grupo('Auxiliares', 'Auxiliar')));
   }
@@ -2334,6 +2332,24 @@
     const de = h('input', { type: 'date', class: 'entrada', value: per[0] }), ate = h('input', { type: 'date', class: 'entrada', value: per[1] });
     const mover = (k) => { const [a] = quinzena(per[0]); const d = new Date(a + 'T12:00'); d.setDate(k < 0 ? d.getDate() - 1 : d.getDate() + 16); const q = quinzena(isoDia(d)); aoMudar(q); };
     return h('div', { class: 'periodo' }, h('button', { class: 'btn sec peq', onclick: () => mover(-1), 'aria-label': 'Quinzena anterior' }, ico('esq')), de, h('span', null, 'a'), ate, h('button', { class: 'btn sec peq', onclick: () => mover(1), 'aria-label': 'Próxima quinzena' }, ico('dir')), h('button', { class: 'btn peq', onclick: () => aoMudar([de.value, ate.value]) }, 'Ver'));
+  }
+  // "Meu dia": o que a dupla consulta fora da hora da coleta
+  async function telaMeuDia() {
+    const corpo = h('main'); const hoje = diaLocal(agoraISO());
+    $app.replaceChildren(topo('Meu dia', [S.projeto.equipe, Dupla.nomes()].filter(Boolean).join(' · '), h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Voltar ao mapa' }, ico('voltar')), null), corpo);
+    const rs = (await Store.registros(S.projeto.id)).filter((r) => r.usuario === S.sessao.u);
+    const feitos = rs.filter((r) => r.status !== 'rascunho' && diaLocal(r.concluido_em || r.criado_em) === hoje && !r.faceId).length;
+    const aEnviar = rs.filter((r) => r.status === 'pendente' || r.erroSync).length; const dev = rs.filter((r) => r.validacao === 'Devolvido').length; const rasc = rs.filter((r) => r.status === 'rascunho').length;
+    let meta = (await Store.get('meta:' + S.projeto.id)) || 0; const d = await Dia.aberto();
+    const cartaoHoje = h('div', { class: 'cartao' }); const pintarHoje = () => cartaoHoje.replaceChildren(h('h3', null, 'Hoje'), h('div', { class: 'dia-num' }, h('b', null, fmtN(feitos)), meta ? ` de ${fmtN(meta)} árvores` : feitos === 1 ? ' árvore' : ' árvores'),
+      meta ? h('div', { class: 'meta-barra' }, h('div', { style: `width:${Math.min(100, (feitos / meta) * 100)}%` })) : null, meta ? h('small', { class: 'dica' }, feitos >= meta ? `Meta da dupla batida: ${fmtN(feitos - meta)} acima.` : `Faltam ${fmtN(meta - feitos)} para a meta da dupla. Vale a árvore validada pela coordenação.`) : null);
+    pintarHoje();
+    const lin = (t, v, fn) => h('button', { class: 'menu-it dia-lin', onclick: fn }, h('span', null, t), h('small', null, v || ''));
+    corpo.replaceChildren(cartaoHoje,
+      h('div', { class: 'cartao' }, h('div', { class: 'dia-tres' }, h('div', null, h('b', null, fmtN(aEnviar)), 'a enviar'), h('div', null, h('b', null, fmtN(dev)), 'devolvidas'), h('div', null, h('b', null, fmtN(rasc)), 'não terminadas'))),
+      h('div', { class: 'cartao' }, lin('Meus registros', '', () => ir('#lista')), lin('Minha produção', '', () => ir('#producao')), lin('Ordens de serviço', '', () => ir('#ordens')), lin('Consultar o mapa', 'busca e filtros', () => ir('#consulta'))),
+      d ? h('button', { class: 'btn sec', style: 'width:100%', onclick: async () => { await Dia.encerrar(); if (!(await Dia.aberto())) ir('#mapa'); } }, 'Encerrar o dia') : null);
+    if (navigator.onLine && !Api.demo) try { const P = await Api.b.producaoMinha(S.projeto.id, hoje, hoje); if (P.regras && P.regras.meta) { meta = P.regras.meta; Store.set('meta:' + S.projeto.id, meta); if (document.body.contains(cartaoHoje)) pintarHoje(); } } catch (e) { /* servidor antigo ou sem conexão */ }
   }
   async function telaMinhaProducao() {
     const corpo = h('main'); S.perProd = S.perProd || quinzena();
@@ -2640,8 +2656,8 @@
       P('Como peço acesso, correção ou exclusão?', 'Fale ' + contato + '.'),
     ] : [
       P('O que é este app?', 'O app da Neofloresta para registrar o inventário da arborização urbana nos projetos contratados.'),
-      P('Quais dados meus o app usa?', 'Usuário, nome e equipe; quem estava na dupla do dia (nome, função, registro profissional do avaliador e vínculo); data, hora e posição do celular quando você marca um ponto; o modelo do aparelho. Não usamos contatos, galeria pessoal nem arquivos do celular, nem dados de pagamento.'),
-      P('O app acompanha onde eu estou?', 'Só durante o trabalho e só com o app aberto: a posição na hora de marcar cada árvore e, quando a coordenação liga o trajeto do turno, o caminho da equipe até você tocar em "Encerrar turno". Fora disso, nada.'),
+      P('Quais dados meus o app usa?', 'Usuário, nome e equipe; a dupla da equipe (nome, função, registro profissional do avaliador e vínculo); data, hora e posição do celular quando você marca um ponto; o modelo do aparelho. Não usamos contatos, galeria pessoal nem arquivos do celular, nem dados de pagamento.'),
+      P('O app acompanha onde eu estou?', 'Só durante o trabalho e só com o app aberto: a posição na hora de marcar cada árvore e, quando a coordenação liga o trajeto, o caminho da equipe até você tocar em "Encerrar o dia". Fora disso, nada.'),
       P('Para que servem esses dados?', 'Saber quem fez cada registro, conferir a qualidade e a localização das árvores, acompanhar o andamento do campo, calcular a produção de cada pessoa (árvores validadas, prêmio e bônus) e cumprir o contrato com o cliente. Para parceiros o app não registra jornada: só o começo e o fim de cada cadastro.'),
       P('Quem vê?', 'A coordenação da Neofloresta. O cliente recebe os dados das árvores, sem os dados das equipes.'),
       P('E as fotos?', 'Fotografe a árvore e o entorno. Evite pessoas, placas de veículos e o interior das casas; se aparecerem, a foto é usada só como registro técnico.'),
@@ -2652,7 +2668,7 @@
     const longo = h('div', { class: 'termo-longo' },
       h('p', null, 'Este sistema é da Neofloresta Serviços Ecossistêmicos Ltda.' + (CONTATO.cnpj ? ' (CNPJ ' + CONTATO.cnpj + ')' : '') + ' e é usado para o inventário da arborização urbana nos projetos contratados pelo poder público ou por empresas.'),
       h('h4', null, 'Dados pessoais'),
-      h('p', null, cliente ? 'Tratamos o usuário, o nome, o email informado pelo contratante e o registro das ações no sistema (auditoria).' : 'Tratamos o usuário, o nome e a equipe de quem usa o app; o nome, a função, o registro profissional (avaliadores) e o vínculo de quem está na dupla do dia, gravados em cada registro para calcular a produção; data, hora e posição do aparelho no momento de cada registro; o trajeto da equipe durante o turno, quando ligado pela coordenação, sempre com aviso na tela e só com o app aberto; e o modelo do aparelho. Não coletamos contatos, arquivos pessoais nem a localização fora do trabalho de campo.'),
+      h('p', null, cliente ? 'Tratamos o usuário, o nome, o email informado pelo contratante e o registro das ações no sistema (auditoria).' : 'Tratamos o usuário, o nome e a equipe de quem usa o app; o nome, a função, o registro profissional (avaliadores) e o vínculo da dupla da equipe, gravados em cada registro para calcular a produção; data, hora e posição do aparelho no momento de cada registro; o trajeto da equipe durante o turno, quando ligado pela coordenação, sempre com aviso na tela e só com o app aberto; e o modelo do aparelho. Não coletamos contatos, arquivos pessoais nem a localização fora do trabalho de campo.'),
       h('h4', null, 'Finalidade e base legal'),
       h('p', null, 'Identificar quem fez cada registro, garantir a qualidade e a rastreabilidade do inventário (histórico de alterações e auditoria), acompanhar o andamento e a segurança do trabalho de campo e cumprir o contrato. O tratamento se apoia na execução do contrato e no legítimo interesse, nos termos da Lei Geral de Proteção de Dados Pessoais.'),
       h('h4', null, 'Guarda e compartilhamento'),

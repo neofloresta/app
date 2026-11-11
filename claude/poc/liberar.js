@@ -48,6 +48,7 @@ const suites = [
   ['2.7: mapa primeiro, cancelar registro, risco com descrição, primeiro acesso em telas próprias', 'node b27.js'],
   ['2.7: pessoas, dupla do dia, árvore repetida, setores censitários, parceiro sem jornada', 'node b27e.js'],
   ['2.7: produção, prêmio, bônus, auditoria por setor e fechamento da medição', 'node b27f.js'],
+  ['2.8: tela de coleta limpa, começar e encerrar o dia, sino, Meu dia e dupla fixa', 'node b28.js'],
   ['estresse: 2 mil cadastros em 6 celulares (5 equipes), servidor lento, sem internet e quedas', 'node bstress.js 2000', null, { LATENCIA: '300', UI: '2' }],
   ['velocidade com servidor lento (1,5 s por consulta) e celular fraco', 'node perf.js', null, { LATENCIA: '1500', ROTULO: 'liberar' }],
 ];

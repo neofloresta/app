@@ -1,13 +1,11 @@
 {
- "versao": "2.7.1",
- "data": "2026-11-10",
+ "versao": "2.8.0",
+ "data": "2026-11-11",
  "notas": [
-  "Meta do dia e prêmio contados por dupla, não pela equipe toda",
-  "O app abre no mapa: botão + no canto de baixo para nova árvore e toque na quadra ou na face para marcar",
-  "Primeiro acesso em telas próprias: localização, instalar o app e teste do GPS",
-  "Botão Cancelar registro no topo do cadastro; descrição do risco sempre à vista",
-  "Dupla do dia: avaliador habilitado e auxiliar escolhidos no primeiro cadastro, gravados em cada árvore",
-  "Aviso de árvore já cadastrada a menos de 2 m e de ponto fora dos setores da equipe",
-  "Minha produção: árvores de hoje, da semana e do período, validadas e devolvidas com o motivo"
+  "Tela de coleta limpa: só o mapa, onde estou, o GPS e o botão Nova árvore",
+  "Começar o dia e Encerrar o dia com um toque",
+  "Avisos atrás do sino; números, registros e produção em Meu dia, no menu",
+  "Dupla fixa por acesso, definida pela coordenação (o celular não pergunta mais)",
+  "Meta do dia e prêmio contados por dupla"
  ]
 }

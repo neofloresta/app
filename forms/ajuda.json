@@ -1,5 +1,5 @@
 {
- "versao": "2.7",
+ "versao": "2.8",
  "passos": {
   "campo": [
    [
@@ -582,8 +582,8 @@
    ],
    "tema": "Turno e trajeto",
    "chave": "turno",
-   "p": "O que é \"Começar turno\"?",
-   "r": "Quando a coordenação liga o trajeto para a sua equipe, aparece \"Começar turno\" na tela inicial. Ao tocar, o app guarda o caminho da equipe enquanto estiver aberto e mantém a tela acesa. No fim do dia, toque em \"Encerrar turno\"."
+   "p": "O app grava o caminho da equipe?",
+   "r": "Só quando a coordenação liga o trajeto para a sua equipe. Aí, ao tocar em \"Começar o dia\", o app guarda o caminho enquanto estiver aberto, até você encerrar o dia. A etiqueta \"Dia desde...\" fica com uma bolinha rosa. Dupla com parceiro não tem trajeto."
   },
   {
    "perfis": [
@@ -592,7 +592,7 @@
    "tema": "Turno e trajeto",
    "chave": "turno",
    "p": "O trajeto grava com o celular no bolso ou com a tela desligada?",
-   "r": "Não. Ele grava só com o app aberto na tela. Por isso o app pede para manter a tela acesa durante o turno."
+   "r": "Não. Ele grava só com o app aberto na tela. Por isso o app pede para manter a tela acesa durante o dia."
   },
   {
    "perfis": [
@@ -600,8 +600,8 @@
    ],
    "tema": "Turno e trajeto",
    "chave": "turno",
-   "p": "Esqueci de encerrar o turno.",
-   "r": "No dia seguinte o app encerra o turno anterior sozinho ao abrir."
+   "p": "Esqueci de encerrar o dia.",
+   "r": "No dia seguinte o app fecha o dia anterior sozinho ao abrir e mostra \"Começar o dia\" de novo."
   },
   {
    "perfis": [
@@ -628,7 +628,7 @@
    "tema": "Mapa",
    "chave": "mapa",
    "p": "Onde fica o botão de nova árvore?",
-   "r": "O app abre no mapa. O botão redondo com + no canto de baixo, à direita, marca o ponto e abre o cadastro. Toque na quadra ou na face para marcar levantada ou sem árvores. Seus cadastros ficam em \"Meus registros\", embaixo do mapa."
+   "r": "O app abre no mapa. De manhã toque em \"Começar o dia\"; o botão vira \"Nova árvore\". Toque na face da calçada para marcar levantada ou sem árvores. Números, registros e produção ficam em \"Meu dia\", no menu."
   },
   {
    "perfis": [
@@ -636,8 +636,8 @@
    ],
    "tema": "Cadastro",
    "chave": "cadastro",
-   "p": "O app pergunta quem está na dupla. O que escolho?",
-   "r": "No primeiro cadastro do dia, escolha o avaliador habilitado e o auxiliar que estão no campo. Sem avaliador a coleta não é liberada. Para trocar no meio do dia, toque nos nomes da dupla embaixo do mapa."
+   "p": "Quem aparece como dupla nos meus registros?",
+   "r": "A dupla do acesso: o avaliador responsável e o auxiliar que a coordenação definiu. Os nomes aparecem no alto da tela. Se mudou alguém, avise a coordenação para trocar no cadastro."
   },
   {
    "perfis": [
@@ -664,7 +664,7 @@
    "tema": "Cadastro",
    "chave": "cadastro",
    "p": "Onde vejo minha produção?",
-   "r": "No menu, Campo, \"Minha produção\": árvores de hoje, da semana e do período, validadas, em validação e devolvidas com o motivo. Conta como validada a árvore com 2 m de altura ou mais, foto, coordenada e aprovada pela coordenação."
+   "r": "No menu, \"Meu dia\" mostra as árvores de hoje contra a meta da dupla, o que falta enviar e as devolvidas. \"Minha produção\" mostra a semana e o período. Conta a árvore com 2 m de altura ou mais, foto, coordenada e aprovada pela coordenação."
   },
   {
    "perfis": [
@@ -673,7 +673,7 @@
    "tema": "Equipes e quadras",
    "chave": "equipes",
    "p": "Como cadastro as pessoas das equipes?",
-   "r": "Em Coordenação, Pessoas: nome, função (avaliador habilitado com o registro profissional, ou auxiliar) e vínculo (CLT ou parceiro). O acesso continua por dupla: no celular a dupla escolhe quem está no campo no dia. Sem pessoas cadastradas o app funciona como antes."
+   "r": "Em Coordenação, Pessoas: nome, função (avaliador habilitado com o registro profissional, ou auxiliar) e vínculo (CLT ou parceiro). Depois, em Usuários, edite o acesso da equipe e escolha o avaliador responsável e o auxiliar. A dupla é fixa: o celular não pergunta nada."
   },
   {
    "perfis": [
@@ -701,6 +701,24 @@
    "chave": "painel",
    "p": "Como fecho a medição e pago a produção?",
    "r": "Em Produção e pagamento, escolha o período (quinzena), confira por pessoa, equipe, setor e o prêmio por dia, e exporte a planilha. \"Fechar medição\" marca as árvores do período como pagas. O prêmio dos CLT é pago no cartão prêmio. Os valores ficam no cadastro do projeto, em Produção e auditoria."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Conta e app",
+   "chave": "conta",
+   "p": "Como começo e encerro o dia?",
+   "r": "De manhã, toque em \"Começar o dia\". Para terminar, toque na etiqueta \"Dia desde...\" em cima do mapa (ou em \"Encerrar o dia\" no menu) e confirme: o app envia o que falta. Se esquecer, o dia fecha sozinho à meia-noite."
+  },
+  {
+   "perfis": [
+    "campo"
+   ],
+   "tema": "Conta e app",
+   "chave": "conta",
+   "p": "Para que serve o sino?",
+   "r": "Junta os avisos que não são da hora da coleta: árvores devolvidas para corrigir, ordens de serviço da equipe e versão nova do app. O número mostra quantos avisos há."
   }
  ]
 }
