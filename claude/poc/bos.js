@@ -34,7 +34,7 @@ const sync = (p) => p.evaluate(() => window.__app.sincronizar(true));
   ok('4.1', semTipo === 1 && /OS 0001/.test(itemC) && /Poda de limpeza/.test(itemC) && /Aberta/.test(itemC) && /E1-0001/.test(itemC), `sem tipo não abre=${semTipo === 1}; lista: "${itemC.replace(/\s+/g, ' ')}"`);
 
   // 4.2 equipe vê a ordem na tela inicial e executa sem internet, com foto de antes e depois
-  await pe.goto(L.WEB + '#inicio'); await pe.reload(); await pe.waitForSelector('.faixa-os', { timeout: 15000 });
+  await pe.goto(L.WEB + '#inicio'); await pe.reload(); await pe.waitForFunction(() => { const x = document.querySelector('.selo-sino'); return x && !x.classList.contains('oculto'); }, null, { timeout: 15000 }); await pe.click('.bt-sino'); await pe.waitForSelector('.faixa-os', { timeout: 15000 }); // 2.8: a ordem da equipe fica no sino
   const faixa = await pe.locator('.faixa-os').innerText();
   await pe.click('.faixa-os'); await pe.click('.os-item'); await pe.waitForSelector('text=Concluir serviço');
   await E.ctx.setOffline(true);

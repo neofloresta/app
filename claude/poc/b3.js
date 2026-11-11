@@ -12,7 +12,7 @@ const N = +(process.argv[2] || 5000);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 }); // celular intermediário
   const t1 = Date.now(); await L.logar(p, 'div-1', 'equipe01'); await p.waitForSelector('button.nova', { timeout: 120000 }); const tLogin = Date.now() - t1;
   await p.waitForTimeout(500);
-  const t2 = Date.now(); await p.goto(L.WEB + '#mapa');
+  const t2 = Date.now(); await p.goto(L.WEB + '#consulta');
   // calçadas sem árvores não viram ponto no mapa (só a linha da face): o total fica um pouco abaixo de N
   await p.waitForFunction((n) => { const t = (document.querySelector('.mapa-conta') || {}).textContent || ''; const m = t.match(/de ([\d.]+) pontos/); return m && +m[1].replace(/\./g, '') >= n * 0.7 && !/Carregando pontos|atualizando/.test(t); }, N, { timeout: 180000 });
   if (await p.locator('.mapa-sel.oculto').count()) await p.click('.bt-filtros'); // no celular os filtros começam recolhidos

@@ -38,7 +38,7 @@ const N = +(process.argv[2] || 3000);
   ok('V.2', dev.validacao === 'Devolvido' && nVal > 0, `devolvido com motivo "${dev.validacao_obs}"; "${txtLote}" validou ${nVal}`);
 
   // --- coletor vê o devolvido, corrige
-  await pc.evaluate(() => window.dispatchEvent(new Event('online'))); await pc.waitForTimeout(2500); await pc.goto(L.WEB + '#inicio'); await pc.waitForTimeout(800);
+  await pc.evaluate(() => window.dispatchEvent(new Event('online'))); await pc.waitForTimeout(2500); await pc.goto(L.WEB + '#lista'); await pc.waitForTimeout(800); // 2.8: na coleta o aviso fica no sino; a faixa continua em Meus registros
   const faixa = await pc.locator('.faixa-dev').innerText().catch(() => '');
   await foto(pc, 'coletor-devolvido');
   await pc.click('.faixa-dev').catch(() => {}); await pc.waitForTimeout(300); await pc.click('.reg').catch(() => {}); await pc.waitForTimeout(500);

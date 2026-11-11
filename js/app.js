@@ -534,6 +534,7 @@
         }
       } catch (e) { /* sem quadras */ }
       if (!document.body.contains(el)) return;
+      if (el.closest('.avisos-lista')) qd = null; // no sino só o que pede ação (o andamento das quadras não é aviso)
       el.replaceChildren(qd, f.length ? h('button', { class: 'faixa-os', onclick: () => { S.filtroOS = 'fazer'; ir('#ordens'); } }, h('b', null, `${f.length} ${f.length > 1 ? 'ordens' : 'ordem'} de serviço para a sua equipe`), h('span', null, at ? `${at} atrasada${at > 1 ? 's' : ''}. Toque para ver` : 'Toque para ver e registrar a execução')) : '');
     } catch (e) { /* sem ordens */ }
   }
@@ -564,6 +565,7 @@
     const rasc = todos.filter((r) => r.status === 'rascunho' && r.mexido);
     const cont = document.getElementById('continuar');
     if (cont) cont.replaceChildren(rasc.length ? h('button', { class: 'faixa-cont', onclick: () => ir('#form/' + rasc[0].uuid) }, h('b', null, rasc.length > 1 ? `${rasc.length} cadastros não terminados` : '1 cadastro não terminado'), h('span', null, `${codigoDe(S.form, rasc[0].valores) || ''} · Continuar`)) : '');
+    if (cont && rasc.length && cont.closest('.modo-campo')) cont.firstChild.replaceChildren(h('span', null, rasc.length > 1 ? `Continuar (${rasc.length} não terminados)` : `Continuar ${codigoSo(S.form, rasc[0].valores) || 'o cadastro'}`));
     const ult = await Store.get('ultimoEnvio:' + S.projeto.id); const ue = document.getElementById('ult-envio');
     if (ue) ue.textContent = ult ? `Último envio às ${new Date(ult).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}${new Date(ult).toDateString() !== hoje ? ' de ' + new Date(ult).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : ''}` : '';
     if (box) box.replaceChildren(dev.length ? h('button', { class: 'faixa-dev', onclick: () => { const b = document.querySelector('.busca'); if (b) { b.value = 'devolvido'; listarRegistros('devolvido'); } else { S.filtroLista = 'devolvido'; ir('#lista'); } } }, h('b', null, `${dev.length} registro${dev.length > 1 ? 's' : ''} devolvido${dev.length > 1 ? 's' : ''} pela coordenação`), h('span', null, 'Toque para ver e corrigir')) : '');
@@ -825,30 +827,35 @@
     chave: () => 'dia:' + S.sessao.u + ':' + S.projeto.id,
     async aberto() { if (!S.sessao || !S.projeto) return null; const d = await Store.get(this.chave()); return d && d.dia === diaLocal(agoraISO()) ? d : null; },
     async comecar() {
+      if (Date.now() - (S.diaMudou || 0) < 1200) return; S.diaMudou = Date.now(); // toque duplo não começa, encerra nem abre cadastro sem querer
       await Store.set(this.chave(), { dia: diaLocal(agoraISO()), inicio: agoraISO() }); await Dupla.carregar();
       if (Turno.liberado() && !(Turno.est && Turno.est.ativo)) await Turno.comecar();
       pintarDia(); ligarGps();
     },
     async encerrar() {
-      const rasc = (await Store.registros(S.projeto.id)).filter((r) => r.status === 'rascunho' && r.usuario === S.sessao.u).length;
-      if (!(await confirmar('Encerrar o dia', (rasc ? `Você tem ${rasc} cadastro(s) não terminado(s): eles ficam guardados para amanhã. ` : '') + 'O app envia o que falta e volta para "Começar o dia".', 'Encerrar o dia'))) return;
+      if (S.encerrando || Date.now() - (S.diaMudou || 0) < 1200) return; S.encerrando = true; setTimeout(() => { S.encerrando = false; }, 60000);
+      try { return await this.encerrar2(); } finally { S.encerrando = false; }
+    },
+    async encerrar2() {
+      const rasc = (await Store.registros(S.projeto.id)).filter((r) => r.status === 'rascunho' && r.mexido && r.usuario === S.sessao.u).length;
+      if (!(await confirmar('Encerrar o dia', (rasc ? (rasc > 1 ? `Você tem ${rasc} cadastros não terminados: eles ficam guardados para amanhã. ` : 'Você tem 1 cadastro não terminado: ele fica guardado para amanhã. ') : '') + 'O app envia o que falta e volta para "Começar o dia".', 'Encerrar o dia'))) return;
       if (Turno.est && Turno.est.ativo) await Turno.encerrar(true);
-      await Store.del(this.chave()); pintarDia(); sincronizar(true); toast(navigator.onLine ? 'Dia encerrado. Enviando o que falta.' : 'Dia encerrado. O envio sai quando houver internet.', 4000);
+      S.diaMudou = Date.now(); await Store.del(this.chave()); pintarDia(); sincronizar(true); toast(navigator.onLine ? 'Dia encerrado. Enviando o que falta.' : 'Dia encerrado. O envio sai quando houver internet.', 4000);
     },
   };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pintarDia().catch(() => {}); }); // app aberto de um dia para o outro
   // botão principal e etiqueta do dia na tela de coleta
   async function pintarDia() {
     const bt = document.getElementById('bt-principal'); const et = document.getElementById('turno'); if (!bt) return;
     const d = await Dia.aberto(); if (!document.body.contains(bt)) return;
-    if (d) { bt.className = 'btn nova bt-principal'; bt.replaceChildren(ico('mais'), 'Nova árvore'); bt.onclick = () => novoRegistro(); }
+    if (d) { bt.className = 'btn nova bt-principal'; bt.replaceChildren(ico('mais'), 'Nova árvore'); bt.onclick = async () => { if (Date.now() - (S.diaMudou || 0) < 1200) return; if (!(await Dia.aberto())) { pintarDia(); return toast('Novo dia: toque em "Começar o dia".', 4000); } novoRegistro(); }; }
     else { bt.className = 'btn comecar-dia bt-principal'; bt.replaceChildren('Começar o dia'); bt.onclick = () => Dia.comecar(); }
     if (et) { const traj = !!(Turno.est && Turno.est.ativo);
       et.replaceChildren(d ? h('button', { class: 'pill-dia' + (traj ? ' trajeto' : ''), onclick: () => Dia.encerrar(), 'aria-label': 'Encerrar o dia' }, h('i'), `Dia desde ${new Date(d.inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`) : ''); }
-    const c = document.getElementById('continuar'); if (c) c.classList.toggle('oculto', !d);
   }
   function pintarGpsPill(p) {
     const el = document.getElementById('gps-pill'); if (!el) return; p = p || S.pos; const velho = !p || Date.now() - p.t > 30000;
-    const [cls, txt] = S.gpsNegado ? ['ruim', 'GPS bloqueado'] : velho ? ['sem', 'Procurando GPS'] : p.prec <= 5 ? ['bom', `GPS bom ±${numBR(Math.round(p.prec))} m`] : p.prec <= 10 ? ['medio', `GPS médio ±${numBR(Math.round(p.prec))} m`] : ['ruim', `GPS fraco ±${numBR(Math.round(p.prec))} m`];
+    const [cls, txt] = S.gpsNegado ? ['ruim', 'GPS bloqueado'] : velho ? ['sem', 'Procurando GPS'] : p.prec <= 5 ? ['bom', `GPS bom ±${numBR(Math.round(p.prec))} m`] : p.prec <= 10 ? ['medio', `GPS médio ±${numBR(Math.round(p.prec))} m`] : ['ruim', p.prec > 99 ? 'GPS fraco' : `GPS fraco ±${numBR(Math.round(p.prec))} m`];
     el.className = 'gps-pill ' + cls; el.textContent = txt;
   }
 
@@ -2346,7 +2353,7 @@
     pintarHoje();
     const lin = (t, v, fn) => h('button', { class: 'menu-it dia-lin', onclick: fn }, h('span', null, t), h('small', null, v || ''));
     corpo.replaceChildren(cartaoHoje,
-      h('div', { class: 'cartao' }, h('div', { class: 'dia-tres' }, h('div', null, h('b', null, fmtN(aEnviar)), 'a enviar'), h('div', null, h('b', null, fmtN(dev)), 'devolvidas'), h('div', null, h('b', null, fmtN(rasc)), 'não terminadas'))),
+      h('div', { class: 'cartao' }, h('div', { class: 'dia-tres' }, h('div', null, h('b', null, fmtN(aEnviar)), 'a enviar'), h('div', null, h('b', null, fmtN(dev)), dev === 1 ? 'devolvida' : 'devolvidas'), h('div', null, h('b', null, fmtN(rasc)), rasc === 1 ? 'não terminada' : 'não terminadas'))),
       h('div', { class: 'cartao' }, lin('Meus registros', '', () => ir('#lista')), lin('Minha produção', '', () => ir('#producao')), lin('Ordens de serviço', '', () => ir('#ordens')), lin('Consultar o mapa', 'busca e filtros', () => ir('#consulta'))),
       d ? h('button', { class: 'btn sec', style: 'width:100%', onclick: async () => { await Dia.encerrar(); if (!(await Dia.aberto())) ir('#mapa'); } }, 'Encerrar o dia') : null);
     if (navigator.onLine && !Api.demo) try { const P = await Api.b.producaoMinha(S.projeto.id, hoje, hoje); if (P.regras && P.regras.meta) { meta = P.regras.meta; Store.set('meta:' + S.projeto.id, meta); if (document.body.contains(cartaoHoje)) pintarHoje(); } } catch (e) { /* servidor antigo ou sem conexão */ }
