@@ -1,13 +1,13 @@
 {
- "versao": "2.7.0",
+ "versao": "2.7.1",
  "data": "2026-11-10",
  "notas": [
+  "Meta do dia e prêmio contados por dupla, não pela equipe toda",
   "O app abre no mapa: botão + no canto de baixo para nova árvore e toque na quadra ou na face para marcar",
   "Primeiro acesso em telas próprias: localização, instalar o app e teste do GPS",
   "Botão Cancelar registro no topo do cadastro; descrição do risco sempre à vista",
   "Dupla do dia: avaliador habilitado e auxiliar escolhidos no primeiro cadastro, gravados em cada árvore",
   "Aviso de árvore já cadastrada a menos de 2 m e de ponto fora dos setores da equipe",
-  "Minha produção: árvores de hoje, da semana e do período, validadas e devolvidas com o motivo",
-  "Coordenação: pessoas das equipes, setores censitários, auditoria por setor, produção por pessoa e fechamento da medição"
+  "Minha produção: árvores de hoje, da semana e do período, validadas e devolvidas com o motivo"
  ]
 }

@@ -64,6 +64,12 @@ let ANA, BRUNO;
   const fj = await enviar('div-1', 'equipe01', 99, '05', { avaliador_id: 'P_FAKE', avaliador: 'Fantasma', avaliador_vinculo: 'Parceiro', auxiliar_id: ANA.avaliador_id, auxiliar: 'X', auxiliar_vinculo: 'Parceiro', setor: 'S2' }, 'Equipe 1');
   const lf = (await L.post('listar', { projeto: PJ })).linhas.find((l) => l.uuid === fj) || {};
   ok('F.9', f3.medicao.arvores === 1 && f3.medicao.total === 3 && lf.avaliador === '' && lf.auxiliar === 'Ana Souza' && lf.auxiliar_vinculo === 'CLT', `árvore validada depois do fechamento entra na medição seguinte sozinha (${f3.medicao.arvores} árvore, ${f3.medicao.total}); pessoa inexistente apagada ("${lf.avaliador}"), vínculo vem do cadastro (${lf.auxiliar} ${lf.auxiliar_vinculo})`);
+  // meta por dupla: duas duplas da mesma equipe no mesmo dia com 50 cada não passam da meta de 90
+  const idDavi = await nova({ nome: 'Davi Rocha', funcao: 'Avaliador', registro: 'CRBio 3', vinculo: 'CLT', equipe: 'Equipe 1' });
+  const d6 = []; for (let k = 0; k < 50; k++) { d6.push(await enviar('div-1', 'equipe01', 200 + k, '06', Object.assign({}, ANA), 'Equipe 1')); d6.push(await enviar('div-1', 'equipe01', 300 + k, '06', { avaliador_id: idDavi }, 'Equipe 1')); }
+  await L.post('validar', { projeto: PJ, itens: d6.map((uuid) => ({ uuid, estado: 'Validado' })) });
+  const P6 = await L.post('producao', { projeto: PJ, de: '2026-11-06', ate: '2026-11-06' });
+  ok('F.10', P6.dias.length === 2 && P6.dias.every((x) => x.validadas === 50 && x.acima === 0 && x.premio === 0), `dia 06/11: ${P6.dias.map((x) => `${x.dupla} ${x.validadas} árvores, ${x.acima} acima da meta`).join('; ')}`);
   // 5. telas
   const b = await chromium.launch();
   const C = await L.celular(b, { viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false }); const q = C.p;

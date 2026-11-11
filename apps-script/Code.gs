@@ -1206,7 +1206,8 @@ function producao(projetoId, de, ate, soLogin) {
     if (!k.conta) return;
     const aPagar = !l.pagamento; if (aPagar) arvoresPagar++; const sx = st[sn]; const comBonus = R.bonus > 0 && sx && sx.situacao === 'Aprovado' && sx.erro_pct !== '' && +sx.erro_pct < R.bonusErroMax;
     membros.forEach((m) => { const P = pes(m.id, m.nome, m.v); const v = m.v === 'Parceiro' ? R.valor * m.pct / 100 : 0; const bn = comBonus ? R.bonus * m.pct / 100 : 0; if (noPeriodo) { P.valor += v; P.bonus += bn; E.valor += v; E.bonus += bn; S_.valor += v; S_.bonus += bn; } if (aPagar) { P.arvoresPagar++; P.valorPagar += v; P.bonusPagar += bn; } });
-    const kd = d + '|' + e; const D = dias[kd] = dias[kd] || { dia: d, equipe: e, n: 0, nPagar: 0, clt: {}, noPeriodo: noPeriodo }; D.n++; if (aPagar) D.nPagar++;
+    // meta do dia é por dupla (avaliador + auxiliar); registro antigo sem dupla conta pelo acesso da dupla
+    const kd = d + '|' + (membros.length ? membros.map((m) => m.id).sort().join('+') : 'acesso:' + String(l.usuario).toLowerCase()); const D = dias[kd] = dias[kd] || { dia: d, equipe: e, dupla: membros.length ? membros.map((m) => m.nome).join(' + ') : l.usuario, n: 0, nPagar: 0, clt: {}, noPeriodo: noPeriodo }; D.n++; if (aPagar) D.nPagar++;
     membros.forEach((m) => { if (m.v === 'CLT') D.clt[m.id] = { nome: m.nome }; });
   });
   // dia anterior ao período só aparece se ganhou árvore validada depois (o prêmio já pago sai da conta)
@@ -1214,7 +1215,7 @@ function producao(projetoId, de, ate, soLogin) {
     const D = dias[kd]; const acima = Math.max(0, D.n - R.meta); const total = acima * R.premio; const ids = Object.keys(D.clt);
     const jaPago = Math.max(0, D.n - D.nPagar - R.meta) * R.premio; const pagar = Math.max(0, total - jaPago);
     if (total && ids.length) ids.forEach((id) => { const P = pessoas[id]; if (P) { if (D.noPeriodo) P.premio += total / ids.length; P.premioPagar += pagar / ids.length; } }); if (equipes[D.equipe] && D.noPeriodo) equipes[D.equipe].premio += ids.length ? total : 0;
-    return { dia: D.dia, equipe: D.equipe, validadas: D.n, meta: R.meta, acima: acima, premio: ids.length ? total : 0, clt: ids.map((id) => D.clt[id].nome) };
+    return { dia: D.dia, equipe: D.equipe, dupla: D.dupla, validadas: D.n, meta: R.meta, acima: acima, premio: ids.length ? total : 0, clt: ids.map((id) => D.clt[id].nome) };
   });
   const r2 = (x) => Math.round(x * 100) / 100;
   const arred = (o) => { ['valor', 'premio', 'bonus', 'valorPagar', 'premioPagar', 'bonusPagar'].forEach((k) => { if (k in o) o[k] = r2(o[k]); }); o.total = r2(o.valor + o.premio + o.bonus); if ('valorPagar' in o) o.totalPagar = r2(o.valorPagar + o.premioPagar + o.bonusPagar); return o; };
@@ -1225,9 +1226,8 @@ function producao(projetoId, de, ate, soLogin) {
 }
 // painel da dupla: só os registros deste acesso; parceiro vê o valor se o projeto deixar
 function producaoDaDupla(projetoId, de, ate, usr) {
-  const r = producao(projetoId, de, ate, usr.login.toLowerCase()); const tudo = producao(projetoId, de, ate); // meta e prêmio são da equipe no dia, com todas as duplas
-  const eq = usr.equipe || ''; const premioDe = {}; tudo.pessoas.forEach((x) => { premioDe[x.id] = x.premio; }); r.pessoas.forEach((x) => { if (x.id in premioDe) x.premio = premioDe[x.id]; }); r.dias = tudo.dias.filter((d) => d.equipe === eq);
-  const out = { regras: { meta: r.regras.meta, premio: r.regras.premio, parceiroVeValor: r.regras.parceiroVeValor }, de: r.de, ate: r.ate, dias: r.dias.map((d) => ({ dia: d.dia, validadas: d.validadas, meta: d.meta, acima: d.acima, premio: d.premio })), devolvidas: r.devolvidas,
+  const r = producao(projetoId, de, ate, usr.login.toLowerCase()); // meta e prêmio são por dupla: bastam os registros deste acesso
+  const out = { regras: { meta: r.regras.meta, premio: r.regras.premio, parceiroVeValor: r.regras.parceiroVeValor }, de: r.de, ate: r.ate, dias: r.dias.map((d) => ({ dia: d.dia, dupla: d.dupla, validadas: d.validadas, meta: d.meta, acima: d.acima, premio: d.premio })), devolvidas: r.devolvidas,
     pessoas: r.pessoas.map((x) => { const o = { id: x.id, nome: x.nome, vinculo: x.vinculo, coletadas: x.coletadas, validadas: x.validadas, emValidacao: x.emValidacao, devolvidas: x.devolvidas, pagas: x.pagas, naoContam: x.naoContam };
       if (x.vinculo === 'Parceiro' && r.regras.parceiroVeValor) { o.valor = x.valor; o.bonus = x.bonus; } if (x.vinculo === 'CLT') { o.premio = x.premio; o.bonus = x.bonus; } return o; }) };
   const t = r.equipes.reduce((a, e) => { ['coletadas', 'validadas', 'emValidacao', 'devolvidas', 'pagas'].forEach((k) => { a[k] += e[k]; }); return a; }, { coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0 });
