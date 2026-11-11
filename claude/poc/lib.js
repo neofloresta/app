@@ -108,6 +108,6 @@ async function logar(p, u, s) {
   try { await p.waitForSelector('button:has-text("Li e aceito"), button.nova, .painel, .subabas, .cfg-pular', { timeout: 15000 }); } catch (e) { return; }
   if (await p.locator('button:has-text("Li e aceito")').count()) { await p.click('button:has-text("Li e aceito")'); await p.waitForTimeout(600); }
   // primeiro acesso no aparelho (2.7): configuração em 3 telas; os testes pulam (o teste próprio é o b27)
-  if (!process.env.COM_CONFIGURAR) { await p.waitForTimeout(300); try { await p.waitForFunction(() => !document.querySelector('.tela-cfg'), null, { timeout: 8000 }); } catch (e) { /* segue */ } } // quem pula é o observador do celular()
+  if (!process.env.COM_CONFIGURAR) { try { await p.waitForSelector('.tela-cfg, .bt-principal, button.nova, .painel, .subabas, .kpis', { timeout: 8000 }); await p.waitForFunction(() => !document.querySelector('.tela-cfg'), null, { timeout: 8000 }); } catch (e) { /* segue */ } } // quem pula é o observador do celular()
 }
 module.exports = { subir, post, configurar, semear, gerar, cabecalho, stats, falhar, celular, logar, espera, FORM, MOCK, WEB, APP, senha: () => senhaAdmin };

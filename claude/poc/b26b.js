@@ -32,8 +32,8 @@ const PROIBIDO = /google|drive|planilha|servidor(es)? fora|controlador|operador|
   await p.reload(); await p.waitForTimeout(1500); const deNovo = await p.locator('button:has-text("Li e aceito")').count();
   ok('A.5', deNovo === 0 && u1.termo_versao === require('fs').readFileSync(L.APP + '/js/app.js', 'utf8').match(/TERMO_VERSAO = '([^']+)'/)[1] && await p.locator('button.nova').count() === 1, `depois de aceitar, reabrir o app não pede de novo (${deNovo}); servidor guardou a versão "${u1.termo_versao}"`);
   // 3. "?" da tela inicial e ajuda do cadastro
-  await p.click('.topo .ic[aria-label="Ajuda"]'); await p.waitForSelector('.ajuda-lista'); const abasAj = await p.locator('.subaba').count(); const temas = await p.locator('.ajuda-tema h3').allInnerTexts();
-  ok('A.6', abasAj === 0 && temas.includes('GPS') && temas.includes('Faces de quadra') && !temas.includes('Validação'), `"?" da tela inicial abre a ajuda da equipe (abas ${abasAj}): ${temas.join(', ')}`);
+  await p.click('.topo .ic[aria-label="Menu"]'); await p.click('.menu-it:has-text("Ajuda")'); await p.waitForSelector('.ajuda-lista'); const abasAj = await p.locator('.subaba').count(); const temas = await p.locator('.ajuda-tema h3').allInnerTexts();
+  ok('A.6', abasAj === 0 && temas.includes('GPS') && temas.includes('Faces de quadra') && !temas.includes('Validação'), `a Ajuda do menu abre a ajuda da equipe (abas ${abasAj}): ${temas.join(', ')}`);
   await p.goto(L.WEB + '#inicio'); await p.waitForSelector('button.nova'); await p.click('button.nova'); await p.waitForSelector('.prog', { timeout: 30000 });
   await p.click('.prog-topo'); await p.click('.folha .link-ajuda-form'); await p.waitForSelector('.ajuda-lista'); await p.waitForTimeout(300);
   const visivel = await p.evaluate(() => { const s = [...document.querySelectorAll('.ajuda-tema')].find((x) => /Cadastro/.test(x.querySelector('h3').textContent)); if (!s) return null; const r = s.getBoundingClientRect(); return Math.round(r.top); });

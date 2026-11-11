@@ -59,10 +59,10 @@ const tocar = async (p, lat, lon) => { const xy = await p.evaluate(([a, b]) => {
   await pe.goto(L.WEB + '#inicio'); await pe.reload(); await pe.waitForSelector('button.nova'); await pe.waitForTimeout(1500);
   await A.arvoreCompleta(pe); await pe.waitForTimeout(800); await sync(pe); await pe.waitForTimeout(1500); s = await sit(T);
   ok('Q.7', s[qGps.n].situacao === 'Em levantamento', `ao salvar a árvore, a quadra ${qGps.n} passou de "A levantar" para "${s[qGps.n].situacao}"`);
-  await pe.goto(L.WEB + '#inicio'); await pe.reload(); await pe.waitForSelector('.faixa-qd', { timeout: 10000 }).catch(() => null);
+  await pe.goto(L.WEB + '#meudia'); await pe.reload(); await pe.waitForSelector('.faixa-qd', { timeout: 10000 }).catch(() => null);
   const faixa = await pe.locator('.faixa-qd').innerText().catch(() => '');
   await pe.screenshot({ path: 'qd-inicio-equipe.png' });
-  ok('Q.8', /Quadras da sua equipe: 0 de 3 levantadas/.test(faixa) && /2 em levantamento/.test(faixa), `tela inicial: "${faixa.replace(/\s+/g, ' ')}"`);
+  ok('Q.8', /Quadras da sua equipe: 0 de 3 levantadas/.test(faixa) && /2 em levantamento/.test(faixa), `Meu dia: "${faixa.replace(/\s+/g, ' ')}"`);
   // 4. coordenação escolhe várias e define equipe
   await pa.goto(L.WEB + '#mapa'); await pa.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000, state: 'attached' }); await pa.waitForFunction(() => !/Carregando/.test(document.querySelector('.mapa-conta').textContent)); await pa.waitForTimeout(1500);
   await tocar(pa, ...centro(q4)); await pa.click('.qd-ficha button:has-text("Escolher várias")'); await pa.waitForTimeout(300);

@@ -22,7 +22,7 @@ const quadrado = (n, x0, y0, x1, y1) => ({ n, b: [x0, y0, x1, y1], a: [[x0, y0, 
   process.env.COM_DUPLICIDADE = '1'; process.env.COM_DIA = '1'; const E = await L.celular(b); const p = E.p; delete process.env.COM_DUPLICIDADE; delete process.env.COM_DIA;
   await L.logar(p, 'div-1', 'equipe01'); await p.waitForSelector('button.comecar-dia', { timeout: 20000 }); await p.waitForTimeout(800);
   const sub = await p.locator('.topo h1 small').innerText().catch(() => '');
-  await p.click('button.comecar-dia'); await p.waitForSelector('button.nova', { timeout: 10000 }); await p.waitForTimeout(500);
+  await p.click('button.comecar-dia'); await p.waitForSelector('button.nova', { timeout: 10000 }); await p.waitForTimeout(1500);
   const trajeto = await p.locator('.pill-dia.trajeto').count(); const pill = await p.locator('.pill-dia').innerText().catch(() => '');
   await p.click('button.nova'); await p.waitForSelector('.prog', { timeout: 40000 }); const perguntou = await p.locator('.folha:has-text("dupla")').count();
   ok('E.2', /habilitado/.test(errAux) && /Ana \+ João/.test(sub) && !perguntou, `auxiliar não pode ser o responsável ("${errAux.slice(0, 70)}"); o topo mostra "${sub}"; Começar o dia e Nova árvore sem nenhuma pergunta de dupla (${perguntou})`);

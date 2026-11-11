@@ -14,7 +14,7 @@ const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.s
   const b = await chromium.launch(); const { p } = await L.celular(b);
   const cdp = await p.context().newCDPSession(p); await cdp.send('Emulation.setCPUThrottlingRate', { rate: +process.env.CPU || 4 });
   const cron = async (k, fn) => { await chamadas(); const t0 = Date.now(); await fn(); marca(k, Date.now() - t0); const c = await chamadas(); if (c.length) console.log('   chamadas:', c.join(', ')); };
-  await cron('login coletor até a tela inicial', async () => { await L.logar(p, 'div-1', 'equipe01'); await p.waitForSelector('button.nova', { timeout: 60000 }); });
+  await cron('login coletor até a tela inicial', async () => { await L.logar(p, 'div-1', 'equipe01'); await p.waitForSelector('.bt-principal', { timeout: 60000 }); }); await p.waitForSelector('button.nova', { timeout: 60000 }); // 2.8: a tela inicial é o botão do dia; o teste começa o dia sozinho
   await p.waitForTimeout(3000); await chamadas();
   await cron('reabrir o app (já logado)', async () => { await p.reload(); await p.waitForSelector('button.nova', { timeout: 60000 }); });
   await p.waitForTimeout(3000); await chamadas();
@@ -23,7 +23,7 @@ const P = async (acao, d) => (await fetch(L.MOCK, { method: 'POST', body: JSON.s
   await cron('trocar de aba', async () => { await A.aba(p, 'Meio'); });
   await p.goto(L.WEB + '#inicio'); await p.waitForSelector('button.nova'); await p.waitForTimeout(2500); await chamadas();
   await cron('cadastro completo (preencher e concluir)', async () => { await A.arvoreCompleta(p, {}); });
-  await cron('abrir mapa até quadras desenhadas', async () => { await p.goto(L.WEB + '#mapa'); await p.waitForFunction(() => document.body.innerText.includes('quadras levantadas'), null, { timeout: 90000 }); });
+  await cron('abrir mapa até quadras desenhadas', async () => { await p.goto(L.WEB + '#consulta'); await p.waitForFunction(() => document.body.innerText.includes('quadras levantadas'), null, { timeout: 90000 }); });
   await p.evaluate(() => new Promise((r) => { const m = window.__app.mapa; m.once('moveend', () => setTimeout(r, 300)); m.setView([-20.1436, -44.8908], 16); }));
   await cron('arrastar o mapa', async () => { const m = await p.locator('#mapa, .mapa, .leaflet-container').first().boundingBox(); await p.mouse.move(m.x + 200, m.y + 300); await p.mouse.down(); await p.mouse.move(m.x + 100, m.y + 200, { steps: 8 }); await p.mouse.up(); await p.waitForTimeout(50); });
   await cron('zoom no mapa', async () => { const r = await p.evaluate(() => new Promise((r) => { const m = window.__app.mapa; const z0 = m.getZoom(); m.once('zoomend', () => setTimeout(() => r('ok'), 0)); m.setZoom(z0 >= 18 ? 16 : 18); /* sem mudança de zoom não há zoomend (era isso que travava o teste) */ setTimeout(() => r(`sem zoomend em 20 s (zoom ${z0} -> ${m.getZoom()})`), 20000); })); if (r !== 'ok') console.log('   AVISO', r); await p.evaluate(() => new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(r)); setTimeout(r, 3000); })); });

@@ -21,7 +21,7 @@ const Api = (() => {
 
   function paraMapa(linhas, campos) { return { cab: campos, linhas: linhas.map((l) => campos.map((c) => l[c] ?? '')) }; }
   // listas da coordenação: a resposta vale por 1 minuto (trocar de aba fica instantâneo); qualquer gravação limpa
-  const MEMO_LEITURA = ['usuarios_listar', 'projetos_listar', 'formularios_listar'];
+  const MEMO_LEITURA = ['usuarios_listar', 'projetos_listar', 'formularios_listar', 'pessoas_listar'];
   const LEITURAS = ['conferir', 'trajetos', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', 'pessoas_listar', 'setores_camada', 'setores_situacao', 'producao', 'producao_minha', ...MEMO_LEITURA];
   let memo = new Map();
   async function chamar(acao, dados, semCred) {

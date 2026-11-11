@@ -32,13 +32,13 @@ const VJ = JSON.parse(fs.readFileSync(L.APP + '/version.json', 'utf8'));
   process.on('exit', restaurar);
   fs.writeFileSync(L.APP + '/version.json', JSON.stringify(nova));
   await p.goto(L.WEB + '#inicio'); await p.reload(); await p.waitForTimeout(2000);
-  const aviso = await p.locator('#aviso-versao').innerText().catch(() => '');
+  const aviso = await p.locator('#aviso-versao').evaluate((e) => e.textContent).catch(() => '');
   await p.screenshot({ path: 'aviso-versao.png' });
   ok('V.2', aviso.includes('9.9.9'), `aviso: "${aviso.replace(/\s+/g, ' ').slice(0, 140)}"`);
 
   // V.3 botão atualiza, rascunho e fila continuam no aparelho
   restaurar();
-  await Promise.all([p.waitForEvent('load', { timeout: 15000 }).catch(() => null), p.locator('#aviso-versao button').first().click()]);
+  await Promise.all([p.waitForEvent('load', { timeout: 15000 }).catch(() => null), (async () => { if (await p.locator('.bt-sino').count()) await p.click('.bt-sino'); await p.locator('#aviso-versao button').first().click(); })()]);
   await p.waitForTimeout(2500);
   const rascDepois = (await regs(p)).length;
   const logado = await p.locator('text=Nova árvore').count();

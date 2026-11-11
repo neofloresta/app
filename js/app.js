@@ -2354,8 +2354,10 @@
     const lin = (t, v, fn) => h('button', { class: 'menu-it dia-lin', onclick: fn }, h('span', null, t), h('small', null, v || ''));
     corpo.replaceChildren(cartaoHoje,
       h('div', { class: 'cartao' }, h('div', { class: 'dia-tres' }, h('div', null, h('b', null, fmtN(aEnviar)), 'a enviar'), h('div', null, h('b', null, fmtN(dev)), dev === 1 ? 'devolvida' : 'devolvidas'), h('div', null, h('b', null, fmtN(rasc)), rasc === 1 ? 'não terminada' : 'não terminadas'))),
+      h('div', { id: 'os-equipe' }),
       h('div', { class: 'cartao' }, lin('Meus registros', '', () => ir('#lista')), lin('Minha produção', '', () => ir('#producao')), lin('Ordens de serviço', '', () => ir('#ordens')), lin('Consultar o mapa', 'busca e filtros', () => ir('#consulta'))),
       d ? h('button', { class: 'btn sec', style: 'width:100%', onclick: async () => { await Dia.encerrar(); if (!(await Dia.aberto())) ir('#mapa'); } }, 'Encerrar o dia') : null);
+    pintarOSEquipe(); // andamento das quadras e faces da equipe e ordens de serviço
     if (navigator.onLine && !Api.demo) try { const P = await Api.b.producaoMinha(S.projeto.id, hoje, hoje); if (P.regras && P.regras.meta) { meta = P.regras.meta; Store.set('meta:' + S.projeto.id, meta); if (document.body.contains(cartaoHoje)) pintarHoje(); } } catch (e) { /* servidor antigo ou sem conexão */ }
   }
   async function telaMinhaProducao() {
