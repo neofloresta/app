@@ -700,7 +700,7 @@
    "tema": "Painel e entrega",
    "chave": "painel",
    "p": "Como fecho a medição e pago a produção?",
-   "r": "Em Produção e pagamento, escolha o período (quinzena), confira por pessoa, equipe, setor e o prêmio por dia, e exporte a planilha. \"Fechar medição\" marca as árvores do período como pagas. O prêmio dos CLT é pago no cartão prêmio. Os valores ficam no cadastro do projeto, em Produção e auditoria. Se a dupla foi trazida por alguém (uma empresa júnior, por exemplo), preencha \"Dupla trazida por\" no acesso da equipe, em Usuários: a aba \"Quem trouxe\" mostra o valor por árvore validada."
+   "r": "Em Produção e pagamento, escolha o período (quinzena), confira por pessoa, equipe, setor e o prêmio por dia, e exporte a planilha. \"Fechar medição\" marca as árvores do período como pagas. O prêmio dos CLT é pago no cartão prêmio. Os valores ficam no cadastro do projeto, em Produção e auditoria. Se a dupla é de um time parceiro (uma empresa júnior, por exemplo), preencha \"Time da dupla\" no acesso da equipe, em Usuários: a aba \"Por time\" mostra o valor por árvore validada."
   },
   {
    "perfis": [

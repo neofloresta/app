@@ -323,7 +323,7 @@ function salvarUsuario(dados) {
   if (!/^[a-z0-9._-]{2,40}$/i.test(dados.login)) throw new Error('Usuário só pode ter letras, números, ponto, hífen e sublinhado.');
   const o = { login: String(dados.login).trim().toLowerCase() };
   ['nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'modo_copa', 'trajeto', 'avaliador_id', 'auxiliar_id'].forEach((k) => { if (dados[k] != null) o[k] = String(dados[k]).trim(); });
-  if (dados.indicacao != null) o.indicacao = seguro(String(dados.indicacao).replace(/[\t\r\n]+/g, ' ').trim().slice(0, 80)); // quem trouxe a dupla (ex.: empresa júnior)
+  if (dados.indicacao != null) o.indicacao = seguro(String(dados.indicacao).replace(/[\t\r\n]+/g, ' ').trim().slice(0, 80)); // time da dupla (ex.: empresa júnior)
   // dupla fixa do acesso: avaliador responsável e auxiliar, escolhidos do cadastro de pessoas
   ['avaliador_id', 'auxiliar_id'].forEach((k) => { if (o[k]) { const pe = tabela('Pessoas').find((x) => x.id === o[k]); if (!pe) throw new Error('Pessoa não encontrada no cadastro.'); if (k === 'avaliador_id' && pe.funcao !== 'Avaliador') throw new Error('O responsável precisa ser um avaliador habilitado.'); } });
   if (o.avaliador_id && o.avaliador_id === o.auxiliar_id) throw new Error('Avaliador e auxiliar precisam ser pessoas diferentes.');
@@ -1197,7 +1197,7 @@ function producao(projetoId, de, ate, soLogin) {
   const X = linhasProducao(projetoId); const R = regrasProducao(X.p); const F = X.F;
   const st = {}; lerSetores(projetoId).forEach((x) => { st[x.numero] = x; });
   const pessoas = {}, equipes = {}, setores = {}, dias = {}; const devolvidas = [];
-  // quem trouxe a dupla (empresa júnior, por exemplo) recebe um valor por árvore que conta, além do que a dupla recebe
+  // o time da dupla (empresa júnior, por exemplo) recebe um valor por árvore que conta, além do que a dupla recebe
   const trouxe = {}; tabela('Usuarios').forEach((u) => { if (u.indicacao) trouxe[String(u.login).toLowerCase()] = u.indicacao; }); const indic = {};
   const pes = (id, nome, vinc) => (pessoas[id] = pessoas[id] || { id: id, nome: nome, vinculo: vinc, coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0, arvoresPagar: 0, valorPagar: 0, premioPagar: 0, bonusPagar: 0 });
   const zero = () => ({ coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0 });
