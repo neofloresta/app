@@ -11,9 +11,9 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.8';
-const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id'];
-const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga', 'prod_valor', 'prod_avaliador_pct', 'premio_valor', 'premio_meta', 'bonus_valor', 'bonus_erro_max', 'auditoria_pct', 'auditoria_erro_max', 'parceiro_ve_valor'];
+const VERSAO_SCRIPT = '2.9';
+const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id', 'indicacao'];
+const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga', 'prod_valor', 'prod_avaliador_pct', 'premio_valor', 'premio_meta', 'bonus_valor', 'bonus_erro_max', 'auditoria_pct', 'auditoria_erro_max', 'parceiro_ve_valor', 'indicacao_valor'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
 // pessoas das equipes (a dupla do dia é escolhida no celular): só o nome, a função e o vínculo, sem dados de pagamento
@@ -323,6 +323,7 @@ function salvarUsuario(dados) {
   if (!/^[a-z0-9._-]{2,40}$/i.test(dados.login)) throw new Error('Usuário só pode ter letras, números, ponto, hífen e sublinhado.');
   const o = { login: String(dados.login).trim().toLowerCase() };
   ['nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'modo_copa', 'trajeto', 'avaliador_id', 'auxiliar_id'].forEach((k) => { if (dados[k] != null) o[k] = String(dados[k]).trim(); });
+  if (dados.indicacao != null) o.indicacao = seguro(String(dados.indicacao).replace(/[\t\r\n]+/g, ' ').trim().slice(0, 80)); // quem trouxe a dupla (ex.: empresa júnior)
   // dupla fixa do acesso: avaliador responsável e auxiliar, escolhidos do cadastro de pessoas
   ['avaliador_id', 'auxiliar_id'].forEach((k) => { if (o[k]) { const pe = tabela('Pessoas').find((x) => x.id === o[k]); if (!pe) throw new Error('Pessoa não encontrada no cadastro.'); if (k === 'avaliador_id' && pe.funcao !== 'Avaliador') throw new Error('O responsável precisa ser um avaliador habilitado.'); } });
   if (o.avaliador_id && o.avaliador_id === o.auxiliar_id) throw new Error('Avaliador e auxiliar precisam ser pessoas diferentes.');
@@ -342,7 +343,7 @@ function duplaDoUsuario(u) {
   return { av: de(u.avaliador_id), ax: de(u.auxiliar_id) };
 }
 function paraAdmin(u) {
-  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'termo_versao', 'criado_em', 'modo_copa', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id'].forEach((k) => (o[k] = u[k] || ''));
+  const o = {}; ['login', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'termo_aceito_em', 'termo_versao', 'criado_em', 'modo_copa', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id', 'indicacao'].forEach((k) => (o[k] = u[k] || ''));
   o.perfil = normalizarPerfil(u.perfil);
   o.bloqueado = !!(u.bloqueado_ate && new Date(u.bloqueado_ate) > new Date());
   o.senha_antiga = !u.senha_hash;
@@ -1162,7 +1163,7 @@ function gravarSetor(sh, o) {
 // (pago por cartão prêmio, fora da folha); bônus de qualidade por árvore dos setores aprovados na auditoria com erro baixo.
 function regrasProducao(p) {
   const n = (v, d) => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(x) && x >= 0 ? x : d; };
-  return { valor: n(p.prod_valor, 2.5), pctAvaliador: Math.min(100, n(p.prod_avaliador_pct, 50)), premio: n(p.premio_valor, 1.5), meta: n(p.premio_meta, 90), bonus: n(p.bonus_valor, 0), bonusErroMax: n(p.bonus_erro_max, 2),
+  return { valor: n(p.prod_valor, 2.5), pctAvaliador: Math.min(100, n(p.prod_avaliador_pct, 50)), premio: n(p.premio_valor, 1.5), meta: n(p.premio_meta, 90), bonus: n(p.bonus_valor, 0), bonusErroMax: n(p.bonus_erro_max, 2), indicacao: n(p.indicacao_valor, 0.5),
     auditoriaPct: Math.min(100, Math.max(1, n(p.auditoria_pct, 10))), auditoriaErroMax: n(p.auditoria_erro_max, 5), parceiroVeValor: !/^n[aã]o$/i.test(String(p.parceiro_ve_valor || 'sim').trim()) };
 }
 function camposProducao(form) {
@@ -1196,6 +1197,8 @@ function producao(projetoId, de, ate, soLogin) {
   const X = linhasProducao(projetoId); const R = regrasProducao(X.p); const F = X.F;
   const st = {}; lerSetores(projetoId).forEach((x) => { st[x.numero] = x; });
   const pessoas = {}, equipes = {}, setores = {}, dias = {}; const devolvidas = [];
+  // quem trouxe a dupla (empresa júnior, por exemplo) recebe um valor por árvore que conta, além do que a dupla recebe
+  const trouxe = {}; tabela('Usuarios').forEach((u) => { if (u.indicacao) trouxe[String(u.login).toLowerCase()] = u.indicacao; }); const indic = {};
   const pes = (id, nome, vinc) => (pessoas[id] = pessoas[id] || { id: id, nome: nome, vinculo: vinc, coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0, arvoresPagar: 0, valorPagar: 0, premioPagar: 0, bonusPagar: 0 });
   const zero = () => ({ coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0 });
   let arvoresPagar = 0;
@@ -1212,7 +1215,8 @@ function producao(projetoId, de, ate, soLogin) {
     if (noPeriodo) alvo.forEach((a) => { a.coletadas++; if (sit === 'Em validação') a.emValidacao++; if (sit === 'Devolvida') a.devolvidas++; if (sit === 'Paga') a.pagas++; if (k.conta) a.validadas++; else if (l.validacao === 'Validado') a.naoContam++; });
     if (sit === 'Devolvida' && noPeriodo) devolvidas.push({ uuid: l.uuid, codigo: F.cod ? l[F.cod] : '', especie: F.esp ? l[F.esp] : '', motivo: l.validacao_obs || '', dia: d });
     if (!k.conta) return;
-    const aPagar = !l.pagamento; if (aPagar) arvoresPagar++; const sx = st[sn]; const comBonus = R.bonus > 0 && sx && sx.situacao === 'Aprovado' && sx.erro_pct !== '' && +sx.erro_pct < R.bonusErroMax;
+    const aPagar = !l.pagamento; if (aPagar) arvoresPagar++; const sx = st[sn];
+    const quem = trouxe[String(l.usuario).toLowerCase()]; if (quem && R.indicacao > 0) { const I = indic[quem] = indic[quem] || { nome: quem, arvores: 0, valor: 0, arvoresPagar: 0, valorPagar: 0 }; if (noPeriodo) { I.arvores++; I.valor += R.indicacao; } if (aPagar) { I.arvoresPagar++; I.valorPagar += R.indicacao; } } const comBonus = R.bonus > 0 && sx && sx.situacao === 'Aprovado' && sx.erro_pct !== '' && +sx.erro_pct < R.bonusErroMax;
     membros.forEach((m) => { const P = pes(m.id, m.nome, m.v); const v = m.v === 'Parceiro' ? R.valor * m.pct / 100 : 0; const bn = comBonus ? R.bonus * m.pct / 100 : 0; if (noPeriodo) { P.valor += v; P.bonus += bn; E.valor += v; E.bonus += bn; S_.valor += v; S_.bonus += bn; } if (aPagar) { P.arvoresPagar++; P.valorPagar += v; P.bonusPagar += bn; } });
     // meta do dia é por dupla (avaliador + auxiliar); registro antigo sem dupla conta pelo acesso da dupla
     const kd = d + '|' + (membros.length ? membros.map((m) => m.id).sort().join('+') : 'acesso:' + String(l.usuario).toLowerCase()); const D = dias[kd] = dias[kd] || { dia: d, equipe: e, dupla: membros.length ? membros.map((m) => m.nome).join(' + ') : l.usuario, n: 0, nPagar: 0, clt: {}, noPeriodo: noPeriodo }; D.n++; if (aPagar) D.nPagar++;
@@ -1229,8 +1233,10 @@ function producao(projetoId, de, ate, soLogin) {
   const arred = (o) => { ['valor', 'premio', 'bonus', 'valorPagar', 'premioPagar', 'bonusPagar'].forEach((k) => { if (k in o) o[k] = r2(o[k]); }); o.total = r2(o.valor + o.premio + o.bonus); if ('valorPagar' in o) o.totalPagar = r2(o.valorPagar + o.premioPagar + o.bonusPagar); return o; };
   const ps = Object.keys(pessoas).map((k) => arred(pessoas[k])).sort((a, b) => a.nome.localeCompare(b.nome));
   const tot = ps.reduce((a, x) => { ['valor', 'premio', 'bonus', 'valorPagar', 'premioPagar', 'bonusPagar'].forEach((k) => { a[k] += x[k]; }); return a; }, { valor: 0, premio: 0, bonus: 0, valorPagar: 0, premioPagar: 0, bonusPagar: 0 });
-  return { regras: R, de: de || '', ate: ate || '', pessoas: ps, equipes: Object.keys(equipes).map((k) => arred(equipes[k])), setores: Object.keys(setores).map((k) => arred(setores[k])), dias: listaDias, devolvidas: devolvidas.slice(-100),
-    totais: Object.assign(arred(tot), { arvoresPagar: arvoresPagar }), medicoes: lerMedicoes(projetoId) };
+  const inds = Object.keys(indic).sort().map((k) => { const I = indic[k]; I.valor = r2(I.valor); I.valorPagar = r2(I.valorPagar); return I; });
+  tot.indicacao = inds.reduce((a, x) => a + x.valor, 0); tot.indicacaoPagar = inds.reduce((a, x) => a + x.valorPagar, 0);
+  return { regras: R, de: de || '', ate: ate || '', indicacoes: inds, pessoas: ps, equipes: Object.keys(equipes).map((k) => arred(equipes[k])), setores: Object.keys(setores).map((k) => arred(setores[k])), dias: listaDias, devolvidas: devolvidas.slice(-100),
+    totais: (() => { const t = arred(tot); t.indicacao = r2(t.indicacao); t.indicacaoPagar = r2(t.indicacaoPagar); t.total = r2(t.total + t.indicacao); t.totalPagar = r2(t.totalPagar + t.indicacaoPagar); t.arvoresPagar = arvoresPagar; return t; })(), medicoes: lerMedicoes(projetoId) };
 }
 // painel da dupla: só os registros deste acesso; parceiro vê o valor se o projeto deixar
 function producaoDaDupla(projetoId, de, ate, usr) {
@@ -1241,13 +1247,13 @@ function producaoDaDupla(projetoId, de, ate, usr) {
   const t = r.equipes.reduce((a, e) => { ['coletadas', 'validadas', 'emValidacao', 'devolvidas', 'pagas'].forEach((k) => { a[k] += e[k]; }); return a; }, { coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0 });
   out.totais = t; return out;
 }
-const COLS_MEDICOES = ['id', 'de', 'ate', 'fechada_em', 'fechada_por', 'arvores', 'valor', 'premio', 'bonus', 'total', 'resumo'];
+const COLS_MEDICOES = ['id', 'de', 'ate', 'fechada_em', 'fechada_por', 'arvores', 'valor', 'premio', 'bonus', 'total', 'resumo', 'indicacao'];
 function abaMedicoes(projetoId) {
   const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Medicoes');
   if (!sh) { sh = ss.insertSheet('Medicoes'); sh.appendRow(COLS_MEDICOES); sh.setFrozenRows(1); }
   return garantirCab(sh, COLS_MEDICOES);
 }
-function lerMedicoes(projetoId) { const sh = SpreadsheetApp.openById(projeto(projetoId).planilha_id).getSheetByName('Medicoes'); if (!sh || sh.getLastRow() < 2) return []; return lerOS(sh).map((m) => ({ id: m.id, de: m.de, ate: m.ate, fechada_em: m.fechada_em, fechada_por: m.fechada_por, arvores: +m.arvores || 0, valor: +m.valor || 0, premio: +m.premio || 0, bonus: +m.bonus || 0, total: +m.total || 0 })); }
+function lerMedicoes(projetoId) { const sh = SpreadsheetApp.openById(projeto(projetoId).planilha_id).getSheetByName('Medicoes'); if (!sh || sh.getLastRow() < 2) return []; return lerOS(sh).map((m) => ({ id: m.id, de: m.de, ate: m.ate, fechada_em: m.fechada_em, fechada_por: m.fechada_por, arvores: +m.arvores || 0, valor: +m.valor || 0, premio: +m.premio || 0, bonus: +m.bonus || 0, indicacao: +m.indicacao || 0, total: +m.total || 0 })); }
 // fecha a medição: as árvores que contam e ainda não foram pagas no período ficam marcadas como pagas nesta medição
 function fecharMedicao(projetoId, de, ate, usr) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(de || '')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(ate || '')) || de > ate) throw new Error('Período inválido.');
@@ -1264,7 +1270,7 @@ function fecharMedicao(projetoId, de, ate, usr) {
     rg.setNumberFormat('@').setValues(pg);
     const semDupla = n - r.totais.arvoresPagar; // conferência: árvores sem dupla informada também ficam pagas (sem valor a ninguém)
     const resumo = r.pessoas.filter((x) => x.arvoresPagar || x.totalPagar).map((x) => ({ nome: x.nome, vinculo: x.vinculo, arvores: x.arvoresPagar, valor: x.valorPagar, premio: x.premioPagar, bonus: x.bonusPagar, total: x.totalPagar }));
-    const T = r.totais; const m = { id: id, de: de, ate: ate, fechada_em: new Date().toISOString(), fechada_por: usr.nome || usr.login, arvores: n, valor: T.valorPagar, premio: T.premioPagar, bonus: T.bonusPagar, total: T.totalPagar, resumo: JSON.stringify({ pessoas: resumo, sem_dupla: Math.max(0, semDupla) }).slice(0, 45000) }; // só o que ainda não foi pago
+    const T = r.totais; const m = { id: id, de: de, ate: ate, fechada_em: new Date().toISOString(), fechada_por: usr.nome || usr.login, arvores: n, valor: T.valorPagar, premio: T.premioPagar, bonus: T.bonusPagar, indicacao: T.indicacaoPagar, total: T.totalPagar, resumo: JSON.stringify({ pessoas: resumo, indicacoes: r.indicacoes.filter((x) => x.arvoresPagar).map((x) => ({ nome: x.nome, arvores: x.arvoresPagar, valor: x.valorPagar })), sem_dupla: Math.max(0, semDupla) }).slice(0, 45000) }; // só o que ainda não foi pago
     gravarSetor(abaMedicoes(projetoId), m);
     auditar(usr.login, 'medicao_fechar', projetoId, txt + ': ' + n + ' árvores');
     CacheService.getScriptCache().remove('painel:' + projetoId + ':todos');
