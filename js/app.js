@@ -2747,7 +2747,7 @@
     if (passo === 0) {
       const st = h('div', { class: 'cfg-estado' });
       let estado = ''; try { estado = (await navigator.permissions.query({ name: 'geolocation' })).state; } catch (e) { /* navegador antigo */ }
-      const pintar = () => st.replaceChildren(estado === 'granted' ? h('div', { class: 'info' }, ico('check'), ' Localização permitida.') : estado === 'denied' || S.gpsNegado ? h('div', { class: 'aviso' }, h('b', null, 'A localização está bloqueada.'), h('br'), 'Android: toque no cadeado ao lado do endereço (ou em Configurações, Apps, Neofloresta), Permissões, Localização, Permitir. iPhone: Ajustes, Privacidade, Serviços de Localização, Safari, Ao Usar o App. Depois volte aqui.') : null);
+      const pintar = () => st.replaceChildren(estado === 'granted' ? h('div', { class: 'info' }, ico('check'), ' Localização permitida.') : estado === 'denied' || S.gpsNegado ? h('div', { class: 'aviso' }, h('b', null, 'A localização está bloqueada.'), h('br'), 'Android: toque no cadeado ao lado do endereço (ou em Configurações, Apps, Arvorada), Permissões, Localização, Permitir. iPhone: Ajustes, Privacidade, Serviços de Localização, Safari, Ao Usar o App. Depois volte aqui.') : null);
       const bt = h('button', { class: 'btn cheio', onclick: () => {
         if (estado === 'granted') return prox();
         bt.disabled = true; bt.textContent = 'Aguardando a sua resposta...';
@@ -2760,7 +2760,7 @@
     } else if (passo === 1) {
       const bt = S.pedidoInstalar ? h('button', { class: 'btn cheio', onclick: async () => { const e = S.pedidoInstalar; S.pedidoInstalar = null; e.prompt(); try { await e.userChoice; } catch (er) { /* segue */ } prox(); } }, 'Instalar o app') : h('button', { class: 'btn cheio', onclick: prox }, 'Já instalei, continuar');
       corpo.replaceChildren(h('p', { class: 'cfg-txt' }, 'Instalado, o app abre em tela cheia pelo ícone, como os outros apps do celular, e funciona sem internet.'),
-        S.pedidoInstalar ? null : h('ol', { class: 'cfg-lista' }, ios ? [h('li', null, 'No Safari, toque em ', h('b', null, 'Compartilhar'), ' (o quadrado com a seta).'), h('li', null, 'Toque em ', h('b', null, 'Adicionar à Tela de Início'), '.')] : [h('li', null, 'No Chrome, toque nos ', h('b', null, '3 pontinhos'), ' no canto de cima.'), h('li', null, 'Toque em ', h('b', null, 'Instalar app'), ' (ou ', h('b', null, 'Adicionar à tela inicial'), ').')], h('li', null, 'Depois abra pelo ícone da Neofloresta.')),
+        S.pedidoInstalar ? null : h('ol', { class: 'cfg-lista' }, ios ? [h('li', null, 'No Safari, toque em ', h('b', null, 'Compartilhar'), ' (o quadrado com a seta).'), h('li', null, 'Toque em ', h('b', null, 'Adicionar à Tela de Início'), '.')] : [h('li', null, 'No Chrome, toque nos ', h('b', null, '3 pontinhos'), ' no canto de cima.'), h('li', null, 'Toque em ', h('b', null, 'Instalar app'), ' (ou ', h('b', null, 'Adicionar à tela inicial'), ').')], h('li', null, 'Depois abra pelo ícone do Arvorada.')),
         rodape(bt));
     } else {
       const num = h('div', { class: 'cfg-gps' }, '...'); const dica = h('p', { class: 'dica', style: 'text-align:center' }, 'Fique parado em lugar aberto, longe de prédios e de copas fechadas.');

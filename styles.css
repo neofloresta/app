@@ -7,8 +7,8 @@
 /* Cores da marca Arvorada: verde-copa #2F6B45, terracota #CD834C, verde-noite #1F3D2B e creme #F3EEE4 */
 :root {
   --laranja: #CD834C; --azul-claro: #2F6B45;
-  --teal: #2F6B45; --teal-2: #2F6B45; --tint: #E3EDE5; --fundo: #F3EEE4; --sup: #fff; --texto: #1F3D2B; --suave: #52645A; --acao: #A65A1E;
-  --linha: #CFD6CC; --ok: #2E7D32; --alerta: #E09B00; --erro: #C62828; --raio: 12px;
+  --teal: #2F6B45; --teal-2: #2F6B45; --tint: #E3EDE5; --fundo: #F3EEE4; --sup: #fff; --texto: #1F3D2B; --suave: #52645A; --acao: #9A5119;
+  --linha: #CFD6CC; --ok: #2A7230; --alerta: #E09B00; --erro: #C62828; --raio: 12px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; }
@@ -140,8 +140,8 @@ textarea.entrada { min-height: 96px; resize: vertical; }
 .prog-topo .ico { color: var(--suave); width: 20px; height: 20px; }
 .prog-barra { display: flex; gap: 4px; margin-top: 10px; }
 .seg { flex: 1; height: 5px; border-radius: 3px; background: #DCE4E6; }
-.seg.meio { background: #A9CDD7; }
-.seg.cheio { background: #5E9DAE; }
+.seg.meio { background: #B7D3BE; }
+.seg.cheio { background: #6FA882; }
 .seg.falta { background: var(--erro); }
 .seg.at { background: var(--teal); }
 .seg-dot { width: 10px; height: 10px; border-radius: 50%; background: #DCE4E6; flex: none; }
@@ -342,7 +342,7 @@ input[type=file]::file-selector-button { border: 0; border-radius: 10px; backgro
 .campo.falta::after { content: "Falta preencher"; display: block; color: var(--erro); font-size: 13px; font-weight: 500; margin-top: 4px; }
 @media (prefers-reduced-motion: reduce) { .campo.destaque { animation: none; } }
 
-.faixa-versao { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #E3F2F7; border-left: 4px solid var(--azul-claro); border-radius: var(--raio); padding: 10px 14px; margin: 0 0 12px; color: #0B3E4E; }
+.faixa-versao { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #E3EDE5; border-left: 4px solid var(--azul-claro); border-radius: var(--raio); padding: 10px 14px; margin: 0 0 12px; color: #1F3D2B; }
 .faixa-versao ul { margin: 4px 0; padding-left: 18px; font-size: 13.5px; } .faixa-versao small { color: var(--suave); }
 
 /* ---------- Ordens de serviço ---------- */
@@ -394,7 +394,7 @@ input[type=file]::file-selector-button { border: 0; border-radius: 10px; backgro
 .mapa-leg.recolhida > :not(.leg-bt) { display: none; }
 .mapa-leg.recolhida .leg-bt { padding: 0; }
 .mapa-leg .leg-fc { width: 14px; height: 4px; border-radius: 0; vertical-align: middle; }
-.faixa-face { margin: 8px 12px 0; padding: 10px 12px; border-left: 4px solid #00838F; background: #E6F4F5; border-radius: 6px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.faixa-face { margin: 8px 12px 0; padding: 10px 12px; border-left: 4px solid #2F6B45; background: #E3EDE5; border-radius: 6px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
 .faixa-face span { color: #37474F; }
 .faixa-qd { border-left-color: #2E7D32; background: #EEF6EE; }
 .prog-qd { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #E3E8EA; margin: 4px 0 12px; }
@@ -474,6 +474,7 @@ html.sol { --texto: #000; --suave: #263238; --linha: #52645A; }
 html.sol body { font-size: 18px; }
 html.sol .op, html.sol .chip, html.sol .entrada { border-width: 2px; border-color: #52645A; }
 html.sol .dica, html.sol small { color: #263238; }
+html.sol .topo small, html.sol .cfg-cab small, html.sol .op.sel small { color: #fff; }
 
 /* Hoje no campo (coordenação) */
 .coord-atalhos { margin: 8px 0; } .coord-atalhos .btn { flex: 1; }
@@ -694,3 +695,7 @@ footer.rodape.val-dec .ic-nav { flex: 0 0 52px; }
 .tela-mapa.modo-campo .leaflet-bottom.leaflet-left { display: none; }
 .tela-mapa.modo-campo .leaflet-bottom.leaflet-right { bottom: calc(84px + env(safe-area-inset-bottom)); right: 76px; }
 .avisos-lista > div:not(:has(*)) { display: none; }
+
+/* 2.9.1: marca Arvorada, ajustes de contraste */
+.op.sel small { opacity: 1; }
+.chip.exclusivo.sel { background: var(--teal); border-color: var(--teal); color: #fff; }
