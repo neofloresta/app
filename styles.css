@@ -145,7 +145,7 @@ textarea.entrada { min-height: 96px; resize: vertical; }
 .seg.falta { background: var(--erro); }
 .seg.at { background: var(--teal); }
 .seg-dot { width: 10px; height: 10px; border-radius: 50%; background: #DCE4E6; flex: none; }
-.seg-dot.meio { background: #A9CDD7; } .seg-dot.cheio { background: #5E9DAE; } .seg-dot.falta { background: var(--erro); }
+.seg-dot.meio { background: #B7D3BE; } .seg-dot.cheio { background: #6FA882; } .seg-dot.falta { background: var(--erro); }
 
 .rodape { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--sup); border-top: 1px solid var(--linha); padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); display: flex; gap: 10px; }
 .rodape .quad { width: 56px; flex: none; padding: 0; }
