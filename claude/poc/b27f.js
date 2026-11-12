@@ -82,8 +82,9 @@ let ANA, BRUNO;
   const P7 = await L.post('producao', { projeto: PJ, de: '2026-11-07', ate: '2026-11-07' }); const i7 = P7.indicacoes[0] || {};
   const f7 = await L.post('medicao_fechar', { projeto: PJ, de: '2026-11-07', ate: '2026-11-07' }); const P7b = await L.post('producao', { projeto: PJ, de: '2026-11-07', ate: '2026-11-07' }); const m7 = P7b.medicoes[P7b.medicoes.length - 1] || {};
   const visto = await L.post('producao_minha', { projeto: PJ, de: '2026-11-07', ate: '2026-11-07' }, 'div-2', 'equipe02');
-  ok('F.11', i0.nome === 'Floresta Jr' && i0.arvores === 11 && i0.valor === 5.5 && i0.arvoresPagar === 0 && i7.arvores === 4 && i7.valorPagar === 2 && P7.totais.indicacaoPagar === 2 && m7.indicacao === 2 && f7.medicao.total === P7.totais.totalPagar && (P7b.indicacoes[0] || {}).valorPagar === 0 && !('indicacoes' in visto),
-    `Floresta Jr no período já pago: ${i0.arvores} árvores = ${i0.valor}, a pagar ${i0.valorPagar}; dia 07/11: ${i7.arvores} árvores novas, a pagar ${i7.valorPagar}; medição grava ${m7.indicacao} para quem trouxe e depois nada fica a pagar; a dupla não vê esse valor`);
+  const b7 = P7.pessoas.find((x) => x.nome === 'Bruno Alves') || {};
+  ok('F.11', b7.valorPagar === 8 && i0.nome === 'Floresta Jr' && i0.arvores === 11 && i0.valor === 5.5 && i0.arvoresPagar === 0 && i7.arvores === 4 && i7.valorPagar === 2 && P7.totais.indicacaoPagar === 2 && m7.indicacao === 2 && f7.medicao.total === P7.totais.totalPagar && (P7b.indicacoes[0] || {}).valorPagar === 0 && !('indicacoes' in visto),
+    `a parte do time sai do valor da árvore: Bruno fica com ${b7.valorPagar} por 4 árvores (2,00 cada); Floresta Jr no período já pago: ${i0.arvores} árvores = ${i0.valor}, a pagar ${i0.valorPagar}; dia 07/11: ${i7.arvores} árvores novas, a pagar ${i7.valorPagar}; medição grava ${m7.indicacao} para quem trouxe e depois nada fica a pagar; a dupla não vê esse valor`);
   // 5. telas
   const b = await chromium.launch();
   const C = await L.celular(b, { viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false }); const q = C.p;
@@ -98,7 +99,7 @@ let ANA, BRUNO;
   const E = await L.celular(b); const p = E.p; await L.logar(p, 'div-2', 'equipe02'); await p.waitForSelector('button.nova', { timeout: 20000 });
   await p.evaluate(() => { window.__app.S.perProd = ['2026-11-01', '2026-11-15']; }); await p.goto(L.WEB + '#producao'); await p.waitForSelector('.prod-linha', { timeout: 20000 }); await p.waitForTimeout(500);
   const tp = await p.locator('main').innerText(); await p.screenshot({ path: 'b27f-dupla.png', fullPage: true });
-  ok('F.7', /Bruno Alves/.test(tp) && /R\$\s?45,00/.test(tp) && /2 m de altura/.test(tp), `painel da dupla no celular: ${tp.replace(/\s+/g, ' ').slice(0, 200)}`);
+  ok('F.7', /Bruno Alves/.test(tp) && /R\$\s?37,50/.test(tp) && /2 m de altura/.test(tp), `painel da dupla no celular: ${tp.replace(/\s+/g, ' ').slice(0, 200)}`);
   const erros = [...p.erros, ...q.erros]; ok('F.8', !erros.length, erros.length ? erros.join(' | ') : 'sem erros de JavaScript');
   fs.writeFileSync(__dirname + '/res-b27f.json', JSON.stringify(R, null, 1));
   const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);
