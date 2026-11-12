@@ -1,17 +1,19 @@
 {
-  "name": "Neofloresta Inventário",
-  "short_name": "Neofloresta",
-  "description": "Coleta de campo da arborização urbana",
+  "name": "Arvorada",
+  "short_name": "Arvorada",
+  "description": "Inventário de árvores urbanas",
   "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#FFFFFF",
-  "theme_color": "#00546E",
+  "background_color": "#2F6B45",
+  "theme_color": "#2F6B45",
   "lang": "pt-BR",
   "icons": [
-    { "src": "icons/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icons/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "icons/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icone-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icone-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
