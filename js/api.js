@@ -22,7 +22,7 @@ const Api = (() => {
   function paraMapa(linhas, campos) { return { cab: campos, linhas: linhas.map((l) => campos.map((c) => l[c] ?? '')) }; }
   // listas da coordenação: a resposta vale por 1 minuto (trocar de aba fica instantâneo); qualquer gravação limpa
   const MEMO_LEITURA = ['usuarios_listar', 'projetos_listar', 'formularios_listar', 'pessoas_listar'];
-  const LEITURAS = ['conferir', 'trajetos', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', 'pessoas_listar', 'setores_camada', 'setores_situacao', 'producao', 'producao_minha', ...MEMO_LEITURA];
+  const LEITURAS = ['conferir', 'trajetos', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', 'pessoas_listar', 'setores_camada', 'setores_situacao', 'producao', 'producao_minha', 'producao_time', ...MEMO_LEITURA];
   let memo = new Map();
   async function chamar(acao, dados, semCred) {
     if (LEITURAS.indexOf(acao) < 0) memo = new Map();
@@ -234,6 +234,7 @@ const Api = (() => {
     async setoresAtribuir(projeto, itens) { return chamar('setores_atribuir', { projeto, itens }); },
     async producao(projeto, de, ate) { return chamar('producao', { projeto, de, ate }); },
     async producaoMinha(projeto, de, ate) { return chamar('producao_minha', { projeto, de, ate }); },
+    async producaoTime(projeto) { return chamar('producao_time', { projeto }); },
     async medicaoFechar(projeto, de, ate) { return chamar('medicao_fechar', { projeto, de, ate }); },
     async auditoriaSortear(projeto, setor) { return chamar('auditoria_sortear', { projeto, setor }); },
     async auditoriaConferir(projeto, setor, uuid, resultado, motivo) { return chamar('auditoria_conferir', { projeto, setor, uuid, resultado, motivo }); },

@@ -85,6 +85,13 @@ let ANA, BRUNO;
   const b7 = P7.pessoas.find((x) => x.nome === 'Bruno Alves') || {};
   ok('F.11', b7.valorPagar === 8 && i0.nome === 'Floresta Jr' && i0.arvores === 11 && i0.valor === 5.5 && i0.arvoresPagar === 0 && i7.arvores === 4 && i7.valorPagar === 2 && P7.totais.indicacaoPagar === 2 && m7.indicacao === 2 && f7.medicao.total === P7.totais.totalPagar && (P7b.indicacoes[0] || {}).valorPagar === 0 && !('indicacoes' in visto),
     `a parte do time sai do valor da árvore: Bruno fica com ${b7.valorPagar} por 4 árvores (2,00 cada); Floresta Jr no período já pago: ${i0.arvores} árvores = ${i0.valor}, a pagar ${i0.valorPagar}; dia 07/11: ${i7.arvores} árvores novas, a pagar ${i7.valorPagar}; medição grava ${m7.indicacao} para quem trouxe e depois nada fica a pagar; a dupla não vê esse valor`);
+  // 2.9: acesso do time parceiro: vê só a produção e o valor do próprio time, com o histórico pago
+  await L.post('usuario_salvar', { usuario_dados: { login: 'gap', senha: 'biologia', nome: 'Time Gap', perfil: 'time', projeto: PJ, indicacao: 'floresta jr' } });
+  const T = await L.post('producao_time', { projeto: PJ }, 'gap', 'biologia');
+  const neg = []; for (const ac of ['listar', 'mapa', 'painel', 'producao', 'pessoas_listar', 'usuarios_listar', 'foto_ver', 'os_listar', 'quadras_situacao']) neg.push(await L.post(ac, { projeto: PJ, campos: ['uuid'] }, 'gap', 'biologia').then(() => ac + ' LIBEROU').catch(() => ''));
+  const outro = await L.post('producao_time', { projeto: PJ }, 'div-1', 'equipe01').then(() => 'liberado').catch((e) => e.message);
+  ok('F.12', T.time === 'floresta jr' && T.duplas.length === 1 && T.duplas[0].equipe === 'Equipe 2' && T.totais.validadas === 15 && T.totais.pagas === 15 && T.totais.valorPagar === 0 && T.historico.length === 1 && T.historico[0].valor === 2 && T.pago === 2 && !neg.filter(Boolean).length && outro !== 'liberado',
+    `time vê ${T.duplas.length} dupla (${(T.duplas[0] || {}).equipe}): ${T.totais.validadas} validadas, ${T.totais.pagas} pagas, a receber ${T.totais.valorPagar}; histórico com ${T.historico.length} medição (${(T.historico[0] || {}).valor}); outras consultas negadas (${neg.filter(Boolean).join(', ') || 'todas'}); equipe de campo não abre o painel do time`);
   // 5. telas
   const b = await chromium.launch();
   const C = await L.celular(b, { viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false }); const q = C.p;
@@ -100,7 +107,11 @@ let ANA, BRUNO;
   await p.evaluate(() => { window.__app.S.perProd = ['2026-11-01', '2026-11-15']; }); await p.goto(L.WEB + '#producao'); await p.waitForSelector('.prod-linha', { timeout: 20000 }); await p.waitForTimeout(500);
   const tp = await p.locator('main').innerText(); await p.screenshot({ path: 'b27f-dupla.png', fullPage: true });
   ok('F.7', /Bruno Alves/.test(tp) && /R\$\s?37,50/.test(tp) && /2 m de altura/.test(tp), `painel da dupla no celular: ${tp.replace(/\s+/g, ' ').slice(0, 200)}`);
-  const erros = [...p.erros, ...q.erros]; ok('F.8', !erros.length, erros.length ? erros.join(' | ') : 'sem erros de JavaScript');
+  const G = await L.celular(b); const g = G.p; g.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::/.test(m.text())) g.erros.push(m.text()); });
+  await L.logar(g, 'gap', 'biologia'); await g.waitForSelector('.kpis', { timeout: 20000 }); await g.waitForTimeout(2500); const tg = await g.locator('main').innerText(); const avisoG = await g.locator('.toast.erro, .aviso').count();
+  await g.goto(L.WEB + '#mapa'); await g.waitForTimeout(1200); const aindaTime = await g.locator('text=Duplas do time').count(); await g.screenshot({ path: 'b27f-time.png', fullPage: true });
+  ok('F.13', /A receber/.test(tg) && /Equipe 2/.test(tg) && /Histórico de pagamentos/.test(tg) && !avisoG && aindaTime === 1, `tela do time: ${tg.replace(/\s+/g, ' ').slice(0, 170)}; sem erro na tela (${avisoG}); tentar abrir o mapa volta ao painel do time`);
+  const erros = [...p.erros, ...q.erros, ...g.erros]; ok('F.8', !erros.length, erros.length ? erros.join(' | ') : 'sem erros de JavaScript');
   fs.writeFileSync(__dirname + '/res-b27f.json', JSON.stringify(R, null, 1));
   const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);
 })().catch((e) => { console.error('ERRO', e); process.exit(1); });

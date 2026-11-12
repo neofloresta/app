@@ -228,6 +228,7 @@
     if (!S.sessao) return telaLogin();
     if (!termoEmDia()) return telaTermo(true);
     const [r, a, b] = location.hash.replace(/^#/, '').split('/');
+    if (perfil() === 'time' && r !== 'sobre') return telaTime(); // time parceiro: só o painel do time
     if (r === 'configurar') return telaConfigurar(+a || 0);
     if (perfil() === 'coletor' && S.projeto && !S.configurado) return telaConfigurar(0); // primeiro acesso no aparelho: configuração curta antes do mapa
     const pf = perfil();
@@ -253,6 +254,7 @@
     if (r === 'auditoria' && ehCoord()) return telaAuditoria(a ? decodeURIComponent(a) : null);
     if (r === 'ficha' && a && pf !== 'coletor') return telaFichaServidor(decodeURIComponent(a));
     if (pf === 'cliente') return telaPainel();
+    if (pf === 'time') return telaTime();
     if (r === 'form' && a) return telaForm(a, b);
     return telaInicio();
   }
@@ -609,7 +611,7 @@
       it('Ajuda e perguntas frequentes', () => ir('#ajuda')),
       it('Sobre, termo de uso e privacidade', () => ir('#sobre')),
       it('Sair', () => sair()));
-    const grupos = pf === 'cliente' ? [
+    const grupos = pf === 'time' ? [grupo('Conta', it('Meu time', () => ir('#inicio')), it('Trocar senha', trocarSenhaTela), it('Sobre o app', () => ir('#sobre')), it('Sair', sair))] : pf === 'cliente' ? [
       grupo('Projeto', it('Painel', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa')), it('Pedidos de serviço', () => ir('#ordens'))),
       grupo('Entregas', it('Relatório para imprimir ou PDF', () => ir('#relatorio')), it('Boletim de medição', () => ir('#medicao')), it('Baixar dados', () => exportarCliente())),
     ] : pf === 'coletor' ? [
@@ -2144,7 +2146,7 @@
   async function adminUsuarios(corpo) {
     const [us, projetos, pessoas] = await Promise.all([Api.b.usuariosListar(), Api.b.projetosListar(), Api.b.pessoasListar().catch(() => [])]);
     const nomePe = (id) => (pessoas.find((x) => x.id === id) || {}).nome || '';
-    const PERFIS = [['coletor', 'Equipe de campo (coleta)'], ['revisor', 'Revisão técnica (valida registros)'], ['cliente', 'Cliente (consulta painel, mapa e relatório)'], ['admin', 'Coordenação (acesso total)']];
+    const PERFIS = [['coletor', 'Equipe de campo (coleta)'], ['revisor', 'Revisão técnica (valida registros)'], ['cliente', 'Cliente (consulta painel, mapa e relatório)'], ['time', 'Time parceiro (acompanha a produção e o valor do time)'], ['admin', 'Coordenação (acesso total)']];
     // código sugerido: o próximo E<n> livre no projeto
     const proxCodigo = (proj) => { const usados = new Set(us.filter((x) => String(x.projeto).split(',').some((pp) => String(proj).split(',').includes(pp))).map((x) => String(x.codigo || '').toUpperCase())); let n = 1; while (usados.has('E' + n)) n++; return 'E' + n; };
     async function editar(u, novoF, senhaF) {
@@ -2165,7 +2167,7 @@
       const opPe = (f, sel) => pessoas.filter((x) => (!f || x.funcao === f) && (x.ativo !== 'não' || x.id === sel)).sort((a, b) => a.nome.localeCompare(b.nome, 'pt')).map((x) => h('option', { value: x.id, selected: x.id === sel }, `${x.nome} (${x.funcao === 'Avaliador' ? x.registro || 'avaliador' : 'auxiliar'}, ${x.vinculo})`));
       const sAv = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Sem avaliador definido'), opPe('Avaliador', u.avaliador_id)); const sAx = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Sem auxiliar'), opPe('', u.auxiliar_id));
       const ind = h('input', { class: 'entrada', value: u.indicacao || '', placeholder: 'ex.: Time Gap', list: 'lista-indicacao' });
-      const cInd = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Time da dupla (opcional)'), ind, h('datalist', { id: 'lista-indicacao' }, [...new Set(us.map((x) => x.indicacao).filter(Boolean))].map((x) => h('option', { value: x }))), h('div', { class: 'dica' }, 'Para duplas de um time parceiro (por exemplo, uma empresa júnior). A parte do time sai do valor da árvore: com R$ 2,50 por árvore e R$ 0,50 para o time, a dupla fica com R$ 2,00.'));
+      const cInd = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Time (da dupla, ou o time deste acesso)'), ind, h('datalist', { id: 'lista-indicacao' }, [...new Set(us.map((x) => x.indicacao).filter(Boolean))].map((x) => h('option', { value: x }))), h('div', { class: 'dica' }, 'Para duplas de um time parceiro (por exemplo, uma empresa júnior). A parte do time sai do valor da árvore: com R$ 2,50 por árvore e R$ 0,50 para o time, a dupla fica com R$ 2,00.'));
       const cDupla = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Dupla deste acesso'), pessoas.length ? h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Avaliador responsável'), sAv), h('div', null, h('small', null, 'Auxiliar'), sAx)) : h('div', { class: 'dica' }, 'Cadastre antes as pessoas em Coordenação, Pessoas.'), h('div', { class: 'dica' }, 'Cada árvore deste acesso fica gravada com esta dupla. Se alguém mudar, troque aqui.'));
       const marcados = new Set(String(u.projeto || '').split(',').map((x) => x.trim()));
       const prj = h('div', { class: 'chips' }, projetos.map((p) => { const b = h('button', { class: 'chip' + (marcados.has(p.id) ? ' sel' : ''), onclick: () => { b.classList.toggle('sel'); if (marcados.has(p.id)) marcados.delete(p.id); else marcados.add(p.id); } }, p.nome); return b; }));
@@ -2187,7 +2189,7 @@
       if (se.value.trim() && se.value.trim().length < 8 && !Api.demo) return erro('A senha precisa ter pelo menos 8 caracteres.');
       if (novo && !se.value.trim()) return erro('Defina a senha.');
       if (novo && us.some((x) => x.login === login)) return erro('Esse usuário já existe.');
-      const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '', avaliador_id: pe.value === 'coletor' ? sAv.value : '', auxiliar_id: pe.value === 'coletor' ? sAx.value : '', indicacao: pe.value === 'coletor' ? ind.value.trim() : '' };
+      const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '', avaliador_id: pe.value === 'coletor' ? sAv.value : '', auxiliar_id: pe.value === 'coletor' ? sAx.value : '', indicacao: pe.value === 'coletor' || pe.value === 'time' ? ind.value.trim() : '' };
       if (se.value.trim()) dados.senha = se.value.trim();
       if (pe.value === 'coletor' && !dados.codigo) return erro('Defina o código da equipe (ex.: E1).');
       if (pe.value === 'coletor' && us.some((x) => x.login !== login && x.codigo === dados.codigo && String(x.projeto).split(',').some((p) => dados.projeto.split(',').includes(p)))) return erro('Outra equipe deste projeto já usa o código ' + dados.codigo + '.');
@@ -2362,6 +2364,23 @@
       d ? h('button', { class: 'btn sec', style: 'width:100%', onclick: async () => { await Dia.encerrar(); if (!(await Dia.aberto())) ir('#mapa'); } }, 'Encerrar o dia') : null);
     pintarOSEquipe(); // andamento das quadras e faces da equipe e ordens de serviço
     if (navigator.onLine && !Api.demo) try { const P = await Api.b.producaoMinha(S.projeto.id, hoje, hoje); if (P.regras && P.regras.meta) { meta = P.regras.meta; Store.set('meta:' + S.projeto.id, meta); if (document.body.contains(cartaoHoje)) pintarHoje(); } } catch (e) { /* servidor antigo ou sem conexão */ }
+  }
+  // painel do time parceiro (ex.: empresa júnior): árvores das duplas do time, valor a receber e histórico do que já foi pago
+  async function telaTime() {
+    const corpo = h('main');
+    $app.replaceChildren(topo(S.sessao.usuario.nome || 'Meu time', S.projeto ? S.projeto.nome : '', h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')), null), corpo);
+    if (!S.projeto) return corpo.replaceChildren(h('div', { class: 'info' }, 'Nenhum projeto liberado para este acesso.'));
+    corpo.replaceChildren(h('div', { class: 'info' }, 'Carregando...'));
+    let T; try { T = await Api.b.producaoTime(S.projeto.id); } catch (e) { return corpo.replaceChildren(h('div', { class: 'aviso' }, e.message), h('button', { class: 'btn sec', onclick: telaTime }, 'Tentar de novo')); }
+    const t = T.totais;
+    corpo.replaceChildren(
+      h('div', { class: 'cartao' }, h('h3', null, T.time), h('div', { class: 'kpis' }, kpi('A receber', R$(t.valorPagar), `${fmtN(t.aPagar)} árvores validadas ainda não pagas`), kpi('Já recebido', R$(T.pago), `${fmtN(t.pagas)} árvores em medições fechadas`), kpi('Em validação', fmtN(t.emValidacao), 'aguardando a coordenação'), kpi('Devolvidas', fmtN(t.devolvidas), 'para a dupla corrigir')),
+        h('p', { class: 'dica' }, `${R$(T.porArvore)} por árvore validada (com 2 m de altura ou mais, foto e coordenada). Devolvida só conta depois de corrigida e validada de novo.`)),
+      h('div', { class: 'cartao' }, h('h3', null, 'Duplas do time'), T.duplas.length ? h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, ['Dupla', 'Coletadas', 'Em validação', 'Devolvidas', 'Validadas', 'Pagas', 'A receber'].map((c) => h('th', null, c))),
+        T.duplas.map((d) => h('tr', null, h('td', null, d.equipe), h('td', null, fmtN(d.coletadas)), h('td', null, fmtN(d.emValidacao)), h('td', null, fmtN(d.devolvidas)), h('td', null, fmtN(d.validadas)), h('td', null, fmtN(d.pagas)), h('td', null, h('b', null, R$(d.valorPagar))))))) : h('p', { class: 'dica' }, 'Nenhuma dupla ligada a este time ainda.')),
+      h('div', { class: 'cartao' }, h('h3', null, 'Histórico de pagamentos'), T.historico.length ? h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, ['Medição', 'Fechada em', 'Árvores', 'Valor'].map((c) => h('th', null, c))),
+        T.historico.map((m) => h('tr', null, h('td', null, `${dBRc(m.de)} a ${dBRc(m.ate)}`), h('td', null, dataAno(m.fechada_em)), h('td', null, fmtN(m.arvores)), h('td', null, h('b', null, R$(m.valor))))))) : h('p', { class: 'dica' }, 'Nenhuma medição fechada ainda. Cada medição fechada pela coordenação aparece aqui.')),
+      h('button', { class: 'btn sec', onclick: telaTime }, 'Atualizar'));
   }
   async function telaMinhaProducao() {
     const corpo = h('main'); S.perProd = S.perProd || quinzena();
@@ -2660,6 +2679,7 @@
   // Quando TERMO_VERSAO muda, todos aceitam de novo antes de continuar.
   function textoTermo(pf, completo) {
     pf = pf || perfil(); const cliente = pf === 'cliente';
+    if (pf === 'time') return h('div', null, h('div', { class: 'termo-q' }, h('h4', null, 'O que é este acesso?'), h('p', null, 'O painel do seu time no sistema da Neofloresta: árvores cadastradas pelas duplas do time, o que já foi validado, o valor a receber e o histórico das medições pagas.')), h('div', { class: 'termo-q' }, h('h4', null, 'Quais dados meus o app usa?'), h('p', null, 'Seu usuário, nome e as vezes em que você entra no sistema, para segurança e registro.')), h('div', { class: 'termo-q' }, h('h4', null, 'O que eu me comprometo a fazer?'), h('p', null, 'Guardar a senha do acesso e usar as informações só para acompanhar o trabalho do time.')));
     const contato = 'à coordenação do projeto' + (CONTATO.email ? ' ou pelo email ' + CONTATO.email : '') + (CONTATO.telefone ? ' ou pelo telefone ' + CONTATO.telefone : '');
     const P = (q, r) => h('div', { class: 'termo-q' }, h('h4', null, q), h('p', null, r));
     const curto = cliente ? [

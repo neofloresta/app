@@ -22,7 +22,9 @@ const FUNCOES = ['Avaliador', 'Auxiliar'];
 const VINCULOS = ['CLT', 'Parceiro'];
 const COLS_CHAVES = ['id', 'nome', 'projeto', 'hash', 'criada_por', 'criada_em', 'ativa'];
 const ACOES_INTEGRACAO = ['listar', 'mapa', 'painel', 'os_listar', 'formulario', 'sessao', 'quadras_camada', 'quadras_situacao'];
-const PERFIS = ['admin', 'revisor', 'coletor', 'cliente'];
+const PERFIS = ['admin', 'revisor', 'coletor', 'cliente', 'time'];
+// perfil "time": parceiro que traz duplas (ex.: empresa júnior). Só acompanha a produção e o valor do próprio time
+const ACOES_TIME = ['sessao', 'sair', 'aceitar_termo', 'trocar_senha', 'formulario', 'producao_time'];
 // Colunas que só o servidor escreve (validação). Um envio do aparelho nunca as apaga.
 const COLS_SISTEMA = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'numero_unico', 'servidor_em', 'pagamento'];
 // Colunas internas que o perfil cliente não recebe
@@ -93,6 +95,7 @@ function doPost(e) {
     const admin = perfil === 'admin';
     const pode = (...ps) => { if (!admin && ps.indexOf(perfil) < 0) throw new Error('Seu perfil não tem acesso a esta função.'); };
     const exigeProjeto = (id) => { if (!admin && usr.projetos.indexOf(id) < 0) throw new Error('Projeto não liberado para este usuário.'); };
+    if (perfil === 'time' && ACOES_TIME.indexOf(d.acao) < 0) throw new Error('Seu perfil não tem acesso a esta função.');
     switch (d.acao) {
       case 'sessao': return json({ ok: true, versaoScript: VERSAO_SCRIPT, usuario: publico(usr), projetos: projetosDoUsuario(usr) });
       case 'sair': encerrarSessao(d.t); return json({ ok: true });
@@ -129,6 +132,7 @@ function doPost(e) {
       case 'auditoria_conferir': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, conferirAuditoria(d.projeto, d.setor, d.uuid, d.resultado, d.motivo, usr)));
       case 'producao': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producao(d.projeto, d.de, d.ate)));
       case 'producao_minha': pode('coletor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producaoDaDupla(d.projeto, d.de, d.ate, usr)));
+      case 'producao_time': pode('time'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producaoDoTime(d.projeto, usr)));
       case 'medicao_fechar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, fecharMedicao(d.projeto, d.de, d.ate, usr)));
       case 'projetos_listar': pode(); return json({ ok: true, projetos: tabela('Projetos').map(comLinks) });
       case 'projeto_salvar': pode(); salvarProjeto(d.projeto_dados); auditar(usr.login, 'projeto_salvar', d.projeto_dados && d.projeto_dados.id, ''); return json({ ok: true });
@@ -1247,6 +1251,26 @@ function producaoDaDupla(projetoId, de, ate, usr) {
       if (x.vinculo === 'Parceiro' && r.regras.parceiroVeValor) { o.valor = x.valor; o.bonus = x.bonus; } if (x.vinculo === 'CLT') { o.premio = x.premio; o.bonus = x.bonus; } return o; }) };
   const t = r.equipes.reduce((a, e) => { ['coletadas', 'validadas', 'emValidacao', 'devolvidas', 'pagas'].forEach((k) => { a[k] += e[k]; }); return a; }, { coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0 });
   out.totais = t; return out;
+}
+// painel do time: árvores e valor do time por dupla, e o histórico do que já foi pago nas medições fechadas
+function producaoDoTime(projetoId, usr) {
+  const time = String(usr.indicacao || '').trim(); if (!time) throw new Error('Este acesso não tem time definido. Peça à coordenação.');
+  const igual = (x) => String(x || '').trim().toLowerCase() === time.toLowerCase();
+  const X = linhasProducao(projetoId); const R = regrasProducao(X.p); const doTime = {};
+  tabela('Usuarios').forEach((u) => { if (u.perfil === 'coletor' && igual(u.indicacao)) doTime[String(u.login).toLowerCase()] = u; });
+  const duplas = {}; const r2 = (x) => Math.round(x * 100) / 100;
+  Object.keys(doTime).forEach((lg) => { const u = doTime[lg]; duplas[lg] = { equipe: u.equipe || u.nome || lg, coletadas: 0, emValidacao: 0, devolvidas: 0, validadas: 0, pagas: 0, aPagar: 0, valor: 0, valorPagar: 0 }; });
+  X.linhas.forEach((l) => {
+    const D = duplas[String(l.usuario).toLowerCase()]; if (!D || l.validacao === 'Descartado' || !l.criado_em) return;
+    const sit = situacaoReg(l); const k = contaParaProducao(l, X.F); D.coletadas++;
+    if (sit === 'Em validação') D.emValidacao++; if (sit === 'Devolvida') D.devolvidas++;
+    if (k.conta) { D.validadas++; D.valor += R.indicacao; if (l.pagamento) D.pagas++; else { D.aPagar++; D.valorPagar += R.indicacao; } }
+  });
+  const lista = Object.keys(duplas).map((k) => { const D = duplas[k]; D.valor = r2(D.valor); D.valorPagar = r2(D.valorPagar); return D; }).sort((a, b) => String(a.equipe).localeCompare(String(b.equipe)));
+  const tot = lista.reduce((a, D) => { Object.keys(a).forEach((c) => { a[c] += D[c]; }); return a; }, { coletadas: 0, emValidacao: 0, devolvidas: 0, validadas: 0, pagas: 0, aPagar: 0, valor: 0, valorPagar: 0 }); tot.valor = r2(tot.valor); tot.valorPagar = r2(tot.valorPagar);
+  const sh = SpreadsheetApp.openById(X.p.planilha_id).getSheetByName('Medicoes'); const hist = [];
+  if (sh && sh.getLastRow() > 1) lerOS(sh).forEach((m) => { let j = {}; try { j = JSON.parse(m.resumo || '{}'); } catch (e) { j = {}; } const it = (j.indicacoes || []).filter((x) => igual(x.nome))[0]; if (it) hist.push({ de: m.de, ate: m.ate, fechada_em: m.fechada_em, arvores: +it.arvores || 0, valor: +it.valor || 0 }); });
+  return { time: time, porArvore: R.indicacao, duplas: lista, totais: tot, historico: hist, pago: r2(hist.reduce((a, x) => a + x.valor, 0)) };
 }
 const COLS_MEDICOES = ['id', 'de', 'ate', 'fechada_em', 'fechada_por', 'arvores', 'valor', 'premio', 'bonus', 'total', 'resumo', 'indicacao'];
 function abaMedicoes(projetoId) {
