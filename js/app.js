@@ -1,6 +1,6 @@
-// Arvorada: inventário de árvores urbanas (por Neofloresta)
+// Árvores de Rua: inventário de florestas urbanas (por Neofloresta)
 (() => {
-  const VERSAO = '2.9.1';
+  const VERSAO = '2.9.2';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -290,7 +290,7 @@
     s.addEventListener('keydown', (e) => e.key === 'Enter' && entrar());
     if (S.ultimoUsuario) u.value = S.ultimoUsuario;
     $app.replaceChildren(h('div', { class: 'tela-login' }, h('div', { class: 'login' },
-      h('div', { class: 'marca' }, h('img', { src: 'icons/arvorada-horizontal-branca.svg', alt: 'Arvorada', width: 260, height: 70 }), h('span', null, 'inventário de árvores urbanas')),
+      h('div', { class: 'marca' }, h('img', { src: 'icons/arvores-de-rua-horizontal-branca.svg', alt: 'Árvores de Rua', width: 300, height: 67 }), h('span', null, 'inventário de florestas urbanas')),
       h('div', { class: 'login-cx' },
       S.expirada ? h('div', { class: 'aviso' }, 'Sua sessão expirou. Entre de novo: os registros guardados no aparelho continuam salvos e serão enviados.') : null,
       Api.demo ? h('div', { class: 'info' }, 'Modo demonstração: os dados ficam só neste aparelho. Usuários de teste (senha 1234): ', h('b', null, 'admin'), ', ', h('b', null, 'revisor'), ' e ', h('b', null, 'prefeitura'), '. Equipes de campo: ', h('b', null, 'equipe1 / 1111'), ' e ', h('b', null, 'equipe2 / 2222'), '.') : null,
@@ -625,7 +625,7 @@
       admin ? grupo('Administração', it('Segurança, cópias e servidor', () => ir('#admin/seguranca'))) : null,
     ];
     const veu = h('div', { class: 'veu', onclick: (e) => e.target === veu && veu.remove() }, h('div', { class: 'folha menu-lateral' },
-      h('img', { class: 'folha-marca', src: 'icons/arvorada-horizontal.svg', alt: 'Arvorada' }),
+      h('img', { class: 'folha-marca', src: 'icons/arvores-de-rua-horizontal.svg', alt: 'Árvores de Rua' }),
       h('h3', null, S.sessao.usuario.nome, h('small', { class: 'perfil-tag' }, ROT_PERFIL[pf] || '')),
       grupos, conta,
       h('p', { class: 'dica', style: 'margin-top:12px' }, `Versão ${VERSAO}${Api.demo ? ' · demonstração' : ''}`)));
@@ -1661,7 +1661,7 @@
     let qdDados = null, qdSit = new Map(), selecao = null; let seguindo = false, euPrec = null, eu = null;
     if (S.fundo == null) S.fundo = (await Store.get('fundo')) || 'ruas';
     camadasFundo(mapa, false);
-    const cores = ['#1F3D2B', '#CD834C', '#6A1B9A', '#2E7D32', '#C62828', '#2F7FA8'];
+    const cores = ['#00546E', '#CD834C', '#6A1B9A', '#2E7D32', '#C62828', '#12A6C8'];
     const corRisco = { Baixo: COR_RISCO.Baixo, 'Médio': COR_RISCO['Médio'], Alto: COR_RISCO.Alto, Severo: COR_RISCO.Severo };
     const equipes = []; const corEq = (e) => { if (!equipes.includes(e)) equipes.push(e); return e === '-' ? '#8A969C' : corEquipe(e); };
     // pontos: os do aparelho primeiro (podem ter edição ainda não enviada), depois os do servidor
@@ -1673,7 +1673,7 @@
     const stCamada = L.layerGroup().addTo(mapa);
     if (perfil() !== 'cliente') Setores.camada().then(async (cam) => {
       if (!cam || !document.body.contains(div)) return; const meus = new Set((await Setores.situacao()).filter((x) => x.equipe && x.equipe === minhaEquipe()).map((x) => x.numero));
-      for (const st of cam.setores) { const meu = meus.has(st.n); L.polygon(st.a.map((an) => { const o = []; for (let i = 0; i < an.length; i += 2) o.push([an[i + 1], an[i]]); return o; }), { renderer: render, interactive: false, fill: false, color: meu ? '#2F6B45' : '#7A8C92', weight: meu ? 3 : 1.2, dashArray: meu ? null : '6 5', opacity: meu ? 0.9 : 0.6 }).addTo(stCamada); }
+      for (const st of cam.setores) { const meu = meus.has(st.n); L.polygon(st.a.map((an) => { const o = []; for (let i = 0; i < an.length; i += 2) o.push([an[i + 1], an[i]]); return o; }), { renderer: render, interactive: false, fill: false, color: meu ? '#00546E' : '#7A8C92', weight: meu ? 3 : 1.2, dashArray: meu ? null : '6 5', opacity: meu ? 0.9 : 0.6 }).addTo(stCamada); }
     }).catch(() => {});
     const qdCamada = L.layerGroup().addTo(mapa); const rotulos = L.layerGroup().addTo(mapa);
     const corQd = (q) => { const s = qdSit.get(q.n) || {}; if (selQd.value === 'eq') return s.equipe ? corEq(s.equipe) : '#9AA9B0'; return COR_QD[s.situacao || 'A levantar']; };
@@ -2051,7 +2051,7 @@
     const corpo = h('main');
     const it = (id, txt) => h('button', { class: sub === id ? 'at' : '', onclick: () => ir('#admin/' + id) }, txt);
     const voltar = S.projeto ? h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')) : h('button', { class: 'ic', onclick: abrirMenuAdmin, 'aria-label': 'Menu' }, ico('menu'));
-    $app.replaceChildren(...[topo('Coordenação', Api.demo ? 'Modo demonstração' : (S.projeto ? S.projeto.nome : 'Arvorada'), voltar, null),
+    $app.replaceChildren(...[topo('Coordenação', Api.demo ? 'Modo demonstração' : (S.projeto ? S.projeto.nome : 'Árvores de Rua'), voltar, null),
       !S.projeto ? h('main', { style: 'padding-bottom:0' }, h('div', { class: 'info' }, 'Primeiros passos: 1) em Formulários, instale ou importe um formulário; 2) em Projetos, crie o projeto; 3) em Equipes e usuários, crie os acessos de campo.')) : null,
       h('main', { style: 'padding-bottom:0' }, h('div', { class: 'subabas' }, it('exportar', 'Exportar'), it('importar', 'Importar'), it('projetos', 'Projetos'), it('usuarios', 'Usuários'), it('pessoas', 'Pessoas'), it('setores', 'Setores'), it('formularios', 'Formulários'), it('seguranca', 'Segurança')),
         S.projeto ? h('div', { class: 'linha-btn', style: 'margin:8px 0 0' }, h('button', { class: 'btn sec peq', onclick: () => ir('#painel') }, 'Painel'), h('button', { class: 'btn sec peq', onclick: () => ir('#validacao') }, 'Validação'), h('button', { class: 'btn sec peq', onclick: () => ir('#mapa') }, 'Mapa')) : null), corpo].filter(Boolean));
@@ -2680,17 +2680,17 @@
   // Quando TERMO_VERSAO muda, todos aceitam de novo antes de continuar.
   function textoTermo(pf, completo) {
     pf = pf || perfil(); const cliente = pf === 'cliente';
-    if (pf === 'time') return h('div', null, h('div', { class: 'termo-q' }, h('h4', null, 'O que é este acesso?'), h('p', null, 'O painel do seu time no Arvorada, o sistema de inventário da Neofloresta: árvores cadastradas pelas duplas do time, o que já foi validado, o valor a receber e o histórico das medições pagas.')), h('div', { class: 'termo-q' }, h('h4', null, 'Quais dados meus o app usa?'), h('p', null, 'Seu usuário, nome e as vezes em que você entra no sistema, para segurança e registro.')), h('div', { class: 'termo-q' }, h('h4', null, 'O que eu me comprometo a fazer?'), h('p', null, 'Guardar a senha do acesso e usar as informações só para acompanhar o trabalho do time.')));
+    if (pf === 'time') return h('div', null, h('div', { class: 'termo-q' }, h('h4', null, 'O que é este acesso?'), h('p', null, 'O painel do seu time no sistema da Neofloresta: árvores cadastradas pelas duplas do time, o que já foi validado, o valor a receber e o histórico das medições pagas.')), h('div', { class: 'termo-q' }, h('h4', null, 'Quais dados meus o app usa?'), h('p', null, 'Seu usuário, nome e as vezes em que você entra no sistema, para segurança e registro.')), h('div', { class: 'termo-q' }, h('h4', null, 'O que eu me comprometo a fazer?'), h('p', null, 'Guardar a senha do acesso e usar as informações só para acompanhar o trabalho do time.')));
     const contato = 'à coordenação do projeto' + (CONTATO.email ? ' ou pelo email ' + CONTATO.email : '') + (CONTATO.telefone ? ' ou pelo telefone ' + CONTATO.telefone : '');
     const P = (q, r) => h('div', { class: 'termo-q' }, h('h4', null, q), h('p', null, r));
     const curto = cliente ? [
-      P('O que é este app?', 'O Arvorada, sistema da Neofloresta para acompanhar o inventário da arborização urbana do seu município: painel, mapa, relatórios, pedidos de serviço e download dos dados validados.'),
+      P('O que é este app?', 'O sistema da Neofloresta para acompanhar o inventário da arborização urbana do seu município: painel, mapa, relatórios, pedidos de serviço e download dos dados validados.'),
       P('Quais dados meus o app usa?', 'Seu usuário, nome e as ações que você faz no sistema (entrar, baixar dados, pedir serviço), para segurança e registro.'),
       P('De quem são os dados do inventário?', 'Do contratante. A Neofloresta faz o levantamento, confere cada registro e entrega os dados e as fotos no fim do contrato.'),
       P('Os dados estão protegidos?', 'Sim. Conexão criptografada, senha guardada de forma criptografada, bloqueio depois de senhas erradas e cópia de segurança diária.'),
       P('Como peço acesso, correção ou exclusão?', 'Fale ' + contato + '.'),
     ] : [
-      P('O que é este app?', 'O Arvorada, app da Neofloresta para registrar o inventário da arborização urbana nos projetos contratados.'),
+      P('O que é este app?', 'O Árvores de Rua, app da Neofloresta para registrar o inventário da arborização urbana nos projetos contratados.'),
       P('Quais dados meus o app usa?', 'Usuário, nome e equipe; a dupla da equipe (nome, função, registro profissional do avaliador e vínculo); data, hora e posição do celular quando você marca um ponto; o modelo do aparelho. Não usamos contatos, galeria pessoal nem arquivos do celular, nem dados de pagamento.'),
       P('O app acompanha onde eu estou?', 'Só durante o trabalho e só com o app aberto: a posição na hora de marcar cada árvore e, quando a coordenação liga o trajeto, o caminho da equipe até você tocar em "Encerrar o dia". Fora disso, nada.'),
       P('Para que servem esses dados?', 'Saber quem fez cada registro, conferir a qualidade e a localização das árvores, acompanhar o andamento do campo, calcular a produção de cada pessoa (árvores validadas, prêmio e bônus) e cumprir o contrato com o cliente. Para parceiros o app não registra jornada: só o começo e o fim de cada cadastro.'),
@@ -2701,7 +2701,7 @@
       P('Combinado de uso', 'Usuário e senha são pessoais: não compartilhe. Registre só o que observou em campo.'),
     ];
     const longo = h('div', { class: 'termo-longo' },
-      h('p', null, 'O Arvorada é um sistema da Neofloresta Serviços Ecossistêmicos Ltda.' + (CONTATO.cnpj ? ' (CNPJ ' + CONTATO.cnpj + ')' : '') + ' e é usado para o inventário da arborização urbana nos projetos contratados pelo poder público ou por empresas.'),
+      h('p', null, 'O Árvores de Rua é o app de coleta da Neofloresta Serviços Ecossistêmicos Ltda.' + (CONTATO.cnpj ? ' (CNPJ ' + CONTATO.cnpj + ')' : '') + ' e é usado para o inventário da arborização urbana nos projetos contratados pelo poder público ou por empresas.'),
       h('h4', null, 'Dados pessoais'),
       h('p', null, cliente ? 'Tratamos o usuário, o nome, o email informado pelo contratante e o registro das ações no sistema (auditoria).' : 'Tratamos o usuário, o nome e a equipe de quem usa o app; o nome, a função, o registro profissional (avaliadores) e o vínculo da dupla da equipe, gravados em cada registro para calcular a produção; data, hora e posição do aparelho no momento de cada registro; o trajeto da equipe durante o turno, quando ligado pela coordenação, sempre com aviso na tela e só com o app aberto; e o modelo do aparelho. Não coletamos contatos, arquivos pessoais nem a localização fora do trabalho de campo.'),
       h('h4', null, 'Finalidade e base legal'),
@@ -2743,11 +2743,11 @@
     const pontos = h('div', { class: 'cfg-pontos', 'aria-label': `Passo ${passo + 1} de ${PASSOS.length}` }, PASSOS.map((t, k) => h('span', { class: k === passo ? 'at' : k < passo ? 'feito' : '' })));
     const corpo = h('main', { class: 'cfg' });
     const rodape = (principal, rot, extra) => h('div', { class: 'cfg-rodape' }, principal, extra || null, h('button', { class: 'link-ajuda-form cfg-pular', onclick: () => (passo >= PASSOS.length - 1 ? concluirConfiguracao() : prox()) }, rot || 'Pular este passo'));
-    $app.replaceChildren(h('div', { class: 'tela-cfg' }, h('div', { class: 'cfg-cab' }, h('img', { src: 'icons/arvorada-horizontal-branca.svg', alt: 'Arvorada', class: 'cfg-logo' }), pontos, h('h1', null, PASSOS[passo]), h('small', null, `Passo ${passo + 1} de ${PASSOS.length}`)), corpo));
+    $app.replaceChildren(h('div', { class: 'tela-cfg' }, h('div', { class: 'cfg-cab' }, h('img', { src: 'icons/arvores-de-rua-horizontal-branca.svg', alt: 'Árvores de Rua', class: 'cfg-logo' }), pontos, h('h1', null, PASSOS[passo]), h('small', null, `Passo ${passo + 1} de ${PASSOS.length}`)), corpo));
     if (passo === 0) {
       const st = h('div', { class: 'cfg-estado' });
       let estado = ''; try { estado = (await navigator.permissions.query({ name: 'geolocation' })).state; } catch (e) { /* navegador antigo */ }
-      const pintar = () => st.replaceChildren(estado === 'granted' ? h('div', { class: 'info' }, ico('check'), ' Localização permitida.') : estado === 'denied' || S.gpsNegado ? h('div', { class: 'aviso' }, h('b', null, 'A localização está bloqueada.'), h('br'), 'Android: toque no cadeado ao lado do endereço (ou em Configurações, Apps, Arvorada), Permissões, Localização, Permitir. iPhone: Ajustes, Privacidade, Serviços de Localização, Safari, Ao Usar o App. Depois volte aqui.') : null);
+      const pintar = () => st.replaceChildren(estado === 'granted' ? h('div', { class: 'info' }, ico('check'), ' Localização permitida.') : estado === 'denied' || S.gpsNegado ? h('div', { class: 'aviso' }, h('b', null, 'A localização está bloqueada.'), h('br'), 'Android: toque no cadeado ao lado do endereço (ou em Configurações, Apps, Árvores de Rua), Permissões, Localização, Permitir. iPhone: Ajustes, Privacidade, Serviços de Localização, Safari, Ao Usar o App. Depois volte aqui.') : null);
       const bt = h('button', { class: 'btn cheio', onclick: () => {
         if (estado === 'granted') return prox();
         bt.disabled = true; bt.textContent = 'Aguardando a sua resposta...';
@@ -2760,7 +2760,7 @@
     } else if (passo === 1) {
       const bt = S.pedidoInstalar ? h('button', { class: 'btn cheio', onclick: async () => { const e = S.pedidoInstalar; S.pedidoInstalar = null; e.prompt(); try { await e.userChoice; } catch (er) { /* segue */ } prox(); } }, 'Instalar o app') : h('button', { class: 'btn cheio', onclick: prox }, 'Já instalei, continuar');
       corpo.replaceChildren(h('p', { class: 'cfg-txt' }, 'Instalado, o app abre em tela cheia pelo ícone, como os outros apps do celular, e funciona sem internet.'),
-        S.pedidoInstalar ? null : h('ol', { class: 'cfg-lista' }, ios ? [h('li', null, 'No Safari, toque em ', h('b', null, 'Compartilhar'), ' (o quadrado com a seta).'), h('li', null, 'Toque em ', h('b', null, 'Adicionar à Tela de Início'), '.')] : [h('li', null, 'No Chrome, toque nos ', h('b', null, '3 pontinhos'), ' no canto de cima.'), h('li', null, 'Toque em ', h('b', null, 'Instalar app'), ' (ou ', h('b', null, 'Adicionar à tela inicial'), ').')], h('li', null, 'Depois abra pelo ícone do Arvorada.')),
+        S.pedidoInstalar ? null : h('ol', { class: 'cfg-lista' }, ios ? [h('li', null, 'No Safari, toque em ', h('b', null, 'Compartilhar'), ' (o quadrado com a seta).'), h('li', null, 'Toque em ', h('b', null, 'Adicionar à Tela de Início'), '.')] : [h('li', null, 'No Chrome, toque nos ', h('b', null, '3 pontinhos'), ' no canto de cima.'), h('li', null, 'Toque em ', h('b', null, 'Instalar app'), ' (ou ', h('b', null, 'Adicionar à tela inicial'), ').')], h('li', null, 'Depois abra pelo ícone do Árvores de Rua.')),
         rodape(bt));
     } else {
       const num = h('div', { class: 'cfg-gps' }, '...'); const dica = h('p', { class: 'dica', style: 'text-align:center' }, 'Fique parado em lugar aberto, longe de prédios e de copas fechadas.');
@@ -2809,10 +2809,10 @@
     corpo.replaceChildren(seletor, busca, lista, contato); pintar();
   }
   function telaSobre() {
-    $app.replaceChildren(topo('Sobre', 'Arvorada', h('button', { class: 'ic', onclick: () => history.back(), 'aria-label': 'Voltar' }, ico('voltar')), null),
+    $app.replaceChildren(topo('Sobre', 'Árvores de Rua', h('button', { class: 'ic', onclick: () => history.back(), 'aria-label': 'Voltar' }, ico('voltar')), null),
       h('main', null,
-        h('div', { class: 'cartao sobre' }, h('img', { src: 'icons/arvorada-horizontal.svg', alt: 'Arvorada', style: 'width:240px;max-width:80%' }), h('p', { class: 'sobre-slogan' }, 'ver de perto cada árvore da cidade'),
-          h('p', null, h('b', null, 'Arvorada'), ' · versão ', VERSAO, S.sessao && S.sessao.versaoScript ? ' · servidor ' + S.sessao.versaoScript : ''),
+        h('div', { class: 'cartao sobre' }, h('img', { src: 'icons/arvores-de-rua-horizontal.svg', alt: 'Árvores de Rua', style: 'width:280px;max-width:90%' }), h('p', { class: 'dica', style: 'margin:2px 0 12px' }, 'inventário de florestas urbanas'),
+          h('p', null, h('b', null, 'Árvores de Rua'), ' · versão ', VERSAO, S.sessao && S.sessao.versaoScript ? ' · servidor ' + S.sessao.versaoScript : ''),
           h('div', { class: 'linha-btn' }, S.novaVersao ? h('button', { class: 'btn', onclick: atualizarApp }, `Atualizar para a versão ${S.novaVersao.versao}`) : h('button', { class: 'btn sec', onclick: async () => { await verificarAtualizacao(true); if (S.novaVersao) telaSobre(); } }, 'Verificar atualização')),
           h('p', null, 'Coleta de campo, validação, painel e entrega dos dados do inventário da arborização urbana. Funciona sem internet: os registros ficam no aparelho e são enviados quando houver conexão.'),
           h('p', { class: 'dica' }, ['por Neofloresta Serviços Ecossistêmicos Ltda.', CONTATO.cnpj ? 'CNPJ ' + CONTATO.cnpj : '', CONTATO.cidade || 'Dois Vizinhos/PR'].filter(Boolean).join(' · ')),
@@ -2825,9 +2825,9 @@
   const COR_RISCO = { Baixo: '#009E73', 'Médio': '#F0E442', Alto: '#D55E00', Severo: '#3B0F70', Extremo: '#3B0F70' };
   const ROT_CURTO = { Pendente: 'Aguardando', Validado: 'Validados', Corrigido: 'Corrigidos', Devolvido: 'Devolvidos', Descartado: 'Descartados' };
   const COR_VAL = { Validado: '#1B7F3B', Pendente: '#8A969C', Corrigido: '#0072B2', Devolvido: '#E69F00', Descartado: '#B0BEC5' };
-  const CORES = ['#2F6B45', '#CD834C', '#4F7CAC', '#8E6C8A', '#9DBF9E', '#7A5C3E'];
+  const CORES = ['#00546E', '#CD834C', '#12A6C8', '#5B8C5A', '#8E6C8A', '#C9A227'];
   // uma paleta de equipes para o painel e o mapa (acessível a daltônicos e sem o vermelho do risco); a mesma equipe tem sempre a mesma cor
-  const CORES_EQ = ['#1F3D2B', '#E69F00', '#56B4E9', '#CC79A7', '#009E73', '#3B0F70', '#8C6D31', '#0072B2'];
+  const CORES_EQ = ['#00546E', '#E69F00', '#56B4E9', '#CC79A7', '#009E73', '#3B0F70', '#8C6D31', '#0072B2'];
   function corEquipe(e) { const m = String(e || '').match(/(\d+)\s*$/); if (m) return CORES_EQ[(+m[1] - 1 + CORES_EQ.length) % CORES_EQ.length]; let hsh = 0; for (const ch of String(e)) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0; return CORES_EQ[hsh % CORES_EQ.length]; }
   const pl = (n, um, varios) => `${fmtN(n)} ${n === 1 ? um : varios}`;
   const fmtN = (n) => (n == null ? '' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 1 }));
@@ -3094,7 +3094,7 @@
         tab([dias.length > 14 ? 'Semana' : 'Data', ...equipes, 'Total'], producaoTabela(d.porDia, dias, equipes, dias.length > 14))],
       h('div', { id: 'rel-os' }),
       p.responsavel ? h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, p.responsavel), p.registro_profissional ? h('div', null, p.registro_profissional) : null, p.art ? h('div', null, 'ART nº ' + p.art) : null, h('div', null, 'Responsável técnico · Neofloresta Serviços Ecossistêmicos Ltda.')) : h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('div', null, 'Responsável técnico · Neofloresta Serviços Ecossistêmicos Ltda.')),
-      h('footer', { class: 'rel-rodape' }, 'Neofloresta Serviços Ecossistêmicos Ltda. · Gerado pelo Arvorada ' + VERSAO));
+      h('footer', { class: 'rel-rodape' }, 'Neofloresta Serviços Ecossistêmicos Ltda. · Gerado pelo sistema da Neofloresta, versão ' + VERSAO));
     try {
       const od = await carregarOS(false); const el = document.getElementById('rel-os');
       if (el && !od.semServidor && od.ordens.length) {
@@ -3141,7 +3141,7 @@
         h('div', { class: 'rel-assinaturas' },
           h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, p.responsavel || 'Responsável técnico'), p.registro_profissional ? h('div', null, p.registro_profissional) : null, h('div', null, 'Neofloresta Serviços Ecossistêmicos Ltda.')),
           h('div', { class: 'rel-assina' }, h('div', { class: 'linha-ass' }), h('b', null, 'Fiscal do contrato'), h('div', null, 'Atesto a execução dos serviços acima. Data: ____/____/______'))),
-        h('footer', { class: 'rel-rodape' }, 'Gerado pelo Arvorada ' + VERSAO + ' em ' + new Date().toLocaleString('pt-BR')));
+        h('footer', { class: 'rel-rodape' }, 'Gerado pelo sistema da Neofloresta, versão ' + VERSAO + ' em ' + new Date().toLocaleString('pt-BR')));
       try {
         const od = await carregarOS(false); const el = document.getElementById('med-os');
         const feitas = od.ordens.filter((o) => o.status === 'Concluída' && o.numero && (() => { const x = diaLocal(o.concluida_em); return x && x >= de.value && x <= ate.value; })()).sort((a, b) => +a.numero - +b.numero);
@@ -3855,7 +3855,7 @@
             ['validacao', 'Situação da validação técnica (Pendente, Validado, Devolvido, Corrigido, Descartado)', ''], ['validado_por', 'Quem fez a última avaliação', ''], ['validado_em', 'Data e hora da última avaliação', ''], ['validacao_hist', 'Histórico de todas as avaliações do registro', ''], ['historico', 'Histórico de alterações feitas depois de concluído', ''], ['uuid', 'Identificador interno do registro', '']]
             .map(([c, d, u]) => ({ Campo: c, 'Nome no app': '', Unidade: u, Descrição: d, Tipo: '', Opções: '' }))];
         const meta = [['Projeto', p.nome], ['Contratante', p.contratante || ''], ['Contrato', p.contrato || ''], ['Município', p.municipio || ''], ['Responsável técnico', [p.responsavel, p.registro_profissional, p.art ? 'ART ' + p.art : ''].filter(Boolean).join(' · ')],
-          ['Registros neste arquivo', String(linhas.length)], ['Filtro', filtro === 'validados' ? 'Somente registros validados' : 'Todos os registros, exceto descartados'], ['Sistema de referência das coordenadas', 'SIRGAS 2000, geográficas (EPSG:4674)'], ['Formulário', `${form.nome} (versão ${form.versao || 1})`], ['Gerado em', new Date().toLocaleString('pt-BR')], ['Gerado por', `${S.sessao.usuario.nome || S.sessao.u} no Arvorada ${VERSAO}`]].map(([k, v]) => ({ Item: k, Valor: v }));
+          ['Registros neste arquivo', String(linhas.length)], ['Filtro', filtro === 'validados' ? 'Somente registros validados' : 'Todos os registros, exceto descartados'], ['Sistema de referência das coordenadas', 'SIRGAS 2000, geográficas (EPSG:4674)'], ['Formulário', `${form.nome} (versão ${form.versao || 1})`], ['Gerado em', new Date().toLocaleString('pt-BR')], ['Gerado por', `${S.sessao.usuario.nome || S.sessao.u} no sistema da Neofloresta, versão ${VERSAO}`]].map(([k, v]) => ({ Item: k, Valor: v }));
         const abas = [{ nome: 'Registros', cols, linhas: leg.map((l) => Object.fromEntries(cols.map((c) => [c, l[c]]))) }];
         if (camQd) {
           try {
@@ -3920,7 +3920,7 @@
       const LIM = 300; let baixadas = 0;
       if (fotos.length <= LIM) for (const f of fotos) { msg(`Baixando fotos: ${baixadas + 1} de ${fotos.length}...`); try { arqs.push({ nome: 'DCIM/' + f.nome, dados: await Api.b.fotoVer(p.id, f.id) }); baixadas++; } catch (e) { /* fica o link na planilha */ } }
       const dia = new Date().toLocaleDateString('pt-BR');
-      const leia = [`Pacote de entrega: ${p.nome}`, `Gerado em ${dia} pelo Arvorada ${VERSAO}.`, `Contratante: ${p.contratante || ''}  Contrato: ${p.contrato || ''}  Município: ${p.municipio || ''}`, `Responsável técnico: ${[p.responsavel, p.registro_profissional, p.art ? 'ART ' + p.art : ''].filter(Boolean).join(', ')}`, '',
+      const leia = [`Pacote de entrega: ${p.nome}`, `Gerado em ${dia} pelo sistema da Neofloresta, versão ${VERSAO}.`, `Contratante: ${p.contratante || ''}  Contrato: ${p.contrato || ''}  Município: ${p.municipio || ''}`, `Responsável técnico: ${[p.responsavel, p.registro_profissional, p.art ? 'ART ' + p.art : ''].filter(Boolean).join(', ')}`, '',
         `Registros: ${linhas.length} (${filtro === 'validados' ? 'somente validados' : 'todos, exceto descartados'}).`, `Ordens de serviço: ${os.length}.`, '',
         'Arquivos:', ...arqs.filter((a) => !a.nome.startsWith('DCIM/')).map((a) => '  ' + a.nome + ({ gpkg: ': GeoPackage para o QGIS, em SIRGAS 2000 / UTM, com a simbologia embutida', xlsx: ': Excel com os registros, as ordens de serviço, o dicionário de campos (unidade e descrição) e os metadados', zip: ': Shapefile em SIRGAS 2000 / UTM; o arquivo _campos.csv traz o nome completo de cada campo', csv: ': texto separado por ponto e vírgula, decimal com vírgula', kml: ': Google Earth e Google Maps' }[a.nome.split('.').pop()] || '')),
         fotos.length <= LIM ? `  DCIM/: ${baixadas} fotos. As dos registros têm o nome da coluna de foto da planilha; as das ordens de serviço ficam em DCIM/ordens/ com o nome indicado nas colunas "arquivo no pacote" da aba Ordens de serviço.` : `  Fotos: são ${fotos.length}, grandes demais para um arquivo só. Peça à Neofloresta o pacote de fotos (pasta DCIM) e coloque ao lado do GeoPackage. Cada linha da planilha tem o link da foto.`,
