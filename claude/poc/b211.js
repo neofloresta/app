@@ -1,4 +1,5 @@
 // 2.11 nas telas: modo quadra (fora da reserva), destravar o ponto, dois raios, espécie a confirmar, altura pelo celular, foto da face, fechar quadra, lixeira e legenda
+process.env.COM_FOTO_FACE = '1';
 const { chromium } = require('playwright'); const L = require('./lib'); const fs = require('fs'); const vm = require('vm');
 const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
 const PJ = 'divinopolis'; const limpo = (t) => String(t || '').replace(/\s+/g, ' ').trim();

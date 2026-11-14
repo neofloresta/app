@@ -242,6 +242,7 @@ const Api = (() => {
     // servidor antigo (sem times nem dias): lista vazia
     async timesListar() { try { return (await chamar('times_listar')).times || []; } catch (e) { if (/desconhecida/i.test(e.message)) return []; throw e; } },
     async timeSalvar(time) { return chamar('time_salvar', { time }); },
+    async registroQuadra(projeto, uuid, quadra) { return chamar('registro_quadra', { projeto, uuid, quadra }); },
     async diasListar(projeto) { try { return (await chamar('dias_listar', { projeto })).dias || []; } catch (e) { if (/desconhecida/i.test(e.message)) return []; throw e; } },
     async diaMarcar(projeto, dados) { return chamar('dia_marcar', Object.assign({ projeto }, dados)); },
     async chuvaRegistrar(projeto, dados) { return chamar('chuva_registrar', Object.assign({ projeto }, dados)); },

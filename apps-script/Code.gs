@@ -147,6 +147,7 @@ function doPost(e) {
       case 'auditoria_conferir': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, conferirAuditoria(d.projeto, d.setor, d.uuid, d.resultado, d.motivo, usr)));
       case 'producao': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producao(d.projeto, d.de, d.ate)));
       case 'producao_minha': pode('coletor', 'auxiliar'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producaoPainel(d.projeto, usr)));
+      case 'registro_quadra': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, definirQuadraRegistro(d.projeto, d.uuid, d.quadra, usr)));
       case 'times_listar': pode('revisor'); return json({ ok: true, times: listarTimes() });
       case 'time_salvar': pode(); { const id = salvarTime(d.time || {}); auditar(usr.login, 'time_salvar', id, (d.time && d.time.tipo) || ''); return json({ ok: true, id: id }); }
       case 'chuva_registrar': pode('coletor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, registrarChuva(d.projeto, d, usr)));
@@ -586,6 +587,13 @@ function salvarRegistro(projetoId, linha, usr) {
   if (linha.atualizado_em && new Date(linha.atualizado_em) > new Date(Date.now() + 10 * 60000)) throw new Error('Data do aparelho adiantada. Acerte a data e a hora do celular e envie de novo.');
   if (usr.perfil === 'coletor') { linha.usuario = usr.login; if (linha.criado_em && new Date(linha.criado_em) > new Date(Date.now() + 10 * 60000)) throw new Error('Data do aparelho adiantada. Acerte a data e a hora do celular e envie de novo.'); if (usr.avaliador_id || usr.auxiliar_id || 'avaliador_id' in linha || 'auxiliar_id' in linha) { let aux = usr.auxiliar_id || ''; if (usr.avaliador_id && !usr.auxiliar_id && 'auxiliar_id' in linha && timeParceiroDo(usr)) aux = auxiliarDoTurno(linha.auxiliar_id, usr, projetoId); linha.avaliador_id = usr.avaliador_id || ''; linha.auxiliar_id = aux; } } // a dupla é a do acesso, definida pela coordenação
   conferirDupla(linha, projetoId);
+  if (usr.perfil === 'coletor' && timeParceiroDo(usr) && 'quadra' in linha && String(linha.quadra || '').trim()) { // time parceiro: a quadra informada precisa ser da equipe e estar aberta
+    const iq = infoQuadras(projetoId);
+    if (iq && iq.faces) { const qn = String(linha.quadra).trim(); const q = lerSitQuadras(projetoId).find((x) => x.numero === qn);
+      if (!q || q.equipe !== usr.equipe) throw new Error('Este registro não fica em uma quadra reservada para a sua equipe. Peça a reserva à coordenação.');
+      if (q.fechada_em && linha.criado_em && new Date(linha.criado_em) > new Date(q.fechada_em)) throw new Error('A quadra ' + qn + ' já foi fechada. Peça à coordenação para reabrir.');
+      linha.quadra = qn; }
+  }
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
     const sh = planilha(projetoId);
@@ -701,7 +709,7 @@ function clienteVeTodos(projetoId) { return String(projeto(projetoId).cliente_ve
 // colunas que o cliente não recebe: dados internos das equipes (quem coletou, histórico com logins)
 function ocultasCliente(projetoId) {
   let auto = []; try { auto = lerFormulario(projeto(projetoId).formulario).campos.filter((c) => c.auto === 'coletor').map((c) => c.nome); } catch (e) { /* sem formulário */ }
-  return COLS_INTERNAS.concat(['equipe', 'validado_por', 'historico', 'validacao_hist', 'pagamento'], COLS_DUPLA, auto);
+  return COLS_INTERNAS.concat(['equipe', 'validado_por', 'historico', 'validacao_hist', 'pagamento', 'ponto_ajustado', 'ponto_dist_m', 'altura_dist_m', 'altura_ang_base', 'altura_ang_topo'], COLS_DUPLA, auto);
 }
 function paraCliente(projetoId, linhas) {
   const todos = clienteVeTodos(projetoId); const oc = ocultasCliente(projetoId);
@@ -1104,17 +1112,20 @@ function vencerReservas(projetoId) {
   if (!infoQuadras(projetoId)) return 0;
   const parc = {}; tabela('Usuarios').forEach((u) => { if (normalizarPerfil(u.perfil) === 'coletor' && u.equipe && timeParceiroDo(u)) parc[u.equipe] = 1; });
   if (!Object.keys(parc).length) return 0;
-  const agora = Date.now(); const cand = lerSitQuadras(projetoId).filter((q) => q.equipe && parc[q.equipe] && q.reservada_em && !q.fechada_em && agora - new Date(q.reservada_em).getTime() > RESERVA_DIAS * 864e5);
-  if (!cand.length) return 0;
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
-    const shF = abaFaces(projetoId); const faces = lerOS(shF); const shQ = abaQuadras(projetoId); let n = 0;
-    cand.forEach((q) => {
-      const fq = faces.filter((f) => f.quadra === q.numero); const iniciada = fq.some((f) => FACE_FEITA.indexOf(f.situacao) >= 0); const dias = (agora - new Date(q.reservada_em).getTime()) / 864e5;
+    const agora = Date.now(); const shQ = abaQuadras(projetoId); let n = 0; let faces = null, shF = null;
+    lerOS(shQ).forEach((q) => { // lido dentro da trava: um fechamento feito agora não é desfeito
+      if (!q.equipe || !parc[q.equipe] || q.fechada_em) return;
+      const t = q.reservada_em ? new Date(q.reservada_em).getTime() : NaN;
+      if (isNaN(t)) { q.reservada_em = new Date().toISOString(); gravarSetor(shQ, q); return; } // reserva de antes desta regra: o prazo começa agora
+      if (agora - t <= RESERVA_DIAS * 864e5) return;
+      if (!faces) { shF = abaFaces(projetoId); faces = lerOS(shF); }
+      const fq = faces.filter((f) => f.quadra === q.numero); const era = q.equipe; const iniciada = fq.some((f) => f.equipe === era && FACE_FEITA.indexOf(f.situacao) >= 0); const dias = (agora - t) / 864e5;
       if (iniciada && dias <= RESERVA_DIAS + RESERVA_EXTRA) return;
-      const era = q.equipe; q.historico = [q.historico, new Date().toISOString().slice(0, 16).replace('T', ' ') + ' sistema: reserva da ' + era + ' vencida (' + (iniciada ? 'não fechada em ' + (RESERVA_DIAS + RESERVA_EXTRA) : 'não começada em ' + RESERVA_DIAS) + ' dias)'].filter(Boolean).join(' | ').slice(-5000);
-      q.equipe = ''; q.atribuida = ''; q.reservada_em = ''; q.situacao = iniciada ? 'Em levantamento' : 'A levantar'; q.atualizado_em = new Date().toISOString(); gravarSetor(shQ, q);
-      fq.forEach((f) => { if (FACE_FEITA.indexOf(f.situacao) >= 0 || (!f.equipe && f.situacao === 'A levantar')) return; f.equipe = ''; f.atribuida = ''; f.situacao = 'A levantar'; f.atualizado_em = q.atualizado_em; gravarSetor(shF, f); });
+      q.historico = [q.historico, new Date().toISOString().slice(0, 16).replace('T', ' ') + ' sistema: reserva da ' + era + ' vencida (' + (iniciada ? 'não fechada em ' + (RESERVA_DIAS + RESERVA_EXTRA) : 'não começada em ' + RESERVA_DIAS) + ' dias)'].filter(Boolean).join(' | ').slice(-5000);
+      q.equipe = ''; q.atribuida = ''; q.reservada_em = ''; q.situacao = fq.some((f) => FACE_FEITA.indexOf(f.situacao) >= 0 || f.situacao === 'Em levantamento' && f.equipe !== era) ? 'Em levantamento' : 'A levantar'; q.atualizado_em = new Date().toISOString(); gravarSetor(shQ, q);
+      fq.forEach((f) => { if (f.equipe !== era || FACE_FEITA.indexOf(f.situacao) >= 0) return; f.equipe = ''; f.atribuida = ''; f.situacao = 'A levantar'; f.atualizado_em = q.atualizado_em; gravarSetor(shF, f); }); // só as faces da equipe que perdeu a reserva
       auditar('sistema', 'reserva_vencida', projetoId, 'quadra ' + q.numero + ' (' + era + ')'); n++;
     });
     return n;
@@ -1304,8 +1315,9 @@ function linhasProducao(projetoId) {
   const p = projeto(projetoId); const form = lerFormulario(p.formulario); const F = camposProducao(form);
   const campos = ['uuid', 'equipe', 'usuario', 'criado_em', 'validacao', 'validacao_obs', 'avaliador_id', 'avaliador', 'avaliador_vinculo', 'auxiliar_id', 'auxiliar', 'auxiliar_vinculo', 'setor', 'latitude', 'longitude', 'pagamento', 'quadra', F.alt, F.cat, F.foto, F.foto ? F.foto + ' link' : null, F.cod, F.esp].filter(Boolean);
   const c = colunas(projetoId, campos, { perfil: 'admin' }); const ix = indiceSetores(projetoId);
-  let QF = null; try { if (infoQuadras(projetoId)) { QF = {}; lerSitQuadras(projetoId).forEach((q) => { QF[q.numero] = q.fechada_em ? 1 : 0; }); } } catch (e) { QF = null; }
-  return { p: p, F: F, QF: QF, FV: facesVazias(projetoId), linhas: c.linhas.map((l) => { const o = {}; campos.forEach((k, i) => { o[k] = l[i]; }); if (ix) o.setor = o.latitude !== '' && o.latitude != null ? ix(+o.longitude, +o.latitude) : ''; return o; }) }; // o setor sai da coordenada, não do aparelho
+  // time parceiro trabalha por quadra (projeto com camada de faces): o registro precisa estar numa quadra e ela precisa estar fechada. Vale para registros criados depois que a regra entrou no projeto.
+  let QF = null, MQ = ''; try { const iq = infoQuadras(projetoId); if (iq && iq.faces) { QF = {}; lerSitQuadras(projetoId).forEach((q) => { QF[q.numero] = q.fechada_em ? 1 : 0; }); MQ = PROPS.getProperty('MQ_' + projetoId) || ''; if (!MQ) { MQ = dia(new Date().toISOString()); PROPS.setProperty('MQ_' + projetoId, MQ); } } } catch (e) { QF = null; }
+  return { p: p, F: F, QF: QF, MQ: MQ, FV: facesVazias(projetoId), linhas: c.linhas.map((l) => { const o = {}; campos.forEach((k, i) => { o[k] = l[i]; }); if (ix) o.setor = o.latitude !== '' && o.latitude != null ? ix(+o.longitude, +o.latitude) : ''; return o; }) }; // o setor sai da coordenada, não do aparelho
 }
 // setor de um ponto pela camada do projeto (dentro do polígono); null quando o projeto não tem setores
 function indiceSetores(projetoId) {
@@ -1328,6 +1340,17 @@ function contaParaProducao(l, F, FV) {
 }
 // Produção do período. Parceiro recebe por registro que conta (a parte do time sai desse valor).
 // Dupla com carteira recebe prêmio por semana: prêmio de meta quando a média dos dias trabalhados chega à meta, e superação pelo que a média passar da meta, até o teto.
+// a coordenação informa a quadra de um registro de parceiro que chegou sem quadra válida
+function definirQuadraRegistro(projetoId, uuid, quadra, usr) {
+  const qn = String(quadra || '').trim(); if (!lerSitQuadras(projetoId).some((x) => x.numero === qn) && !indiceCamada(projetoId).nums.has(qn)) throw new Error('Quadra não existe na camada.');
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try { const sh = planilha(projetoId); const cab = cabecalho(sh, ['quadra']); const n = sh.getLastRow() - 1; if (n < 1) throw new Error('Registro não encontrado.');
+    const uu = sh.getRange(2, cab.indexOf('uuid') + 1, n, 1).getValues(); let k = -1; uu.forEach((u, i) => { if (String(u[0]) === String(uuid)) k = i; }); if (k < 0) throw new Error('Registro não encontrado.');
+    sh.getRange(k + 2, cab.indexOf('quadra') + 1).setNumberFormat('@').setValue(seguro(qn)); auditar(usr.login, 'registro_quadra', projetoId, String(uuid).slice(0, 40) + ': quadra ' + qn); return { quadra: qn };
+  } finally { lock.releaseLock(); }
+}
+// registro de time parceiro: '' pode entrar na medição; 'aberta' espera a quadra fechar; 'sem' não tem quadra válida e espera a coordenação
+function esperaQuadra(l, X) { if (!X.QF || l.pagamento || !l.criado_em || (X.MQ && dia(l.criado_em) < X.MQ)) return ''; const q = String(l.quadra == null ? '' : l.quadra).trim(); if (!q || !(q in X.QF)) return 'sem'; return X.QF[q] ? '' : 'aberta'; }
 function producao(projetoId, de, ate, soLogin, X0, comMarcar) {
   const X = X0 || linhasProducao(projetoId); const F = X.F; const FV = X.FV; const RG = {}; const regra = (d) => RG[d] || (RG[d] = regrasProducao(X.p, d));
   const r2 = (x) => Math.round(x * 100) / 100; const hoje = dia(new Date().toISOString());
@@ -1336,7 +1359,7 @@ function producao(projetoId, de, ate, soLogin, X0, comMarcar) {
   const tipoTime = tiposDosTimes(); const trouxe = {}; tabela('Usuarios').forEach((u) => { const t = String(u.indicacao || '').trim(); if (t && tipoTime(t) === 'parceiro') trouxe[String(u.login).toLowerCase()] = t; }); const indic = {};
   const pes = (id, nome, vinc) => (pessoas[id] = pessoas[id] || { id: id, nome: nome, vinculo: vinc, coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, premioPrevisto: 0, bonus: 0, arvoresPagar: 0, valorPagar: 0, premioPagar: 0, bonusPagar: 0 });
   const zero = () => ({ coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0 });
-  let arvoresPagar = 0, semDuplaPagar = 0, quadraAberta = 0; const marcar = {};
+  let arvoresPagar = 0, semDuplaPagar = 0, quadraAberta = 0; const marcar = {}; const semQuadra = [];
   X.linhas.forEach((l) => {
     if (l.validacao === 'Descartado' || !l.criado_em) return; const d = dia(l.criado_em);
     if (soLogin && String(l.usuario).toLowerCase() !== soLogin) return;
@@ -1362,8 +1385,9 @@ function producao(projetoId, de, ate, soLogin, X0, comMarcar) {
     if (!k.conta) return;
     const sx = st[sn]; const quem = trouxe[String(l.usuario).toLowerCase()]; const vTime = quem && R.indicacao > 0 ? R.indicacao * w : 0;
     // entra na medição o registro de parceiro ou de time parceiro (e o sem dupla, como antes); o de dupla só com carteira fica fora: o prêmio dela é por semana
-    const aberta = !!(quem && X.QF && l.quadra && !X.QF[String(l.quadra)]) && !l.pagamento; // time parceiro trabalha por quadra: o registro só entra na medição com a quadra fechada
-    if (aberta && noPeriodo) { quadraAberta++; membros.forEach((m) => { const P = pes(m.id, m.nome, m.v); P.quadraAberta = (P.quadraAberta || 0) + 1; }); }
+    const espera = quem ? esperaQuadra(l, X) : ''; const aberta = !!espera; // time parceiro trabalha por quadra: o registro só entra na medição com a quadra fechada
+    if (espera === 'sem' && semQuadra.length < 300) semQuadra.push({ uuid: l.uuid, codigo: F.cod ? l[F.cod] : '', equipe: e, dia: d, quadra: String(l.quadra || '') });
+    if (aberta) { quadraAberta++; membros.forEach((m) => { const P = pes(m.id, m.nome, m.v); P.quadraAberta = (P.quadraAberta || 0) + 1; }); }
     const pagavel = !aberta && (!membros.length || vTime > 0 || membros.some((m) => m.v === 'Parceiro')); const aPagar = !l.pagamento && pagavel;
     if (aPagar) { arvoresPagar++; marcar[l.uuid] = 1; if (!membros.length) semDuplaPagar++; }
     if (vTime) { const I = indic[quem] = indic[quem] || { nome: quem, arvores: 0, valor: 0, arvoresPagar: 0, valorPagar: 0 }; if (noPeriodo) { I.arvores++; I.valor += vTime; } if (aPagar) { I.arvoresPagar++; I.valorPagar += vTime; } }
@@ -1397,6 +1421,7 @@ function producao(projetoId, de, ate, soLogin, X0, comMarcar) {
   const out = { regras: regra(ate || hoje), de: de || '', ate: ate || '', indicacoes: inds, pessoas: ps, equipes: Object.keys(equipes).map((k) => arred(equipes[k])), setores: Object.keys(setores).map((k) => arred(setores[k])), dias: listaDias, semanas: semanas, devolvidas: devolvidas.slice(-100),
     totais: (() => { const t = arred(tot); t.indicacao = r2(t.indicacao); t.indicacaoPagar = r2(t.indicacaoPagar); t.total = r2(t.total + t.indicacao); t.totalPagar = r2(t.totalPagar + t.indicacaoPagar); t.arvoresPagar = arvoresPagar; t.quadraAberta = quadraAberta; return t; })(), medicoes: lerMedicoes(projetoId) };
   if (comMarcar) { out._marcar = marcar; out._semDupla = semDuplaPagar; }
+  if (!soLogin && !X0) out.semQuadra = semQuadra;
   if (!soLogin) out.jornada = jornada.sort((a, b) => (a.dia + a.equipe < b.dia + b.equipe ? -1 : 1));
   return out;
 }
@@ -1433,7 +1458,7 @@ function producaoDoTime(projetoId, usr) {
     const D = duplas[String(l.usuario).toLowerCase()]; if (!D || l.validacao === 'Descartado' || !l.criado_em) return;
     const sit = situacaoReg(l); const k = contaParaProducao(l, X.F, X.FV); const Rd = regra(dia(l.criado_em)); const vt = Rd.indicacao * (k.face ? Rd.pesoFace : 1); D.coletadas++;
     if (sit === 'Em validação') D.emValidacao++; if (sit === 'Devolvida') D.devolvidas++;
-    if (k.conta) { D.validadas++; D.valor += vt; if (l.pagamento) D.pagas++; else { D.aPagar++; D.valorPagar += vt; } }
+    if (k.conta) { D.validadas++; D.valor += vt; if (l.pagamento) D.pagas++; else if (esperaQuadra(l, X)) D.quadraAberta = (D.quadraAberta || 0) + 1; else { D.aPagar++; D.valorPagar += vt; } }
   });
   const lista = Object.keys(duplas).map((k) => { const D = duplas[k]; D.valor = r2(D.valor); D.valorPagar = r2(D.valorPagar); return D; }).sort((a, b) => String(a.equipe).localeCompare(String(b.equipe)));
   const tot = lista.reduce((a, D) => { Object.keys(a).forEach((c) => { a[c] += D[c]; }); return a; }, { coletadas: 0, emValidacao: 0, devolvidas: 0, validadas: 0, pagas: 0, aPagar: 0, valor: 0, valorPagar: 0 }); tot.valor = r2(tot.valor); tot.valorPagar = r2(tot.valorPagar);
@@ -1568,7 +1593,8 @@ function marcarQuadras(projetoId, itens, usr) {
   } finally { lock.releaseLock(); }
 }
 function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
-  const eqQuadra = {}; lerSitQuadras(projetoId).forEach((q) => { if (q.equipe && q.atribuida !== 'nao') eqQuadra[q.numero] = q.equipe; });
+  const eqQuadra = {}; const qInfo = {}; lerSitQuadras(projetoId).forEach((q) => { qInfo[q.numero] = q; if (q.equipe && q.atribuida !== 'nao') eqQuadra[q.numero] = q.equipe; });
+  const soReservada = !coord && usr.perfil === 'coletor' && timeParceiroDo(usr);
   const sh = abaFaces(projetoId); const por = {}; const todas = [];
   const v0 = sh.getDataRange().getValues(); const cab0 = v0.shift().map(String);
   v0.forEach((l, i) => { if (l[0] === '') return; const o = { __linha: i + 2 }; cab0.forEach((c, k) => { if (c) o[c] = texto(l[k]); }); todas.push(o); por[o.numero] = o; }); // linha real na planilha, mesmo com linhas em branco no meio
@@ -1583,6 +1609,9 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
       const lt = String(it.largura == null ? '' : it.largura).trim(); const lg = +lt.replace(',', '.'); // largura é opcional desde a 2.6 (só a foto)
       if (!/^[0-9a-f-]{8,60}$/i.test(String(it.registro || '')) || (lt && (!/^\d{1,2}([.,]\d{1,3})?$/.test(lt) || !(lg > 0)))) { recusadas.push({ numero: id, motivo: 'Face sem árvores precisa da foto da calçada (cadastro de calçada).' }); return; }
     }
+    const qi = qInfo[qn] || {};
+    if (!coord && qi.fechada_em) { if (!it.auto) recusadas.push({ numero: id, motivo: 'Quadra fechada. Só a coordenação reabre.' }); return; }
+    if (soReservada && qi.equipe !== usr.equipe) { if (!it.auto) recusadas.push({ numero: id, motivo: 'Quadra não reservada para a sua equipe. Peça a reserva à coordenação.' }); return; } // time parceiro só mexe em face de quadra reservada para ele
     if (!coord) {
       if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
       if (f.equipe && f.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Face da ' + f.equipe + '.' }); return; }
@@ -1647,7 +1676,8 @@ function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums, facesIdx) {
         if (atual === it.situacao) return;
         if (it.soDe === 'faces' && !(atual === 'Levantada' || (atual === 'Em levantamento' && /\(face em levantamento\)$/.test(q.historico || '')))) return; // quadra começada por árvore ou pela equipe fica como está
         q.situacao = it.situacao; q.marcada_por = usr.login; q.marcada_em = new Date().toISOString();
-        if (it.situacao === 'Levantada' && !q.equipe && !coord && usr.equipe) { q.equipe = usr.equipe; q.atribuida = 'nao'; } // quadra feita pelas faces fica com a equipe que fez
+        if (it.situacao !== 'Levantada' && q.fechada_em) { q.fechada_em = ''; if (q.equipe) q.reservada_em = q.marcada_em; } // face reaberta pela coordenação: a quadra deixa de estar fechada e o prazo recomeça
+        if (it.situacao === 'Levantada' && !q.equipe && !coord && usr.equipe && !soReservada) { q.equipe = usr.equipe; q.atribuida = 'nao'; q.reservada_em = q.marcada_em; } // quadra feita pelas faces fica com a equipe que fez
         if (it.situacao === 'A levantar' && q.atribuida === 'nao') q.equipe = '';
         q.historico = [q.historico, carimboHist(usr, it.situacao.toLowerCase() + ' (' + it.sistema + ')', q.marcada_em)].filter(Boolean).join(' | ').slice(-5000);
         q.atualizado_em = q.marcada_em; if (q0) Object.assign(q0, q); else { por[n] = q; todas.push(q); } mudou.push(n); return;
@@ -1657,12 +1687,12 @@ function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums, facesIdx) {
         if (q.equipe && q.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Quadra da ' + q.equipe + '.' }); return; }
         if (!q.equipe && soReservada) { if (!it.auto) recusadas.push({ numero: n, motivo: 'Quadra não reservada para a sua equipe. Peça a reserva à coordenação.' }); return; } // time parceiro só trabalha em quadra reservada pela coordenação
         if (!q.equipe) { q.equipe = usr.equipe; q.atribuida = 'nao'; q.reservada_em = new Date().toISOString(); }
-      } else if (it.equipe != null) { const nova = String(it.equipe).slice(0, 60); if (nova !== (q.equipe || '')) q.reservada_em = nova ? new Date().toISOString() : ''; q.equipe = nova; q.atribuida = q.equipe ? 'sim' : ''; }
+      } else if (it.equipe != null) { const nova = String(it.equipe).slice(0, 60); q.reservada_em = nova ? new Date().toISOString() : ''; q.equipe = nova; q.atribuida = q.equipe ? 'sim' : ''; }
       if (it.fechar) { // fechar a quadra: todas as faces precisam estar encerradas
         if (!coord && q.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Só a equipe da quadra pode fechá-la.' }); return; }
         const fq = facesDe ? facesDe(n) : null; if (fq && fq.falta) { recusadas.push({ numero: n, motivo: 'Faltam ' + fq.falta + ' face(s) para encerrar antes de fechar a quadra.' }); return; }
         it = Object.assign({}, it, { situacao: 'Levantada' }); q.fechada_em = new Date().toISOString();
-      } else if (it.situacao != null && it.situacao !== 'Levantada' && q.fechada_em) { if (!coord) { recusadas.push({ numero: n, motivo: 'Quadra fechada. Só a coordenação reabre.' }); return; } q.fechada_em = ''; }
+      } else if (it.situacao != null && it.situacao !== 'Levantada' && q.fechada_em) { if (!coord) { recusadas.push({ numero: n, motivo: 'Quadra fechada. Só a coordenação reabre.' }); return; } q.fechada_em = ''; if (q.equipe) q.reservada_em = new Date().toISOString(); }
       if (it.auto && (q.situacao || 'A levantar') !== 'A levantar') return; // automática ao salvar árvore: só vale para quadra ainda a levantar
       if (it.situacao != null && it.em && q.marcada_em && new Date(it.em) < new Date(q.marcada_em)) { recusadas.push({ numero: n, motivo: 'A quadra foi marcada depois por ' + q.marcada_por + ' (' + q.situacao.toLowerCase() + ').' }); return; }
       const txt = [];

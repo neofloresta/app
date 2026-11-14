@@ -780,7 +780,8 @@
   const modoQuadra = () => perfil() === 'coletor' && !!(S.sessao.usuario.modoQuadra);
   async function conferirQuadra(r) {
     try {
-      if (r.lat == null || r.faceId) return true; const cam = await carregarQuadras(); if (!cam || !S.qdIdx) return true;
+      if (r.faceId) { const k = String(r.faceId).lastIndexOf('-'); r.quadra = String(r.faceId).slice(0, k); r.face = r.faceId; return true; } // cadastro de calçada: a quadra é a da face
+      if (r.lat == null) return true; const cam = await carregarQuadras(); if (!cam || !S.qdIdx) return true;
       const sit = await carregarSitQd(false); const minha = minhaEquipe(); const comFaces = S.qdTemFaces === S.projeto.id;
       const fcs = comFaces ? S.qdIdx.idx.faces(+r.lon, +r.lat, 15) : []; const dentro = S.qdIdx.idx.achar(+r.lon, +r.lat);
       const cands = fcs.map((x) => ({ q: x.q, face: x.id })).concat(dentro ? [{ q: dentro, face: (fcs.find((x) => x.q.n === dentro.n) || {}).id || '' }] : []);
@@ -1212,7 +1213,7 @@
         const a = m.m - zero; angTxt.textContent = numBR(Math.round(a * 10) / 10) + '°';
         if (!armado || Date.now() < armado + 1000) return; armado = 0;
         if (m.dp > 1.2) { msg.textContent = 'Mexeu demais. Segure firme e marque de novo.'; msg.className = 'clin-msg ruim'; return; }
-        if (etapa === 1) { if (a > 20) { msg.textContent = 'A base fica para baixo ou na altura dos olhos. Mire no pé do tronco.'; msg.className = 'clin-msg ruim'; return; } base = a; etapa = 2; pintar(); }
+        if (etapa === 1) { if (a < -60) { msg.textContent = 'Inclinação demais para baixo. Afaste-se do tronco e mire no pé dele.'; msg.className = 'clin-msg ruim'; return; } if (a > 20) { msg.textContent = 'A base fica para baixo ou na altura dos olhos. Mire no pé do tronco.'; msg.className = 'clin-msg ruim'; return; } base = a; etapa = 2; pintar(); }
         else { if (a > 60) { msg.textContent = 'Perto demais (topo acima de 60°). Afaste-se e meça de novo a distância.'; msg.className = 'clin-msg ruim'; return; } if (a <= base + 2) { msg.textContent = 'O topo precisa ficar acima da base. Mire no ponto mais alto da copa.'; msg.className = 'clin-msg ruim'; return; } topo = a; etapa = 3; pintar(); }
       }, 150);
       pintar();
@@ -1736,7 +1737,7 @@
         const centro = r.lat != null ? [r.lat, r.lon] : S.pos ? [S.pos.lat, S.pos.lon] : [-15.8, -47.9];
         mapa = L.map(div, { maxZoom: 21 }).setView(centro, r.lat != null || S.pos ? 19 : 4);
         camadasFundo(mapa, false);
-        if (r.lat != null) { marca = L.marker(centro, { draggable: true }).addTo(mapa); marca.on('dragend', () => { const ll = marca.getLatLng(); Object.assign(r, { lat: ll.lat, lon: ll.lng, posManual: true, gpsAuto: false }); salvarRascunho(); pintar(); pintarGps(); }); }
+        if (r.lat != null) { marca = L.marker(centro, { draggable: true }).addTo(mapa); marca.on('dragend', () => { const ll = marca.getLatLng(); const antes = { lat: r.lat, lon: r.lon, q: r.quadra, f: r.face }; Object.assign(r, { lat: ll.lat, lon: ll.lng, posManual: true, gpsAuto: false }); conferirQuadra(r).then((ok) => { if (!ok) { Object.assign(r, { lat: antes.lat, lon: antes.lon, quadra: antes.q, face: antes.f }); marca.setLatLng([antes.lat, antes.lon]); } salvarRascunho(); pintar(); pintarGps(); }); }); } // o ponto mudou: a quadra e a face são conferidas de novo
         if (S.pos) L.circle([S.pos.lat, S.pos.lon], { radius: S.pos.prec, color: '#0B6E8C', weight: 1 }).addTo(mapa);
       }, 60);
       const v = await p;
@@ -2724,7 +2725,7 @@
         h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Pessoa'), h('th', null, 'Validados'), h('th', null, 'Estimado')),
           P.pessoas.map((x) => h('tr', null, h('td', null, x.nome), h('td', null, fmtN(x.validados)),
             h('td', null, x.vinculo === 'Parceiro' ? (x.aReceber != null ? [h('b', null, R$(x.aReceber)), h('br'), h('small', { class: 'dica' }, 'a receber')] : 'com a coordenação') : [h('b', null, R$(x.estimado || 0)), h('br'), h('small', { class: 'dica' }, x.premioPrevisto ? `prêmio; ${R$(x.premioPrevisto)} ainda em semana aberta` : 'prêmio das semanas apuradas')]))))),
-        P.pessoas.some((x) => x.quadraAberta) ? h('p', { class: 'dica' }, `${fmtN(Math.max(...P.pessoas.map((x) => x.quadraAberta || 0)))} registro(s) em quadra ainda aberta: entram no valor quando a quadra for fechada.`) : null,
+        P.pessoas.some((x) => x.quadraAberta) ? h('p', { class: 'dica' }, `${fmtN(Math.max(...P.pessoas.map((x) => x.quadraAberta || 0)))} registro(s) esperando a quadra: entram no valor quando a quadra for fechada.`) : null,
         h('p', { class: 'dica' }, 'Estimativa. O valor final sai no fechamento feito pela coordenação.')) : null,
       sem.length ? h('div', { class: 'cartao' }, h('h3', null, 'Semanas'), h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, ['Semana', varios ? 'Pessoa' : null, 'Dias', 'Média por dia', 'Prêmio', 'Situação'].filter(Boolean).map((c) => h('th', null, c))),
         sem.map((s) => h('tr', null, h('td', null, `${dBRc(s.semana).slice(0, 5)} a ${dBRc(s.ate).slice(0, 5)}`), varios ? h('td', null, s.nome) : null, h('td', null, fmtN(s.diasTrabalhados)), h('td', null, fmtN(s.media)), h('td', null, R$(s.total)), h('td', null, s.situacao === 'Apurada' ? 'Apurada' : s.pendentes ? `Aberta: ${fmtN(s.pendentes)} em validação` : 'Em andamento'))))),
@@ -2765,6 +2766,13 @@
     };
     const abas = h('div', { class: 'subabas' }, [['pessoas', 'Por pessoa'], ['equipes', 'Por equipe'], ['indic', 'Por parceiro'], ['semanas', 'Prêmio por semana'], ['dias', 'Dias e chuva'], ['jornada', 'Gestão da equipe'], ['setores', 'Por setor'], ['medicoes', 'Medições fechadas']].map(([a, t]) => h('button', { 'data-a': a, onclick: () => { aba = a; pintar(); } }, t)));
     const aPagar = P.totais.arvoresPagar || 0;
+    async function resolverQuadras() {
+      const lin = (P.semQuadra || []).map((x) => { const inp = h('input', { class: 'entrada peq', placeholder: 'nº da quadra', value: x.quadra || '' }); return { x, inp, el: h('tr', null, h('td', null, x.codigo || x.uuid.slice(0, 8)), h('td', null, x.equipe), h('td', null, dBRc(x.dia)), h('td', null, inp)) }; });
+      const ok = await modal('Registros de parceiro sem quadra', h('div', null, h('p', { class: 'dica' }, 'Chegaram sem quadra válida (celular com versão antiga, sem GPS ou sem a camada). Informe a quadra de cada um: ele entra na medição quando a quadra estiver fechada.'), h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, ['Código', 'Equipe', 'Dia', 'Quadra'].map((c) => h('th', null, c))), lin.map((l) => l.el)))), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
+      if (!ok) return; let n = 0; const erros = [];
+      for (const l of lin) { const q = l.inp.value.trim(); if (!q || q === l.x.quadra) continue; try { await Api.b.registroQuadra(S.projeto.id, l.x.uuid, q); n++; } catch (e) { erros.push(`${l.x.codigo || l.x.uuid.slice(0, 8)}: ${e.message}`); } }
+      toast(erros.length ? `${n} salvo(s). Não aceitos: ${erros.slice(0, 2).join('; ')}` : `${n} registro(s) com a quadra informada.`, 6000); if (n) telaProducao();
+    }
     async function fechar() {
       if (!(await confirmar('Fechar a medição', `Fechar de ${dBRc(P.de)} a ${dBRc(P.ate)}? Os registros de parceiros que contam e ainda não foram pagos até o fim do período (inclusive validados depois de uma medição anterior) ficam marcados como pagos (a pagar ${R$(P.totais.totalPagar)}). Exporte a planilha antes para pagar. O prêmio de quem tem carteira não entra aqui.`, 'Fechar medição'))) return;
       try { const r = await Api.b.medicaoFechar(S.projeto.id, P.de, P.ate); toast(`Medição fechada: ${fmtN(r.medicao.arvores)} registros marcados como pagos.`, 5000); S.abaProd = 'medicoes'; telaProducao(); } catch (e) { toast(e.message, 6000); }
@@ -2794,7 +2802,7 @@
           kpi('Times parceiros', R$(P.totais.indicacao), `${R$(Rg.indicacao)} por registro, já dentro dos ${R$(Rg.valor)}`),
           kpi('Prêmio com carteira', R$(P.totais.premio), P.totais.premioPrevisto ? `semanas apuradas; ${R$(P.totais.premioPrevisto)} em semanas abertas` : 'semanas apuradas no período'),
           kpi('A pagar na medição', R$(P.totais.totalPagar), P.totais.quadraAberta ? `parceiros e times; ${fmtN(P.totais.quadraAberta)} registro(s) esperando a quadra fechar` : 'parceiros e times parceiros')),
-        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: exportar }, 'Exportar planilha'), h('button', { class: 'btn', disabled: !aPagar, onclick: fechar }, aPagar ? `Fechar medição (${fmtN(aPagar)} registros a pagar)` : 'Nada a pagar até o fim do período'), h('button', { class: 'btn sec', onclick: () => ir('#auditoria') }, 'Auditoria por setor')),
+        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: exportar }, 'Exportar planilha'), h('button', { class: 'btn', disabled: !aPagar, onclick: fechar }, aPagar ? `Fechar medição (${fmtN(aPagar)} registros a pagar)` : 'Nada a pagar até o fim do período'), h('button', { class: 'btn sec', onclick: () => ir('#auditoria') }, 'Auditoria por setor'), (P.semQuadra || []).length ? h('button', { class: 'btn sec', onclick: resolverQuadras }, `Registros de parceiro sem quadra (${fmtN(P.semQuadra.length)})`) : null),
         h('p', { class: 'dica' }, 'Conta o registro validado pelo auditor: árvore com 2 m de altura ou mais, foto e coordenada, e face de quadra sem árvore com foto. Validados que não contam: ' + fmtN(soma('naoContam')) + '. A planilha traz a folha do RH com os prêmios apurados. As regras de valor ficam no cadastro do projeto.')),
       abas, conteudo);
     pintar();

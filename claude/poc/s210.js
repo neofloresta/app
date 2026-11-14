@@ -86,6 +86,7 @@ const diaN = (k) => { const d = new Date(seg0); d.setDate(seg0.getDate() + k); r
   const imp = await L.post('quadras_importar', { projeto: PJ, camada: JSON.stringify(cam) }); const fid = '2459-' + cam.quadras[0].f[0].i;
   const fv = 'a1b2c3d4-0000-4000-8000-0000000000f1'; await L.post('registro', { projeto: PJ, linha: { uuid: fv, projeto: PJ, equipe: 'Equipe 2', criado_em: diaN(4) + 'T12:00:00.000Z', atualizado_em: diaN(4) + 'T12:00:00.000Z', latitude: -20.15, longitude: -44.85, 'Altura total (m)': '', Categoria: '5', 'Foto 1': 'DCIM/c.jpg', 'Foto 1 link': 'https://drive.google.com/file/d/abcdefghijklmnopqrstuvwxyz/view', auxiliar_id: '' } }, 'div-2', 'equipe02'); await L.post('validar', { projeto: PJ, itens: [{ uuid: fv, estado: 'Validado' }] });
   const antes = (await L.post('producao', { projeto: PJ, de, ate })).totais.arvoresPagar;
+  await L.post('quadras_marcar', { projeto: PJ, itens: [{ numero: '2459', equipe: 'Equipe 2' }] }); // time parceiro só mexe em quadra reservada para ele
   const mk = await L.post('quadras_marcar', { projeto: PJ, itens: [{ tipo: 'face', numero: fid, situacao: 'Levantada, sem árvores', registro: fv, largura: '2,4' }] }, 'div-2', 'equipe02');
   let PF = await L.post('producao', { projeto: PJ, de, ate }); const b1 = pe('Bia Gap', PF).valorPagar;
   await L.post('projeto_salvar', { projeto_dados: Object.assign({}, prj0, { peso_face: '0.5' }) }); PF = await L.post('producao', { projeto: PJ, de, ate }); const b2 = pe('Bia Gap', PF).valorPagar;
