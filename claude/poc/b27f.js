@@ -1,4 +1,4 @@
-// 2.7: produção por pessoa (parceiro por árvore, CLT no prêmio acima da meta), bônus, auditoria por setor e fechamento da medição
+// 2.7 e 2.10: produção por pessoa (parceiro por registro, carteira no prêmio da semana), bônus, auditoria por setor e fechamento da medição
 const { chromium } = require('playwright'); const L = require('./lib'); const fs = require('fs');
 const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
 const PJ = 'divinopolis';
@@ -30,14 +30,14 @@ let ANA, BRUNO;
   const P = await L.post('producao', { projeto: PJ, de: '2026-11-01', ate: '2026-11-15' });
   const pe = (n) => P.pessoas.find((x) => x.nome === n) || {};
   const ana = pe('Ana Souza'), joao = pe('João Lima'), bruno = pe('Bruno Alves'); const d3 = P.dias.find((x) => x.dia === '2026-11-03') || {};
-  ok('F.1', joao.validadas === 95 && joao.valor === 118.75 && ana.valor === 0 && ana.premio === 7.5 && d3.acima === 5 && bruno.valor === 25 && ana.naoContam === 1 && ana.devolvidas === 1 && ana.emValidacao === 1,
-    `João (parceiro, 50%): ${joao.validadas} validadas = ${joao.valor}; Ana (CLT): por árvore ${ana.valor}, prêmio ${ana.premio} (${d3.validadas} no dia, ${d3.acima} acima da meta); Bruno (parceiro sozinho) ${bruno.valor}; altura abaixo de 2 m não conta (${ana.naoContam}); devolvida ${ana.devolvidas}, em validação ${ana.emValidacao}`);
+  ok('F.1', joao.validadas === 95 && joao.valor === 118.75 && ana.valor === 0 && ana.premio === 0 && d3.validadas === 95 && bruno.valor === 25 && ana.naoContam === 1 && ana.devolvidas === 1 && ana.emValidacao === 1,
+    `João (parceiro, 50%): ${joao.validadas} validadas = ${joao.valor}; Ana (CLT): por registro ${ana.valor}, prêmio da semana ${ana.premio} (${d3.validadas} no dia, abaixo da meta de 100); Bruno (parceiro sozinho) ${bruno.valor}; altura abaixo de 2 m não conta (${ana.naoContam}); devolvida ${ana.devolvidas}, em validação ${ana.emValidacao}`);
   // 2. painel da dupla: só os dela, parceiro vê o valor, CLT vê o prêmio
   const M = await L.post('producao_minha', { projeto: PJ, de: '2026-11-01', ate: '2026-11-15' }, 'div-1', 'equipe01');
   const mj = M.pessoas.find((x) => x.nome === 'João Lima') || {}, ma = M.pessoas.find((x) => x.nome === 'Ana Souza') || {};
   const negado = await L.post('producao', { projeto: PJ }, 'div-1', 'equipe01').then(() => 'liberado').catch((e) => e.message);
-  ok('F.2', M.pessoas.length === 2 && mj.valor === 118.75 && !('valor' in ma) && ma.premio === 7.5 && M.devolvidas.length === 1 && /Foto sem a árvore/.test(M.devolvidas[0].motivo) && negado !== 'liberado',
-    `dupla vê ${M.pessoas.length} pessoas (só as dela): João ${mj.valor}, Ana prêmio ${ma.premio}; devolvida com motivo "${(M.devolvidas[0] || {}).motivo}"; painel do gestor negado à equipe`);
+  ok('F.2', M.pessoas.length === 2 && mj.aReceber === 118.75 && !('aReceber' in ma) && ma.premioApurado === 0 && M.hoje && M.devolvidas.length === 1 && /Foto sem a árvore/.test(M.devolvidas[0].motivo) && negado !== 'liberado',
+    `dupla vê ${M.pessoas.length} pessoas (só as dela): João a receber ${mj.aReceber}, Ana prêmio ${ma.premioApurado}; devolvida com motivo "${(M.devolvidas[0] || {}).motivo}"; painel do gestor negado à equipe`);
   // 3. auditoria: S2 sem erro (aprovado, bônus), S1 com erro acima de 5% (setor inteiro volta)
   const a2 = await L.post('auditoria_sortear', { projeto: PJ, setor: 'S2' }); let fim2;
   for (const u of a2.amostra) fim2 = (await L.post('auditoria_conferir', { projeto: PJ, setor: 'S2', uuid: u, resultado: 'ok' })).fim;
@@ -56,8 +56,8 @@ let ANA, BRUNO;
   const P3 = await L.post('producao', { projeto: PJ, de: '2026-11-01', ate: '2026-11-15' }); const b3 = P3.pessoas.find((x) => x.nome === 'Bruno Alves') || {};
   const M2 = await L.post('producao_minha', { projeto: PJ, de: '2026-11-01', ate: '2026-11-15' }, 'div-2', 'equipe02');
   const lis = (await L.post('listar', { projeto: PJ })).linhas.filter((l) => l.pagamento);
-  ok('F.5', f1.medicao.arvores === 10 && f1.medicao.total === 30 && /Nenhuma árvore validada a pagar/.test(f2) && /setor da camada/.test(fake) && devPaga.pagos === 1 && devPaga.alterados === 0 && b3.pagas === 10 && b3.arvoresPagar === 0 && P3.medicoes.length === 1 && M2.totais.pagas === 10 && lis.length === 10 && /Medição 2026-11-01 a 2026-11-15/.test(lis[0].pagamento),
-    `medição fechada com ${f1.medicao.arvores} árvores (${f1.medicao.total}); fechar de novo: "${f2}"; pago não volta como devolvido (${devPaga.pagos}); setor vazio recusado; Bruno com ${b3.pagas} pagas e nada a pagar; a dupla vê ${M2.totais.pagas} pagas; planilha marca "${(lis[0] || {}).pagamento}"`);
+  ok('F.5', f1.medicao.arvores === 10 && f1.medicao.total === 30 && /Nenhuma árvore validada a pagar/.test(f2) && /setor da camada/.test(fake) && devPaga.pagos === 1 && devPaga.alterados === 0 && b3.pagas === 10 && b3.arvoresPagar === 0 && P3.medicoes.length === 1 && (M2.pessoas[0] || {}).pagos === 10 && lis.length === 10 && /Medição 2026-11-01 a 2026-11-15/.test(lis[0].pagamento),
+    `medição fechada com ${f1.medicao.arvores} árvores (${f1.medicao.total}); fechar de novo: "${f2}"; pago não volta como devolvido (${devPaga.pagos}); setor vazio recusado; Bruno com ${b3.pagas} pagas e nada a pagar; a dupla vê ${(M2.pessoas[0] || {}).pagos} pagos; planilha marca "${(lis[0] || {}).pagamento}"`);
   // 4b. validação tardia de um dia já fechado entra na medição seguinte, sem pagar de novo o que já foi pago
   const tard = await enviar('div-2', 'equipe02', 50, '04', Object.assign({ setor: 'S1', fora_do_setor: '' }, BRUNO), 'Equipe 2');
   await L.post('validar', { projeto: PJ, itens: [{ uuid: tard, estado: 'Validado' }] });
@@ -66,14 +66,14 @@ let ANA, BRUNO;
   const fj = await enviar('div-1', 'equipe01', 99, '05', { avaliador_id: 'P_FAKE', avaliador: 'Fantasma', avaliador_vinculo: 'Parceiro', auxiliar_id: ANA.avaliador_id, auxiliar: 'X', auxiliar_vinculo: 'Parceiro', setor: 'S2' }, 'Equipe 1');
   const lf = (await L.post('listar', { projeto: PJ })).linhas.find((l) => l.uuid === fj) || {};
   ok('F.9', f3.medicao.arvores === 1 && f3.medicao.total === 3 && lf.avaliador === 'Ana Souza' && lf.avaliador_vinculo === 'CLT' && lf.auxiliar === 'João Lima', `árvore validada depois do fechamento entra na medição seguinte sozinha (${f3.medicao.arvores} árvore, ${f3.medicao.total}); o celular mandou outra dupla e o servidor gravou a do acesso (${lf.avaliador} ${lf.avaliador_vinculo} + ${lf.auxiliar})`);
-  // meta por dupla: duas duplas da mesma equipe no mesmo dia com 50 cada não passam da meta de 90
+  // meta por dupla: duas duplas da mesma equipe no mesmo dia com 50 cada ficam abaixo da meta, cada uma na sua semana
   const idDavi = await nova({ nome: 'Davi Rocha', funcao: 'Avaliador', registro: 'CRBio 3', vinculo: 'CLT', equipe: 'Equipe 1' });
   const d6 = []; for (let k = 0; k < 50; k++) d6.push(await enviar('div-1', 'equipe01', 200 + k, '06', {}, 'Equipe 1'));
   await L.post('usuario_salvar', { usuario_dados: { login: 'div-1', avaliador_id: idDavi, auxiliar_id: '' } });
   for (let k = 0; k < 50; k++) d6.push(await enviar('div-1', 'equipe01', 300 + k, '06', {}, 'Equipe 1'));
   await L.post('validar', { projeto: PJ, itens: d6.map((uuid) => ({ uuid, estado: 'Validado' })) });
   const P6 = await L.post('producao', { projeto: PJ, de: '2026-11-06', ate: '2026-11-06' });
-  ok('F.10', P6.dias.length === 2 && P6.dias.every((x) => x.validadas === 50 && x.acima === 0 && x.premio === 0), `dia 06/11: ${P6.dias.map((x) => `${x.dupla} ${x.validadas} árvores, ${x.acima} acima da meta`).join('; ')}`);
+  ok('F.10', P6.dias.length === 2 && P6.dias.every((x) => x.validadas === 50 && x.acima === 0) && P6.semanas.length === 2 && P6.semanas.every((x) => !x.bateu && x.avaliador.total === 0), `dia 06/11: ${P6.dias.map((x) => `${x.dupla} ${x.validadas} árvores, ${x.acima} acima da meta`).join('; ')}`);
   // 2.9: quem trouxe a dupla (empresa júnior) recebe por árvore validada, sem pagar duas vezes
   await L.post('usuario_salvar', { usuario_dados: { login: 'div-2', indicacao: 'Floresta Jr' } });
   const PI = await L.post('producao', { projeto: PJ, de: '2026-11-01', ate: '2026-11-15' }); const i0 = PI.indicacoes[0] || {};
@@ -106,7 +106,7 @@ let ANA, BRUNO;
   const E = await L.celular(b); const p = E.p; await L.logar(p, 'div-2', 'equipe02'); await p.waitForSelector('button.nova', { timeout: 20000 });
   await p.evaluate(() => { window.__app.S.perProd = ['2026-11-01', '2026-11-15']; }); await p.goto(L.WEB + '#producao'); await p.waitForSelector('.prod-linha', { timeout: 20000 }); await p.waitForTimeout(500);
   const tp = await p.locator('main').innerText(); await p.screenshot({ path: 'b27f-dupla.png', fullPage: true });
-  ok('F.7', /Bruno Alves/.test(tp) && /R\$\s?37,50/.test(tp) && /2 m de altura/.test(tp), `painel da dupla no celular: ${tp.replace(/\s+/g, ' ').slice(0, 200)}`);
+  ok('F.7', /Bruno Alves/.test(tp) && /a receber/.test(tp) && /Mês\s*15 coletados/.test(tp) && !/hora/i.test(tp) && /2 m de altura/.test(tp), `painel da dupla no celular: ${tp.replace(/\s+/g, ' ').slice(0, 200)}`);
   const G = await L.celular(b); const g = G.p; g.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::/.test(m.text())) g.erros.push(m.text()); });
   await L.logar(g, 'gap', 'biologia'); await g.waitForSelector('.kpis', { timeout: 20000 }); await g.waitForTimeout(2500); const tg = await g.locator('main').innerText(); const avisoG = await g.locator('.toast.erro, .aviso').count();
   await g.goto(L.WEB + '#mapa'); await g.waitForTimeout(1200); const aindaTime = await g.locator('text=Duplas do time').count(); await g.screenshot({ path: 'b27f-time.png', fullPage: true });

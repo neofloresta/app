@@ -15,17 +15,17 @@ const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console
   ok('J.1', bt === 1 && semBt === 0 && diaE2 === 1, `as duas equipes começam o dia com um toque; equipe sem trajeto liberado fica sem a marca de trajeto (${semBt})`);
   await p.click('button.comecar-dia'); await p.waitForSelector('button.nova'); await p.waitForTimeout(500);
   const selo = await p.locator('.pill-dia.trajeto').innerText().catch(() => '');
-  ok('J.2', /Dia desde \d\d:\d\d/.test(selo), `etiqueta do dia com trajeto ligado: "${selo.replace(/\s+/g, ' ')}"`);
+  ok('J.2', /Turno aberto/.test(selo), `etiqueta do dia com trajeto ligado: "${selo.replace(/\s+/g, ' ')}"`);
   // anda de carro (~12 m/s) e depois fica parado
   let lat = -20.1436, lon = -44.8908;
   for (let i = 0; i < 12; i++) { lat += 0.0001; await E.ctx.setGeolocation({ latitude: lat, longitude: lon, accuracy: 5 }); await p.waitForTimeout(900); }
   await p.waitForTimeout(4000); // o turno grava no aparelho 3 s depois do último ponto
   const nPts = await p.evaluate(async () => { const st = await window.__app.Store.get('turno:div-1:divinopolis'); return st ? st.pts.length : -1; });
-  await p.click('.pill-dia'); await p.click('.folha button:has-text("Encerrar o dia")'); await p.waitForTimeout(2500);
+  await p.click('.pill-dia'); await p.click('.folha button:has-text("Encerrar o turno")'); await p.waitForTimeout(2500);
   const tr = await L.post('trajetos', { projeto: 'divinopolis' }, 'rev-1', 'revisor01');
   const t0 = (tr.trechos || [])[0] || {};
   const depois = await p.locator('button.comecar-dia').count();
-  ok('J.3', nPts >= 8 && tr.trechos.length >= 1 && t0.equipe === 'Equipe 1' && t0.km_carro > 0.05 && /^[\x3f-\x7e]+$/.test(t0.pontos), `${nPts} pontos gravados; ${tr.trechos.length} trecho(s) no servidor, equipe ${t0.equipe}, ${t0.km_carro} km de carro, ${t0.km_pe} km a pé; dia encerrado volta a mostrar "Começar o dia" (${depois})`);
+  ok('J.3', nPts >= 8 && tr.trechos.length >= 1 && t0.equipe === 'Equipe 1' && t0.km_carro > 0.05 && /^[\x3f-\x7e]+$/.test(t0.pontos), `${nPts} pontos gravados; ${tr.trechos.length} trecho(s) no servidor, equipe ${t0.equipe}, ${t0.km_carro} km de carro, ${t0.km_pe} km a pé; dia encerrado volta a mostrar "Começar o turno" (${depois})`);
   // reenvio do mesmo trecho não duplica
   const rep = await L.post('trajeto_salvar', { projeto: 'divinopolis', trecho: { id: t0.id, dia: t0.dia, pontos: t0.pontos } }, 'div-1', 'equipe01');
   const tr2 = await L.post('trajetos', { projeto: 'divinopolis' }, 'rev-1', 'revisor01');
@@ -44,7 +44,7 @@ const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console
   const card = await q.locator('.hoje-eq:has-text("Equipe 1")').innerText().catch(() => '');
   ok('J.7', /Trajeto/.test(card) && /km de carro/.test(card), `Hoje no campo: ${card.replace(/\s+/g, ' ').slice(0, 220)}`);
   await p.goto(L.WEB + '#sobre'); await p.waitForTimeout(500); const sobre = await p.locator('main').innerText();
-  ok('J.8', /Encerrar o dia/.test(sobre) && /trajeto/i.test(sobre), 'o termo da equipe explica o trajeto do turno');
+  ok('J.8', /Encerrar o turno/.test(sobre) && /trajeto/i.test(sobre), 'o termo da equipe explica o trajeto do turno');
   const erros = [...p.erros, ...E2.p.erros, ...q.erros]; ok('J.9', !erros.length, erros.length ? erros.join(' | ') : 'sem erros de JavaScript');
   fs.writeFileSync(__dirname + '/res-b26c.json', JSON.stringify(R, null, 1));
   const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);

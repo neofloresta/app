@@ -25,7 +25,7 @@ const PJ = 'divinopolis';
   await p.screenshot({ path: 'b28-1-comecar.png' });
   await p.click('button.comecar-dia'); await p.waitForSelector('button.nova', { timeout: 10000 }); await p.waitForTimeout(400);
   const t1 = await p.locator('.bt-principal').innerText(); const pill1 = await p.locator('.pill-dia').innerText(); const sub = await p.locator('.topo h1 small').innerText();
-  ok('G.2', /Começar o dia/.test(t0) && pill0 === 0 && /GPS bom ±4 m/.test(gps) && /Nova árvore/.test(t1) && /Dia desde \d\d:\d\d/.test(pill1) && /Ana \+ João/.test(sub), `antes: "${t0}", GPS "${gps}"; depois de um toque: "${t1.trim()}", etiqueta "${pill1}", topo "${sub}"`);
+  ok('G.2', /Começar o turno/.test(t0) && pill0 === 0 && /GPS bom ±4 m/.test(gps) && /Nova árvore/.test(t1) && /Turno aberto/.test(pill1) && /Ana \+ João/.test(sub), `antes: "${t0}", GPS "${gps}"; depois de um toque: "${t1.trim()}", etiqueta "${pill1}", topo "${sub}"`);
   await p.reload(); await p.waitForSelector('.bt-principal', { timeout: 20000 }); await p.waitForTimeout(1500); const t2 = await p.locator('.bt-principal').innerText();
   // 3. coleta, devolução e sino
   const f = await A.arvoreCompleta(p, { fotos: 1 }); await p.waitForSelector('.tela-mapa.modo-campo', { timeout: 20000 }); await p.waitForTimeout(3500);
@@ -39,20 +39,20 @@ const PJ = 'divinopolis';
   ok('G.3', /Nova árvore/.test(t2) && f.length === 0 && l0.avaliador === 'Ana Souza' && +selo >= 1 && faixasNoMapa === 0 && /devolvid/i.test(av), `depois de reabrir o app o dia continua aberto ("${t2.trim()}"); árvore gravada com ${l0.avaliador} + ${l0.auxiliar}; devolução aparece só no sino (${selo}) e nada em cima do mapa (${faixasNoMapa}): "${av.replace(/\s+/g, ' ').slice(0, 90)}"`);
   // 4. Meu dia
   await p.goto(L.WEB + '#meudia'); await p.waitForSelector('.dia-num', { timeout: 10000 }); await p.waitForTimeout(2500); const md = await p.locator('main').innerText(); await p.screenshot({ path: 'b28-4-meudia.png' });
-  ok('G.4', /1\s*de 90 árvores/.test(md) && /1\s*devolvida/.test(md) && /Encerrar o dia/.test(md), `Meu dia: ${md.replace(/\s+/g, ' ').slice(0, 170)}`);
-  // 5. encerrar o dia: confirma e volta para "Começar o dia", sem perder nada
-  await p.goto(L.WEB + '#mapa'); await p.waitForSelector('.pill-dia', { timeout: 20000 }); await p.click('.pill-dia'); await p.waitForSelector('.folha:has-text("Encerrar o dia")'); const txt = await p.locator('.folha').innerText();
+  ok('G.4', /1\s*de 100 registros/.test(md) && /1\s*devolvida/.test(md) && /Encerrar o turno/.test(md), `Meu dia: ${md.replace(/\s+/g, ' ').slice(0, 170)}`);
+  // 5. encerrar o dia: confirma e volta para "Começar o turno", sem perder nada
+  await p.goto(L.WEB + '#mapa'); await p.waitForSelector('.pill-dia', { timeout: 20000 }); await p.click('.pill-dia'); await p.waitForSelector('.folha:has-text("Encerrar o turno")'); const txt = await p.locator('.folha').innerText();
   await p.click('.folha button:has-text("Cancelar")'); await p.waitForTimeout(300); const ainda = await p.locator('button.nova').count();
-  await p.click('.pill-dia'); await p.click('.folha button:has-text("Encerrar o dia")'); await p.waitForSelector('button.comecar-dia', { timeout: 10000 }); await p.waitForTimeout(500);
+  await p.click('.pill-dia'); await p.click('.folha button:has-text("Encerrar o turno")'); await p.waitForSelector('button.comecar-dia', { timeout: 10000 }); await p.waitForTimeout(500);
   const nReg = await p.evaluate(async () => (await window.__app.Store.registros('divinopolis')).length); const pill2 = await p.locator('.pill-dia').count();
-  ok('G.5', /envia o que falta/.test(txt) && ainda === 1 && pill2 === 0 && nReg === 1, `confirmação: "${txt.replace(/\s+/g, ' ').slice(0, 100)}"; Cancelar mantém o dia; encerrado volta "Começar o dia" e os registros continuam no aparelho (${nReg})`);
+  ok('G.5', /envia o que falta/.test(txt) && ainda === 1 && pill2 === 0 && nReg === 1, `confirmação: "${txt.replace(/\s+/g, ' ').slice(0, 100)}"; Cancelar mantém o dia; encerrado volta "Começar o turno" e os registros continuam no aparelho (${nReg})`);
   // toque duplo não desfaz o que a dupla acabou de fazer
   await p.waitForTimeout(1500); await p.click('button.comecar-dia'); await p.waitForTimeout(250); await p.locator('.bt-principal').click({ force: true }); await p.waitForTimeout(1500);
   const abriuSozinho = await p.locator('.mp-veu, .prog').count(); const diaOk = await p.locator('button.nova').count();
-  await p.click('.pill-dia'); await p.waitForSelector('.folha:has-text("Encerrar o dia")'); const cx = await p.locator('.folha button:has-text("Encerrar o dia")').boundingBox();
+  await p.click('.pill-dia'); await p.waitForSelector('.folha:has-text("Encerrar o turno")'); const cx = await p.locator('.folha button:has-text("Encerrar o turno")').boundingBox();
   await p.touchscreen.tap(cx.x + cx.width / 2, cx.y + cx.height / 2); await p.waitForTimeout(300); await p.touchscreen.tap(cx.x + cx.width / 2, cx.y + cx.height / 2); await p.waitForTimeout(1800);
   const fechado = await p.locator('button.comecar-dia').count(); const semForm = await p.locator('.mp-veu, .prog').count();
-  ok('G.8', !abriuSozinho && diaOk === 1 && fechado === 1 && !semForm, `toque duplo em "Começar o dia" não abre cadastro (${abriuSozinho}); toque duplo na confirmação de encerrar deixa o dia encerrado (${fechado}) e não abre cadastro (${semForm})`);
+  ok('G.8', !abriuSozinho && diaOk === 1 && fechado === 1 && !semForm, `toque duplo em "Começar o turno" não abre cadastro (${abriuSozinho}); toque duplo na confirmação de encerrar deixa o dia encerrado (${fechado}) e não abre cadastro (${semForm})`);
   // 6. consultar o mapa completo continua a um toque
   await p.goto(L.WEB + '#consulta'); await p.waitForSelector('.chip-rapido', { timeout: 20000 }); const chips = await p.locator('.chip-rapido').allInnerTexts(); const semBt = await p.locator('.bt-principal').count();
   ok('G.6', chips.includes('Hoje') && semBt === 0, `"Consultar o mapa" traz busca e filtros (${chips.join(', ')}) sem o botão de coleta`);

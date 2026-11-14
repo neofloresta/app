@@ -25,7 +25,7 @@ const PROIBIDO = /google|drive|planilha|servidor(es)? fora|controlador|operador|
   await p.fill('input[placeholder=Usuário]', 'div-1'); await p.fill('input[placeholder=Senha]', 'equipe01'); await p.click('text=Entrar');
   await p.waitForSelector('button:has-text("Li e aceito")', { timeout: 15000 }); const tTermo = await p.locator('main').innerText(); const sub = await p.locator('.topo small').innerText();
   const completo = await p.evaluate(() => document.querySelector('.termo-completo').textContent);
-  ok('A.4', /mudou/.test(sub) && /Encerrar o dia/.test(tTermo) && /Quem vê\?/.test(tTermo) && !PROIBIDO.test(tTermo + completo), `termo antigo pede novo aceite ("${sub}"); fala de trajeto e de quem vê; menção a Google/Drive/planilha/controlador/artigo: ${(tTermo + completo).match(PROIBIDO) || 'nenhuma'}`);
+  ok('A.4', /mudou/.test(sub) && /Encerrar o turno/.test(tTermo) && /Quem vê\?/.test(tTermo) && !PROIBIDO.test(tTermo + completo), `termo antigo pede novo aceite ("${sub}"); fala de trajeto e de quem vê; menção a Google/Drive/planilha/controlador/artigo: ${(tTermo + completo).match(PROIBIDO) || 'nenhuma'}`);
   await p.click('button:has-text("Li e aceito")'); await p.waitForSelector('button.nova', { timeout: 15000 });
   const srv = (await L.post('usuarios_listar', {}).catch(() => ({ usuarios: [] }))).usuarios || [];
   const u1 = srv.find((u) => u.login === 'div-1') || {};
@@ -49,7 +49,7 @@ const PROIBIDO = /google|drive|planilha|servidor(es)? fora|controlador|operador|
   if (await q.locator('text=Configurar servidor').count()) { await q.click('text=Configurar servidor'); await q.fill('.folha input', L.MOCK); await q.click('.folha >> text=Salvar'); await q.waitForTimeout(300); }
   await q.fill('input[placeholder=Usuário]', 'cli-1'); await q.fill('input[placeholder=Senha]', 'cliente01'); await q.click('text=Entrar');
   await q.waitForSelector('button:has-text("Li e aceito")', { timeout: 15000 }); const tc = await q.locator('main').innerText();
-  ok('A.10', /De quem são os dados do inventário\?/.test(tc) && !/Encerrar o dia|posição do celular/.test(tc) && !PROIBIDO.test(tc), 'termo do cliente fala dos dados do inventário, sem trajeto nem GPS de equipe, sem menção a onde ficam guardados');
+  ok('A.10', /De quem são os dados do inventário\?/.test(tc) && !/Encerrar o turno|posição do celular/.test(tc) && !PROIBIDO.test(tc), 'termo do cliente fala dos dados do inventário, sem trajeto nem GPS de equipe, sem menção a onde ficam guardados');
   await q.click('button:has-text("Li e aceito")'); await q.waitForSelector('.painel', { timeout: 20000 });
   await q.goto(L.WEB + '#ajuda'); await q.waitForSelector('.ajuda-lista'); const tq = await q.locator('.ajuda-tema h3').allInnerTexts();
   ok('A.11', !tq.includes('GPS') && tq.includes('Pedidos de serviço'), `ajuda do cliente: ${tq.join(', ')}`);

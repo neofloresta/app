@@ -25,12 +25,12 @@ const quadrado = (n, x0, y0, x1, y1) => ({ n, b: [x0, y0, x1, y1], a: [[x0, y0, 
   await p.click('button.comecar-dia'); await p.waitForSelector('button.nova', { timeout: 10000 }); await p.waitForTimeout(1500);
   const trajeto = await p.locator('.pill-dia.trajeto').count(); const pill = await p.locator('.pill-dia').innerText().catch(() => '');
   await p.click('button.nova'); await p.waitForSelector('.prog', { timeout: 40000 }); const perguntou = await p.locator('.folha:has-text("dupla")').count();
-  ok('E.2', /habilitado/.test(errAux) && /Ana \+ João/.test(sub) && !perguntou, `auxiliar não pode ser o responsável ("${errAux.slice(0, 70)}"); o topo mostra "${sub}"; Começar o dia e Nova árvore sem nenhuma pergunta de dupla (${perguntou})`);
+  ok('E.2', /habilitado/.test(errAux) && /Ana \+ João/.test(sub) && !perguntou, `auxiliar não pode ser o responsável ("${errAux.slice(0, 70)}"); o topo mostra "${sub}"; Começar o turno e Nova árvore sem nenhuma pergunta de dupla (${perguntou})`);
   await p.click('.topo .bt-cancelar'); await p.click('.folha button:has-text("Cancelar registro")'); await p.waitForTimeout(800);
   const f = await A.arvoreCompleta(p, { fotos: 1 }); await p.waitForSelector('.tela-mapa.modo-campo', { timeout: 20000 }); await p.waitForTimeout(3500);
   const linhas = (await L.post('listar', { projeto: PJ })).linhas; const l0 = linhas[0] || {};
   ok('E.3', f.length === 0 && l0.avaliador === 'Ana Souza' && l0.avaliador_registro === 'CRBio 12345/04-D' && l0.auxiliar === 'João Lima' && l0.auxiliar_vinculo === 'Parceiro', `registro no servidor com avaliador "${l0.avaliador}" (${l0.avaliador_registro}) e auxiliar "${l0.auxiliar}" (${l0.auxiliar_vinculo})`);
-  ok('E.4', trajeto === 0 && /Dia desde/.test(pill), `dupla com parceiro: dia começado sem trajeto (marca de trajeto ${trajeto}), etiqueta "${pill}"`);
+  ok('E.4', trajeto === 0 && /Turno aberto/.test(pill), `dupla com parceiro: dia começado sem trajeto (marca de trajeto ${trajeto}), etiqueta "${pill}"`);
   // 3. árvore repetida: mesmo ponto
   const n0 = (await p.evaluate(async () => (await window.__app.Store.registros('divinopolis')).length));
   await p.click('button.nova'); await p.waitForSelector('.folha:has-text("Árvore já cadastrada?")', { timeout: 40000 }); const txtRep = await p.locator('.folha').innerText();

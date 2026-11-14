@@ -1,8 +1,10 @@
 {
- "versao": "2.9.3",
+ "versao": "2.10.0",
  "data": "2026-11-14",
  "notas": [
-  "O app agora se chama ArborizIA Coletor",
-  "Nada muda na coleta nem nos dados guardados no aparelho"
+  "\"Começar o turno\" e \"Encerrar o turno\" no lugar de dia",
+  "Minha produção nova: registros de hoje, da semana e do mês, meta e valor estimado",
+  "Parada por chuva com foto, direto do celular",
+  "Coordenação: times, usuários por perfil, prêmio por semana e painéis dos outros perfis"
  ]
 }

@@ -1,6 +1,6 @@
 // ArborizIA Coletor: app de campo do ArborizIA, gestão das árvores da cidade (por Neofloresta)
 (() => {
-  const VERSAO = '2.9.3';
+  const VERSAO = '2.10.0';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -173,27 +173,28 @@
         const r = await Api.b.login(S.sessao.u, S.sessao.s, aparelho());
         if (r.token) { S.sessao.t = r.token; delete S.sessao.s; S.sessao.versaoScript = r.versaoScript; Api.credenciais(credDe(S.sessao)); }
         if (r.usuario.termo_aceito_em === undefined) r.usuario.termo_aceito_em = S.sessao.usuario.termo_aceito_em; // servidor antigo
-        Object.assign(S.sessao, { usuario: r.usuario, projetos: r.projetos }); await Store.set('sessao', S.sessao); return;
+        Object.assign(S.sessao, { usuario: r.usuario, projetos: r.projetos }); await guardarSessao(); return;
       }
       const r = await Api.b.sessao(); if (!r) return;
       if (S.termoLocal === TERMO_VERSAO && r.usuario && r.usuario.termo_versao !== TERMO_VERSAO) Object.assign(r.usuario, { termo_versao: TERMO_VERSAO, termo_aceito_em: r.usuario.termo_aceito_em || S.sessao.usuario.termo_aceito_em || agoraISO() }); // aceite no aparelho ainda indo ao servidor
-      Object.assign(S.sessao, { usuario: r.usuario, projetos: r.projetos, versaoScript: r.versaoScript }); await Store.set('sessao', S.sessao);
+      Object.assign(S.sessao, { usuario: r.usuario, projetos: r.projetos, versaoScript: r.versaoScript }); await guardarSessao();
     } catch (e) { /* sem conexão ou sessão expirada: o aviso já aparece */ }
   }
   const aparelho = () => { const u = navigator.userAgent; const m = u.match(/Android [\d.]+;[^)]*|iPhone OS [\d_]+|Windows NT [\d.]+|Mac OS X [\d_]+/); return (m ? m[0] : u).slice(0, 100); };
   async function abrirProjetoCliente(id) {
     const p = S.sessao.projetos.find((x) => x.id === id) || S.sessao.projetos[0];
     if (!p) throw new Error('Nenhum projeto liberado para este usuário.');
-    S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
+    S.projeto = p; S.sessao.projetoAtual = p.id; await guardarSessao();
     S.form = await carregarForm(p.formulario);
   }
   async function abrirProjeto(id) {
     const p = S.sessao.projetos.find((x) => x.id === id) || S.sessao.projetos[0];
     if (!p) { if (S.sessao.usuario.perfil === 'admin') { S.projeto = null; S.form = null; return; } throw new Error('Nenhum projeto liberado para este usuário.'); }
-    S.projeto = p; S.sessao.projetoAtual = p.id; await Store.set('sessao', S.sessao);
+    S.projeto = p; S.sessao.projetoAtual = p.id; await guardarSessao();
     S.form = await carregarForm(p.formulario);
     Dupla.carregar().then(() => Turno.carregar()).catch(() => {});
     // a numeração dos códigos se prepara em segundo plano: a tela abre na hora
+    if (S.real || S.sessao.usuario.perfil === 'auxiliar') { S.prepCodigosOk = true; S.prepCodigos = Promise.resolve(); return; }
     S.prepCodigosOk = false;
     S.prepCodigos = (async () => { await Promise.race([sincronizarSequencia(), new Promise((r) => setTimeout(r, 8000))]); await Promise.race([garantirFaixa(), new Promise((r) => setTimeout(r, 8000))]); S.prepCodigosOk = true; })();
   }
@@ -229,10 +230,12 @@
     if (!termoEmDia()) return telaTermo(true);
     const [r, a, b] = location.hash.replace(/^#/, '').split('/');
     if (perfil() === 'time' && r !== 'sobre') return telaTime(); // time parceiro: só o painel do time
+    if (perfil() === 'auxiliar' && r !== 'sobre') return S.projeto ? telaMinhaProducao() : telaLogin(); // auxiliar: só o painel de produção dele
     if (r === 'configurar') return telaConfigurar(+a || 0);
     if (perfil() === 'coletor' && S.projeto && !S.configurado) return telaConfigurar(0); // primeiro acesso no aparelho: configuração curta antes do mapa
     const pf = perfil();
     if (r === 'sobre') return telaSobre();
+    if (r === 'projetos' && pf === 'admin') return telaProjetos();
     if (r === 'admin' && pf === 'admin') return telaAdmin(a);
     if (!S.projeto) { if (pf === 'admin') return telaAdmin('projetos'); return telaLogin(); }
     if (r === 'painel' && pf !== 'coletor') return telaPainel();
@@ -249,6 +252,7 @@
     if (r === 'os' && a) return telaOS(decodeURIComponent(a));
     if (r === 'os-nova') return telaNovaOS(a ? decodeURIComponent(a) : null);
     if (r === 'validacao' && ehCoord()) return telaValidacao();
+    if (r === 'time' && a && pf === 'admin') return telaTime(decodeURIComponent(a));
     if (r === 'producao' && pf === 'admin') return telaProducao();
     if (r === 'producao' && pf === 'coletor') return telaMinhaProducao();
     if (r === 'auditoria' && ehCoord()) return telaAuditoria(a ? decodeURIComponent(a) : null);
@@ -278,10 +282,10 @@
         S.sessao = { u: usuario, t: r.token || '', usuario: r.usuario, projetos: r.projetos, projetoAtual: r.projetos.length ? r.projetos[0].id : null, servidor: Api.servidor || '', versaoScript: r.versaoScript || '' };
         if (!r.token) S.sessao.s = senha; // servidor antigo ou demonstração: sem sessão, guarda a senha como antes
         Api.credenciais(credDe(S.sessao)); S.expirada = false; S.termoLocal = await Store.get('termoV:' + usuario); S.configurado = !!(await Store.get('configurado:' + usuario));
-        await Store.set('sessao', S.sessao);
+        await guardarSessao();
         for (const [fid, f] of Object.entries(r.formularios || {})) if (f && Array.isArray(f.campos)) { await Store.set('form:' + fid, f); S.formsEm = Date.now(); }
-        if (r.usuario.perfil === 'cliente') await abrirProjetoCliente(S.sessao.projetoAtual); else { await abrirProjeto(S.sessao.projetoAtual); if (termoEmDia()) ligarGps(); }
-        ir(r.usuario.perfil === 'cliente' ? '#painel' : '#inicio'); rota();
+        if (r.usuario.perfil === 'cliente') await abrirProjetoCliente(S.sessao.projetoAtual); else { await abrirProjeto(S.sessao.projetoAtual); if (termoEmDia() && !['time', 'auxiliar'].includes(r.usuario.perfil)) ligarGps(); }
+        ir(r.usuario.perfil === 'cliente' ? '#painel' : r.usuario.perfil === 'admin' && r.projetos.length > 1 ? '#projetos' : '#inicio'); rota();
       } catch (e) {
         erro.textContent = navigator.onLine ? e.message : 'Sem internet. O primeiro acesso precisa de conexão.'; erro.classList.remove('oculto');
         btn.disabled = false; btn.textContent = 'Entrar';
@@ -311,6 +315,7 @@
   }
 
   async function sair(semPerguntar) {
+    if (S.real) return voltarDoComo();
     const regs = await Store.todosRegistros();
     const pend = regs.filter((r) => r.status === 'pendente' || (r.status === 'enviado' && fotoFalta(r))).length + (S.sessao ? await nFilaOS() : 0); // inclui fotos esperando o Wi-Fi
     if (!semPerguntar && pend && !(await confirmar('Sair', `Há ${pend} registro(s) ou atualização(ões) de ordem de serviço ainda não enviados (registros, fotos esperando o Wi-Fi ou ordens de serviço). Eles continuam guardados neste aparelho e serão enviados quando você entrar de novo com o mesmo usuário.`, 'Sair mesmo assim'))) return;
@@ -348,11 +353,11 @@
   }
   async function sincronizar(silencioso) {
     if (S.expirada && !silencioso) return reentrar();
-    if (S.sincronizando || !S.sessao || S.expirada || perfil() === 'cliente') return;
+    if (S.real || S.sincronizando || !S.sessao || S.expirada || ['cliente', 'auxiliar', 'time'].includes(perfil())) return;
     if (!navigator.onLine) { if (!silencioso) toast('Sem internet. Os dados ficam guardados e serão enviados depois.'); return atualizarSync(); }
     S.sincronizando = true; // marcado antes de qualquer espera: nunca roda duas vezes ao mesmo tempo
     try { const tp = await Store.get('termoPend:' + S.sessao.u); if (tp) { await Api.b.aceitarTermo(tp); await Store.del('termoPend:' + S.sessao.u); } } catch (e) { /* tenta no próximo envio */ }
-    try { await enviarPendentes(silencioso); if (!S.expirada) await enviarFilaOS(silencioso); if (!S.expirada) await enviarFilaQd(silencioso); if (!S.expirada) await Turno.enviar(); } finally { S.sincronizando = false; await atualizarSync(); }
+    try { await enviarPendentes(silencioso); if (!S.expirada) await enviarFilaOS(silencioso); if (!S.expirada) await enviarFilaQd(silencioso); if (!S.expirada) await Turno.enviar(); if (!S.expirada) await enviarChuvas(); } finally { S.sincronizando = false; await atualizarSync(); }
     garantirFaixa();
     if (S.expirada) return;
     await atualizarSituacao();
@@ -605,33 +610,34 @@
     const grupo = (tit, ...itens) => { const v = itens.filter(Boolean); return v.length ? h('div', { class: 'menu-grupo' }, h('b', { class: 'menu-tit' }, tit), v) : null; };
     const pf = perfil(); const coord = ehCoord(); const admin = pf === 'admin';
     const conta = grupo('Conta',
-      S.sessao.projetos.length > 1 ? it('Trocar projeto', trocarProjeto) : null,
+      pf === 'admin' ? it('Projetos', () => ir('#projetos')) : S.sessao.projetos.length > 1 ? it('Trocar projeto', trocarProjeto) : null,
       it('Preferências', () => ir('#preferencias')),
       it('Trocar minha senha', trocarSenha),
       S.novaVersao ? it(`Atualizar para a versão ${S.novaVersao.versao}`, atualizarApp) : it('Verificar atualização', () => verificarAtualizacao(true)),
       it('Ajuda e perguntas frequentes', () => ir('#ajuda')),
       it('Sobre, termo de uso e privacidade', () => ir('#sobre')),
       it('Sair', () => sair()));
-    const grupos = pf === 'time' ? [grupo('Conta', it('Meu time', () => ir('#inicio')), it('Trocar senha', trocarSenhaTela), it('Sobre o app', () => ir('#sobre')), it('Sair', sair))] : pf === 'cliente' ? [
+    const grupos = pf === 'time' ? [grupo('Conta', it('Meu time', () => ir('#inicio')), it('Trocar senha', trocarSenhaTela), it('Sobre o app', () => ir('#sobre')), it('Sair', sair))] : pf === 'auxiliar' ? [grupo('Conta', it('Minha produção', () => ir('#inicio')), it('Trocar minha senha', trocarSenha), it('Sobre, termo de uso e privacidade', () => ir('#sobre')), it('Sair', () => sair()))] : pf === 'cliente' ? [
       grupo('Projeto', it('Painel', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa')), it('Pedidos de serviço', () => ir('#ordens'))),
       grupo('Entregas', it('Relatório para imprimir ou PDF', () => ir('#relatorio')), it('Boletim de medição', () => ir('#medicao')), it('Baixar dados', () => exportarCliente())),
     ] : pf === 'coletor' ? [
-      grupo('Campo', it('Meu dia', () => ir('#meudia')), it('Meus registros', () => ir('#lista')), it('Minha produção', () => ir('#producao')), it('Ordens de serviço', () => ir('#ordens')), it('Consultar o mapa', () => ir('#consulta')), it('Enviar agora', () => sincronizar()), it('Encerrar o dia', async () => { if (await Dia.aberto()) Dia.encerrar(); else toast('O dia ainda não foi começado.'); })),
+      grupo('Campo', it('Meu dia', () => ir('#meudia')), it('Meus registros', () => ir('#lista')), it('Minha produção', () => ir('#producao')), it('Ordens de serviço', () => ir('#ordens')), it('Consultar o mapa', () => ir('#consulta')), it('Enviar agora', () => sincronizar()), !S.sessao.usuario.escolheAuxiliar ? it('Parada por chuva', async () => { if (await Dia.aberto()) paradaChuva(); else toast('Comece o turno antes de registrar a parada.', 4000); }) : null, it('Encerrar o turno', async () => { if (await Dia.aberto()) Dia.encerrar(); else toast('O turno ainda não foi começado.'); })),
     ] : [
       grupo('Acompanhar', coord ? it('Hoje no campo', () => ir('#hoje')) : null, it('Painel do projeto', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa'))),
       grupo('Agir', coord ? it('Validação dos registros', () => ir('#validacao')) : null, coord ? it('Auditoria por setor', () => ir('#auditoria')) : null, admin ? it('Produção e pagamento', () => ir('#producao')) : null, it('Ordens de serviço', () => ir('#ordens')), !admin ? it('Enviar agora', () => sincronizar()) : null),
       grupo('Entregar', it('Relatório para imprimir ou PDF', () => ir('#relatorio')), it('Boletim de medição', () => ir('#medicao')), admin ? it('Exportar dados', () => ir('#admin/exportar')) : null),
-      admin ? grupo('Configurar projeto', it('Projetos', () => ir('#admin/projetos')), it('Equipes e usuários', () => ir('#admin/usuarios')), it('Pessoas das equipes', () => ir('#admin/pessoas')), it('Setores censitários', () => ir('#admin/setores')), it('Formulários', () => ir('#admin/formularios')), it('Importar inventário', () => ir('#admin/importar'))) : null,
+      admin && !S.real ? grupo('Painéis e telas dos outros perfis', it('Painel do cliente', () => verComo('cliente')), it('Painel do parceiro', () => verComo('time')), it('Telas do avaliador', () => verComo('coletor')), it('Telas do auxiliar', () => verComo('auxiliar'))) : null,
+      admin ? grupo('Configurar projeto', it('Projetos', () => ir('#admin/projetos')), it('Times', () => ir('#admin/times')), it('Equipes e usuários', () => ir('#admin/usuarios')), it('Pessoas das equipes', () => ir('#admin/pessoas')), it('Setores censitários', () => ir('#admin/setores')), it('Formulários', () => ir('#admin/formularios')), it('Importar inventário', () => ir('#admin/importar'))) : null,
       admin ? grupo('Administração', it('Segurança, cópias e servidor', () => ir('#admin/seguranca'))) : null,
     ];
     const veu = h('div', { class: 'veu', onclick: (e) => e.target === veu && veu.remove() }, h('div', { class: 'folha menu-lateral' },
       h('img', { class: 'folha-marca', src: 'icons/arborizia-horizontal.svg', alt: 'ArborizIA' }),
       h('h3', null, S.sessao.usuario.nome, h('small', { class: 'perfil-tag' }, ROT_PERFIL[pf] || '')),
-      grupos, conta,
+      grupos, pf === 'time' || pf === 'auxiliar' ? null : conta,
       h('p', { class: 'dica', style: 'margin-top:12px' }, `Versão ${VERSAO}${Api.demo ? ' · demonstração' : ''}`)));
     document.body.append(veu);
   }
-  const ROT_PERFIL = { admin: 'Coordenação', revisor: 'Revisão técnica', coletor: 'Equipe de campo', cliente: 'Cliente (consulta)' };
+  const ROT_PERFIL = { admin: 'Coordenação', revisor: 'Auditor', coletor: 'Equipe de campo', cliente: 'Cliente (consulta)', time: 'Parceiro', auxiliar: 'Auxiliar' };
   async function trocarSenha() {
     const a = h('input', { class: 'entrada', type: 'password', autocomplete: 'current-password' });
     const n1 = h('input', { class: 'entrada', type: 'password', autocomplete: 'new-password' });
@@ -641,7 +647,7 @@
     if (!ok) return;
     if (n1.value !== n2.value) return toast('As duas senhas novas não conferem.');
     if (n1.value.trim().length < 8 && !Api.demo) return toast('A nova senha precisa ter pelo menos 8 caracteres.');
-    try { await Api.b.trocarSenha(a.value, n1.value.trim()); if (S.sessao.s) { S.sessao.s = n1.value.trim(); Api.credenciais(credDe(S.sessao)); await Store.set('sessao', S.sessao); } toast('Senha alterada.'); } catch (e) { toast(e.message, 5000); }
+    try { await Api.b.trocarSenha(a.value, n1.value.trim()); if (S.sessao.s) { S.sessao.s = n1.value.trim(); Api.credenciais(credDe(S.sessao)); await guardarSessao(); } toast('Senha alterada.'); } catch (e) { toast(e.message, 5000); }
   }
   async function trocarProjeto() {
     const r = await modal('Projeto', h('div', null, S.sessao.projetos.map((p) => h('button', { class: 'menu-it', onclick: () => { document.querySelector('.veu').remove(); escolher(p.id); } }, p.nome + (p.id === S.projeto.id ? ' ✓' : '')))), []);
@@ -726,6 +732,7 @@
   }
 
   async function novoRegistro(ex) {
+    if (somenteVer()) return;
     if (!ex || !ex.faceId) ex = null; // chamado pelo botão: recebe o clique
     if (S.abrindoNova && Date.now() - S.abrindoNova < 60000) return toast('Abrindo o cadastro...'); S.abrindoNova = Date.now(); // toque duplo não cria dois rascunhos
     try { return await novoRegistro2(ex); } finally { S.abrindoNova = false; }
@@ -819,20 +826,128 @@
   };
   function pintarTurno() { pintarDia(); }
 
+  // ---------- 2.10: projetos da coordenação, telas de outro perfil, auxiliar do turno e parada por chuva ----------
+  const guardarSessao = () => (S.real ? Promise.resolve() : Store.set('sessao', S.sessao)); // vendo as telas de outro perfil, a sessão guardada continua a da coordenação
+  function telaProjetos() {
+    const ps = S.sessao.projetos || [];
+    $app.replaceChildren(topo('Projetos', 'Escolha o projeto para abrir', S.projeto ? h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')) : h('button', { class: 'ic', onclick: abrirMenuAdmin, 'aria-label': 'Menu' }, ico('menu')), null),
+      h('main', null, ps.length ? h('div', { class: 'proj-lista' }, ps.map((p) => h('button', { class: 'cartao proj-card', onclick: async () => { try { await abrirProjeto(p.id); ir('#inicio'); } catch (e) { toast(e.message, 5000); } } }, h('b', null, p.nome), h('small', null, [p.municipio, p.contratante].filter(Boolean).join(' · ') || p.id)))) : h('div', { class: 'info' }, 'Nenhum projeto criado ainda.'),
+        h('button', { class: 'btn sec', style: 'margin-top:12px', onclick: () => ir('#admin/projetos') }, 'Cadastrar ou editar projetos')));
+  }
+  const limparCaches = () => { S.linhas = {}; S.painel = null; S.qdSitEm = null; S.qdEm = null; S.formsEm = null; S.stEm = null; S.stSitEm = null; };
+  // coordenação abre o painel do cliente, o painel do parceiro ou as telas do avaliador e do auxiliar. Só consulta: o servidor recusa qualquer gravação.
+  async function verComo(pf) {
+    if (!navigator.onLine || Api.demo) return toast('Para abrir as telas de outro perfil é preciso internet.', 4000);
+    let us, times = []; try { [us, times] = await Promise.all([Api.b.usuariosListar(), pf === 'time' ? Api.b.timesListar() : Promise.resolve([])]); } catch (e) { return toast(e.message, 5000); }
+    const doProj = (u) => u.projeto === '*' || String(u.projeto || '').split(',').map((x) => x.trim()).includes(S.projeto.id);
+    const lista = us.filter((u) => (u.perfil === 'campo' ? 'coletor' : u.perfil) === pf && String(u.ativo).toLowerCase() !== 'nao' && doProj(u));
+    const tit = { cliente: 'Painel do cliente', time: 'Painel do parceiro', coletor: 'Telas do avaliador', auxiliar: 'Telas do auxiliar' }[pf];
+    const escolha = (itens, fn, dica) => modal(tit, h('div', null, h('p', { class: 'dica' }, dica), itens.map((x) => h('button', { class: 'menu-it', onclick: () => { document.querySelector('.veu').remove(); fn(x); } }, x.rot, x.sub ? h('small', { class: 'dica' }, ' ' + x.sub) : null))), []);
+    if (pf === 'time') { // o parceiro vem do cadastro de times: não precisa de acesso criado
+      const nomes = [...new Set([...times.filter((t) => t.tipo === 'Parceiro' && t.ativo !== 'não').map((t) => t.nome), ...lista.map((u) => u.indicacao).filter(Boolean)])];
+      if (!nomes.length) return toast('Nenhum time parceiro cadastrado. Cadastre em Coordenação, Times.', 5000);
+      if (nomes.length === 1) return ir('#time/' + encodeURIComponent(nomes[0]));
+      return escolha(nomes.map((n) => ({ rot: n, v: n })), (x) => ir('#time/' + encodeURIComponent(x.v)), 'Escolha o parceiro:');
+    }
+    if (!lista.length) return toast(`Nenhum acesso de ${{ cliente: 'cliente', coletor: 'equipe de campo', auxiliar: 'auxiliar' }[pf]} neste projeto. Crie em Coordenação, Usuários.`, 5000);
+    if (lista.length === 1) return entrarComo(lista[0]);
+    return escolha(lista.map((u) => ({ rot: u.nome || u.login, sub: [u.equipe && u.equipe !== u.nome ? u.equipe : '', u.login].filter(Boolean).join(' · '), v: u })), (x) => entrarComo(x.v), 'Você vê as telas como a pessoa vê. Nada é gravado.');
+  }
+  async function entrarComo(u) {
+    const real = { sessao: S.sessao, projeto: S.projeto, form: S.form, configurado: S.configurado };
+    try {
+      Api.como(u.login); const r = await Api.b.sessao();
+      if (!r || !r.projetos.length) throw new Error('Este acesso não tem projeto liberado.');
+      if (String(r.usuario.login || '').toLowerCase() !== String(u.login).toLowerCase()) throw new Error('O servidor ainda está na versão anterior. Atualize o servidor para abrir as telas de outro perfil.');
+      S.real = real; limparCaches(); S.configurado = true;
+      S.sessao = { u: String(r.usuario.login).toLowerCase(), t: real.sessao.t, s: real.sessao.s, usuario: r.usuario, projetos: r.projetos, projetoAtual: null, servidor: real.sessao.servidor, versaoScript: r.versaoScript };
+      const pid = (r.projetos.find((p) => p.id === real.projeto.id) || r.projetos[0]).id;
+      if (r.usuario.perfil === 'cliente') await abrirProjetoCliente(pid); else await abrirProjeto(pid);
+      pintarFaixaComo(); location.hash = r.usuario.perfil === 'cliente' ? '#painel' : '#inicio'; rota();
+    } catch (e) { Api.como(null); if (S.real) { S.real = null; S.sessao = real.sessao; S.projeto = real.projeto; S.form = real.form; S.configurado = real.configurado; } tirarFaixaComo(); toast(e.message, 6000); }
+  }
+  function pintarFaixaComo() {
+    let f = document.getElementById('faixa-como'); if (!f) { f = h('div', { id: 'faixa-como', class: 'faixa-como', role: 'status' }); document.body.prepend(f); }
+    const u = S.sessao.usuario; f.replaceChildren(h('span', null, `Vendo as telas de ${u.nome || u.login} (${ROT_PERFIL[u.perfil] || u.perfil}). Nada é gravado.`), h('button', { onclick: voltarDoComo }, 'Voltar à coordenação')); document.body.classList.add('vendo-como');
+  }
+  function tirarFaixaComo() { const f = document.getElementById('faixa-como'); if (f) f.remove(); document.body.classList.remove('vendo-como'); }
+  function voltarDoComo() {
+    const R = S.real; if (!R) return; Api.como(null); S.real = null; limparCaches(); S.sessao = R.sessao; S.projeto = R.projeto; S.form = R.form; S.configurado = R.configurado; S.reg = null; S.dupla = null;
+    tirarFaixaComo(); document.querySelectorAll('.veu').forEach((v) => v.remove()); if (location.hash === '#inicio') rota(); else location.hash = '#inicio';
+  }
+  const somenteVer = () => { if (S.real) { toast('Você está vendo as telas de outro perfil: nada é gravado.', 4000); return true; } return false; };
+  // avaliador de time parceiro: a cada começo de turno diz se coleta sozinho ou com auxiliar. Devolve o auxiliar, null (sozinho) ou undefined (desistiu).
+  async function escolherAuxiliar() {
+    const r = await modal('Começar o turno', h('p', null, 'Neste turno você coleta sozinho ou com auxiliar?'), [{ texto: 'Sozinho', classe: 'sec', valor: 'so' }, { texto: 'Com auxiliar', valor: 'com' }]);
+    if (!r) return undefined; if (r === 'so') return null;
+    let ps = []; try { ps = await Api.b.pessoasListar(); await Store.set('pessoas:' + S.projeto.id, ps); } catch (e) { ps = (await Store.get('pessoas:' + S.projeto.id)) || []; }
+    const meu = String(S.sessao.usuario.time || '').trim().toLowerCase();
+    const aux = ps.filter((x) => x.funcao === 'Auxiliar' && x.ativo !== 'não' && (!x.time || String(x.time).trim().toLowerCase() === meu)).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+    if (!aux.length) { toast('Nenhum auxiliar do seu time no cadastro. O turno começa com você sozinho; peça à coordenação para cadastrar o auxiliar.', 7000); return null; }
+    const sel = h('select', { class: 'entrada' }, aux.map((x) => h('option', { value: x.id }, x.nome)));
+    const ok = await modal('Quem é o auxiliar neste turno?', h('div', { class: 'campo' }, sel, h('div', { class: 'dica' }, 'Com auxiliar, o valor de cada registro é dividido meio a meio.')), [{ texto: 'Voltar', classe: 'sec', valor: false }, { texto: 'Começar o turno', valor: true }]);
+    if (!ok) return undefined; const p = aux.find((x) => x.id === sel.value); return { id: p.id, nome: p.nome, vinculo: p.vinculo };
+  }
+  // parada por chuva: hora, foto e observação. Fica guardada no aparelho e sai quando houver internet.
+  const chuvaChave = () => 'chuva:' + S.sessao.u;
+  async function paradaChuva(obs0) {
+    if (somenteVer()) return;
+    let foto = null; const prev = h('small', { class: 'dica' }, ' Sem foto ainda.');
+    const cam = h('input', { type: 'file', accept: 'image/*', capture: 'environment', class: 'oculto', onchange: async () => { const a = cam.files[0]; if (!a) return; try { foto = await reduzir(a, 1280, 0.7); prev.textContent = ' Foto pronta.'; } catch (e) { toast('Não foi possível ler a foto. Tente de novo.', 4000); } } });
+    const obs = h('textarea', { class: 'entrada', rows: 2, placeholder: 'Opcional. Ex.: chuva forte, paramos na Rua Goiás' }); obs.value = obs0 || '';
+    const ok = await modal('Parada por chuva', h('div', null, h('p', { class: 'dica' }, 'Registra a hora da parada com uma foto do tempo. A coordenação confere e decide se o dia entra na média da semana.'),
+      h('div', { class: 'campo' }, h('button', { class: 'btn sec', type: 'button', onclick: () => cam.click() }, 'Tirar foto'), cam, prev), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Observação'), obs)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Registrar parada', valor: true }]);
+    if (!ok) return; if (!foto) { toast('Tire a foto do tempo para registrar a parada.', 4000); return paradaChuva(obs.value); }
+    const fila = (await Store.get(chuvaChave())) || []; fila.push({ quando: agoraISO(), obs: obs.value.trim(), foto, projeto: S.projeto.id }); await Store.set(chuvaChave(), fila);
+    toast(navigator.onLine ? 'Parada registrada. Enviando.' : 'Parada registrada. O envio sai quando houver internet.', 4000); enviarChuvas().catch(() => {});
+  }
+  async function enviarChuvas() {
+    if (S.real || !S.sessao || !navigator.onLine || Api.demo || S.enviandoChuva) return; const fila = (await Store.get(chuvaChave())) || []; if (!fila.length) return;
+    S.enviandoChuva = true; const resta = [];
+    try { for (const c of fila) { try { if (!c.url && c.foto) c.url = (await Api.b.foto(c.projeto, `chuva_${S.sessao.u.replace(/[^\w.-]/g, '')}_${c.quando.replace(/\D/g, '').slice(0, 14)}.jpg`, c.foto)).url || ''; await Api.b.chuvaRegistrar(c.projeto, { quando: c.quando, obs: c.obs, foto: c.url || '' }); } catch (e) { if (/desconhecida/i.test(e.message)) continue; resta.push(c); } } await Store.set(chuvaChave(), resta); } finally { S.enviandoChuva = false; }
+  }
+  // times: a equipe própria e os parceiros (uma empresa júnior, por exemplo). O tipo do time define como a dupla recebe.
+  async function adminTimes(corpo) {
+    const [times, ps] = await Promise.all([Api.b.timesListar(), Api.b.pessoasListar()]);
+    async function editar(t, dig) {
+      const novo = !t; t = Object.assign({ nome: '', tipo: 'Parceiro', ativo: 'sim' }, t || {}, dig || {});
+      const no = h('input', { class: 'entrada', value: t.nome, placeholder: 'ex.: Gap' });
+      const tp = h('select', { class: 'entrada' }, [['Próprio', 'Próprio (equipe da casa, com carteira)'], ['Parceiro', 'Parceiro (recebe por registro validado)']].map(([v, x]) => h('option', { value: v, selected: t.tipo === v }, x)));
+      const ok = await modal(novo ? 'Novo time' : 'Editar time', h('div', null, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome do time'), no), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Tipo'), tp, h('div', { class: 'dica' }, 'No time parceiro, uma parte do valor de cada registro vai para o time e o avaliador diz, a cada começo de turno, se coleta sozinho ou com auxiliar.'))), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
+      if (!ok) return; const d = { id: t.id, nome: no.value.trim(), tipo: tp.value, ativo: t.ativo || 'sim' };
+      if (!d.nome) { toast('Informe o nome do time.', 4000, null, true); return editar(novo ? null : t, d); }
+      try { await Api.b.timeSalvar(d); toast('Time salvo.'); telaAdmin('times'); } catch (e) { toast(e.message, 5000, null, true); editar(novo ? null : t, d); }
+    }
+    async function alternar(t) { try { await Api.b.timeSalvar(Object.assign({}, t, { ativo: t.ativo === 'não' ? 'sim' : 'não' })); telaAdmin('times'); } catch (e) { toast(e.message, 5000); } }
+    const doTime = (t) => ps.filter((x) => String(x.time || '').trim().toLowerCase() === String(t.nome).trim().toLowerCase() && x.ativo !== 'não');
+    corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Times'),
+      h('p', { class: 'dica' }, 'Cadastre a equipe da casa e cada parceiro. Depois, em Pessoas, diga de qual time é cada avaliador e auxiliar. O acesso de campo segue o time do avaliador.'),
+      h('button', { class: 'btn', style: 'margin-bottom:10px', onclick: () => editar(null) }, '+ Novo time'),
+      times.length ? h('div', { class: 'us-lista' }, times.map((t) => { const inat = t.ativo === 'não'; const g = doTime(t); return h('div', { class: 'us-card' + (inat ? ' inativo' : '') },
+        h('div', { class: 'us-cab' }, h('b', null, t.nome), h('span', { class: 'selo' + (t.tipo === 'Parceiro' ? ' selo-parceiro' : '') }, t.tipo), inat ? h('span', { class: 'tag-cinza' }, 'desativado') : null),
+        h('small', null, g.length ? `${g.filter((x) => x.funcao === 'Avaliador').length} avaliador(es) e ${g.filter((x) => x.funcao === 'Auxiliar').length} auxiliar(es)` : 'Ninguém ligado a este time ainda'),
+        g.length ? h('small', { class: 'dica' }, g.map((x) => x.nome).join(', ')) : null,
+        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec peq', onclick: () => editar(t) }, 'Editar'), h('button', { class: 'btn sec peq', onclick: () => alternar(t) }, inat ? 'Reativar' : 'Desativar'), t.tipo === 'Parceiro' && S.projeto ? h('button', { class: 'btn sec peq', onclick: () => ir('#time/' + encodeURIComponent(t.nome)) }, 'Painel do parceiro') : null)); })) : h('p', { class: 'dica' }, 'Nenhum time cadastrado.')));
+  }
+
   // ---------- Dupla da equipe e dia de coleta ----------
   // a dupla é fixa: a coordenação define o avaliador responsável e o auxiliar de cada acesso (o servidor grava nos registros)
   const Dupla = {
-    async carregar() { const d = S.sessao && S.sessao.usuario && S.sessao.usuario.dupla; S.dupla = d && d.av ? d : null; S.duplaParceiro = !!(d && [d.av, d.ax].some((x) => x && x.vinculo === 'Parceiro')); },
+    async carregar() { const u = S.sessao && S.sessao.usuario; let d = u && u.dupla;
+      if (d && d.av && u.escolheAuxiliar) { const dd = S.projeto ? await Dia.aberto() : null; d = { av: d.av, ax: dd && dd.escolheu ? dd.ax || null : null }; } // time parceiro: o auxiliar é o escolhido no começo do turno
+      S.dupla = d && d.av ? d : null; S.duplaParceiro = !!(d && [d.av, d.ax].some((x) => x && x.vinculo === 'Parceiro')); },
     nomes() { const d = S.dupla; return d ? [d.av && d.av.nome, d.ax && d.ax.nome].filter(Boolean).map((n) => n.split(' ')[0]).join(' + ') : ''; },
   };
-  // dia de coleta: "Começar o dia" libera o botão de nova árvore (e liga o trajeto, quando a coordenação liberou); "Encerrar o dia" envia o que falta
+  // dia de coleta: "Começar o turno" libera o botão de nova árvore (e liga o trajeto, quando a coordenação liberou); "Encerrar o turno" envia o que falta
   const Dia = {
     chave: () => 'dia:' + S.sessao.u + ':' + S.projeto.id,
     async aberto() { if (!S.sessao || !S.projeto) return null; const d = await Store.get(this.chave()); return d && d.dia === diaLocal(agoraISO()) ? d : null; },
     async comecar() {
       if (Date.now() - (S.diaMudou || 0) < 1200) return; S.diaMudou = Date.now(); // toque duplo não começa, encerra nem abre cadastro sem querer
-      await Store.set(this.chave(), { dia: diaLocal(agoraISO()), inicio: agoraISO() }); await Dupla.carregar();
-      if (Turno.liberado() && !(Turno.est && Turno.est.ativo)) await Turno.comecar();
+      const esc = !!S.sessao.usuario.escolheAuxiliar; let ax = null;
+      if (esc) { ax = await escolherAuxiliar(); if (ax === undefined) { S.diaMudou = 0; return; } S.diaMudou = Date.now(); }
+      await Store.set(this.chave(), Object.assign({ dia: diaLocal(agoraISO()), inicio: agoraISO() }, esc ? { ax: ax, escolheu: true } : {})); await Dupla.carregar();
+      if (!S.real && Turno.liberado() && !(Turno.est && Turno.est.ativo)) await Turno.comecar();
       pintarDia(); ligarGps();
     },
     async encerrar() {
@@ -841,9 +956,9 @@
     },
     async encerrar2() {
       const rasc = (await Store.registros(S.projeto.id)).filter((r) => r.status === 'rascunho' && r.mexido && r.usuario === S.sessao.u).length;
-      if (!(await confirmar('Encerrar o dia', (rasc ? (rasc > 1 ? `Você tem ${rasc} cadastros não terminados: eles ficam guardados para amanhã. ` : 'Você tem 1 cadastro não terminado: ele fica guardado para amanhã. ') : '') + 'O app envia o que falta e volta para "Começar o dia".', 'Encerrar o dia'))) return;
+      if (!(await confirmar('Encerrar o turno', (rasc ? (rasc > 1 ? `Você tem ${rasc} cadastros não terminados: eles ficam guardados para amanhã. ` : 'Você tem 1 cadastro não terminado: ele fica guardado para amanhã. ') : '') + 'O app envia o que falta e volta para "Começar o turno".', 'Encerrar o turno'))) return;
       if (Turno.est && Turno.est.ativo) await Turno.encerrar(true);
-      S.diaMudou = Date.now(); await Store.del(this.chave()); pintarDia(); sincronizar(true); toast(navigator.onLine ? 'Dia encerrado. Enviando o que falta.' : 'Dia encerrado. O envio sai quando houver internet.', 4000);
+      S.diaMudou = Date.now(); await Store.del(this.chave()); await Dupla.carregar(); pintarDia(); sincronizar(true); toast(navigator.onLine ? 'Turno encerrado. Enviando o que falta.' : 'Turno encerrado. O envio sai quando houver internet.', 4000);
     },
   };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pintarDia().catch(() => {}); }); // app aberto de um dia para o outro
@@ -851,10 +966,10 @@
   async function pintarDia() {
     const bt = document.getElementById('bt-principal'); const et = document.getElementById('turno'); if (!bt) return;
     const d = await Dia.aberto(); if (!document.body.contains(bt)) return;
-    if (d) { bt.className = 'btn nova bt-principal'; bt.replaceChildren(ico('mais'), 'Nova árvore'); bt.onclick = async () => { if (Date.now() - (S.diaMudou || 0) < 1200) return; if (!(await Dia.aberto())) { pintarDia(); return toast('Novo dia: toque em "Começar o dia".', 4000); } novoRegistro(); }; }
-    else { bt.className = 'btn comecar-dia bt-principal'; bt.replaceChildren('Começar o dia'); bt.onclick = () => Dia.comecar(); }
+    if (d) { bt.className = 'btn nova bt-principal'; bt.replaceChildren(ico('mais'), 'Nova árvore'); bt.onclick = async () => { if (Date.now() - (S.diaMudou || 0) < 1200) return; if (!(await Dia.aberto())) { pintarDia(); return toast('Novo dia: toque em "Começar o turno".', 4000); } novoRegistro(); }; }
+    else { bt.className = 'btn comecar-dia bt-principal'; bt.replaceChildren('Começar o turno'); bt.onclick = () => Dia.comecar(); }
     if (et) { const traj = !!(Turno.est && Turno.est.ativo);
-      et.replaceChildren(d ? h('button', { class: 'pill-dia' + (traj ? ' trajeto' : ''), onclick: () => Dia.encerrar(), 'aria-label': 'Encerrar o dia' }, h('i'), `Dia desde ${new Date(d.inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`) : ''); }
+      et.replaceChildren(d ? h('button', { class: 'pill-dia' + (traj ? ' trajeto' : ''), onclick: () => Dia.encerrar(), 'aria-label': 'Encerrar o turno' }, h('i'), 'Turno aberto') : ''); }
   }
   function pintarGpsPill(p) {
     const el = document.getElementById('gps-pill'); if (!el) return; p = p || S.pos; const velho = !p || Date.now() - p.t > 30000;
@@ -1634,7 +1749,7 @@
     const btCidade = h('button', { class: 'mapa-bt', onclick: () => verCidade(), 'aria-label': 'Ver a cidade', title: 'Ver a cidade' }, ico('cidade'), h('span', { class: 'so-leitor' }, 'Ver a cidade'));
     const btSel = h('button', { class: 'mapa-bt pilula oculto', onclick: () => iniciarSelecao(), 'aria-label': 'Selecionar quadras ou faces' }, ico('selecionar'), 'Selecionar');
     const bts = h('div', { class: 'mapa-bts' }, btSel, btCidade, btEu);
-    const fab = campo ? h('button', { class: 'btn bt-principal', id: 'bt-principal' }, '...') : null; // "Começar o dia" ou "Nova árvore" (pintarDia)
+    const fab = campo ? h('button', { class: 'btn bt-principal', id: 'bt-principal' }, '...') : null; // "Começar o turno" ou "Nova árvore" (pintarDia)
     // faixa embaixo do mapa: o que antes ficava na tela inicial (envio, cadastro não terminado, turno, avisos, encerrar face, meus registros)
     // tela de coleta limpa: só a etiqueta do dia, a do GPS e o cadastro não terminado; os avisos ficam atrás do sino
     const avisos = campo ? h('div', { class: 'avisos-lista' }, h('div', { id: 'aviso-versao' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'devolvidos' }), h('div', { id: 'os-equipe' })) : null;
@@ -2053,7 +2168,7 @@
     const voltar = S.projeto ? h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')) : h('button', { class: 'ic', onclick: abrirMenuAdmin, 'aria-label': 'Menu' }, ico('menu'));
     $app.replaceChildren(...[topo('Coordenação', Api.demo ? 'Modo demonstração' : (S.projeto ? S.projeto.nome : 'ArborizIA'), voltar, null),
       !S.projeto ? h('main', { style: 'padding-bottom:0' }, h('div', { class: 'info' }, 'Primeiros passos: 1) em Formulários, instale ou importe um formulário; 2) em Projetos, crie o projeto; 3) em Equipes e usuários, crie os acessos de campo.')) : null,
-      h('main', { style: 'padding-bottom:0' }, h('div', { class: 'subabas' }, it('exportar', 'Exportar'), it('importar', 'Importar'), it('projetos', 'Projetos'), it('usuarios', 'Usuários'), it('pessoas', 'Pessoas'), it('setores', 'Setores'), it('formularios', 'Formulários'), it('seguranca', 'Segurança')),
+      h('main', { style: 'padding-bottom:0' }, h('div', { class: 'subabas' }, it('exportar', 'Exportar'), it('importar', 'Importar'), it('projetos', 'Projetos'), it('times', 'Times'), it('usuarios', 'Usuários'), it('pessoas', 'Pessoas'), it('setores', 'Setores'), it('formularios', 'Formulários'), it('seguranca', 'Segurança')),
         S.projeto ? h('div', { class: 'linha-btn', style: 'margin:8px 0 0' }, h('button', { class: 'btn sec peq', onclick: () => ir('#painel') }, 'Painel'), h('button', { class: 'btn sec peq', onclick: () => ir('#validacao') }, 'Validação'), h('button', { class: 'btn sec peq', onclick: () => ir('#mapa') }, 'Mapa')) : null), corpo].filter(Boolean));
     corpo.style.paddingTop = '0';
     // as listas das outras abas vêm em segundo plano: trocar de aba fica instantâneo
@@ -2063,6 +2178,7 @@
       else if (sub === 'projetos') await adminProjetos(corpo);
       else if (sub === 'usuarios') await adminUsuarios(corpo);
       else if (sub === 'pessoas') await adminPessoas(corpo);
+      else if (sub === 'times') await adminTimes(corpo);
       else if (sub === 'setores') await adminSetores(corpo);
       else if (sub === 'formularios') await adminFormularios(corpo);
       else if (sub === 'importar') await adminImportar(corpo);
@@ -2076,7 +2192,7 @@
   }
   async function recarregarSessao() {
     const r = await Api.b.login(S.sessao.u, S.sessao.s);
-    S.sessao.projetos = r.projetos; await Store.set('sessao', S.sessao);
+    S.sessao.projetos = r.projetos; await guardarSessao();
     if (!S.projeto && r.projetos.length) await abrirProjeto(r.projetos[0].id);
   }
 
@@ -2101,7 +2217,8 @@
       const cve = h('select', { class: 'entrada' }, h('option', { value: 'validados', selected: p.cliente_ve !== 'todos' }, 'Só registros validados'), h('option', { value: 'todos', selected: p.cliente_ve === 'todos' }, 'Todos, inclusive aguardando validação'));
       const num = (v, ph) => h('input', { class: 'entrada', inputmode: 'decimal', value: v || '', placeholder: ph });
       const fGps = num(p.face_gps, '10'), fDist = num(p.face_dist, '15'), fFolga = num(p.face_folga, '8');
-      const pV = num(p.prod_valor, '2,50'), pA = num(p.prod_avaliador_pct, '50'), pP = num(p.premio_valor, '1,50'), pM = num(p.premio_meta, '90'), pB = num(p.bonus_valor, '0'), pBe = num(p.bonus_erro_max, '2'), pI = num(p.indicacao_valor, '0,50'), aP = num(p.auditoria_pct, '10'), aE = num(p.auditoria_erro_max, '5');
+      const mD = num(p.meta_dia, '100'), mT = num(p.teto_dia, '130'), pmA = num(p.premio_meta_av, '250'), pmX = num(p.premio_meta_ax, '150'), sA = num(p.sup_av, '2,50'), sX = num(p.sup_ax, '1,50'), pF = num(p.peso_face, '1'); const rDe = h('input', { class: 'entrada', type: 'date' });
+      const pV = num(p.prod_valor, '2,50'), pA = num(p.prod_avaliador_pct, '50'), pB = num(p.bonus_valor, '0'), pBe = num(p.bonus_erro_max, '2'), pI = num(p.indicacao_valor, '0,50'), aP = num(p.auditoria_pct, '10'), aE = num(p.auditoria_erro_max, '5');
       const pVe = h('select', { class: 'entrada' }, h('option', { value: 'sim', selected: p.parceiro_ve_valor !== 'não' }, 'Sim, o parceiro vê o valor estimado no celular'), h('option', { value: 'não', selected: p.parceiro_ve_valor === 'não' }, 'Não, só a coordenação'));
       const ok = await modal(novo ? 'Novo projeto' : 'Editar projeto', h('div', null,
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Identificador (sem espaços)'), id), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), nome),
@@ -2116,14 +2233,21 @@
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Faces de quadra: começo automático pelo GPS'),
           h('div', { class: 'grade3' }, h('div', null, h('small', null, 'Erro máximo do GPS (m)'), fGps), h('div', null, h('small', null, 'Distância até a face (m)'), fDist), h('div', null, h('small', null, 'Folga para a 2ª face (m)'), fFolga)),
           h('div', { class: 'dica' }, 'Ao salvar uma árvore, a face da calçada passa a "em levantamento" sozinha só quando o erro do GPS é até o máximo, a face está mais perto que a distância e nenhuma outra face está a menos da folga. Em branco vale 10, 15 e 8.')),
-        h('details', { class: 'campo' }, h('summary', { class: 'rot' }, 'Produção e auditoria'),
-          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Valor por árvore validada, parceiros (R$)'), pV), h('div', null, h('small', null, 'Parte do avaliador (%)'), pA)),
-          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Meta por dia por dupla (árvores)'), pM), h('div', null, h('small', null, 'Prêmio por árvore acima da meta, CLT (R$)'), pP)),
-          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Bônus de qualidade por árvore (R$)'), pB), h('div', null, h('small', null, 'Bônus se o erro da auditoria for abaixo de (%)'), pBe)),
+        h('details', { class: 'campo' }, h('summary', { class: 'rot' }, 'Produção, prêmios e auditoria'),
+          h('b', { class: 'rot' }, 'Parceiros (por registro validado)'),
+          h('div', { class: 'grade3' }, h('div', null, h('small', null, 'Valor por registro (R$)'), pV), h('div', null, h('small', null, 'Parte do time parceiro, dentro do valor (R$)'), pI), h('div', null, h('small', null, 'Parte do avaliador quando há auxiliar (%)'), pA)),
+          h('div', { class: 'dica' }, 'Exemplo: R$ 2,50 por registro, R$ 0,50 para o time e R$ 2,00 para quem coleta. Sozinho, o avaliador fica com os R$ 2,00; com auxiliar, metade para cada.'),
+          h('b', { class: 'rot' }, 'Equipe com carteira (prêmio por semana)'),
+          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Meta por dia, na média da semana (registros)'), mD), h('div', null, h('small', null, 'Teto da superação por dia'), mT)),
+          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Prêmio de meta por mês, avaliador (R$)'), pmA), h('div', null, h('small', null, 'Prêmio de meta por mês, auxiliar (R$)'), pmX)),
+          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Superação por registro, avaliador (R$)'), sA), h('div', null, h('small', null, 'Superação por registro, auxiliar (R$)'), sX)),
+          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Face de quadra sem árvore vale (registros)'), pF), h('div', null, h('small', null, 'Mudança de regra vale a partir de'), rDe)),
+          h('div', { class: 'dica' }, (p.regras_de ? `As regras atuais valem desde ${dBRc(p.regras_de)}. ` : '') + 'Ao mudar um valor, informe a data de início: as semanas e medições anteriores continuam com a regra antiga. Sem data, a mudança vale para o período atual inteiro.'),
+          h('b', { class: 'rot' }, 'Auditoria'),
           h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Amostra da auditoria por setor (%)'), aP), h('div', null, h('small', null, 'Erro que devolve o setor, acima de (%)'), aE)),
-          h('div', null, h('small', null, 'Parte do time da dupla, dentro do valor da árvore (R$)'), pI),
+          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Bônus de qualidade por registro, parceiros (R$)'), pB), h('div', null, h('small', null, 'Bônus se o erro da auditoria for abaixo de (%)'), pBe)),
           h('div', null, h('small', null, 'Parceiro vê o valor no celular'), pVe),
-          h('div', { class: 'dica' }, 'Em branco valem os números de exemplo. O prêmio é pago por cartão prêmio, fora da folha. Sem dados de pagamento no app.'))),
+          h('div', { class: 'dica' }, 'Em branco valem os números de exemplo. O prêmio de quem tem carteira sai no relatório do RH, fora da medição. Sem dados de pagamento no app.'))),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       const nOk = (x, a, b) => { const v = +String(x.value).replace(',', '.'); return x.value.trim() === '' ? '' : v >= a && v <= b ? String(v) : null; };
       if (!ok) return;
@@ -2131,8 +2255,8 @@
       if (novo && projetos.some((x) => x.id === pid)) return toast('Já existe projeto com esse identificador.');
       const fg = nOk(fGps, 1, 50), fd = nOk(fDist, 1, 50), ff = nOk(fFolga, 0, 50);
       if (fg == null || fd == null || ff == null) return toast('Faces de quadra: use números entre 1 e 50 metros (folga de 0 a 50).', 5000);
-      const prod = { prod_valor: nOk(pV, 0, 1000), prod_avaliador_pct: nOk(pA, 0, 100), premio_valor: nOk(pP, 0, 1000), premio_meta: nOk(pM, 0, 10000), bonus_valor: nOk(pB, 0, 1000), bonus_erro_max: nOk(pBe, 0, 100), indicacao_valor: nOk(pI, 0, 1000), auditoria_pct: nOk(aP, 1, 100), auditoria_erro_max: nOk(aE, 0, 100), parceiro_ve_valor: pVe.value };
-      if (Object.values(prod).some((v) => v == null)) return toast('Produção e auditoria: confira os números (porcentagens de 0 a 100).', 5000);
+      const prod = { prod_valor: nOk(pV, 0, 1000), prod_avaliador_pct: nOk(pA, 0, 100), meta_dia: nOk(mD, 1, 10000), teto_dia: nOk(mT, 1, 10000), premio_meta_av: nOk(pmA, 0, 100000), premio_meta_ax: nOk(pmX, 0, 100000), sup_av: nOk(sA, 0, 1000), sup_ax: nOk(sX, 0, 1000), peso_face: nOk(pF, 0, 10), regras_de: rDe.value || '', bonus_valor: nOk(pB, 0, 1000), bonus_erro_max: nOk(pBe, 0, 100), indicacao_valor: nOk(pI, 0, 1000), auditoria_pct: nOk(aP, 1, 100), auditoria_erro_max: nOk(aE, 0, 100), parceiro_ve_valor: pVe.value };
+      if (Object.values(prod).some((v) => v == null)) return toast('Produção, prêmios e auditoria: confira os números (porcentagens de 0 a 100).', 5000);
       try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value, face_gps: fg, face_dist: fd, face_folga: ff, responsavel: rt.value.trim(), registro_profissional: reg.value.trim(), art: art.value.trim(), tipos_os: tos.value.split('\n').map((x) => x.trim()).filter(Boolean).join('; ') }, prod)); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
     }
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Projetos'),
@@ -2145,9 +2269,10 @@
   }
 
   async function adminUsuarios(corpo) {
-    const [us, projetos, pessoas] = await Promise.all([Api.b.usuariosListar(), Api.b.projetosListar(), Api.b.pessoasListar().catch(() => [])]);
+    const [us, projetos, pessoas, times] = await Promise.all([Api.b.usuariosListar(), Api.b.projetosListar(), Api.b.pessoasListar().catch(() => []), Api.b.timesListar().catch(() => [])]);
+    const timeParc = (n) => { const t = times.find((x) => String(x.nome).trim().toLowerCase() === String(n || '').trim().toLowerCase()); return !!n && (!t || t.tipo === 'Parceiro'); };
     const nomePe = (id) => (pessoas.find((x) => x.id === id) || {}).nome || '';
-    const PERFIS = [['coletor', 'Equipe de campo (coleta)'], ['revisor', 'Revisão técnica (valida registros)'], ['cliente', 'Cliente (consulta painel, mapa e relatório)'], ['time', 'Time parceiro (acompanha a produção e o valor do time)'], ['admin', 'Coordenação (acesso total)']];
+    const PERFIS = [['coletor', 'Equipe de campo (avaliador que coleta)'], ['auxiliar', 'Auxiliar (só vê a produção dele)'], ['revisor', 'Auditor (valida registros)'], ['cliente', 'Cliente (consulta painel, mapa e relatório)'], ['time', 'Parceiro (acompanha a produção e o valor do time)'], ['admin', 'Coordenação (acesso total)']];
     // código sugerido: o próximo E<n> livre no projeto
     const proxCodigo = (proj) => { const usados = new Set(us.filter((x) => String(x.projeto).split(',').some((pp) => String(proj).split(',').includes(pp))).map((x) => String(x.codigo || '').toUpperCase())); let n = 1; while (usados.has('E' + n)) n++; return 'E' + n; };
     async function editar(u, novoF, senhaF) {
@@ -2167,30 +2292,43 @@
       // dupla fixa do acesso: avaliador responsável e auxiliar (cadastro de Pessoas)
       const opPe = (f, sel) => pessoas.filter((x) => (!f || x.funcao === f) && (x.ativo !== 'não' || x.id === sel)).sort((a, b) => a.nome.localeCompare(b.nome, 'pt')).map((x) => h('option', { value: x.id, selected: x.id === sel }, `${x.nome} (${x.funcao === 'Avaliador' ? x.registro || 'avaliador' : 'auxiliar'}, ${x.vinculo})`));
       const sAv = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Sem avaliador definido'), opPe('Avaliador', u.avaliador_id)); const sAx = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Sem auxiliar'), opPe('', u.auxiliar_id));
-      const ind = h('input', { class: 'entrada', value: u.indicacao || '', placeholder: 'ex.: Time Gap', list: 'lista-indicacao' });
-      const cInd = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Time (da dupla, ou o time deste acesso)'), ind, h('datalist', { id: 'lista-indicacao' }, [...new Set(us.map((x) => x.indicacao).filter(Boolean))].map((x) => h('option', { value: x }))), h('div', { class: 'dica' }, 'Para duplas de um time parceiro (por exemplo, uma empresa júnior). A parte do time sai do valor da árvore: com R$ 2,50 por árvore e R$ 0,50 para o time, a dupla fica com R$ 2,00.'));
-      const cDupla = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Dupla deste acesso'), pessoas.length ? h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Avaliador responsável'), sAv), h('div', null, h('small', null, 'Auxiliar'), sAx)) : h('div', { class: 'dica' }, 'Cadastre antes as pessoas em Coordenação, Pessoas.'), h('div', { class: 'dica' }, 'Cada árvore deste acesso fica gravada com esta dupla. Se alguém mudar, troque aqui.'));
+      const sPx = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Escolha a pessoa'), opPe('Auxiliar', u.perfil === 'auxiliar' ? u.auxiliar_id : ''));
+      const ind = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Escolha o time'), [...new Set([...times.filter((t) => t.tipo === 'Parceiro' && t.ativo !== 'não').map((t) => t.nome), u.perfil === 'time' ? u.indicacao : ''].filter(Boolean))].map((n) => h('option', { value: n, selected: n === u.indicacao }, n)));
+      const cInd = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Time parceiro deste acesso'), ind, h('div', { class: 'dica' }, 'Este acesso vê só a produção e o valor do time escolhido. Os times ficam em Coordenação, Times.'));
+      const cAux = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Quem é este auxiliar'), sPx, h('div', { class: 'dica' }, 'Do cadastro de Pessoas. O auxiliar entra só para ver a produção e o valor dele.'));
+      const bAx = h('div', null, h('small', null, 'Auxiliar'), sAx); const dTime = h('div', { class: 'dica' });
+      const verDupla = () => { const pa = pessoas.find((x) => x.id === sAv.value); const parc = !!(pa && pa.time && timeParc(pa.time)); bAx.classList.toggle('oculto', parc);
+        dTime.textContent = !pa ? 'Cada registro deste acesso fica gravado com esta dupla. Se alguém mudar, troque aqui.' : pa.time ? `Time do avaliador: ${pa.time}.` + (parc ? ' No time parceiro o avaliador diz no celular, a cada começo de turno, se coleta sozinho ou com auxiliar.' : ' Cada registro fica gravado com esta dupla.') : 'Este avaliador ainda não tem time: defina em Coordenação, Pessoas.'; };
+      sAv.onchange = verDupla;
+      const cDupla = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Dupla deste acesso'), pessoas.length ? h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Avaliador responsável'), sAv), bAx) : h('div', { class: 'dica' }, 'Cadastre antes as pessoas em Coordenação, Pessoas.'), dTime);
       const marcados = new Set(String(u.projeto || '').split(',').map((x) => x.trim()));
       const prj = h('div', { class: 'chips' }, projetos.map((p) => { const b = h('button', { class: 'chip' + (marcados.has(p.id) ? ' sel' : ''), onclick: () => { b.classList.toggle('sel'); if (marcados.has(p.id)) marcados.delete(p.id); else marcados.add(p.id); } }, p.nome); return b; }));
-      const ok = await modal(novo ? 'Novo usuário' : 'Editar usuário', h('div', null,
+      // cada perfil mostra só os campos que valem para ele
+      const so = (pfs, el) => { el.dataset.pf = pfs; return el; };
+      const fm = h('div', null,
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Usuário'), lo), h('div', { class: 'campo' }, h('label', { class: 'rot' }, novo ? 'Senha' : 'Nova senha'), se)),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Perfil'), pe),
-        h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), no), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe'), eq)),
-        h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Código da equipe'), cod), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Email'), em)),
-        h('div', { class: 'dica' }, 'O código da equipe vira o prefixo dos códigos das árvores (E1 gera E1-0001, E1-0002...). Use um diferente para cada equipe.'),
-        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Como mede a copa'), mc),
-        cDupla, cInd, h('label', { class: 'campo' }, tj, ' Registrar o trajeto do dia (liga em "Começar o dia", só com o app aberto; não vale para dupla com parceiro)'),
-        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos liberados'), prj), h('label', null, at, ' Usuário ativo')),
-        [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
+        so('auxiliar', cAux), so('time', cInd),
+        h('div', { class: 'grade2' }, so('coletor revisor cliente time admin', h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), no)), so('coletor', h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe'), eq))),
+        h('div', { class: 'grade2' }, so('coletor', h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Código da equipe'), cod)), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Email'), em)),
+        so('coletor', h('div', { class: 'dica' }, 'O código da equipe vira o prefixo dos códigos das árvores (E1 gera E1-0001, E1-0002...). Use um diferente para cada equipe.')),
+        so('coletor', h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Como mede a copa'), mc)),
+        so('coletor', cDupla), so('coletor', h('label', { class: 'campo' }, tj, ' Registrar o trajeto do turno (liga em "Começar o turno", só com o app aberto; não vale para dupla com parceiro)')),
+        so('coletor auxiliar revisor cliente time', h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos liberados'), prj)), h('label', null, at, ' Usuário ativo'));
+      const verPf = () => { fm.querySelectorAll('[data-pf]').forEach((el) => el.classList.toggle('oculto', !el.dataset.pf.split(' ').includes(pe.value))); verDupla(); }; pe.onchange = verPf; verPf();
+      const ok = await modal(novo ? 'Novo usuário' : 'Editar usuário', fm, [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
       const login = lo.value.trim().toLowerCase();
-      const digitado = () => ({ login: lo.value.trim().toLowerCase(), nome: no.value, perfil: pe.value, projeto: [...marcados].filter(Boolean).join(','), equipe: eq.value, codigo: cod.value, email: em.value, ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '', avaliador_id: sAv.value, auxiliar_id: sAx.value, indicacao: ind.value });
+      const digitado = () => ({ login: lo.value.trim().toLowerCase(), nome: no.value, perfil: pe.value, projeto: [...marcados].filter(Boolean).join(','), equipe: eq.value, codigo: cod.value, email: em.value, ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '', avaliador_id: sAv.value, auxiliar_id: pe.value === 'auxiliar' ? sPx.value : sAx.value, indicacao: pe.value === 'time' ? ind.value : u.indicacao || '' });
       const erro = (m) => { toast(m, 5000, null, true); return editar(digitado(), novo, se.value); }; // o formulário volta com o que foi digitado
       if (!login) return erro('Preencha o usuário.');
       if (se.value.trim() && se.value.trim().length < 8 && !Api.demo) return erro('A senha precisa ter pelo menos 8 caracteres.');
       if (novo && !se.value.trim()) return erro('Defina a senha.');
       if (novo && us.some((x) => x.login === login)) return erro('Esse usuário já existe.');
-      const dados = { login, nome: no.value.trim() || login, perfil: pe.value, projeto: pe.value === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: eq.value.trim(), codigo: cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '', avaliador_id: pe.value === 'coletor' ? sAv.value : '', auxiliar_id: pe.value === 'coletor' ? sAx.value : '', indicacao: pe.value === 'coletor' || pe.value === 'time' ? ind.value.trim() : '' };
+      const pfv = pe.value; const col = pfv === 'coletor'; const pa = pessoas.find((x) => x.id === sAv.value); const parc = !!(pa && pa.time && timeParc(pa.time));
+      if (pfv === 'auxiliar' && !sPx.value) return erro('Escolha quem é este auxiliar (cadastro de Pessoas).');
+      if (pfv === 'time' && !ind.value) return erro('Escolha o time parceiro deste acesso (os times ficam em Coordenação, Times).');
+      const dados = { login, nome: pfv === 'auxiliar' ? nomePe(sPx.value) || login : no.value.trim() || login, perfil: pfv, projeto: pfv === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: col ? eq.value.trim() : '', codigo: col ? cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') : '', email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', modo_copa: col ? mc.value : '', trajeto: col && tj.checked ? 'sim' : '', avaliador_id: col ? sAv.value : '', auxiliar_id: col ? (parc ? '' : sAx.value) : pfv === 'auxiliar' ? sPx.value : '', indicacao: pfv === 'time' ? ind.value : col ? u.indicacao || '' : '' };
       if (se.value.trim()) dados.senha = se.value.trim();
       if (pe.value === 'coletor' && !dados.codigo) return erro('Defina o código da equipe (ex.: E1).');
       if (pe.value === 'coletor' && us.some((x) => x.login !== login && x.codigo === dados.codigo && String(x.projeto).split(',').some((p) => dados.projeto.split(',').includes(p)))) return erro('Outra equipe deste projeto já usa o código ' + dados.codigo + '.');
@@ -2239,20 +2377,21 @@
         return h('div', { class: 'us-card' + (inativo ? ' inativo' : '') },
           h('div', { class: 'us-cab' }, h('b', null, u.login), u.codigo ? h('span', { class: 'selo' }, u.codigo) : null, u.bloqueado ? h('span', { class: 'tag-alerta' }, 'bloqueado') : null, inativo ? h('span', { class: 'tag-cinza' }, 'desativado') : null),
           h('small', null, `${u.nome || ''} · ${rotP(u.perfil)}`), h('small', null, nomeP(u.projeto)),
-          u.perfil === 'coletor' && pessoas.length ? h('small', { class: u.avaliador_id ? '' : 'tag-alerta' }, u.avaliador_id ? 'Dupla: ' + [nomePe(u.avaliador_id), nomePe(u.auxiliar_id)].filter(Boolean).join(' + ') : 'sem avaliador definido') : null, u.indicacao ? h('small', null, 'Time: ' + u.indicacao) : null,
+          u.perfil === 'coletor' && pessoas.length ? h('small', { class: u.avaliador_id ? '' : 'tag-alerta' }, u.avaliador_id ? 'Dupla: ' + [nomePe(u.avaliador_id), nomePe(u.auxiliar_id)].filter(Boolean).join(' + ') : 'sem avaliador definido') : null, u.perfil === 'auxiliar' ? h('small', null, 'Auxiliar: ' + (nomePe(u.auxiliar_id) || 'sem pessoa ligada')) : null, u.indicacao ? h('small', null, 'Time: ' + u.indicacao) : null,
           h('small', { class: 'dica' }, `Último acesso: ${quando(u.ultimo_acesso)}`), u.senha_antiga ? h('small', { class: 'dica' }, 'senha ainda no formato antigo: é convertida no próximo acesso') : null,
           h('div', { class: 'linha-btn' }, u.bloqueado ? h('button', { class: 'btn peq', onclick: () => desbloquear(u) }, 'Desbloquear') : null, h('button', { class: 'btn sec peq', onclick: () => editar(u) }, 'Editar'), h('button', { class: 'btn sec peq', onclick: () => alternarAtivo(u) }, inativo ? 'Reativar' : 'Desativar'),
             h('details', { class: 'us-mais' }, h('summary', { 'aria-label': 'Mais ações' }, '···'), h('button', { class: 'link-perigo', onclick: () => remover(u) }, 'Excluir usuário'))));
       })),
-      h('p', { class: 'dica' }, 'Equipe de campo coleta; revisão técnica valida ou devolve registros; cliente só consulta painel, mapa e relatório dos dados validados; coordenação faz tudo. Prefira desativar a excluir: o histórico continua ligado ao usuário. Senhas ficam guardadas de forma criptografada e o usuário é bloqueado por 15 minutos após 5 senhas erradas.')));
+      h('p', { class: 'dica' }, 'Equipe de campo coleta; auxiliar só vê a produção dele; auditor valida ou devolve registros; cliente só consulta painel, mapa e relatório dos dados validados; parceiro acompanha a produção do time; coordenação faz tudo. Prefira desativar a excluir: o histórico continua ligado ao usuário. Senhas ficam guardadas de forma criptografada e o usuário é bloqueado por 15 minutos após 5 senhas erradas.')));
   }
 
   // pessoas das equipes: avaliadores habilitados e auxiliares, com o vínculo (CLT ou parceiro). Sem dados de pagamento.
   async function adminPessoas(corpo) {
-    const [ps, us, projetos] = await Promise.all([Api.b.pessoasListar(), Api.b.usuariosListar(), Api.b.projetosListar()]);
+    const [ps, us, projetos, times] = await Promise.all([Api.b.pessoasListar(), Api.b.usuariosListar(), Api.b.projetosListar(), Api.b.timesListar().catch(() => [])]);
     const equipes = [...new Set(us.filter((u) => u.perfil === 'coletor' && u.equipe).map((u) => u.equipe))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true }));
     async function editar(pe, dig) {
-      const novo = !pe; pe = Object.assign({ nome: '', funcao: 'Auxiliar', registro: '', vinculo: 'CLT', empresa: '', equipe: '', projeto: S.projeto ? S.projeto.id : '', ativo: 'sim' }, pe || {}, dig || {});
+      const novo = !pe; pe = Object.assign({ nome: '', funcao: 'Auxiliar', registro: '', vinculo: 'CLT', empresa: '', equipe: '', time: '', projeto: S.projeto ? S.projeto.id : '', ativo: 'sim' }, pe || {}, dig || {});
+      const ti = h('select', { class: 'entrada', onchange: () => { const t = times.find((x) => x.nome === ti.value); if (t) { vi.value = t.tipo === 'Parceiro' ? 'Parceiro' : 'CLT'; ver(); } } }, h('option', { value: '' }, 'Sem time'), [...new Set([...times.filter((t) => t.ativo !== 'não').map((t) => t.nome), pe.time].filter(Boolean))].map((n) => h('option', { value: n, selected: n === pe.time }, n)));
       const no = h('input', { class: 'entrada', value: pe.nome, placeholder: 'Nome completo' });
       const fu = h('select', { class: 'entrada' }, ['Avaliador', 'Auxiliar'].map((v) => h('option', { value: v, selected: pe.funcao === v }, v === 'Avaliador' ? 'Avaliador habilitado' : 'Auxiliar')));
       const rg = h('input', { class: 'entrada', value: pe.registro, placeholder: 'ex.: CRBio 12345/04-D, CREA-MG 123456' });
@@ -2266,11 +2405,12 @@
       const ok = await modal(novo ? 'Nova pessoa' : 'Editar pessoa', h('div', null,
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), no),
         h('div', { class: 'grade2' }, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Função'), fu), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Vínculo'), vi)),
+        h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Time'), ti, h('div', { class: 'dica' }, times.length ? 'O time define como a pessoa recebe: time próprio, prêmio por semana; time parceiro, por registro validado.' : 'Cadastre antes os times em Coordenação, Times.')),
         cReg, cEmp, h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe de costume'), eq, h('div', { class: 'dica' }, 'Só para organizar a lista. A dupla de cada acesso é escolhida em Usuários e pode misturar vínculos.')),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos'), prj)),
         [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
-      const d = { id: pe.id, nome: no.value.trim(), funcao: fu.value, registro: fu.value === 'Avaliador' ? rg.value.trim() : '', vinculo: vi.value, empresa: vi.value === 'Parceiro' ? em.value.trim() : '', equipe: eq.value, projeto: [...marcados].join(','), ativo: pe.ativo || 'sim' };
+      const d = { id: pe.id, nome: no.value.trim(), funcao: fu.value, registro: fu.value === 'Avaliador' ? rg.value.trim() : '', vinculo: vi.value, empresa: vi.value === 'Parceiro' ? em.value.trim() : '', equipe: eq.value, time: ti.value, projeto: [...marcados].join(','), ativo: pe.ativo || 'sim' };
       const erro = (m) => { toast(m, 5000, null, true); return editar(novo ? null : pe, d); };
       if (!d.nome) return erro('Informe o nome.');
       if (d.funcao === 'Avaliador' && !d.registro) return erro('Avaliador precisa do registro profissional (ex.: CRBio 12345/04-D, CREA-MG 123456).');
@@ -2280,7 +2420,7 @@
     const nomeP = (ids) => String(ids || '').split(',').filter(Boolean).map((i) => (projetos.find((p) => p.id === i.trim()) || {}).nome || i).join(', ') || 'Todos os projetos';
     const card = (pe) => { const inat = pe.ativo === 'não'; return h('div', { class: 'us-card' + (inat ? ' inativo' : '') },
       h('div', { class: 'us-cab' }, h('b', null, pe.nome), h('span', { class: 'selo' + (pe.vinculo === 'Parceiro' ? ' selo-parceiro' : '') }, pe.vinculo), inat ? h('span', { class: 'tag-cinza' }, 'desativada') : null),
-      h('small', null, [pe.funcao === 'Avaliador' ? pe.registro : 'Auxiliar', pe.vinculo === 'Parceiro' && pe.empresa ? pe.empresa : '', pe.equipe].filter(Boolean).join(' · ')), h('small', null, nomeP(pe.projeto)),
+      h('small', null, [pe.funcao === 'Avaliador' ? pe.registro : 'Auxiliar', pe.time ? 'Time ' + pe.time : '', pe.vinculo === 'Parceiro' && pe.empresa ? pe.empresa : '', pe.equipe].filter(Boolean).join(' · ')), h('small', null, nomeP(pe.projeto)),
       h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec peq', onclick: () => editar(pe) }, 'Editar'), h('button', { class: 'btn sec peq', onclick: () => alternar(pe) }, inat ? 'Reativar' : 'Desativar'))); };
     const grupo = (t, f) => { const l = ps.filter((x) => x.funcao === f).sort((a, b) => (a.ativo === 'não') - (b.ativo === 'não') || a.nome.localeCompare(b.nome, 'pt')); return h('div', null, h('h4', null, `${t} (${l.filter((x) => x.ativo !== 'não').length})`), l.length ? h('div', { class: 'us-lista' }, l.map(card)) : h('p', { class: 'dica' }, 'Ninguém cadastrado.')); };
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Pessoas das equipes'),
@@ -2354,98 +2494,128 @@
     const feitos = rs.filter((r) => r.status !== 'rascunho' && diaLocal(r.concluido_em || r.criado_em) === hoje && !r.faceId).length;
     const aEnviar = rs.filter((r) => r.status === 'pendente' || r.erroSync).length; const dev = rs.filter((r) => r.validacao === 'Devolvido').length; const rasc = rs.filter((r) => r.status === 'rascunho').length;
     let meta = (await Store.get('meta:' + S.projeto.id)) || 0; const d = await Dia.aberto();
-    const cartaoHoje = h('div', { class: 'cartao' }); const pintarHoje = () => cartaoHoje.replaceChildren(h('h3', null, 'Hoje'), h('div', { class: 'dia-num' }, h('b', null, fmtN(feitos)), meta ? ` de ${fmtN(meta)} árvores` : feitos === 1 ? ' árvore' : ' árvores'),
-      meta ? h('div', { class: 'meta-barra' }, h('div', { style: `width:${Math.min(100, (feitos / meta) * 100)}%` })) : null, meta ? h('small', { class: 'dica' }, feitos >= meta ? `Meta da dupla batida: ${fmtN(feitos - meta)} acima.` : `Faltam ${fmtN(meta - feitos)} para a meta da dupla. Vale a árvore validada pela coordenação.`) : null);
+    const cartaoHoje = h('div', { class: 'cartao' }); const pintarHoje = () => cartaoHoje.replaceChildren(h('h3', null, 'Hoje'), h('div', { class: 'dia-num' }, h('b', null, fmtN(feitos)), meta ? ` de ${fmtN(meta)} registros` : feitos === 1 ? ' registro' : ' registros'),
+      meta ? h('div', { class: 'meta-barra' }, h('div', { style: `width:${Math.min(100, (feitos / meta) * 100)}%` })) : null, meta ? h('small', { class: 'dica' }, feitos >= meta ? `Meta do dia batida: ${fmtN(feitos - meta)} acima.` : `Faltam ${fmtN(meta - feitos)} para a meta do dia. Vale o registro validado pelo auditor, na média da semana.`) : null);
     pintarHoje();
     const lin = (t, v, fn) => h('button', { class: 'menu-it dia-lin', onclick: fn }, h('span', null, t), h('small', null, v || ''));
     corpo.replaceChildren(cartaoHoje,
       h('div', { class: 'cartao' }, h('div', { class: 'dia-tres' }, h('div', null, h('b', null, fmtN(aEnviar)), 'a enviar'), h('div', null, h('b', null, fmtN(dev)), dev === 1 ? 'devolvida' : 'devolvidas'), h('div', null, h('b', null, fmtN(rasc)), rasc === 1 ? 'não terminada' : 'não terminadas'))),
       h('div', { id: 'os-equipe' }),
       h('div', { class: 'cartao' }, lin('Meus registros', '', () => ir('#lista')), lin('Minha produção', '', () => ir('#producao')), lin('Ordens de serviço', '', () => ir('#ordens')), lin('Consultar o mapa', 'busca e filtros', () => ir('#consulta'))),
-      d ? h('button', { class: 'btn sec', style: 'width:100%', onclick: async () => { await Dia.encerrar(); if (!(await Dia.aberto())) ir('#mapa'); } }, 'Encerrar o dia') : null);
+      d && !S.sessao.usuario.escolheAuxiliar ? h('button', { class: 'btn sec', style: 'width:100%;margin-bottom:8px', onclick: () => paradaChuva() }, 'Parada por chuva') : null,
+      d ? h('button', { class: 'btn sec', style: 'width:100%', onclick: async () => { await Dia.encerrar(); if (!(await Dia.aberto())) ir('#mapa'); } }, 'Encerrar o turno') : null);
     pintarOSEquipe(); // andamento das quadras e faces da equipe e ordens de serviço
-    if (navigator.onLine && !Api.demo) try { const P = await Api.b.producaoMinha(S.projeto.id, hoje, hoje); if (P.regras && P.regras.meta) { meta = P.regras.meta; Store.set('meta:' + S.projeto.id, meta); if (document.body.contains(cartaoHoje)) pintarHoje(); } } catch (e) { /* servidor antigo ou sem conexão */ }
+    if (navigator.onLine && !Api.demo) try { const P = await Api.b.producaoMinha(S.projeto.id); const mt = P.hoje ? (P.meta ? P.meta.porDia : 0) : null; if (mt != null && mt !== meta) { meta = mt; Store.set('meta:' + S.projeto.id, meta); if (document.body.contains(cartaoHoje)) pintarHoje(); } } catch (e) { /* servidor antigo ou sem conexão */ }
   }
   // painel do time parceiro (ex.: empresa júnior): árvores das duplas do time, valor a receber e histórico do que já foi pago
-  async function telaTime() {
-    const corpo = h('main');
-    $app.replaceChildren(topo(S.sessao.usuario.nome || 'Meu time', S.projeto ? S.projeto.nome : '', h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')), null), corpo);
+  async function telaTime(nomeT) {
+    const corpo = h('main'); const denovo = () => telaTime(nomeT);
+    $app.replaceChildren(topo(nomeT ? 'Painel do parceiro' : S.sessao.usuario.nome || 'Meu time', S.projeto ? S.projeto.nome : '', nomeT ? h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')) : h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')), null), corpo);
     if (!S.projeto) return corpo.replaceChildren(h('div', { class: 'info' }, 'Nenhum projeto liberado para este acesso.'));
     corpo.replaceChildren(h('div', { class: 'info' }, 'Carregando...'));
-    let T; try { T = await Api.b.producaoTime(S.projeto.id); } catch (e) { return corpo.replaceChildren(h('div', { class: 'aviso' }, e.message), h('button', { class: 'btn sec', onclick: telaTime }, 'Tentar de novo')); }
+    let T; try { T = await Api.b.producaoTime(S.projeto.id, nomeT); } catch (e) { return corpo.replaceChildren(h('div', { class: 'aviso' }, e.message), h('button', { class: 'btn sec', onclick: denovo }, 'Tentar de novo')); }
     const t = T.totais;
     corpo.replaceChildren(
       h('div', { class: 'cartao' }, h('h3', null, T.time), h('div', { class: 'kpis' }, kpi('A receber', R$(t.valorPagar), `${fmtN(t.aPagar)} árvores validadas ainda não pagas`), kpi('Já recebido', R$(T.pago), `${fmtN(t.pagas)} árvores em medições fechadas`), kpi('Em validação', fmtN(t.emValidacao), 'aguardando a coordenação'), kpi('Devolvidas', fmtN(t.devolvidas), 'para a dupla corrigir')),
-        h('p', { class: 'dica' }, `${R$(T.porArvore)} por árvore validada (com 2 m de altura ou mais, foto e coordenada). Devolvida só conta depois de corrigida e validada de novo.`)),
+        h('p', { class: 'dica' }, `${R$(T.porArvore)} por registro validado (árvore com 2 m de altura ou mais, foto e coordenada, ou face de quadra sem árvore com foto). Devolvido só conta depois de corrigido e validado de novo.`)),
       h('div', { class: 'cartao' }, h('h3', null, 'Duplas do time'), T.duplas.length ? h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, ['Dupla', 'Coletadas', 'Em validação', 'Devolvidas', 'Validadas', 'Pagas', 'A receber'].map((c) => h('th', null, c))),
         T.duplas.map((d) => h('tr', null, h('td', null, d.equipe), h('td', null, fmtN(d.coletadas)), h('td', null, fmtN(d.emValidacao)), h('td', null, fmtN(d.devolvidas)), h('td', null, fmtN(d.validadas)), h('td', null, fmtN(d.pagas)), h('td', null, h('b', null, R$(d.valorPagar))))))) : h('p', { class: 'dica' }, 'Nenhuma dupla ligada a este time ainda.')),
       h('div', { class: 'cartao' }, h('h3', null, 'Histórico de pagamentos'), T.historico.length ? h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, ['Medição', 'Fechada em', 'Árvores', 'Valor'].map((c) => h('th', null, c))),
         T.historico.map((m) => h('tr', null, h('td', null, `${dBRc(m.de)} a ${dBRc(m.ate)}`), h('td', null, dataAno(m.fechada_em)), h('td', null, fmtN(m.arvores)), h('td', null, h('b', null, R$(m.valor))))))) : h('p', { class: 'dica' }, 'Nenhuma medição fechada ainda. Cada medição fechada pela coordenação aparece aqui.')),
-      h('button', { class: 'btn sec', onclick: telaTime }, 'Atualizar'));
+      h('button', { class: 'btn sec', onclick: denovo }, 'Atualizar'));
   }
+  // painel de quem coleta e do auxiliar: registros de hoje, da semana e do mês, meta e valor estimado. Sem horas nem rendimento por hora.
   async function telaMinhaProducao() {
-    const corpo = h('main'); S.perProd = S.perProd || quinzena();
-    $app.replaceChildren(topo('Minha produção', S.projeto.equipe || '', h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Voltar ao mapa' }, ico('voltar')), null), corpo);
-    if (!navigator.onLine) return corpo.replaceChildren(h('div', { class: 'aviso' }, 'A produção vem da validação da coordenação: abra com internet.'));
+    const aux = perfil() === 'auxiliar'; const corpo = h('main');
+    $app.replaceChildren(topo('Minha produção', aux ? S.projeto.nome : S.projeto.equipe || '', aux ? h('button', { class: 'ic', onclick: abrirMenu, 'aria-label': 'Menu' }, ico('menu')) : h('button', { class: 'ic', onclick: () => ir('#mapa'), 'aria-label': 'Voltar ao mapa' }, ico('voltar')), null), corpo);
+    if (!navigator.onLine) return corpo.replaceChildren(h('div', { class: 'aviso' }, 'A produção vem da validação: abra com internet.'));
     corpo.replaceChildren(h('div', { class: 'info' }, 'Carregando...'));
-    const hoje = diaLocal(agoraISO()); const seg = (() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return isoDia(d); })();
-    let P, H, W; try { [P, H, W] = await Promise.all([Api.b.producaoMinha(S.projeto.id, S.perProd[0], S.perProd[1]), Api.b.producaoMinha(S.projeto.id, hoje, hoje), Api.b.producaoMinha(S.projeto.id, seg, hoje)]); } catch (e) { return corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
-    const Rg = P.regras; const dHoje = (H.dias || []).find((d) => S.dupla && S.dupla.av && String(d.dupla || '').includes(S.dupla.av.nome)) || (H.dias || [])[0] || { validadas: 0 }; // meta é da dupla de hoje
-    const linha = (t, x) => h('div', { class: 'prod-linha' }, h('b', null, t), h('span', null, `${fmtN(x.coletadas)} coletadas`), h('span', null, `${fmtN(x.validadas)} validadas`), h('span', null, `${fmtN(x.emValidacao)} em validação`), x.devolvidas ? h('span', { class: 'ruim' }, `${fmtN(x.devolvidas)} devolvidas`) : null);
-    const clt = (P.pessoas || []).some((x) => x.vinculo === 'CLT');
+    let P; try { P = await Api.b.producaoMinha(S.projeto.id); } catch (e) { return corpo.replaceChildren(h('div', { class: 'aviso' }, /desconhecida/i.test(e.message) ? 'O servidor ainda não foi atualizado para esta versão. Avise a coordenação.' : e.message), h('button', { class: 'btn sec', onclick: telaMinhaProducao }, 'Tentar de novo')); }
+    if (!P.hoje) return corpo.replaceChildren(h('div', { class: 'aviso' }, 'O servidor ainda não foi atualizado para esta versão. Avise a coordenação.'));
+    const linha = (t, x) => h('div', { class: 'prod-linha' }, h('b', null, t), h('span', null, `${fmtN(x.coletados)} ${x.coletados === 1 ? 'coletado' : 'coletados'}`), h('span', null, `${fmtN(x.validados)} ${x.validados === 1 ? 'validado' : 'validados'}`), h('span', null, `${fmtN(x.pendentes)} em validação`), x.devolvidos ? h('span', { class: 'ruim' }, `${fmtN(x.devolvidos)} ${x.devolvidos === 1 ? 'devolvido' : 'devolvidos'}`) : null, x.reprovados ? h('span', { class: 'ruim' }, `${fmtN(x.reprovados)} ${x.reprovados === 1 ? 'reprovado' : 'reprovados'}`) : null);
+    const m = P.meta; const sem = P.semanas || [];
+    const premioSem = (s) => R$(s.premios.reduce((a, x) => a + x.total, 0));
     corpo.replaceChildren(
-      h('div', { class: 'cartao' }, h('h3', null, 'Árvores'), linha('Hoje', H.totais), linha('Semana', W.totais), linha(`${dBRc(P.de).slice(0, 5)} a ${dBRc(P.ate).slice(0, 5)}`, P.totais),
-        h('p', { class: 'dica' }, 'Conta como validada a árvore com 2 m de altura ou mais, foto, coordenada e aprovada pela coordenação.')),
-      clt || !(P.pessoas || []).length ? h('div', { class: 'cartao' }, h('h3', null, 'Meta do dia'), h('div', { class: 'meta-barra' }, h('div', { style: `width:${Math.min(100, (dHoje.validadas / Math.max(1, Rg.meta)) * 100)}%` })),
-        h('p', null, `${fmtN(dHoje.validadas)} de ${fmtN(Rg.meta)} árvores validadas hoje` + (dHoje.acima ? ` · ${fmtN(dHoje.acima)} acima da meta` : '')), h('p', { class: 'dica' }, `Prêmio de ${R$(Rg.premio)} por árvore validada acima da meta, pago no cartão prêmio. A validação pode chegar depois do dia de campo.`)) : null,
-      (P.pessoas || []).length ? h('div', { class: 'cartao' }, h('h3', null, 'Por pessoa no período'), seletorPeriodo(S.perProd, (q) => { S.perProd = q; telaMinhaProducao(); }),
-        h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Pessoa'), h('th', null, 'Validadas'), h('th', null, 'Pagas'), h('th', null, 'Estimado')),
-          P.pessoas.map((x) => h('tr', null, h('td', null, x.nome, h('br'), h('small', { class: 'dica' }, x.vinculo)), h('td', null, fmtN(x.validadas)), h('td', null, fmtN(x.pagas)),
-            h('td', null, x.vinculo === 'Parceiro' ? (x.valor != null ? R$(x.valor + (x.bonus || 0)) : 'com a coordenação') : `prêmio ${R$((x.premio || 0) + (x.bonus || 0))}`)))))) : null,
-      P.devolvidas && P.devolvidas.length ? h('div', { class: 'cartao' }, h('h3', null, 'Devolvidas para refazer'), h('ul', { class: 'lista-mud' }, P.devolvidas.map((x) => h('li', null, h('b', null, x.codigo || x.uuid.slice(0, 8)), ` ${x.especie || ''}: ${x.motivo}`))), h('p', { class: 'dica' }, 'Devolvida não conta até ser corrigida e validada de novo.')) : null);
+      h('div', { class: 'cartao' }, h('h3', null, 'Registros'), linha('Hoje', P.hoje), linha('Semana', P.semana), linha('Mês', P.mes),
+        h('p', { class: 'dica' }, 'Conta o registro validado pelo auditor: árvore com 2 m de altura ou mais, foto e coordenada. Face de quadra sem árvore, com foto, também conta. Devolvido só conta depois de corrigido e validado de novo.')),
+      m ? h('div', { class: 'cartao' }, h('h3', null, 'Meta da semana'), h('div', { class: 'meta-barra' }, h('div', { style: `width:${Math.min(100, (m.mediaSemana / Math.max(1, m.porDia)) * 100)}%` })),
+        h('p', null, m.diasTrabalhados ? `Média de ${fmtN(m.mediaSemana)} registros validados por dia, em ${fmtN(m.diasTrabalhados)} ${m.diasTrabalhados === 1 ? 'dia trabalhado' : 'dias trabalhados'}.` : 'Ainda sem registro validado nesta semana.'),
+        h('p', { class: 'dica' }, (m.falta > 0 ? `Faltam ${fmtN(m.falta)} por dia, na média, para a meta de ${fmtN(m.porDia)}. ` : `Meta de ${fmtN(m.porDia)} por dia batida na média. `) + `O que passar da meta, até ${fmtN(m.teto)} por dia na média, entra como superação. A validação pode chegar depois do dia de campo.`)) : null,
+      (P.pessoas || []).length ? h('div', { class: 'cartao' }, h('h3', null, 'Valor estimado'),
+        h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Pessoa'), h('th', null, 'Validados'), h('th', null, 'Estimado')),
+          P.pessoas.map((x) => h('tr', null, h('td', null, x.nome), h('td', null, fmtN(x.validados)),
+            h('td', null, x.vinculo === 'Parceiro' ? (x.aReceber != null ? [h('b', null, R$(x.aReceber)), h('br'), h('small', { class: 'dica' }, 'a receber')] : 'com a coordenação') : [h('b', null, R$(x.estimado || 0)), h('br'), h('small', { class: 'dica' }, x.premioPrevisto ? `prêmio; ${R$(x.premioPrevisto)} ainda em semana aberta` : 'prêmio das semanas apuradas')]))))),
+        h('p', { class: 'dica' }, 'Estimativa. O valor final sai no fechamento feito pela coordenação.')) : null,
+      sem.length ? h('div', { class: 'cartao' }, h('h3', null, 'Semanas'), h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, ['Semana', 'Dias', 'Média por dia', 'Prêmio', 'Situação'].map((c) => h('th', null, c))),
+        sem.map((s) => h('tr', null, h('td', null, `${dBRc(s.semana).slice(0, 5)} a ${dBRc(s.ate).slice(0, 5)}`), h('td', null, fmtN(s.diasTrabalhados)), h('td', null, fmtN(s.media)), h('td', null, premioSem(s)), h('td', null, s.situacao === 'Apurada' ? 'Apurada' : s.pendentes ? `Aberta: ${fmtN(s.pendentes)} em validação` : 'Em andamento'))))),
+        h('p', { class: 'dica' }, 'A semana é apurada quando todos os registros dela foram avaliados pelo auditor.')) : null,
+      P.devolvidas && P.devolvidas.length ? h('div', { class: 'cartao' }, h('h3', null, 'Devolvidos para refazer'), h('ul', { class: 'lista-mud' }, P.devolvidas.map((x) => h('li', null, h('b', null, x.codigo || x.uuid.slice(0, 8)), ` ${x.especie || ''}: ${x.motivo}`))), h('p', { class: 'dica' }, 'Devolvido não conta até ser corrigido e validado de novo.')) : null,
+      h('button', { class: 'btn sec', onclick: telaMinhaProducao }, 'Atualizar'));
   }
   async function telaProducao() {
     const corpo = h('main'); S.perProd = S.perProd || quinzena();
     $app.replaceChildren(topo('Produção e pagamento', S.projeto.nome, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), null), corpo);
     corpo.replaceChildren(h('div', { class: 'info' }, 'Calculando a produção...'));
-    let P; try { P = await Api.b.producao(S.projeto.id, S.perProd[0], S.perProd[1]); } catch (e) { return corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
+    let P, diasReg = []; try { [P, diasReg] = await Promise.all([Api.b.producao(S.projeto.id, S.perProd[0], S.perProd[1]), Api.b.diasListar(S.projeto.id)]); } catch (e) { return corpo.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
+    if (!P.semanas) return corpo.replaceChildren(h('div', { class: 'aviso' }, 'O servidor ainda está na versão anterior. Atualize o servidor para abrir a produção desta versão do app.'));
     const Rg = P.regras; let aba = S.abaProd || 'pessoas';
     const tabela = (cab, linhas) => h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, cab.map((c) => h('th', null, c))), linhas));
     const num = (x) => [h('td', null, fmtN(x.coletadas)), h('td', null, fmtN(x.validadas)), h('td', null, fmtN(x.emValidacao)), h('td', null, fmtN(x.devolvidas)), h('td', null, fmtN(x.pagas))];
-    const C = ['Coletadas', 'Contam', 'Em validação', 'Devolvidas', 'Pagas'];
+    const C = ['Coletados', 'Contam', 'Em validação', 'Devolvidos', 'Pagos'];
+    const sem5 = (s) => `${dBRc(s.semana).slice(0, 5)} a ${dBRc(s.ate).slice(0, 5)}`;
     const conteudo = h('div');
+    const chuvas = diasReg.filter((x) => x.hora && (!P.de || x.dia >= P.de) && (!P.ate || x.dia <= P.ate));
+    async function marcar(d, equipe, sit) { try { await Api.b.diaMarcar(S.projeto.id, { dia: d, equipe, situacao: sit }); toast('Dia marcado. Recalculando.'); telaProducao(); } catch (e) { toast(e.message, 6000); } }
+    const selDia = (x) => h('select', { class: 'entrada peq', 'aria-label': `Situação do dia ${dBRc(x.dia)}, ${x.equipe}`, onchange: (e) => marcar(x.dia, x.equipe, e.target.value) }, ['Trabalhado', 'Parcial', 'Perdido'].map((v) => h('option', { value: v, selected: (x.situacao || 'Trabalhado') === v }, v === 'Trabalhado' ? 'Trabalhado' : v === 'Parcial' ? 'Parcial (fora da média)' : 'Perdido (fora da média)')));
     const pintar = () => {
       S.abaProd = aba; abas.querySelectorAll('button').forEach((b) => b.classList.toggle('at', b.dataset.a === aba));
-      if (aba === 'pessoas') conteudo.replaceChildren(P.pessoas.length ? tabela(['Pessoa', 'Vínculo', ...C, 'Por árvore', 'Prêmio', 'Bônus', 'Total', 'A pagar'], P.pessoas.map((x) => h('tr', null, h('td', null, x.nome), h('td', null, x.vinculo), ...num(x), h('td', null, R$(x.valor)), h('td', null, R$(x.premio)), h('td', null, R$(x.bonus)), h('td', null, R$(x.total)), h('td', null, h('b', null, R$(x.totalPagar)))))) : h('p', { class: 'dica' }, 'Nenhum registro com dupla informada no período. A dupla do dia aparece depois que as pessoas são cadastradas em Coordenação, Pessoas.'));
-      if (aba === 'indic') conteudo.replaceChildren(P.indicacoes.length ? tabela(['Time', 'Árvores que contam', 'Valor no período', 'Árvores a pagar', 'A pagar'], P.indicacoes.map((x) => h('tr', null, h('td', null, x.nome), h('td', null, fmtN(x.arvores)), h('td', null, R$(x.valor)), h('td', null, fmtN(x.arvoresPagar)), h('td', null, h('b', null, R$(x.valorPagar)))))) : h('p', { class: 'dica' }, `Nenhuma dupla com o "Time da dupla" preenchido em Coordenação, Usuários. O valor é de ${R$(Rg.indicacao)} por árvore validada.`));
-      if (aba === 'equipes') conteudo.replaceChildren(tabela(['Equipe', ...C, 'Por árvore', 'Prêmio', 'Bônus', 'Total'], P.equipes.map((x) => h('tr', null, h('td', null, x.equipe), ...num(x), h('td', null, R$(x.valor)), h('td', null, R$(x.premio)), h('td', null, R$(x.bonus)), h('td', null, h('b', null, R$(x.total)))))));
-      if (aba === 'setores') conteudo.replaceChildren(tabela(['Setor', 'Auditoria', ...C, 'Total'], P.setores.map((x) => h('tr', null, h('td', null, x.setor || 'sem setor'), h('td', null, x.situacao ? x.situacao + (x.erro_pct !== '' ? ` (${fmtN(x.erro_pct)}%)` : '') : ''), ...num(x), h('td', null, R$(x.total))))));
-      if (aba === 'dias') conteudo.replaceChildren(tabela(['Dia', 'Dupla', 'Equipe', 'Contam', 'Acima da meta', 'Prêmio (cartão)', 'CLT na dupla'], P.dias.map((x) => h('tr', null, h('td', null, dBRc(x.dia)), h('td', null, x.dupla || ''), h('td', null, x.equipe), h('td', null, fmtN(x.validadas)), h('td', null, fmtN(x.acima)), h('td', null, R$(x.premio)), h('td', null, x.clt.join(', '))))));
-      if (aba === 'medicoes') conteudo.replaceChildren(P.medicoes.length ? tabela(['Período', 'Fechada em', 'Por', 'Árvores', 'Por árvore', 'Prêmio', 'Bônus', 'Times', 'Total'], P.medicoes.map((m) => h('tr', null, h('td', null, `${dBRc(m.de)} a ${dBRc(m.ate)}`), h('td', null, dataAno(m.fechada_em)), h('td', null, m.fechada_por), h('td', null, fmtN(m.arvores)), h('td', null, R$(m.valor)), h('td', null, R$(m.premio)), h('td', null, R$(m.bonus)), h('td', null, R$(m.indicacao)), h('td', null, h('b', null, R$(m.total)))))) : h('p', { class: 'dica' }, 'Nenhuma medição fechada ainda.'));
+      if (aba === 'pessoas') conteudo.replaceChildren(P.pessoas.length ? tabela(['Pessoa', 'Vínculo', ...C, 'Por registro', 'Prêmio apurado', 'Prêmio em semana aberta', 'A pagar na medição'], P.pessoas.map((x) => h('tr', null, h('td', null, x.nome), h('td', null, x.vinculo), ...num(x), h('td', null, x.vinculo === 'Parceiro' ? R$(x.valor) : ''), h('td', null, x.vinculo === 'CLT' ? R$(x.premio) : ''), h('td', null, x.vinculo === 'CLT' ? R$(x.premioPrevisto) : ''), h('td', null, x.vinculo === 'Parceiro' ? h('b', null, R$(x.totalPagar)) : '')))) : h('p', { class: 'dica' }, 'Nenhum registro com dupla informada no período. A dupla aparece depois que as pessoas são cadastradas em Coordenação, Pessoas, e ligadas ao acesso em Usuários.'),
+        h('p', { class: 'dica' }, 'Parceiro recebe por registro que conta, na medição. Quem tem carteira recebe o prêmio da semana, que vai para o relatório do RH e não entra na medição.'));
+      if (aba === 'indic') conteudo.replaceChildren(P.indicacoes.length ? tabela(['Parceiro', 'Registros que contam', 'Valor no período', 'Registros a pagar', 'A pagar'], P.indicacoes.map((x) => h('tr', null, h('td', null, x.nome), h('td', null, fmtN(x.arvores)), h('td', null, R$(x.valor)), h('td', null, fmtN(x.arvoresPagar)), h('td', null, h('b', null, R$(x.valorPagar)))))) : h('p', { class: 'dica' }, `Nenhum registro de time parceiro no período. Cadastre o time em Coordenação, Times, e ligue os avaliadores a ele em Pessoas. A parte do time é de ${R$(Rg.indicacao)} por registro que conta.`));
+      if (aba === 'equipes') conteudo.replaceChildren(tabela(['Equipe', ...C, 'Por registro', 'Prêmio apurado'], P.equipes.map((x) => h('tr', null, h('td', null, x.equipe), ...num(x), h('td', null, R$(x.valor)), h('td', null, R$(x.premio))))));
+      if (aba === 'semanas') conteudo.replaceChildren(P.semanas.length ? tabela(['Semana', 'Dupla', 'Dias trabalhados', 'Registros', 'Média por dia', 'Meta', 'Avaliador', 'Auxiliar', 'Situação'], P.semanas.map((s) => h('tr', null, h('td', null, sem5(s)), h('td', null, s.dupla), h('td', null, fmtN(s.diasTrabalhados)), h('td', null, fmtN(s.registros)), h('td', null, fmtN(s.media)), h('td', null, s.bateu ? 'batida' : `abaixo de ${fmtN(s.meta)}`), h('td', null, s.avaliador ? R$(s.avaliador.total) : ''), h('td', null, s.auxiliar ? R$(s.auxiliar.total) : ''), h('td', null, s.situacao === 'Apurada' ? h('b', null, 'Apurada') : s.pendentes ? `Aberta: ${fmtN(s.pendentes)} sem decisão do auditor` : 'Em andamento')))) : h('p', { class: 'dica' }, 'Nenhuma dupla com carteira coletou no período.'),
+        h('p', { class: 'dica' }, `Prêmio de meta: ${R$(Rg.premioMetaAv)} por mês para o avaliador e ${R$(Rg.premioMetaAx)} para o auxiliar, um quarto por semana em que a média dos dias trabalhados chega a ${fmtN(Rg.meta)}. Superação: ${R$(Rg.supAv)} (avaliador) e ${R$(Rg.supAx)} (auxiliar) por registro da média acima da meta, até ${fmtN(Rg.teto)}, vezes os dias trabalhados. A semana só é apurada quando o auditor avaliou todos os registros dela.`));
+      if (aba === 'dias') conteudo.replaceChildren(P.dias.length ? tabela(['Dia', 'Equipe', 'Dupla', 'Registros que contam', 'O dia conta na média?'], P.dias.map((x) => h('tr', null, h('td', null, dBRc(x.dia)), h('td', null, x.equipe), h('td', null, x.dupla || ''), h('td', null, fmtN(x.validadas)), h('td', null, x.clt ? selDia(x) : h('small', { class: 'dica' }, 'parceiro: sem meta'))))) : h('p', { class: 'dica' }, 'Nenhum registro que conta no período.'),
+        h('h4', null, 'Paradas por chuva registradas pelas equipes'), chuvas.length ? tabela(['Dia', 'Hora', 'Equipe', 'Observação', 'Foto', 'Situação do dia'], chuvas.map((x) => h('tr', null, h('td', null, dBRc(x.dia)), h('td', null, x.hora), h('td', null, x.equipe), h('td', null, x.obs || ''), h('td', null, x.foto ? h('a', { href: x.foto, target: '_blank', rel: 'noopener' }, 'ver foto') : ''), h('td', null, x.situacao || 'sem marcação')))) : h('p', { class: 'dica' }, 'Nenhuma parada registrada no período.'),
+        h('p', { class: 'dica' }, 'Dia parcial ou perdido (chuva, por exemplo) sai da média da semana da dupla com carteira: não puxa a média para baixo.'));
+      if (aba === 'jornada') conteudo.replaceChildren(h('p', { class: 'dica' }, 'Relatório de gestão: só a coordenação vê. As equipes não veem horas trabalhadas nem rendimento por hora. As horas vão do primeiro ao último registro do dia, sem o maior intervalo do meio do dia.'),
+        (P.jornada || []).length ? tabela(['Dia', 'Equipe', 'Dupla', 'Primeiro registro', 'Último registro', 'Intervalo (min)', 'Horas em campo', 'Coletados', 'Por hora'], P.jornada.map((x) => h('tr', null, h('td', null, dBRc(x.dia)), h('td', null, x.equipe), h('td', null, x.dupla), h('td', null, x.inicio), h('td', null, x.fim), h('td', null, fmtN(x.intervaloMin)), h('td', null, fmtN(x.horas)), h('td', null, fmtN(x.coletados)), h('td', null, fmtN(x.porHora))))) : h('p', { class: 'dica' }, 'Nenhuma dupla com carteira coletou no período.'));
+      if (aba === 'setores') conteudo.replaceChildren(tabela(['Setor', 'Auditoria', ...C], P.setores.map((x) => h('tr', null, h('td', null, x.setor || 'sem setor'), h('td', null, x.situacao ? x.situacao + (x.erro_pct !== '' ? ` (${fmtN(x.erro_pct)}%)` : '') : ''), ...num(x)))));
+      if (aba === 'medicoes') conteudo.replaceChildren(P.medicoes.length ? tabela(['Período', 'Fechada em', 'Por', 'Registros', 'Parceiros', 'Times parceiros', 'Total'], P.medicoes.map((m) => h('tr', null, h('td', null, `${dBRc(m.de)} a ${dBRc(m.ate)}`), h('td', null, dataAno(m.fechada_em)), h('td', null, m.fechada_por), h('td', null, fmtN(m.arvores)), h('td', null, R$((+m.valor || 0) + (+m.bonus || 0) + (+m.premio || 0))), h('td', null, R$(m.indicacao)), h('td', null, h('b', null, R$(m.total)))))) : h('p', { class: 'dica' }, 'Nenhuma medição fechada ainda.'));
     };
-    const abas = h('div', { class: 'subabas' }, [['pessoas', 'Por pessoa'], ['equipes', 'Por equipe'], ['indic', 'Por time'], ['setores', 'Por setor'], ['dias', 'Prêmio por dia'], ['medicoes', 'Medições fechadas']].map(([a, t]) => h('button', { 'data-a': a, onclick: () => { aba = a; pintar(); } }, t)));
+    const abas = h('div', { class: 'subabas' }, [['pessoas', 'Por pessoa'], ['equipes', 'Por equipe'], ['indic', 'Por parceiro'], ['semanas', 'Prêmio por semana'], ['dias', 'Dias e chuva'], ['jornada', 'Gestão da equipe'], ['setores', 'Por setor'], ['medicoes', 'Medições fechadas']].map(([a, t]) => h('button', { 'data-a': a, onclick: () => { aba = a; pintar(); } }, t)));
     const aPagar = P.totais.arvoresPagar || 0;
     async function fechar() {
-      if (!(await confirmar('Fechar a medição', `Fechar de ${dBRc(P.de)} a ${dBRc(P.ate)}? As árvores que contam e ainda não foram pagas até o fim do período (inclusive validadas depois de uma medição anterior) ficam marcadas como pagas (a pagar ${R$(P.totais.totalPagar)}). Exporte a planilha antes para pagar.`, 'Fechar medição'))) return;
-      try { const r = await Api.b.medicaoFechar(S.projeto.id, P.de, P.ate); toast(`Medição fechada: ${fmtN(r.medicao.arvores)} árvores marcadas como pagas.`, 5000); S.abaProd = 'medicoes'; telaProducao(); } catch (e) { toast(e.message, 6000); }
+      if (!(await confirmar('Fechar a medição', `Fechar de ${dBRc(P.de)} a ${dBRc(P.ate)}? Os registros de parceiros que contam e ainda não foram pagos até o fim do período (inclusive validados depois de uma medição anterior) ficam marcados como pagos (a pagar ${R$(P.totais.totalPagar)}). Exporte a planilha antes para pagar. O prêmio de quem tem carteira não entra aqui.`, 'Fechar medição'))) return;
+      try { const r = await Api.b.medicaoFechar(S.projeto.id, P.de, P.ate); toast(`Medição fechada: ${fmtN(r.medicao.arvores)} registros marcados como pagos.`, 5000); S.abaProd = 'medicoes'; telaProducao(); } catch (e) { toast(e.message, 6000); }
     }
     async function exportar() {
       const din = (v) => Math.round((v || 0) * 100) / 100;
+      const rh = {}; P.semanas.filter((s) => s.situacao === 'Apurada').forEach((s) => { [['Avaliador', s.avaliador], ['Auxiliar', s.auxiliar]].forEach(([f, x]) => { if (!x) return; const o = rh[x.id] = rh[x.id] || { Pessoa: x.nome, 'Função': f, 'Semanas apuradas': 0, 'Semanas com meta batida': 0, 'Prêmio de meta (R$)': 0, 'Superação (R$)': 0, 'Total (R$)': 0 }; o['Semanas apuradas']++; if (s.bateu) o['Semanas com meta batida']++; o['Prêmio de meta (R$)'] = din(o['Prêmio de meta (R$)'] + x.meta); o['Superação (R$)'] = din(o['Superação (R$)'] + x.superacao); o['Total (R$)'] = din(o['Total (R$)'] + x.total); }); });
       const b = await Arquivos.xlsx([
-        { nome: 'Por pessoa', cols: ['Pessoa', 'Vínculo', 'Coletadas', 'Validadas', 'Em validação', 'Devolvidas', 'Pagas', 'Árvores a pagar', 'Por árvore a pagar (R$)', 'Prêmio cartão a pagar (R$)', 'Bônus a pagar (R$)', 'Total a pagar (R$)', 'Total do período (R$)'], linhas: P.pessoas.map((x) => ({ Pessoa: x.nome, 'Vínculo': x.vinculo, Coletadas: x.coletadas, Validadas: x.validadas, 'Em validação': x.emValidacao, Devolvidas: x.devolvidas, Pagas: x.pagas, 'Árvores a pagar': x.arvoresPagar, 'Por árvore a pagar (R$)': din(x.valorPagar), 'Prêmio cartão a pagar (R$)': din(x.premioPagar), 'Bônus a pagar (R$)': din(x.bonusPagar), 'Total a pagar (R$)': din(x.totalPagar), 'Total do período (R$)': din(x.total) })) },
-        { nome: 'Por time', cols: ['Time', 'Árvores que contam', 'Valor no período (R$)', 'Árvores a pagar', 'A pagar (R$)'], linhas: P.indicacoes.map((x) => ({ Time: x.nome, 'Árvores que contam': x.arvores, 'Valor no período (R$)': din(x.valor), 'Árvores a pagar': x.arvoresPagar, 'A pagar (R$)': din(x.valorPagar) })) },
-        { nome: 'Por equipe', cols: ['Equipe', 'Coletadas', 'Validadas', 'Em validação', 'Devolvidas', 'Pagas', 'Total (R$)'], linhas: P.equipes.map((x) => ({ Equipe: x.equipe, Coletadas: x.coletadas, Validadas: x.validadas, 'Em validação': x.emValidacao, Devolvidas: x.devolvidas, Pagas: x.pagas, 'Total (R$)': din(x.total) })) },
-        { nome: 'Por setor', cols: ['Setor', 'Auditoria', 'Erro (%)', 'Coletadas', 'Validadas', 'Total (R$)'], linhas: P.setores.map((x) => ({ Setor: x.setor, Auditoria: x.situacao, 'Erro (%)': x.erro_pct, Coletadas: x.coletadas, Validadas: x.validadas, 'Total (R$)': din(x.total) })) },
-        { nome: 'Prêmio por dia', cols: ['Dia', 'Dupla', 'Equipe', 'Validadas', 'Meta', 'Acima da meta', 'Prêmio (R$)', 'CLT na dupla'], linhas: P.dias.map((x) => ({ Dia: dBRc(x.dia), Dupla: x.dupla || '', Equipe: x.equipe, Validadas: x.validadas, Meta: x.meta, 'Acima da meta': x.acima, 'Prêmio (R$)': din(x.premio), 'CLT na dupla': x.clt.join(', ') })) },
-        { nome: 'Regras', cols: ['Regra', 'Valor'], linhas: [['Período', `${dBRc(P.de)} a ${dBRc(P.ate)}`], ['Valor por árvore validada (parceiros)', R$(Rg.valor)], ['Parte do avaliador', Rg.pctAvaliador + '%'], ['Meta por dia por dupla', String(Rg.meta)], ['Prêmio por árvore acima da meta (CLT, cartão prêmio)', R$(Rg.premio)], ['Para o time da dupla, por árvore validada', R$(Rg.indicacao)], ['Bônus de qualidade por árvore', R$(Rg.bonus) + ` (setor aprovado com erro abaixo de ${Rg.bonusErroMax}%)`], ['Árvore que conta', 'validada, 2 m de altura ou mais, com foto e coordenada']].map(([a, b2]) => ({ Regra: a, Valor: b2 })) }]);
+        { nome: 'Parceiros a pagar', cols: ['Pessoa', 'Coletados', 'Contam', 'Em validação', 'Devolvidos', 'Pagos', 'Registros a pagar', 'A pagar (R$)', 'Valor do período (R$)'], linhas: P.pessoas.filter((x) => x.vinculo === 'Parceiro').map((x) => ({ Pessoa: x.nome, Coletados: x.coletadas, Contam: x.validadas, 'Em validação': x.emValidacao, Devolvidos: x.devolvidas, Pagos: x.pagas, 'Registros a pagar': x.arvoresPagar, 'A pagar (R$)': din(x.totalPagar), 'Valor do período (R$)': din(x.valor + x.bonus) })) },
+        { nome: 'Times parceiros', cols: ['Parceiro', 'Registros que contam', 'Valor no período (R$)', 'Registros a pagar', 'A pagar (R$)'], linhas: P.indicacoes.map((x) => ({ Parceiro: x.nome, 'Registros que contam': x.arvores, 'Valor no período (R$)': din(x.valor), 'Registros a pagar': x.arvoresPagar, 'A pagar (R$)': din(x.valorPagar) })) },
+        { nome: 'RH prêmios apurados', cols: ['Pessoa', 'Função', 'Semanas apuradas', 'Semanas com meta batida', 'Prêmio de meta (R$)', 'Superação (R$)', 'Total (R$)'], linhas: Object.values(rh).sort((a, c) => a.Pessoa.localeCompare(c.Pessoa, 'pt')) },
+        { nome: 'Prêmio por semana', cols: ['Semana', 'Dupla', 'Equipe', 'Dias trabalhados', 'Registros', 'Média por dia', 'Meta', 'Meta batida', 'Avaliador', 'Avaliador (R$)', 'Auxiliar', 'Auxiliar (R$)', 'Situação', 'Sem decisão do auditor'], linhas: P.semanas.map((s) => ({ Semana: `${dBRc(s.semana)} a ${dBRc(s.ate)}`, Dupla: s.dupla, Equipe: s.equipe, 'Dias trabalhados': s.diasTrabalhados, Registros: s.registros, 'Média por dia': s.media, Meta: s.meta, 'Meta batida': s.bateu ? 'sim' : 'não', Avaliador: s.avaliador ? s.avaliador.nome : '', 'Avaliador (R$)': s.avaliador ? din(s.avaliador.total) : '', Auxiliar: s.auxiliar ? s.auxiliar.nome : '', 'Auxiliar (R$)': s.auxiliar ? din(s.auxiliar.total) : '', 'Situação': s.situacao, 'Sem decisão do auditor': s.pendentes })) },
+        { nome: 'Por pessoa', cols: ['Pessoa', 'Vínculo', 'Coletados', 'Contam', 'Em validação', 'Devolvidos', 'Pagos'], linhas: P.pessoas.map((x) => ({ Pessoa: x.nome, 'Vínculo': x.vinculo, Coletados: x.coletadas, Contam: x.validadas, 'Em validação': x.emValidacao, Devolvidos: x.devolvidas, Pagos: x.pagas })) },
+        { nome: 'Por equipe', cols: ['Equipe', 'Coletados', 'Contam', 'Em validação', 'Devolvidos', 'Pagos'], linhas: P.equipes.map((x) => ({ Equipe: x.equipe, Coletados: x.coletadas, Contam: x.validadas, 'Em validação': x.emValidacao, Devolvidos: x.devolvidas, Pagos: x.pagas })) },
+        { nome: 'Dias', cols: ['Dia', 'Equipe', 'Dupla', 'Registros que contam', 'Situação do dia'], linhas: P.dias.map((x) => ({ Dia: dBRc(x.dia), Equipe: x.equipe, Dupla: x.dupla || '', 'Registros que contam': x.validadas, 'Situação do dia': x.clt ? x.situacao || 'Trabalhado' : '' })) },
+        { nome: 'Paradas por chuva', cols: ['Dia', 'Hora', 'Equipe', 'Observação', 'Situação do dia'], linhas: chuvas.map((x) => ({ Dia: dBRc(x.dia), Hora: x.hora, Equipe: x.equipe, 'Observação': x.obs || '', 'Situação do dia': x.situacao || '' })) },
+        { nome: 'Gestão da equipe', cols: ['Dia', 'Equipe', 'Dupla', 'Primeiro registro', 'Último registro', 'Intervalo (min)', 'Horas em campo', 'Coletados', 'Por hora'], linhas: (P.jornada || []).map((x) => ({ Dia: dBRc(x.dia), Equipe: x.equipe, Dupla: x.dupla, 'Primeiro registro': x.inicio, 'Último registro': x.fim, 'Intervalo (min)': x.intervaloMin, 'Horas em campo': x.horas, Coletados: x.coletados, 'Por hora': x.porHora })) },
+        { nome: 'Por setor', cols: ['Setor', 'Auditoria', 'Erro (%)', 'Coletados', 'Contam'], linhas: P.setores.map((x) => ({ Setor: x.setor, Auditoria: x.situacao, 'Erro (%)': x.erro_pct, Coletados: x.coletadas, Contam: x.validadas })) },
+        { nome: 'Regras', cols: ['Regra', 'Valor'], linhas: [['Período', `${dBRc(P.de)} a ${dBRc(P.ate)}`], ['Regras em vigor desde', Rg.vigenteDesde ? dBRc(Rg.vigenteDesde) : 'o começo do projeto'], ['Valor por registro que conta (parceiros)', R$(Rg.valor)], ['Parte do time parceiro, dentro desse valor', R$(Rg.indicacao)], ['Divisão quando há auxiliar', `${Rg.pctAvaliador}% avaliador, ${100 - Rg.pctAvaliador}% auxiliar`], ['Meta por dia (dupla com carteira)', String(Rg.meta)], ['Teto da superação por dia', String(Rg.teto)], ['Prêmio de meta por mês', `${R$(Rg.premioMetaAv)} avaliador, ${R$(Rg.premioMetaAx)} auxiliar`], ['Superação por registro', `${R$(Rg.supAv)} avaliador, ${R$(Rg.supAx)} auxiliar`], ['Face de quadra sem árvore vale', String(Rg.pesoFace) + ' registro'], ['Registro que conta', 'validado pelo auditor; árvore com 2 m de altura ou mais, foto e coordenada']].map(([a, b2]) => ({ Regra: a, Valor: b2 })) }]);
       baixar(`producao_${S.projeto.id}_${P.de}_${P.ate}.xlsx`, b);
     }
+    const soma = (k) => P.equipes.reduce((a, x) => a + x[k], 0);
     corpo.replaceChildren(
       h('div', { class: 'cartao' }, seletorPeriodo([P.de, P.ate], (q) => { S.perProd = q; telaProducao(); }),
-        h('div', { class: 'kpis' }, kpi('Árvores que contam', fmtN(P.equipes.reduce((a, x) => a + x.validadas, 0)), `${fmtN(P.equipes.reduce((a, x) => a + x.emValidacao, 0))} em validação · ${fmtN(P.equipes.reduce((a, x) => a + x.devolvidas, 0))} devolvidas`),
-          kpi('Por árvore (parceiros)', R$(P.totais.valor), `${R$(Rg.valor)} por árvore, ${Rg.pctAvaliador}% avaliador`), kpi('Prêmio (cartão)', R$(P.totais.premio), `acima de ${fmtN(Rg.meta)} por dia por dupla`), kpi('Times', R$(P.totais.indicacao), `${R$(Rg.indicacao)} por árvore validada`), kpi('A pagar', R$(P.totais.totalPagar), `do total de ${R$(P.totais.total)} no período` + (Rg.bonus ? `, com bônus` : ''))),
-        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: exportar }, 'Exportar planilha'), h('button', { class: 'btn', disabled: !aPagar, onclick: fechar }, aPagar ? `Fechar medição (${fmtN(aPagar)} árvores a pagar)` : 'Nada a pagar até o fim do período'), h('button', { class: 'btn sec', onclick: () => ir('#auditoria') }, 'Auditoria por setor')),
-        h('p', { class: 'dica' }, 'Conta a árvore validada com 2 m de altura ou mais, foto e coordenada. Validadas que não contam: ' + fmtN(P.equipes.reduce((a, x) => a + x.naoContam, 0)) + '. As regras de valor ficam no cadastro do projeto.')),
+        h('div', { class: 'kpis' }, kpi('Registros que contam', fmtN(soma('validadas')), `${fmtN(soma('emValidacao'))} em validação, ${fmtN(soma('devolvidas'))} devolvidos`),
+          kpi('Parceiros', R$(P.totais.valor), `${R$(Math.max(0, Rg.valor - Rg.indicacao))} por registro para quem coleta; com auxiliar, metade para cada`),
+          kpi('Times parceiros', R$(P.totais.indicacao), `${R$(Rg.indicacao)} por registro, já dentro dos ${R$(Rg.valor)}`),
+          kpi('Prêmio com carteira', R$(P.totais.premio), P.totais.premioPrevisto ? `semanas apuradas; ${R$(P.totais.premioPrevisto)} em semanas abertas` : 'semanas apuradas no período'),
+          kpi('A pagar na medição', R$(P.totais.totalPagar), 'parceiros e times parceiros')),
+        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: exportar }, 'Exportar planilha'), h('button', { class: 'btn', disabled: !aPagar, onclick: fechar }, aPagar ? `Fechar medição (${fmtN(aPagar)} registros a pagar)` : 'Nada a pagar até o fim do período'), h('button', { class: 'btn sec', onclick: () => ir('#auditoria') }, 'Auditoria por setor')),
+        h('p', { class: 'dica' }, 'Conta o registro validado pelo auditor: árvore com 2 m de altura ou mais, foto e coordenada, e face de quadra sem árvore com foto. Validados que não contam: ' + fmtN(soma('naoContam')) + '. A planilha traz a folha do RH com os prêmios apurados. As regras de valor ficam no cadastro do projeto.')),
       abas, conteudo);
     pintar();
   }
@@ -2692,7 +2862,7 @@
     ] : [
       P('O que é este app?', 'O ArborizIA Coletor, app da Neofloresta para registrar o inventário da arborização urbana nos projetos contratados.'),
       P('Quais dados meus o app usa?', 'Usuário, nome e equipe; a dupla da equipe (nome, função, registro profissional do avaliador e vínculo); data, hora e posição do celular quando você marca um ponto; o modelo do aparelho. Não usamos contatos, galeria pessoal nem arquivos do celular, nem dados de pagamento.'),
-      P('O app acompanha onde eu estou?', 'Só durante o trabalho e só com o app aberto: a posição na hora de marcar cada árvore e, quando a coordenação liga o trajeto, o caminho da equipe até você tocar em "Encerrar o dia". Fora disso, nada.'),
+      P('O app acompanha onde eu estou?', 'Só durante o trabalho e só com o app aberto: a posição na hora de marcar cada árvore e, quando a coordenação liga o trajeto, o caminho da equipe até você tocar em "Encerrar o turno". Fora disso, nada.'),
       P('Para que servem esses dados?', 'Saber quem fez cada registro, conferir a qualidade e a localização das árvores, acompanhar o andamento do campo, calcular a produção de cada pessoa (árvores validadas, prêmio e bônus) e cumprir o contrato com o cliente. Para parceiros o app não registra jornada: só o começo e o fim de cada cadastro.'),
       P('Quem vê?', 'A coordenação da Neofloresta. O cliente recebe os dados das árvores, sem os dados das equipes.'),
       P('E as fotos?', 'Fotografe a árvore e o entorno. Evite pessoas, placas de veículos e o interior das casas; se aparecerem, a foto é usada só como registro técnico.'),
@@ -2719,13 +2889,13 @@
     if (completo) return h('div', { class: 'termo' }, curto, longo, h('p', { class: 'dica' }, 'Versão do termo: ' + TERMO_VERSAO));
     return h('div', { class: 'termo' }, curto, h('details', { class: 'termo-completo' }, h('summary', null, 'Ver o texto completo'), longo), h('p', { class: 'dica' }, 'Versão do termo: ' + TERMO_VERSAO));
   }
-  const termoEmDia = () => { const u = S.sessao && S.sessao.usuario; return !!(u && u.termo_aceito_em && (u.termo_versao === TERMO_VERSAO || (u.termo_versao === undefined && S.termoLocal === TERMO_VERSAO))); };
+  const termoEmDia = () => { const u = S.sessao && S.sessao.usuario; if (S.real) return true; return !!(u && u.termo_aceito_em && (u.termo_versao === TERMO_VERSAO || (u.termo_versao === undefined && S.termoLocal === TERMO_VERSAO))); };
   function verTermo() { modal('Termo de uso e privacidade', h('div', null, h('p', { class: 'dica' }, 'Equipe de campo e coordenação:'), textoTermo('coletor'), h('p', { class: 'dica', style: 'margin-top:14px' }, 'Clientes (prefeitura ou empresa contratante):'), textoTermo('cliente')), [{ texto: 'Fechar', valor: true }]); }
   function telaTermo() {
     const mudou = !!(S.sessao && S.sessao.usuario.termo_aceito_em);
     const btn = h('button', { class: 'btn cheio', onclick: async () => {
       btn.disabled = true;
-      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch(async (e) => { if (/desconhecida/i.test(e.message)) return; if (!navigator.onLine || e.rede || /fetch|network|rede|Failed|Sem conex/i.test(e.message)) { await Store.set('termoPend:' + S.sessao.u, TERMO_VERSAO); return; } throw e; }); Object.assign(S.sessao.usuario, { termo_aceito_em: agoraISO(), termo_versao: TERMO_VERSAO }); S.termoLocal = TERMO_VERSAO; await Store.set('sessao', S.sessao); await Store.set('termo:' + S.sessao.u, S.sessao.usuario.termo_aceito_em); await Store.set('termoV:' + S.sessao.u, TERMO_VERSAO); rota(); if (perfil() !== 'cliente') ligarGps(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
+      try { await Api.b.aceitarTermo(TERMO_VERSAO).catch(async (e) => { if (/desconhecida/i.test(e.message)) return; if (!navigator.onLine || e.rede || /fetch|network|rede|Failed|Sem conex/i.test(e.message)) { await Store.set('termoPend:' + S.sessao.u, TERMO_VERSAO); return; } throw e; }); Object.assign(S.sessao.usuario, { termo_aceito_em: agoraISO(), termo_versao: TERMO_VERSAO }); S.termoLocal = TERMO_VERSAO; await guardarSessao(); await Store.set('termo:' + S.sessao.u, S.sessao.usuario.termo_aceito_em); await Store.set('termoV:' + S.sessao.u, TERMO_VERSAO); rota(); if (perfil() !== 'cliente') ligarGps(); } catch (e) { toast(e.message, 5000); btn.disabled = false; }
     } }, 'Li e aceito');
     $app.replaceChildren(topo('Termo de uso e privacidade', mudou ? 'O termo mudou: leia e aceite de novo' : 'Leia antes de começar', null, null), h('main', null,
       mudou ? h('div', { class: 'info' }, 'Atualizamos o termo de uso e privacidade. Seus registros continuam guardados; é só ler e aceitar para seguir.') : null,

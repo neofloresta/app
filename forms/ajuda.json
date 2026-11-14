@@ -248,7 +248,7 @@
    "tema": "GPS",
    "chave": "gps",
    "p": "O GPS melhora ao longo do dia?",
-   "r": "Ele melhora nos primeiros minutos depois de ligado e com o céu aberto. Prédios altos e copas fechadas pioram. Começar o dia com 1 minuto parado em lugar aberto ajuda."
+   "r": "Ele melhora nos primeiros minutos depois de ligado e com o céu aberto. Prédios altos e copas fechadas pioram. Começar o turno com 1 minuto parado em lugar aberto ajuda."
   },
   {
    "perfis": [
@@ -583,7 +583,7 @@
    "tema": "Turno e trajeto",
    "chave": "turno",
    "p": "O app grava o caminho da equipe?",
-   "r": "Só quando a coordenação liga o trajeto para a sua equipe. Aí, ao tocar em \"Começar o dia\", o app guarda o caminho enquanto estiver aberto, até você encerrar o dia. A etiqueta \"Dia desde...\" fica com uma bolinha rosa. Dupla com parceiro não tem trajeto."
+   "r": "Só quando a coordenação liga o trajeto para a sua equipe. Aí, ao tocar em \"Começar o turno\", o app guarda o caminho enquanto estiver aberto, até você encerrar o turno. A etiqueta \"Dia desde...\" fica com uma bolinha rosa. Dupla com parceiro não tem trajeto."
   },
   {
    "perfis": [
@@ -600,8 +600,8 @@
    ],
    "tema": "Turno e trajeto",
    "chave": "turno",
-   "p": "Esqueci de encerrar o dia.",
-   "r": "No dia seguinte o app fecha o dia anterior sozinho ao abrir e mostra \"Começar o dia\" de novo."
+   "p": "Esqueci de encerrar o turno.",
+   "r": "No dia seguinte o app fecha o dia anterior sozinho ao abrir e mostra \"Começar o turno\" de novo."
   },
   {
    "perfis": [
@@ -628,7 +628,7 @@
    "tema": "Mapa",
    "chave": "mapa",
    "p": "Onde fica o botão de nova árvore?",
-   "r": "O app abre no mapa. De manhã toque em \"Começar o dia\"; o botão vira \"Nova árvore\". Toque na face da calçada para marcar levantada ou sem árvores. Números, registros e produção ficam em \"Meu dia\", no menu."
+   "r": "O app abre no mapa. De manhã toque em \"Começar o turno\"; o botão vira \"Nova árvore\". Toque na face da calçada para marcar levantada ou sem árvores. Números, registros e produção ficam em \"Meu dia\", no menu."
   },
   {
    "perfis": [
@@ -709,7 +709,7 @@
    "tema": "Conta e app",
    "chave": "conta",
    "p": "Como começo e encerro o dia?",
-   "r": "De manhã, toque em \"Começar o dia\". Para terminar, toque na etiqueta \"Dia desde...\" em cima do mapa (ou em \"Encerrar o dia\" no menu) e confirme: o app envia o que falta. Se esquecer, o dia fecha sozinho à meia-noite."
+   "r": "De manhã, toque em \"Começar o turno\". Para terminar, toque na etiqueta \"Dia desde...\" em cima do mapa (ou em \"Encerrar o turno\" no menu) e confirme: o app envia o que falta. Se esquecer, o dia fecha sozinho à meia-noite."
   },
   {
    "perfis": [

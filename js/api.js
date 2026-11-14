@@ -22,8 +22,8 @@ const Api = (() => {
   function paraMapa(linhas, campos) { return { cab: campos, linhas: linhas.map((l) => campos.map((c) => l[c] ?? '')) }; }
   // listas da coordenação: a resposta vale por 1 minuto (trocar de aba fica instantâneo); qualquer gravação limpa
   const MEMO_LEITURA = ['usuarios_listar', 'projetos_listar', 'formularios_listar', 'pessoas_listar'];
-  const LEITURAS = ['conferir', 'trajetos', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', 'pessoas_listar', 'setores_camada', 'setores_situacao', 'producao', 'producao_minha', 'producao_time', ...MEMO_LEITURA];
-  let memo = new Map();
+  const LEITURAS = ['conferir', 'trajetos', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', 'pessoas_listar', 'setores_camada', 'setores_situacao', 'producao', 'producao_minha', 'producao_time', 'times_listar', 'dias_listar', ...MEMO_LEITURA];
+  let memo = new Map(); let comoLogin = null; // coordenação vendo as telas de outro usuário (o servidor só aceita consultas)
   async function chamar(acao, dados, semCred) {
     if (LEITURAS.indexOf(acao) < 0) memo = new Map();
     if (MEMO_LEITURA.indexOf(acao) >= 0) {
@@ -35,7 +35,7 @@ const Api = (() => {
   }
   async function chamar1(acao, dados, semCred) {
     const id = semCred ? {} : cred && cred.t ? { t: cred.t } : { u: cred && cred.u, s: cred && cred.s };
-    const corpo = JSON.stringify(Object.assign({ acao }, id, dados || {}));
+    const corpo = JSON.stringify(Object.assign({ acao }, id, comoLogin && !semCred ? { como: comoLogin } : {}, dados || {}));
     let resp;
     try { resp = await fetch(url, { method: 'POST', body: corpo, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow' }); } catch (e) { throw Object.assign(new Error('Sem conexão com o servidor. Confira a internet.'), { rede: true }); }
     if (!resp.ok) throw new Error('Servidor respondeu ' + resp.status);
@@ -122,7 +122,7 @@ const Api = (() => {
     async pessoaSalvar(pe) { const b = await this.base(); b.pessoas = b.pessoas || []; const i = b.pessoas.findIndex((x) => x.id === pe.id); if (!pe.id) pe.id = 'P' + Date.now(); if (i >= 0) b.pessoas[i] = Object.assign(b.pessoas[i], pe); else b.pessoas.push(pe); await Store.set('demo:base', b); return { id: pe.id }; },
     async setoresCamada() { return { semCamada: true }; }, async setoresSituacao() { return []; },
     async setoresImportar() { throw new Error('Setores não disponíveis na demonstração.'); },
-    async producao() { throw new Error('A produção precisa do servidor.'); }, async producaoMinha() { throw new Error('A produção precisa do servidor.'); },
+    async producao() { throw new Error('A produção precisa do servidor.'); }, async producaoMinha() { throw new Error('A produção precisa do servidor.'); }, async timesListar() { return []; }, async diasListar() { return []; }, async timeSalvar() { throw new Error('Os times precisam do servidor.'); }, async diaMarcar() { throw new Error('Precisa do servidor.'); }, async chuvaRegistrar() { return {}; },
     async medicaoFechar() { throw new Error('A produção precisa do servidor.'); }, async auditoriaSortear() { throw new Error('A auditoria precisa do servidor.'); }, async auditoriaConferir() { throw new Error('A auditoria precisa do servidor.'); }, async setoresAtribuir() { throw new Error('Setores não disponíveis na demonstração.'); },
     async quadrasMarcar() { throw new Error('Quadras não disponíveis na demonstração.'); },
     async quadrasImportar() { throw new Error('Quadras não disponíveis na demonstração.'); },
@@ -233,8 +233,14 @@ const Api = (() => {
     async setoresSituacao(projeto) { try { return (await chamar('setores_situacao', { projeto })).setores || []; } catch (e) { if (/desconhecida/i.test(e.message)) return []; throw e; } },
     async setoresAtribuir(projeto, itens) { return chamar('setores_atribuir', { projeto, itens }); },
     async producao(projeto, de, ate) { return chamar('producao', { projeto, de, ate }); },
-    async producaoMinha(projeto, de, ate) { return chamar('producao_minha', { projeto, de, ate }); },
-    async producaoTime(projeto) { return chamar('producao_time', { projeto }); },
+    async producaoMinha(projeto) { return chamar('producao_minha', { projeto }); },
+    async producaoTime(projeto, time) { return chamar('producao_time', time ? { projeto, time } : { projeto }); },
+    // servidor antigo (sem times nem dias): lista vazia
+    async timesListar() { try { return (await chamar('times_listar')).times || []; } catch (e) { if (/desconhecida/i.test(e.message)) return []; throw e; } },
+    async timeSalvar(time) { return chamar('time_salvar', { time }); },
+    async diasListar(projeto) { try { return (await chamar('dias_listar', { projeto })).dias || []; } catch (e) { if (/desconhecida/i.test(e.message)) return []; throw e; } },
+    async diaMarcar(projeto, dados) { return chamar('dia_marcar', Object.assign({ projeto }, dados)); },
+    async chuvaRegistrar(projeto, dados) { return chamar('chuva_registrar', Object.assign({ projeto }, dados)); },
     async medicaoFechar(projeto, de, ate) { return chamar('medicao_fechar', { projeto, de, ate }); },
     async auditoriaSortear(projeto, setor) { return chamar('auditoria_sortear', { projeto, setor }); },
     async auditoriaConferir(projeto, setor, uuid, resultado, motivo) { return chamar('auditoria_conferir', { projeto, setor, uuid, resultado, motivo }); },
@@ -253,6 +259,7 @@ const Api = (() => {
     get servidor() { return url; },
     // sessão: { u, t } (token) ou, em servidor antigo, { u, s }
     credenciais(c) { cred = c; },
+    como(l) { comoLogin = l || null; memo = new Map(); },
     aoExpirar(fn) { aoExpirar = fn; },
     get b() { return url ? Remoto : Demo; },
   };
