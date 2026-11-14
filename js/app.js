@@ -1,6 +1,6 @@
 // ArborizIA Coletor: app de campo do ArborizIA, gestão das árvores da cidade (por Neofloresta)
 (() => {
-  const VERSAO = '2.10.0';
+  const VERSAO = '2.11.0';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -1159,6 +1159,79 @@
       }, 60);
     });
   }
+  // ---------- Altura pelo celular (opcional; a altura digitada à mão continua valendo) ----------
+  // Método da tangente: altura = distância x (tan do ângulo do topo - tan do ângulo da base). A inclinação vem da gravidade no eixo da câmera, então o celular torto para o lado não muda a conta.
+  const ehAltura = (c) => c.tipo === 'number' && /altura total/i.test(c.nome);
+  const inclinacao = (g, zero) => { const m = Math.hypot(g.x, g.y, g.z); return m > 1 ? Math.asin(Math.max(-1, Math.min(1, -g.z / m))) * 180 / Math.PI - (zero || 0) : null; };
+  function lerInclinacao(aoLer) { // devolve a função que desliga
+    const leit = []; const f = (e) => { const g = e.accelerationIncludingGravity; if (!g || g.z == null) return; const el = inclinacao(g, 0); if (el == null) return; leit.push([Date.now(), el]); while (leit.length && Date.now() - leit[0][0] > 1000) leit.shift(); aoLer(leit); };
+    const ligar = () => window.addEventListener('devicemotion', f);
+    ligar(); try { if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') DeviceMotionEvent.requestPermission().catch(() => {}); } catch (e) { /* iPhone pede permissão; nos outros a leitura já vem */ }
+    return () => window.removeEventListener('devicemotion', f);
+  }
+  const mediaLeit = (leit) => { if (leit.length < 5) return null; const v = leit.map((x) => x[1]); const m = v.reduce((a, x) => a + x, 0) / v.length; return { m, dp: Math.sqrt(v.reduce((a, x) => a + (x - m) * (x - m), 0) / v.length), dur: leit[leit.length - 1][0] - leit[0][0] }; };
+  function medirAltura() {
+    return new Promise(async (fim) => {
+      if (somenteVer()) return fim(null);
+      const porPasso = !!S.sessao.usuario.modoQuadra; const passo = +(await Store.get('passo:' + S.sessao.u)) || 0; const zero = +(await Store.get('clin:zero')) || 0;
+      let etapa = 0, dist = null, base = null, topo = null, armado = 0, leitAt = [], stream = null, semSensor = false;
+      const corpo = h('div', { class: 'clin-corpo' }); const acoes = h('div', { class: 'linha-btn' }); const video = h('video', { class: 'clin-video oculto', playsinline: '', muted: '' });
+      const veu = h('div', { class: 'veu clin-veu' }, h('div', { class: 'folha clin' }, h('h3', null, 'Medir a altura com o celular'), h('div', { class: 'clin-visor' }, video, h('div', { class: 'clin-mira', 'aria-hidden': 'true' })), corpo, acoes)); document.body.append(veu);
+      const desligar = lerInclinacao((l) => { leitAt = l; });
+      const fechar = (v) => { if (fechar.feito) return; fechar.feito = true; desligar(); clearInterval(tm); window.removeEventListener('hashchange', aoSair); if (stream) stream.getTracks().forEach((t) => t.stop()); veu.remove(); fim(v); };
+      const aoSair = () => fechar(null); window.addEventListener('hashchange', aoSair);
+      const bt = (txt, fn, cls) => h('button', { class: 'btn ' + (cls || ''), onclick: fn }, txt);
+      const angTxt = h('div', { class: 'clin-ang' }, '...'); const msg = h('p', { class: 'clin-msg' });
+      const t0 = Date.now();
+      const pintar = () => {
+        veu.querySelector('.clin-visor').classList.toggle('oculto', etapa === 0 || etapa === 3);
+        if (etapa === 0) {
+          const inp = h('input', { class: 'entrada', inputmode: 'decimal', placeholder: porPasso ? 'ex.: 14' : 'ex.: 10,5' });
+          corpo.replaceChildren(h('p', null, 'Afaste-se do tronco até ver a árvore inteira. O ideal é ficar a uma distância parecida com a altura dela.'),
+            h('div', { class: 'campo' }, h('label', { class: 'rot' }, porPasso ? 'Quantos passos do tronco até aqui' : 'Distância do tronco até aqui (m), pela trena'), inp),
+            porPasso ? h('p', { class: 'dica' }, passo ? `Seu passo calibrado: ${numBR(Math.round(passo * 100) / 100)} m.` : 'Passo ainda não calibrado: o app usa 0,75 m. Calibre em Preferências para a medida ficar boa.') : null);
+          acoes.replaceChildren(bt('Cancelar', () => fechar(null), 'sec'), bt('Continuar', () => { const v = paraNum(inp.value); if (!(v > 0)) return toast(porPasso ? 'Informe o número de passos.' : 'Informe a distância em metros.'); dist = porPasso ? v * (passo || 0.75) : v; if (dist < 2 || dist > 80) return toast('Distância fora do esperado (de 2 a 80 m). Confira.', 4000); etapa = 1; pintar(); ligarVideo(); }));
+          setTimeout(() => inp.focus(), 100);
+        } else if (etapa === 1 || etapa === 2) {
+          const alvo = etapa === 1 ? 'na BASE do tronco, rente ao chão' : 'no TOPO da copa, no ponto mais alto';
+          msg.textContent = ''; corpo.replaceChildren(h('p', null, 'Mire a cruz ', h('b', null, alvo), '. Toque em Marcar e segure parado por 1 segundo.'), angTxt, msg);
+          acoes.replaceChildren(bt('Cancelar', () => fechar(null), 'sec'), bt(etapa === 1 ? 'Marcar a base' : 'Marcar o topo', () => { if (semSensor) return; armado = Date.now() + 400; msg.textContent = 'Segure parado...'; msg.className = 'clin-msg'; }));
+        } else {
+          const alt = Math.round(dist * (Math.tan(topo * Math.PI / 180) - Math.tan(base * Math.PI / 180)) * 10) / 10;
+          corpo.replaceChildren(h('div', { class: 'clin-res' }, h('b', null, numBR(alt) + ' m'), h('small', null, `distância ${numBR(Math.round(dist * 10) / 10)} m · base ${numBR(Math.round(base * 10) / 10)}° · topo ${numBR(Math.round(topo * 10) / 10)}°`)),
+            topo > 50 ? h('div', { class: 'aviso' }, 'Você está perto demais da árvore (topo acima de 50°). A medida fica melhor mais de longe.') : null,
+            h('p', { class: 'dica' }, 'Confira se o número faz sentido. Dá para corrigir à mão no campo Altura.'));
+          acoes.replaceChildren(bt('Medir de novo', () => { etapa = 0; base = topo = null; pintar(); }, 'sec'), bt('Usar esta altura', () => fechar({ altura: alt, dist: Math.round(dist * 10) / 10, base: Math.round(base * 10) / 10, topo: Math.round(topo * 10) / 10 })));
+        }
+      };
+      async function ligarVideo() { if (stream || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return; try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); if (fechar.feito) return stream.getTracks().forEach((t) => t.stop()); video.srcObject = stream; video.classList.remove('oculto'); await video.play(); } catch (e) { /* sem câmera: mira pela borda de cima do celular */ } }
+      const tm = setInterval(() => {
+        if (etapa !== 1 && etapa !== 2) return;
+        const m = leitAt.length && Date.now() - leitAt[leitAt.length - 1][0] < 700 ? mediaLeit(leitAt) : null;
+        if (!m) { if (Date.now() - t0 > 3000 && !leitAt.length) { semSensor = true; angTxt.textContent = 'sem leitura'; msg.textContent = 'Este celular não informou a inclinação. Feche e digite a altura à mão.'; msg.className = 'clin-msg ruim'; } return; }
+        const a = m.m - zero; angTxt.textContent = numBR(Math.round(a * 10) / 10) + '°';
+        if (!armado || Date.now() < armado + 1000) return; armado = 0;
+        if (m.dp > 1.2) { msg.textContent = 'Mexeu demais. Segure firme e marque de novo.'; msg.className = 'clin-msg ruim'; return; }
+        if (etapa === 1) { if (a > 20) { msg.textContent = 'A base fica para baixo ou na altura dos olhos. Mire no pé do tronco.'; msg.className = 'clin-msg ruim'; return; } base = a; etapa = 2; pintar(); }
+        else { if (a > 60) { msg.textContent = 'Perto demais (topo acima de 60°). Afaste-se e meça de novo a distância.'; msg.className = 'clin-msg ruim'; return; } if (a <= base + 2) { msg.textContent = 'O topo precisa ficar acima da base. Mire no ponto mais alto da copa.'; msg.className = 'clin-msg ruim'; return; } topo = a; etapa = 3; pintar(); }
+      }, 150);
+      pintar();
+    });
+  }
+  // calibrar o passo (anda 20 m e conta) e zerar o sensor de inclinação (celular em pé, encostado numa parede reta)
+  async function calibrarPasso() {
+    const inp = h('input', { class: 'entrada', inputmode: 'numeric', placeholder: 'ex.: 27' });
+    const ok = await modal('Calibrar o passo', h('div', null, h('p', null, 'Marque 20 m com a trena em chão plano. Ande esse trecho no seu passo normal e conte os passos.'), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Passos em 20 m'), inp)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
+    if (!ok) return; const n = paraNum(inp.value); if (!(n >= 15 && n <= 50)) return toast('Em 20 m o normal é de 15 a 50 passos. Confira a contagem.', 5000);
+    await Store.set('passo:' + S.sessao.u, 20 / n); toast(`Passo salvo: ${numBR(Math.round(2000 / n) / 100)} m.`); telaPreferencias();
+  }
+  function zerarSensor() {
+    let ult = []; const ang = h('div', { class: 'clin-ang' }, '...'); const desligar = lerInclinacao((l) => { ult = l; const m = mediaLeit(l); if (m) ang.textContent = numBR(Math.round(m.m * 10) / 10) + '°'; });
+    modal('Zerar o sensor', h('div', null, h('p', null, 'Encoste o celular em pé, de costas, em uma parede ou porta reta e toque em Zerar. Faça uma vez em cada celular.'), ang), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Zerar', valor: true }]).then(async (ok) => {
+      desligar(); if (!ok) return; const m = mediaLeit(ult); if (!m || m.dp > 1 || Math.abs(m.m) > 8) return toast(!m ? 'Este celular não informou a inclinação.' : 'Não deu para zerar: o celular precisa estar em pé e parado.', 5000);
+      await Store.set('clin:zero', m.m); toast('Sensor zerado.'); telaPreferencias(); });
+  }
+
   // aviso de pouco espaço: nada é apagado sozinho; a equipe libera as fotos já confirmadas em Preferências
   async function pintarEspaco() {
     const el = document.getElementById('aviso-espaco'); if (!el || !navigator.storage || !navigator.storage.estimate) return;
@@ -1181,7 +1254,7 @@
     if (m === 'raios2' && !(S.form && (S.form.regras || []).some((r) => r.campo === 'Modo de copa' && r.por && r.por.raios2))) m = 'raios'; // formulário antigo, sem os dois raios
     return m; }
   async function telaPreferencias() {
-    const copa = await prefCopa(); const wifi = await fotosSoWifi(); const sol = !!(await Store.get('modoSol'));
+    const copa = await prefCopa(); const wifi = await fotosSoWifi(); const sol = !!(await Store.get('modoSol')); const passo = +(await Store.get('passo:' + S.sessao.u)) || 0; const zero = await Store.get('clin:zero');
     let esp = ''; try { const e = await navigator.storage.estimate(); esp = `${(e.usage / 1e9).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} GB usados pelo app de ${(e.quota / 1e9).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} GB disponíveis.`; } catch (e) { /* sem informação */ }
     const chave = (txt, det, v, fn) => h('label', { class: 'pref-op' + (v ? ' sel' : '') }, h('input', { type: 'checkbox', checked: v, onchange: async (ev) => { await fn(ev.target.checked); telaPreferencias(); } }), h('div', null, h('b', null, txt), h('small', null, det)));
     $app.replaceChildren(topo('Preferências', S.sessao.usuario.nome || S.sessao.u, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), null),
@@ -1190,7 +1263,9 @@
           h('p', { class: 'dica' }, 'As fotos ficam na qualidade original e continuam guardadas no celular depois de enviadas. ' + esp),
           h('button', { class: 'btn sec', onclick: liberarEspaco }, 'Liberar espaço: apagar do celular fotos já confirmadas no servidor há mais de 30 dias')),
         h('div', { class: 'cartao' }, h('h3', null, 'Tela'), chave('Modo Sol (alto contraste)', 'Letras pretas, bordas mais fortes e texto maior, para ler no sol forte.', sol, async (v) => { await Store.set('modoSol', v); document.documentElement.classList.toggle('sol', v); })),
-        S.form && S.form.campos.some((c) => c.auto === 'modocopa') ? h('div', { class: 'cartao' }, h('h3', null, 'Como medir a copa'), h('p', null, copa === 'area' ? 'Área direto, com trena a laser.' : copa === 'raios2' ? 'Dois raios com trena: um ao longo da calçada e outro perpendicular (o app calcula a área).' : '4 raios com trena (o app calcula a área).'), h('p', { class: 'dica' }, 'Definido pelo time da sua equipe.')) : null));
+        S.form && S.form.campos.some((c) => c.auto === 'modocopa') ? h('div', { class: 'cartao' }, h('h3', null, 'Como medir a copa'), h('p', null, copa === 'area' ? 'Área direto, com trena a laser.' : copa === 'raios2' ? 'Dois raios com trena: um ao longo da calçada e outro perpendicular (o app calcula a área).' : '4 raios com trena (o app calcula a área).'), h('p', { class: 'dica' }, 'Definido pelo time da sua equipe.')) : null,
+        perfil() === 'coletor' && S.form && S.form.campos.some(ehAltura) ? h('div', { class: 'cartao' }, h('h3', null, 'Altura pelo celular'), h('p', { class: 'dica' }, 'Opcional. A altura digitada à mão continua valendo.'),
+          h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: calibrarPasso }, passo ? `Passo: ${numBR(Math.round(passo * 100) / 100)} m (calibrar de novo)` : 'Calibrar o passo'), h('button', { class: 'btn sec', onclick: zerarSensor }, zero != null ? 'Sensor zerado (zerar de novo)' : 'Zerar o sensor de inclinação'))) : null));
   }
   async function liberarEspaco() {
     const lim = Date.now() - 30 * 864e5; let n = 0;
@@ -1535,7 +1610,9 @@
             av.textContent = m || alerta; av.classList.toggle('oculto', !m && !alerta); av.classList.toggle('amarelo', !m && !!alerta); i.classList.toggle('invalido', !!m);
           };
           const i = h('input', { class: 'entrada', inputmode: 'decimal', enterkeyhint: 'next', value: numBR(v), oninput: () => { checar(); mudar(c, c.inteiro ? (paraNum(i.value) == null ? null : Math.round(paraNum(i.value))) : paraNum(i.value)); } });
-          box.append(rot(c), i, av); checar(); break;
+          box.append(rot(c), i, av); checar();
+          if (ehAltura(c) && perfil() === 'coletor') box.append(h('button', { class: 'btn sec peq bt-medir', type: 'button', onclick: async () => { const m = await medirAltura(); if (!m) return; r.alturaMed = m; i.value = numBR(m.altura); checar(); mudar(c, m.altura); } }, 'Medir com o celular'));
+          break;
         }
         case 'multinumber': {
           const lista = h('div', { class: 'fustes' });
@@ -1620,7 +1697,14 @@
         };
         wrap.replaceChildren(
           f ? h('button', { class: 'tile cheia', onclick: opcoes, style: u ? `background-image:url(${u})` : '' }, u ? null : ico('check'))
-            : h('button', { class: 'tile', onclick: () => cam.click() }, ico('camera')),
+            : h('button', { class: 'tile', onclick: async () => {
+              const cAlt = form.campos.find(ehAltura); const primeira = form.campos.find((x) => x.tipo === 'photo') === c;
+              if (!primeira || !cAlt || E[cAlt.nome].oculto || perfil() !== 'coletor' || r.valores[cAlt.nome] != null && r.valores[cAlt.nome] !== '') return cam.click();
+              const v = await modal(c.rotulo, h('p', { class: 'dica' }, 'A altura pelo celular é opcional: dá para digitar depois.'), [{ texto: 'Só foto', classe: 'sec', valor: 'foto' }, { texto: 'Foto e altura', valor: 'alt' }]);
+              if (v === 'foto') return cam.click(); if (v !== 'alt') return;
+              const m = await medirAltura(); if (m) { r.alturaMed = m; mudar(cAlt, m.altura); toast(`Altura ${numBR(m.altura)} m guardada. Agora a foto.`, 3000); }
+              cam.click();
+            } }, ico('camera')),
           h('div', { class: 'tile-rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null),
           ...(f ? [] : [h('button', { class: 'tile-gal link', onclick: () => gal.click() }, 'usar da galeria')]), cam, gal);
       };
@@ -2013,7 +2097,7 @@
         s.fechada_em ? h('small', null, h('b', null, 'Quadra fechada'), ' em ' + dataAno(s.fechada_em)) : null,
         s.reservada_em && !s.fechada_em && perfil() !== 'cliente' ? h('small', { class: 'dica' }, 'Reservada em ' + dataAno(s.reservada_em)) : null,
         q.f && !s.fechada_em && s.equipe && (ehCoord() || (perfil() === 'coletor' && s.equipe === minhaEquipe())) ? h('button', { class: 'btn peq acao', onclick: () => fecharQuadra(q, s, marcar) }, ico('check'), 'Fechar quadra') : null,
-        podeMarcarQd(s) && !(s.fechada_em && !ehCoord()) && !(modoQuadra() && !s.equipe) ? h('div', { class: 'chips qd-chips' }, SIT_QD.map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: q.n, situacao: x }]) }, x))) : null,
+        podeMarcarQd(s) && !(s.fechada_em && !ehCoord()) && !modoQuadra() ? h('div', { class: 'chips qd-chips' }, SIT_QD.map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: q.n, situacao: x }]) }, x))) : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn.el, h('button', { class: 'btn sec peq', onclick: () => { const v = eqIn.valor(); if (v == null) return toast('Escolha a equipe.'); marcar([{ numero: q.n, equipe: v }]); } }, 'Definir equipe')) : null,
         ehCoord() ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'qd'; selecao = new Set([q.n]); pintarSelecao(); restilizar([q.n]); } }, 'Escolher várias quadras') : null);
       abrirFicha(pop, ll);
@@ -2049,6 +2133,7 @@
       const mais = [
         lado.length > 1 && (pode || ehCoord()) ? h('button', { class: 'btn sec peq', onclick: () => vaiSel(lado.map((x) => x.id)) }, `Escolher o lado todo da rua (${lado.length} faces, ${fmtM(mLado)})`) : null,
         pode ? h('button', { class: 'btn sec peq', onclick: () => vaiSel([id]) }, 'Escolher várias faces') : null,
+        (() => { const sq = qdSit.get(q.n) || {}; return sq.equipe && !sq.fechada_em && (ehCoord() || (perfil() === 'coletor' && sq.equipe === minhaEquipe())) ? h('button', { class: 'btn sec peq acao', onclick: () => { mapa.closePopup(); fecharQuadra(q, sq, async (itens) => { try { const r = await marcarQuadras(itens); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Quadra fechada.'); qdSit = await carregarSitQd(!r.fila); desenhar(false); } catch (e) { toast(e.message, 5000); } }); } }, `Fechar a quadra ${q.n}`) : null; })(),
         pode && st === 'Levantada' ? h('button', { class: 'btn sec peq acao', onclick: () => marcar([{ numero: id, situacao: 'Em levantamento' }]) }, 'Voltar para Em levantamento') : null,
         pode && st !== 'A levantar' ? h('button', { class: 'btn sec peq acao', onclick: () => marcar([{ numero: id, situacao: 'A levantar' }]) }, 'Voltar para A levantar') : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn.el, h('button', { class: 'btn sec peq', onclick: () => { const v = eqIn.valor(); if (v == null) return toast('Escolha a equipe.'); marcar([{ numero: id, equipe: v }]); } }, 'Definir equipe')) : null].filter(Boolean);
@@ -3435,7 +3520,7 @@
   async function decidirRegistros(estado, uuids, amostra) {
     let obs = '';
     const antes = {}; const cache = S.linhas && S.linhas[S.projeto.id]; if (cache) for (const l of cache.linhas) if (uuids.includes(l.uuid)) antes[l.uuid] = { st: l.validacao || 'Pendente', validacao_obs: l.validacao_obs || '', validado_por: l.validado_por || '', validado_em: l.validado_em || '' };
-    if (estado !== 'Validado') {
+    if (estado !== 'Validado' && estado !== 'Pendente') {
       const t = h('textarea', { class: 'entrada', placeholder: estado === 'Devolvido' ? 'Ex.: conferir a espécie e refazer a foto 1' : 'Ex.: registro duplicado' });
       const als = cache ? [...new Set(cache.linhas.filter((l) => uuids.includes(l.uuid)).flatMap((l) => l.__alertas || []))] : [];
       const sug = [...new Set(MOTIVO_ALERTA.filter(([r]) => als.some((a) => r.test(a))).map(([, m]) => m).concat(estado === 'Devolvido' ? ['Refazer as fotos (fora de foco ou sem a árvore inteira).'] : ['Registro duplicado.', 'Registro de teste.']))];

@@ -1,10 +1,10 @@
 {
- "versao": "2.10.0",
+ "versao": "2.11.0",
  "data": "2026-11-14",
  "notas": [
-  "\"Começar o turno\" e \"Encerrar o turno\" no lugar de dia",
-  "Minha produção nova: registros de hoje, da semana e do mês, meta e valor estimado",
-  "Parada por chuva com foto, direto do celular",
-  "Coordenação: times, usuários por perfil, prêmio por semana e painéis dos outros perfis"
+  "Marcar o ponto no mapa com o dedo, quando o GPS não ajuda",
+  "Foto da face ao encerrar e botão Fechar quadra",
+  "Altura pelo celular (opcional) e \"Não tenho certeza da espécie\"",
+  "Equipes de parceiros trabalham por quadra reservada"
  ]
 }

@@ -721,3 +721,16 @@ details.campo b.rot { display: block; margin: 12px 0 4px; }
 .mp-alvo::before { left: 50%; top: -10px; width: 2px; height: 54px; margin-left: -1px; }
 .mp-alvo::after { top: 50%; left: -10px; height: 2px; width: 54px; margin-top: -1px; }
 .mp-dist.ruim { color: #B3261E; font-weight: 600; }
+
+/* 2.11: altura pelo celular */
+.clin-visor { position: relative; height: 34vh; min-height: 180px; background: #10242B; border-radius: var(--raio); overflow: hidden; margin: 8px 0; }
+.clin-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.clin-mira { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; pointer-events: none; }
+.clin-mira::before, .clin-mira::after { content: ''; position: absolute; background: #FFD54F; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55); }
+.clin-mira::before { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
+.clin-mira::after { top: 50%; left: 0; height: 2px; width: 100%; margin-top: -1px; }
+.clin-ang { font-size: 34px; font-weight: 700; text-align: center; color: var(--teal); margin: 6px 0; }
+.clin-msg { min-height: 22px; text-align: center; margin: 4px 0; } .clin-msg.ruim { color: #B3261E; font-weight: 600; }
+.clin-res { text-align: center; margin: 10px 0; } .clin-res b { display: block; font-size: 40px; color: var(--teal); } .clin-res small { color: var(--suave); }
+.bt-medir { margin-top: 8px; min-height: 44px; }
+.face-foto img { width: 100%; border-radius: 10px; margin-top: 6px; }

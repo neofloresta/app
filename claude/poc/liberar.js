@@ -51,6 +51,8 @@ const suites = [
   ['2.7: produção, prêmio, bônus, auditoria por setor e fechamento da medição', 'node b27f.js'],
   ['2.8: tela de coleta limpa, começar e encerrar o dia, sino, Meu dia e dupla fixa', 'node b28.js'],
   ['2.10: projetos da coordenação, times, usuário por perfil, turno do parceiro, chuva, Minha produção, auxiliar e painéis dos outros perfis', 'node b210.js'],
+  ['servidor 2.11: modo quadra, reserva de 5 mais 3 dias, fechar quadra, foto da face, copa e legenda por time', 'node s211.js', /(\d+) falha\(s\) de (\d+)/],
+  ['2.11: ponto fora da reserva, destravar o ponto, dois raios, espécie a confirmar, altura pelo celular, foto da face, fechar quadra, lixeira e legenda', 'node b211.js'],
   ['estresse: 2 mil cadastros em 6 celulares (5 equipes), servidor lento, sem internet e quedas', 'node bstress.js 2000', null, { LATENCIA: '300', UI: '2' }],
   ['velocidade com servidor lento (1,5 s por consulta) e celular fraco', 'node perf.js', null, { LATENCIA: '1500', ROTULO: 'liberar' }],
 ];

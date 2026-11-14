@@ -14,6 +14,8 @@ const Api = (() => {
       ...(r.setor != null ? { setor: r.setor || '', fora_do_setor: r.foraSetor ? 'sim' : '' } : {}),
       historico: (r.historico || []).map((x) => `${String(x.em).slice(0, 16).replace('T', ' ')} ${x.por}: ${x.mud.join('; ')}`).join(' | '),
     };
+    // altura medida pelo celular: distância e ângulos vão junto só se a altura do registro ainda é a medida (se foi corrigida à mão, não)
+    if (r.alturaMed) { const ca = form.campos.find((c) => c.tipo === 'number' && /altura total/i.test(c.nome)); if (ca && Math.abs(+(r.valores || {})[ca.nome] - r.alturaMed.altura) < 0.05) Object.assign(l, { altura_dist_m: r.alturaMed.dist, altura_ang_base: r.alturaMed.base, altura_ang_topo: r.alturaMed.topo }); }
     for (const c of form.campos) {
       if (c.tipo === 'photo') { const f = (r.fotos || {})[c.nome]; l[c.nome] = f ? f.nome : ''; l[c.nome + ' link'] = f && f.url ? f.url : ''; }
       else { let v = (r.valores || {})[c.nome]; if (c.tipo === 'bool') v = v == null ? '' : v ? 1 : 0; l[c.nome] = v ?? ''; }
