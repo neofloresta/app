@@ -617,7 +617,7 @@
       it('Ajuda e perguntas frequentes', () => ir('#ajuda')),
       it('Sobre, termo de uso e privacidade', () => ir('#sobre')),
       it('Sair', () => sair()));
-    const grupos = pf === 'time' ? [grupo('Conta', it('Meu time', () => ir('#inicio')), it('Trocar senha', trocarSenhaTela), it('Sobre o app', () => ir('#sobre')), it('Sair', sair))] : pf === 'auxiliar' ? [grupo('Conta', it('Minha produção', () => ir('#inicio')), it('Trocar minha senha', trocarSenha), it('Sobre, termo de uso e privacidade', () => ir('#sobre')), it('Sair', () => sair()))] : pf === 'cliente' ? [
+    const grupos = pf === 'time' ? [grupo('Conta', it('Meu time', () => ir('#inicio')), it('Trocar minha senha', trocarSenha), it('Sobre, termo de uso e privacidade', () => ir('#sobre')), it('Sair', () => sair()))] : pf === 'auxiliar' ? [grupo('Conta', it('Minha produção', () => ir('#inicio')), it('Trocar minha senha', trocarSenha), it('Sobre, termo de uso e privacidade', () => ir('#sobre')), it('Sair', () => sair()))] : pf === 'cliente' ? [
       grupo('Projeto', it('Painel', () => ir('#painel')), it('Mapa das árvores', () => ir('#mapa')), it('Pedidos de serviço', () => ir('#ordens'))),
       grupo('Entregas', it('Relatório para imprimir ou PDF', () => ir('#relatorio')), it('Boletim de medição', () => ir('#medicao')), it('Baixar dados', () => exportarCliente())),
     ] : pf === 'coletor' ? [
@@ -868,7 +868,7 @@
   }
   function pintarFaixaComo() {
     let f = document.getElementById('faixa-como'); if (!f) { f = h('div', { id: 'faixa-como', class: 'faixa-como', role: 'status' }); document.body.prepend(f); }
-    const u = S.sessao.usuario; f.replaceChildren(h('span', null, `Vendo as telas de ${u.nome || u.login} (${ROT_PERFIL[u.perfil] || u.perfil}). Nada é gravado.`), h('button', { onclick: voltarDoComo }, 'Voltar à coordenação')); document.body.classList.add('vendo-como');
+    const u = S.sessao.usuario; f.replaceChildren(h('span', { title: `Vendo as telas de ${u.nome || u.login}. Nada é gravado.` }, h('b', null, 'Só consulta: '), `${u.nome || u.login} (${String(ROT_PERFIL[u.perfil] || u.perfil).replace(/\s*\(.*\)/, '')})`), h('button', { onclick: voltarDoComo }, 'Voltar à coordenação')); document.body.classList.add('vendo-como');
   }
   function tirarFaixaComo() { const f = document.getElementById('faixa-como'); if (f) f.remove(); document.body.classList.remove('vendo-como'); }
   function voltarDoComo() {
