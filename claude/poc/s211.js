@@ -30,7 +30,7 @@ const ctx = { TextDecoder, console }; vm.createContext(ctx); vm.runInContext(fs.
   const f0 = await L.post('quadras_marcar', { projeto: PJ, itens: [{ numero: q1.n, fechar: true }] }, 'div-2', 'equipe02');
   const itensF = q1.f.map((f, k) => Object.assign({ tipo: 'face', numero: q1.n + '-' + f.i, situacao: 'Levantada' }, k === 0 ? { foto: 'https://drive.google.com/file/d/fotoDaFace01/view' } : k === 1 ? { foto: 'javascript:alert(1)' } : {}));
   await L.post('quadras_marcar', { projeto: PJ, itens: itensF }, 'div-2', 'equipe02'); const outro = await L.post('quadras_marcar', { projeto: PJ, itens: [{ numero: q1.n, fechar: true }] }, 'div-1', 'equipe01');
-  const f1 = await L.post('quadras_marcar', { projeto: PJ, itens: [{ numero: q1.n, fechar: true }] }, 'div-2', 'equipe02'); sit = await L.post('quadras_situacao', { projeto: PJ, faces: true });
+  const f1 = await L.post('quadras_marcar', { projeto: PJ, itens: [{ numero: q1.n, fechar: true, em: new Date(Date.now() - 600e3).toISOString() }] }, 'div-2', 'equipe02'); sit = await L.post('quadras_situacao', { projeto: PJ, faces: true });
   const fa = sit.faces.find((x) => x.numero === fid(q1, 0)) || {}, fb = sit.faces.find((x) => x.numero === fid(q1, 1)) || {}; const reabre = await L.post('quadras_marcar', { projeto: PJ, itens: [{ numero: q1.n, situacao: 'Em levantamento' }] }, 'div-2', 'equipe02');
   const sc = await L.post('quadras_situacao', { projeto: PJ, faces: true }, 'pref', 'x').catch(() => null);
   P = await L.post('producao', { projeto: PJ, de, ate: hj });

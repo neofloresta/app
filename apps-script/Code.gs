@@ -1694,7 +1694,7 @@ function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums, facesIdx) {
         it = Object.assign({}, it, { situacao: 'Levantada' }); q.fechada_em = new Date().toISOString();
       } else if (it.situacao != null && it.situacao !== 'Levantada' && q.fechada_em) { if (!coord) { recusadas.push({ numero: n, motivo: 'Quadra fechada. Só a coordenação reabre.' }); return; } q.fechada_em = ''; if (q.equipe) q.reservada_em = new Date().toISOString(); }
       if (it.auto && (q.situacao || 'A levantar') !== 'A levantar') return; // automática ao salvar árvore: só vale para quadra ainda a levantar
-      if (it.situacao != null && it.em && q.marcada_em && new Date(it.em) < new Date(q.marcada_em)) { recusadas.push({ numero: n, motivo: 'A quadra foi marcada depois por ' + q.marcada_por + ' (' + q.situacao.toLowerCase() + ').' }); return; }
+      if (!it.fechar && it.situacao != null && it.em && q.marcada_em && new Date(it.em) < new Date(q.marcada_em)) { recusadas.push({ numero: n, motivo: 'A quadra foi marcada depois por ' + q.marcada_por + ' (' + q.situacao.toLowerCase() + ').' }); return; }
       const txt = [];
       if (it.situacao != null && it.situacao !== q.situacao) { q.situacao = it.situacao; q.marcada_por = usr.login; q.marcada_em = dataAparelho(it.em); txt.push(it.situacao.toLowerCase()); }
       if (it.fechar) txt.push('quadra fechada');

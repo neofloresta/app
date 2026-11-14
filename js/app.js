@@ -1090,7 +1090,7 @@
   const DICAS_GPS = ['Ligue a "Precisão da localização do Google" em Configurações, Localização, Serviços de localização.', 'Ao começar o dia, espere 1 minuto parado em um lugar aberto antes da primeira árvore.', ORIENTA_GPS, 'Segure o celular na mão, com a tela para cima, não no bolso.', 'Se o erro não baixar, desligue e ligue a localização do celular.'];
   function marcarPonto(r) {
     return new Promise((fim) => {
-      const META = 5; const t0 = Date.now(); const leituras = []; let pronto = false;
+      const META = 5; const t0 = Date.now(); const leituras = []; let pronto = false, noMapa = false;
       const num = h('div', { class: 'mp-num' }, '...'); const st = h('div', { class: 'mp-st' }, 'Procurando o sinal do GPS...');
       const det = h('small', { class: 'mp-det' });
       const hojeK = 'gpsDia:' + new Date().toDateString();
@@ -1098,7 +1098,7 @@
       Store.get(hojeK).then((v) => { if (!v) { dicas.open = true; Store.set(hojeK, 1); } }); // primeira marcação do dia: dicas abertas (teste do GPS do dia)
       const btAgora = h('button', { class: 'btn cheio', disabled: true, onclick: () => travar(true) }, 'Marcar agora');
       const btSem = h('button', { class: 'btn sec oculto', onclick: () => { pronto = true; sair(true); } }, 'Continuar sem GPS');
-      const btMapa = h('button', { class: 'btn sec', onclick: async () => { if (pronto) return; pronto = true; const ok = await escolherNoMapa(r); if (ok) { sair(true); } else if (!sair.feito) { pronto = false; } } }, 'Marcar no mapa (destravar)');
+      const btMapa = h('button', { class: 'btn sec', onclick: async () => { if (pronto) return; pronto = true; noMapa = true; const ok = await escolherNoMapa(r); noMapa = false; if (ok) { sair(true); } else if (!sair.feito) { pronto = false; } } }, 'Marcar no mapa (destravar)');
       const veu = h('div', { class: 'veu mp-veu' }, h('div', { class: 'folha mp' }, h('h3', null, 'Marcando o ponto'),
         h('div', { class: 'mp-orienta' }, ORIENTA_GPS), num, st, det, h('div', { class: 'mp-meta' }, `Espere o erro ficar em até ${META} m. O app marca sozinho quando estabilizar.`),
         h('div', { class: 'linha-btn col' }, btAgora, btSem, btMapa), dicas));
@@ -1129,7 +1129,7 @@
       }
       function sair(v) { if (sair.feito) return; sair.feito = true; clearInterval(tm); Gps.ouvintes.delete(ouv); window.removeEventListener('hashchange', aoSair); veu.remove(); fim(v !== false); }
       // Voltar do Android (ou qualquer troca de tela) cancela a marcação: nada fica lendo GPS nem abre o cadastro depois
-      const aoSair = () => { const marcado = pronto; pronto = true; sair(marcado); }; // marcado e saiu logo: o ponto vale; ainda marcando: cancela
+      const aoSair = () => { const marcado = pronto && !noMapa; pronto = true; sair(marcado); }; // com o mapa de marcar aberto e sem ponto escolhido, voltar cancela // marcado e saiu logo: o ponto vale; ainda marcando: cancela
       window.addEventListener('hashchange', aoSair);
       Gps.ouvintes.add(ouv); ligarGps();
       if (S.gpsNegado) { st.textContent = 'O GPS está bloqueado para o app.'; btSem.classList.remove('oculto'); }
@@ -1210,6 +1210,7 @@
         if (etapa !== 1 && etapa !== 2) return;
         const m = leitAt.length && Date.now() - leitAt[leitAt.length - 1][0] < 700 ? mediaLeit(leitAt) : null;
         if (!m) { if (Date.now() - t0 > 3000 && !leitAt.length) { semSensor = true; angTxt.textContent = 'sem leitura'; msg.textContent = 'Este celular não informou a inclinação. Feche e digite a altura à mão.'; msg.className = 'clin-msg ruim'; } return; }
+        if (semSensor) { semSensor = false; msg.textContent = ''; msg.className = 'clin-msg'; } // a leitura chegou atrasada: segue normalmente
         const a = m.m - zero; angTxt.textContent = numBR(Math.round(a * 10) / 10) + '°';
         if (!armado || Date.now() < armado + 1000) return; armado = 0;
         if (m.dp > 1.2) { msg.textContent = 'Mexeu demais. Segure firme e marque de novo.'; msg.className = 'clin-msg ruim'; return; }
@@ -1228,8 +1229,9 @@
   }
   function zerarSensor() {
     let ult = []; const ang = h('div', { class: 'clin-ang' }, '...'); const desligar = lerInclinacao((l) => { ult = l; const m = mediaLeit(l); if (m) ang.textContent = numBR(Math.round(m.m * 10) / 10) + '°'; });
+    const aoSairZ = () => { desligar(); window.removeEventListener('hashchange', aoSairZ); }; window.addEventListener('hashchange', aoSairZ);
     modal('Zerar o sensor', h('div', null, h('p', null, 'Encoste o celular em pé, de costas, em uma parede ou porta reta e toque em Zerar. Faça uma vez em cada celular.'), ang), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Zerar', valor: true }]).then(async (ok) => {
-      desligar(); if (!ok) return; const m = mediaLeit(ult); if (!m || m.dp > 1 || Math.abs(m.m) > 8) return toast(!m ? 'Este celular não informou a inclinação.' : 'Não deu para zerar: o celular precisa estar em pé e parado.', 5000);
+      aoSairZ(); if (!ok) return; const m = mediaLeit(ult); if (!m || m.dp > 1 || Math.abs(m.m) > 8) return toast(!m ? 'Este celular não informou a inclinação.' : 'Não deu para zerar: o celular precisa estar em pé e parado.', 5000);
       await Store.set('clin:zero', m.m); toast('Sensor zerado.'); telaPreferencias(); });
   }
 
@@ -2129,7 +2131,7 @@
       const mLado = lado.reduce((a, x) => a + x.c, 0);
       const marcar = async (itens) => { try { const r = await marcarQuadras(itens.map((i) => Object.assign({ tipo: 'face', rua: f.r }, i))); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Face atualizada.'); qdSit = await carregarSitQd(!r.fila); mapa.closePopup(); desenhar(false); } catch (e) { toast(e.message, 5000); } };
       const eqIn = escolhaEquipe(s.equipe || '');
-      const pode = podeMarcarFc(s, q) && perfil() !== 'cliente';
+      const pode = podeMarcarFc(s, q) && perfil() !== 'cliente' && !(modoQuadra() && ((qdSit.get(q.n) || {}).equipe !== minhaEquipe() || (qdSit.get(q.n) || {}).fechada_em)); // time parceiro: só face de quadra reservada para ele e ainda aberta
       const vaiSel = (ids) => { mapa.closePopup(); selTipo = 'fc'; selecao = new Set(ids); pintarSelecao(); restilizar([...selecao]); };
       const mais = [
         lado.length > 1 && (pode || ehCoord()) ? h('button', { class: 'btn sec peq', onclick: () => vaiSel(lado.map((x) => x.id)) }, `Escolher o lado todo da rua (${lado.length} faces, ${fmtM(mLado)})`) : null,
