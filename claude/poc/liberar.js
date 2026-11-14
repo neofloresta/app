@@ -26,6 +26,7 @@ const suites = [
   ['servidor: ordens de serviço', 'node sos.js', /(\d+) falha\(s\) de (\d+)/],
   ['servidor: chave de integração e restauração', 'node skr.js', /(\d+) falha\(s\) de (\d+)/],
   ['servidor: quadras', 'node sqd.js', /(\d+) falha\(s\) de (\d+)/],
+  ['servidor 2.10: times, auxiliar, prêmio por semana, chuva, vigência das regras, telas de outro perfil', 'node s210.js', /(\d+) falha\(s\) de (\d+)/],
   ['coleta e envio', 'node b12.js'],
   ['coordenação, cliente, exportação', 'node b47.js 3000'],
   ['mapa 5 mil', 'node b3.js 5000'],
@@ -49,6 +50,7 @@ const suites = [
   ['2.7: pessoas, dupla do dia, árvore repetida, setores censitários, parceiro sem jornada', 'node b27e.js'],
   ['2.7: produção, prêmio, bônus, auditoria por setor e fechamento da medição', 'node b27f.js'],
   ['2.8: tela de coleta limpa, começar e encerrar o dia, sino, Meu dia e dupla fixa', 'node b28.js'],
+  ['2.10: projetos da coordenação, times, usuário por perfil, turno do parceiro, chuva, Minha produção, auxiliar e painéis dos outros perfis', 'node b210.js'],
   ['estresse: 2 mil cadastros em 6 celulares (5 equipes), servidor lento, sem internet e quedas', 'node bstress.js 2000', null, { LATENCIA: '300', UI: '2' }],
   ['velocidade com servidor lento (1,5 s por consulta) e celular fraco', 'node perf.js', null, { LATENCIA: '1500', ROTULO: 'liberar' }],
 ];

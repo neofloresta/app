@@ -1241,7 +1241,7 @@ function abaDias(projetoId) { const ss = SpreadsheetApp.openById(projeto(projeto
 function lerDias(projetoId) { const sh = SpreadsheetApp.openById(projeto(projetoId).planilha_id).getSheetByName('Dias'); if (!sh || sh.getLastRow() < 2) return []; return lerOS(sh); }
 function registrarChuva(projetoId, d, usr) {
   const txt = (v, n) => seguro(String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' ').trim().slice(0, n)); let agora = new Date(); const q = d.quando ? new Date(d.quando) : null; if (q && !isNaN(q) && q <= new Date(agora.getTime() + 6e5) && q >= new Date(agora.getTime() - 7 * 864e5)) agora = q; // registrado sem internet: vale a hora do aparelho
-  const o = { id: 'C' + Utilities.getUuid().replace(/-/g, '').slice(0, 10), dia: dia(agora.toISOString()), equipe: usr.equipe || '', login: usr.login, hora: Utilities.formatDate(agora, FUSO, 'HH:mm'), foto: txt(d.foto, 300), obs: txt(d.obs, 300), situacao: '', registrado_em: agora.toISOString() };
+  const o = { id: 'C' + Utilities.getUuid().replace(/-/g, '').slice(0, 10), dia: dia(agora.toISOString()), equipe: usr.equipe || '', login: usr.login, hora: Utilities.formatDate(agora, FUSO, 'HH:mm'), foto: /^https:\/\/drive\.google\.com\/file\/d\/[\w-]+\/view$/.test(String(d.foto || '')) ? String(d.foto) : '', obs: txt(d.obs, 300), situacao: '', registrado_em: agora.toISOString() };
   gravarSetor(abaDias(projetoId), o); auditar(usr.login, 'chuva_registrar', projetoId, o.dia + ' ' + o.hora); return { id: o.id, dia: o.dia, hora: o.hora };
 }
 function marcarDia(projetoId, d, usr) {
