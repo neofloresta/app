@@ -72,8 +72,8 @@ let ANA, BRUNO;
   await L.post('usuario_salvar', { usuario_dados: { login: 'div-1', avaliador_id: idDavi, auxiliar_id: '' } });
   for (let k = 0; k < 50; k++) d6.push(await enviar('div-1', 'equipe01', 300 + k, '06', {}, 'Equipe 1'));
   await L.post('validar', { projeto: PJ, itens: d6.map((uuid) => ({ uuid, estado: 'Validado' })) });
-  const P6 = await L.post('producao', { projeto: PJ, de: '2026-11-06', ate: '2026-11-06' });
-  ok('F.10', P6.dias.length === 2 && P6.dias.every((x) => x.validadas === 50 && x.acima === 0) && P6.semanas.length === 2 && P6.semanas.every((x) => !x.bateu && x.avaliador.total === 0), `dia 06/11: ${P6.dias.map((x) => `${x.dupla} ${x.validadas} árvores, ${x.acima} acima da meta`).join('; ')}`);
+  const P6 = await L.post('producao', { projeto: PJ, de: '2026-11-06', ate: '2026-11-06' }); const P6s = await L.post('producao', { projeto: PJ, de: '2026-11-02', ate: '2026-11-08' });
+  ok('F.10', P6.dias.length === 2 && P6.dias.every((x) => x.validadas === 50 && x.acima === 0) && P6.semanas.length === 0 && P6s.semanas.length >= 2 && P6s.semanas.every((x) => !x.bateu && x.total === 0), `dia 06/11: ${P6.dias.map((x) => `${x.dupla} ${x.validadas} árvores, ${x.acima} acima da meta`).join('; ')}`);
   // 2.9: quem trouxe a dupla (empresa júnior) recebe por árvore validada, sem pagar duas vezes
   await L.post('usuario_salvar', { usuario_dados: { login: 'div-2', indicacao: 'Floresta Jr' } });
   const PI = await L.post('producao', { projeto: PJ, de: '2026-11-01', ate: '2026-11-15' }); const i0 = PI.indicacoes[0] || {};
