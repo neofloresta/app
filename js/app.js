@@ -2172,7 +2172,7 @@
         S.projeto ? h('div', { class: 'linha-btn', style: 'margin:8px 0 0' }, h('button', { class: 'btn sec peq', onclick: () => ir('#painel') }, 'Painel'), h('button', { class: 'btn sec peq', onclick: () => ir('#validacao') }, 'Validação'), h('button', { class: 'btn sec peq', onclick: () => ir('#mapa') }, 'Mapa')) : null), corpo].filter(Boolean));
     corpo.style.paddingTop = '0';
     // as listas das outras abas vêm em segundo plano: trocar de aba fica instantâneo
-    if (!Api.demo && navigator.onLine) { Api.b.usuariosListar().catch(() => {}); Api.b.projetosListar().catch(() => {}); Api.b.formulariosListar().catch(() => {}); }
+    if (!Api.demo && navigator.onLine) { Api.b.usuariosListar().catch(() => {}); Api.b.projetosListar().catch(() => {}); Api.b.formulariosListar().catch(() => {}); Api.b.timesListar().catch(() => {}); Api.b.pessoasListar().catch(() => {}); }
     try {
       if (sub === 'exportar') await adminExportar(corpo);
       else if (sub === 'projetos') await adminProjetos(corpo);
