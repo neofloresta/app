@@ -22,8 +22,8 @@ function gerarDemonstracao() {
   salvarProjeto({ id: DEMO_ID, nome: 'Demonstração (dados de teste)', formulario: modelo.formulario, epsg: modelo.epsg || '', contratante: 'Prefeitura de teste', contrato: 'Teste 000/2026', municipio: modelo.municipio || 'Divinópolis/MG', meta: '10000' });
   const P = (nome, funcao, registro, vinculo, equipe, empresa) => { const id = salvarPessoa({ nome: nome, funcao: funcao, registro: registro, vinculo: vinculo, empresa: empresa || '', projeto: DEMO_ID, equipe: equipe }); return { id: id, nome: nome, registro: registro, vinculo: vinculo }; };
   const equipes = [
-    { login: 'demo-eq1', equipe: 'Equipe 1', cod: 'D1', time: '', copa: 'area', dias: [0, 1, 3, 5, 7], porDia: [92, 122], av: P('Teste Ana Souza', 'Avaliador', 'CREA-MG 000001 (teste)', 'CLT', 'Equipe 1'), ax: P('Teste João Lima', 'Auxiliar', '', 'CLT', 'Equipe 1') },
-    { login: 'demo-eq2', equipe: 'Equipe 2', cod: 'D2', time: '', copa: 'area', dias: [0, 2, 4, 6, 8], porDia: [88, 116], av: P('Teste Bruno Alves', 'Avaliador', 'CRBio 000002 (teste)', 'CLT', 'Equipe 2'), ax: P('Teste Carla Dias', 'Auxiliar', '', 'CLT', 'Equipe 2') },
+    { login: 'demo-eq1', equipe: 'Equipe 1', cod: 'D1', time: '', copa: 'area', dias: [0, 1, 2, 3, 4, 5, 6, 7], porDia: [118, 142], av: P('Teste Ana Souza', 'Avaliador', 'CREA-MG 000001 (teste)', 'CLT', 'Equipe 1'), ax: P('Teste João Lima', 'Auxiliar', '', 'CLT', 'Equipe 1') },
+    { login: 'demo-eq2', equipe: 'Equipe 2', cod: 'D2', time: '', copa: 'area', dias: [0, 1, 2, 3, 4, 6, 8], porDia: [104, 128], av: P('Teste Bruno Alves', 'Avaliador', 'CRBio 000002 (teste)', 'CLT', 'Equipe 2'), ax: P('Teste Carla Dias', 'Auxiliar', '', 'CLT', 'Equipe 2') },
     { login: 'demo-gap1', equipe: 'Gap 1', cod: 'G1', time: 'Gap', copa: 'raios', dias: [1, 2, 3, 9, 10], porDia: [32, 56], av: P('Teste Davi Rocha', 'Avaliador', 'CRBio 000003 (teste)', 'Parceiro', 'Gap 1', 'Gap'), ax: P('Teste Elisa Nunes', 'Auxiliar', '', 'Parceiro', 'Gap 1', 'Gap') },
     { login: 'demo-gap2', equipe: 'Gap 2', cod: 'G2', time: 'Gap', copa: 'raios', dias: [4, 5, 6, 10, 11], porDia: [30, 52], av: P('Teste Fábio Reis', 'Avaliador', 'CRBio 000004 (teste)', 'Parceiro', 'Gap 2', 'Gap'), ax: P('Teste Gabi Melo', 'Auxiliar', '', 'Parceiro', 'Gap 2', 'Gap') },
     { login: 'demo-gap3', equipe: 'Gap 3', cod: 'G3', time: 'Gap', copa: 'raios', dias: [7, 8, 9, 10, 11], porDia: [24, 40], av: P('Teste Helena Prado', 'Avaliador', 'CRBio 000005 (teste)', 'Parceiro', 'Gap 3', 'Gap'), ax: null },
@@ -110,7 +110,7 @@ function gerarDemonstracao() {
         (form.regras || []).forEach((rg) => { const cfg = (rg.por || {})[String(o[rg.campo])]; if (!cfg) return; Object.keys(cfg).forEach((nome) => { if (cfg[nome] !== 'oculto') return; const f = temCampo[nome]; o[nome] = f && f.tipo === 'bool' ? 0 : ''; if (f && f.tipo === 'photo') o[nome + ' link'] = ''; }); });
         // validação: dias antigos conferidos, os mais recentes ainda na fila
         const x = rnd(); let val = 'Pendente', obs = '';
-        if (di <= 6 || (di <= 8 && x < 0.6)) { val = x > 0.995 ? 'Descartado' : x > 0.955 ? 'Devolvido' : 'Validado'; if (val === 'Devolvido') obs = OBS_DEV[Math.floor(rnd() * OBS_DEV.length)]; if (val === 'Descartado') obs = 'Registro duplicado'; }
+        if (di <= 6 || (di <= 8 && x < 0.6)) { val = x > 0.995 ? 'Descartado' : x > 0.955 && di > 6 ? 'Devolvido' : 'Validado'; if (val === 'Devolvido') obs = OBS_DEV[Math.floor(rnd() * OBS_DEV.length)]; if (val === 'Descartado') obs = 'Registro duplicado'; }
         o.validacao = val; o.validacao_obs = obs; o.validado_por = val === 'Pendente' ? '' : 'admin'; o.validado_em = val === 'Pendente' ? '' : new Date(new Date(quando).getTime() + 26 * 36e5).toISOString(); o.validacao_hist = ''; o.numero_unico = num; o.servidor_em = agora; o.pagamento = '';
         linhas.push(o);
       }
