@@ -11,20 +11,26 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.9';
+const VERSAO_SCRIPT = '2.10';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id', 'indicacao'];
-const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga', 'prod_valor', 'prod_avaliador_pct', 'premio_valor', 'premio_meta', 'bonus_valor', 'bonus_erro_max', 'auditoria_pct', 'auditoria_erro_max', 'parceiro_ve_valor', 'indicacao_valor'];
+const COLS_TIMES = ['id', 'nome', 'tipo', 'projeto', 'ativo', 'criado_em'];
+const TIPOS_TIME = ['Próprio', 'Parceiro'];
+const COLS_PROJETOS = ['id', 'nome', 'formulario', 'epsg', 'prefixo', 'pasta_id', 'planilha_id', 'contratante', 'contrato', 'municipio', 'meta', 'cliente_ve', 'responsavel', 'registro_profissional', 'art', 'tipos_os', 'face_gps', 'face_dist', 'face_folga', 'prod_valor', 'prod_avaliador_pct', 'premio_valor', 'premio_meta', 'bonus_valor', 'bonus_erro_max', 'auditoria_pct', 'auditoria_erro_max', 'parceiro_ve_valor', 'indicacao_valor', 'meta_dia', 'teto_dia', 'premio_meta_av', 'premio_meta_ax', 'sup_av', 'sup_ax', 'peso_face', 'regras_de', 'regras_hist'];
 const COLS_SESSOES = ['token', 'login', 'criada_em', 'expira_em', 'aparelho'];
 const COLS_AUDITORIA = ['em', 'login', 'acao', 'alvo', 'detalhe'];
 // pessoas das equipes (a dupla do dia é escolhida no celular): só o nome, a função e o vínculo, sem dados de pagamento
-const COLS_PESSOAS = ['id', 'nome', 'funcao', 'registro', 'vinculo', 'empresa', 'projeto', 'equipe', 'ativo', 'criado_em', 'atualizado_em'];
+const COLS_PESSOAS = ['id', 'nome', 'funcao', 'registro', 'vinculo', 'empresa', 'projeto', 'equipe', 'ativo', 'criado_em', 'atualizado_em', 'time'];
 const FUNCOES = ['Avaliador', 'Auxiliar'];
 const VINCULOS = ['CLT', 'Parceiro'];
 const COLS_CHAVES = ['id', 'nome', 'projeto', 'hash', 'criada_por', 'criada_em', 'ativa'];
 const ACOES_INTEGRACAO = ['listar', 'mapa', 'painel', 'os_listar', 'formulario', 'sessao', 'quadras_camada', 'quadras_situacao'];
-const PERFIS = ['admin', 'revisor', 'coletor', 'cliente', 'time'];
+const PERFIS = ['admin', 'revisor', 'coletor', 'cliente', 'time', 'auxiliar'];
 // perfil "time": parceiro que traz duplas (ex.: empresa júnior). Só acompanha a produção e o valor do próprio time
 const ACOES_TIME = ['sessao', 'sair', 'aceitar_termo', 'trocar_senha', 'formulario', 'producao_time'];
+// auxiliar: entra só para ver o painel de produtividade e remuneração dele
+const ACOES_AUX = ['sessao', 'sair', 'aceitar_termo', 'trocar_senha', 'formulario', 'producao_minha'];
+// coordenação vendo as telas de outro perfil: só consultas, nada é gravado
+const ACOES_COMO = ['sessao', 'formulario', 'estilo', 'mapa', 'painel', 'foto_ver', 'listar', 'situacao_meus', 'producao_minha', 'producao_time', 'pessoas_listar', 'conferir', 'setores_camada', 'setores_situacao', 'quadras_camada', 'quadras_situacao', 'os_listar', 'trajetos_listar'];
 // Colunas que só o servidor escreve (validação). Um envio do aparelho nunca as apaga.
 const COLS_SISTEMA = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'numero_unico', 'servidor_em', 'pagamento'];
 // Colunas internas que o perfil cliente não recebe
@@ -37,7 +43,7 @@ const BLOQUEIO_MIN = 15;
 const FUSO = 'America/Sao_Paulo';
 const ITERACOES = 1000;
 const SENHA_MIN = 8;
-const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar', 'setores_importar', 'setores_atribuir', 'auditoria_sortear', 'auditoria_conferir', 'medicao_fechar'];
+const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar', 'setores_importar', 'setores_atribuir', 'auditoria_sortear', 'auditoria_conferir', 'medicao_fechar', 'chuva_registrar'];
 // texto que começaria uma fórmula na planilha vira texto puro
 function seguro(v) { v = v == null ? '' : String(v); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
 function hashToken(t) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'sessao|' + t, Utilities.Charset.UTF_8)); }
@@ -88,7 +94,15 @@ function doPost(e) {
       prjs.slice(0, 5).forEach((p) => { if (p.formulario && !forms[p.formulario]) try { forms[p.formulario] = lerFormulario(p.formulario); } catch (er) { /* app busca depois */ } });
       return json({ ok: true, versaoScript: VERSAO_SCRIPT, token: token, expira_em: token ? new Date(Date.now() + SESSAO_DIAS * 864e5).toISOString() : '', usuario: publico(usr), projetos: prjs, formularios: forms });
     }
-    const usr = d.chave_api ? autenticarChave(d.chave_api, d.acao) : d.t ? autenticarSessao(d.t) : autenticarSenha(d.u, d.s, true);
+    let usr = d.chave_api ? autenticarChave(d.chave_api, d.acao) : d.t ? autenticarSessao(d.t) : autenticarSenha(d.u, d.s, true);
+    if (d.como) { // a coordenação olha as telas de outro usuário: o servidor responde como se fosse ele, só em consultas
+      if (usr.perfil !== 'admin' || d.chave_api) throw new Error('Seu perfil não tem acesso a esta função.');
+      if (ACOES_COMO.indexOf(d.acao) < 0) throw new Error('Modo de visualização: nada é gravado.');
+      const alvo = buscarUsuario(String(d.como)); if (!alvo) throw new Error('Usuário não encontrado.');
+      if (normalizarPerfil(alvo.perfil) === 'admin') throw new Error('Escolha um acesso de campo, auxiliar, cliente ou parceiro.');
+      if (d.acao === 'sessao') auditar(usr.login, 'ver_como', alvo.login, normalizarPerfil(alvo.perfil));
+      usr = comProjetos(alvo); if (!usr.termo_aceito_em) usr.termo_aceito_em = 'visualização';
+    }
     if (ACOES_ESCRITA.indexOf(d.acao) >= 0 && !usr.termo_aceito_em && usr.perfil !== 'admin') throw new Error('Aceite o termo de uso e privacidade no app antes de enviar dados (atualize o app e entre de novo).');
     const formLiberado = (id) => { if (usr.perfil !== 'admin' && !projetosDoUsuario(usr).some((p) => p.formulario === id)) throw new Error('Formulário não liberado para este usuário.'); };
     const perfil = usr.perfil;
@@ -96,6 +110,7 @@ function doPost(e) {
     const pode = (...ps) => { if (!admin && ps.indexOf(perfil) < 0) throw new Error('Seu perfil não tem acesso a esta função.'); };
     const exigeProjeto = (id) => { if (!admin && usr.projetos.indexOf(id) < 0) throw new Error('Projeto não liberado para este usuário.'); };
     if (perfil === 'time' && ACOES_TIME.indexOf(d.acao) < 0) throw new Error('Seu perfil não tem acesso a esta função.');
+    if (perfil === 'auxiliar' && ACOES_AUX.indexOf(d.acao) < 0) throw new Error('Seu perfil não tem acesso a esta função.');
     switch (d.acao) {
       case 'sessao': return json({ ok: true, versaoScript: VERSAO_SCRIPT, usuario: publico(usr), projetos: projetosDoUsuario(usr) });
       case 'sair': encerrarSessao(d.t); return json({ ok: true });
@@ -131,8 +146,13 @@ function doPost(e) {
       case 'auditoria_sortear': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, sortearAuditoria(d.projeto, d.setor, usr)));
       case 'auditoria_conferir': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, conferirAuditoria(d.projeto, d.setor, d.uuid, d.resultado, d.motivo, usr)));
       case 'producao': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producao(d.projeto, d.de, d.ate)));
-      case 'producao_minha': pode('coletor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producaoDaDupla(d.projeto, d.de, d.ate, usr)));
-      case 'producao_time': pode('time'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producaoDoTime(d.projeto, usr)));
+      case 'producao_minha': pode('coletor', 'auxiliar'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producaoPainel(d.projeto, usr)));
+      case 'times_listar': pode('revisor'); return json({ ok: true, times: listarTimes() });
+      case 'time_salvar': pode(); { const id = salvarTime(d.time || {}); auditar(usr.login, 'time_salvar', id, (d.time && d.time.tipo) || ''); return json({ ok: true, id: id }); }
+      case 'chuva_registrar': pode('coletor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, registrarChuva(d.projeto, d, usr)));
+      case 'dias_listar': pode('revisor'); exigeProjeto(d.projeto); return json({ ok: true, dias: lerDias(d.projeto).map(publicoOS) });
+      case 'dia_marcar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, marcarDia(d.projeto, d, usr)));
+      case 'producao_time': pode('time'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, producaoDoTime(d.projeto, admin && d.time ? { indicacao: String(d.time) } : usr)));
       case 'medicao_fechar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, fecharMedicao(d.projeto, d.de, d.ate, usr)));
       case 'projetos_listar': pode(); return json({ ok: true, projetos: tabela('Projetos').map(comLinks) });
       case 'projeto_salvar': pode(); salvarProjeto(d.projeto_dados); auditar(usr.login, 'projeto_salvar', d.projeto_dados && d.projeto_dados.id, ''); return json({ ok: true });
@@ -327,10 +347,15 @@ function salvarUsuario(dados) {
   if (!/^[a-z0-9._-]{2,40}$/i.test(dados.login)) throw new Error('Usuário só pode ter letras, números, ponto, hífen e sublinhado.');
   const o = { login: String(dados.login).trim().toLowerCase() };
   ['nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'modo_copa', 'trajeto', 'avaliador_id', 'auxiliar_id'].forEach((k) => { if (dados[k] != null) o[k] = String(dados[k]).trim(); });
+  // cada perfil guarda só o que vale para ele (cliente e parceiro não têm equipe de coleta, copa nem dupla)
+  const pfNovo = dados.perfil != null ? normalizarPerfil(dados.perfil) : null;
+  if (pfNovo && pfNovo !== 'coletor') { ['codigo', 'modo_copa', 'trajeto', 'avaliador_id'].forEach((k) => { o[k] = ''; }); if (pfNovo !== 'auxiliar') o.auxiliar_id = ''; if (pfNovo !== 'time' && pfNovo !== 'auxiliar') o.indicacao = ''; if (pfNovo === 'admin' || pfNovo === 'revisor' || pfNovo === 'cliente') o.equipe = o.equipe || ''; }
+  if (pfNovo === 'auxiliar') { const pe = dados.auxiliar_id ? tabela('Pessoas').find((x) => x.id === String(dados.auxiliar_id)) : null; if (!pe || pe.funcao !== 'Auxiliar') throw new Error('Escolha no cadastro de pessoas quem é este auxiliar.'); if (!o.nome) o.nome = pe.nome; }
   if (dados.indicacao != null) o.indicacao = seguro(String(dados.indicacao).replace(/[\t\r\n]+/g, ' ').trim().slice(0, 80)); // time da dupla (ex.: empresa júnior)
   // dupla fixa do acesso: avaliador responsável e auxiliar, escolhidos do cadastro de pessoas
   ['avaliador_id', 'auxiliar_id'].forEach((k) => { if (o[k]) { const pe = tabela('Pessoas').find((x) => x.id === o[k]); if (!pe) throw new Error('Pessoa não encontrada no cadastro.'); if (k === 'avaliador_id' && pe.funcao !== 'Avaliador') throw new Error('O responsável precisa ser um avaliador habilitado.'); } });
   if (o.avaliador_id && o.avaliador_id === o.auxiliar_id) throw new Error('Avaliador e auxiliar precisam ser pessoas diferentes.');
+  if (o.avaliador_id && (!pfNovo || pfNovo === 'coletor')) { const pa = tabela('Pessoas').find((x) => x.id === o.avaliador_id); if (pa && pa.time) o.indicacao = pa.time; } // o acesso herda o time do avaliador
   if (o.trajeto) o.trajeto = o.trajeto === 'sim' ? 'sim' : '';
   if (o.modo_copa && ['raios', 'area'].indexOf(o.modo_copa) < 0) o.modo_copa = 'raios';
   if (o.perfil) o.perfil = normalizarPerfil(o.perfil);
@@ -341,7 +366,15 @@ function salvarUsuario(dados) {
   salvarLinha('Usuarios', COLS_USUARIOS, 'login', o);
   if (dados.senha && existe) encerrarSessoesDe(o.login);
 }
-function publico(u) { return { login: u.login, nome: u.nome, perfil: normalizarPerfil(u.perfil), equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: u.modo_copa || 'raios', trajeto: u.trajeto === 'sim' ? 'sim' : '', dupla: duplaDoUsuario(u) }; }
+function publico(u) { const pf = normalizarPerfil(u.perfil); return { login: u.login, nome: u.nome, perfil: pf, equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: u.modo_copa || 'raios', trajeto: u.trajeto === 'sim' ? 'sim' : '', dupla: pf === 'coletor' ? duplaDoUsuario(u) : null, time: u.indicacao || '', escolheAuxiliar: pf === 'coletor' && !!u.avaliador_id && timeParceiroDo(u) }; }
+// time de parceiro (empresa júnior, por exemplo): a parte do time sai do valor do registro e o avaliador diz, no começo do turno, se está sozinho ou com auxiliar
+function timeParceiroDo(u) { const t = String(u.indicacao || '').trim(); return !!t && tiposDosTimes()(t) === 'parceiro'; }
+function auxiliarDoTurno(id, usr, projetoId) {
+  if (!id) return ''; const pe = tabela('Pessoas').find((x) => x.id === String(id));
+  if (!pe || pe.funcao !== 'Auxiliar' || pe.ativo === 'não' || !pessoaNoProjeto(pe, [projetoId])) return '';
+  if (pe.time && String(pe.time).trim().toLowerCase() !== String(usr.indicacao || '').trim().toLowerCase()) return ''; // auxiliar de outro time não entra
+  return pe.id;
+}
 function duplaDoUsuario(u) {
   if (!u.avaliador_id && !u.auxiliar_id) return null; const ps = tabela('Pessoas'); const de = (id) => { const p = id ? ps.find((x) => x.id === id) : null; return p ? { id: p.id, nome: p.nome, registro: p.registro || '', vinculo: p.vinculo } : null; };
   return { av: de(u.avaliador_id), ax: de(u.auxiliar_id) };
@@ -383,6 +416,14 @@ function salvarProjeto(p) {
     DriveApp.getFileById(ss.getId()).moveTo(pasta);
     ss.getSheets()[0].setName('Registros');
     p.pasta_id = pasta.getId(); p.planilha_id = ss.getId();
+  }
+  // regras de produção com vigência: mudar a regra a partir de uma data guarda a regra anterior, e o que já foi apurado não muda
+  delete p.regras_hist;
+  if (atual && p.regras_de != null) {
+    if (p.regras_de && !/^\d{4}-\d{2}-\d{2}$/.test(String(p.regras_de))) throw new Error('Data de início das regras inválida.');
+    const mudou = REGRAS_CAMPOS.some((k) => p[k] != null && String(p[k]).trim() !== String(atual[k] == null ? '' : atual[k]).trim());
+    if (mudou && p.regras_de && p.regras_de > String(atual.regras_de || '')) { let h = []; try { h = JSON.parse(atual.regras_hist || '[]'); } catch (e) { h = []; } const ant = { ate: somaDias(p.regras_de, -1) }; REGRAS_CAMPOS.forEach((k) => { ant[k] = atual[k] == null ? '' : String(atual[k]); }); h.push(ant); p.regras_hist = JSON.stringify(h).slice(0, 40000); }
+    else if (!p.regras_de || p.regras_de < String(atual.regras_de || '')) p.regras_de = atual.regras_de || '';
   }
   salvarLinha('Projetos', COLS_PROJETOS, 'id', p);
 }
@@ -534,7 +575,7 @@ function salvarRegistro(projetoId, linha, usr) {
   COLS_SISTEMA.forEach((c) => delete linha[c]); // o aparelho não escreve a validação
   Object.keys(linha).forEach((k) => { if (/ link$/.test(k) && linha[k] && !/^https:\/\/drive\.google\.com\//.test(String(linha[k]))) linha[k] = ''; });
   if (linha.atualizado_em && new Date(linha.atualizado_em) > new Date(Date.now() + 10 * 60000)) throw new Error('Data do aparelho adiantada. Acerte a data e a hora do celular e envie de novo.');
-  if (usr.perfil === 'coletor') { linha.usuario = usr.login; if (usr.avaliador_id || usr.auxiliar_id || 'avaliador_id' in linha) { linha.avaliador_id = usr.avaliador_id || ''; linha.auxiliar_id = usr.auxiliar_id || ''; } } // a dupla é a do acesso, definida pela coordenação
+  if (usr.perfil === 'coletor') { linha.usuario = usr.login; if (usr.avaliador_id || usr.auxiliar_id || 'avaliador_id' in linha) { let aux = usr.auxiliar_id || ''; if (usr.avaliador_id && 'auxiliar_id' in linha && timeParceiroDo(usr)) aux = auxiliarDoTurno(linha.auxiliar_id, usr, projetoId); linha.avaliador_id = usr.avaliador_id || ''; linha.auxiliar_id = aux; } } // a dupla é a do acesso, definida pela coordenação
   conferirDupla(linha, projetoId);
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
@@ -593,6 +634,7 @@ function numerarExistentes() {
 }
 // Validação pela coordenação ou revisor: Validado, Devolvido (com motivo), Descartado ou Pendente
 function validar(projetoId, itens, usr) {
+  itens = (itens || []).map((it) => { if (it && it.estado === 'Reprovado') { if (!String(it.obs || '').trim()) throw new Error('Informe o motivo da reprovação.'); return Object.assign({}, it, { estado: 'Descartado' }); } return it; }); // reprovado é o registro que não conta; fica guardado com o motivo
   const estados = ['Validado', 'Devolvido', 'Descartado', 'Pendente', 'Corrigido']; // Pendente e Corrigido: "Desfazer" logo depois de decidir
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
@@ -1056,15 +1098,28 @@ function abaFaces(projetoId) {
   return garantirCab(sh, COLS_FACES);
 }
 function lerSitFaces(projetoId) { return lerOS(abaFaces(projetoId)); }
+// ---------- Times (Neofloresta, parceiros) ----------
+function listarTimes() { garantirAba('Times', COLS_TIMES); return tabela('Times'); }
+function salvarTime(d) {
+  const txt = (v, n) => String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' ').trim().slice(0, n);
+  const o = { nome: seguro(txt(d.nome, 60)), tipo: txt(d.tipo, 20), projeto: seguro(txt(d.projeto, 200)), ativo: d.ativo === 'não' ? 'não' : 'sim' };
+  if (!o.nome) throw new Error('Informe o nome do time.'); if (TIPOS_TIME.indexOf(o.tipo) < 0) throw new Error('Escolha o tipo do time: Próprio ou Parceiro.');
+  const todos = listarTimes(); let id = String(d.id || '');
+  if (todos.some((t) => t.id !== id && String(t.nome).trim().toLowerCase() === o.nome.toLowerCase())) throw new Error('Já existe um time com esse nome.');
+  if (id) { if (!todos.some((t) => t.id === id)) throw new Error('Time não encontrado.'); } else { id = 'T' + Utilities.getUuid().replace(/-/g, '').slice(0, 10); o.criado_em = new Date().toISOString(); }
+  o.id = id; salvarLinha('Times', COLS_TIMES, 'id', o); return id;
+}
+// tipo do time pelo nome; time que não está no cadastro vale como parceiro (era assim antes do cadastro de times)
+function tiposDosTimes() { let t = []; try { t = listarTimes(); } catch (e) { t = []; } const m = {}; t.forEach((x) => { m[String(x.nome).trim().toLowerCase()] = x.tipo === 'Próprio' ? 'proprio' : 'parceiro'; }); return (nome) => m[String(nome || '').trim().toLowerCase()] || 'parceiro'; }
 // ---------- Pessoas das equipes ----------
 function listarPessoas(usr) {
   const t = tabela('Pessoas');
   if (usr.perfil === 'admin') return t;
   const meus = usr.projetos; const tudo = usr.projeto === '*'; const doProjeto = (p) => tudo || pessoaNoProjeto(p, meus);
-  if (usr.perfil !== 'coletor') return t.filter(doProjeto).map((p) => ({ id: p.id, nome: p.nome, funcao: p.funcao, registro: p.registro || '', vinculo: p.vinculo, equipe: p.equipe || '', ativo: p.ativo }));
+  if (usr.perfil !== 'coletor') return t.filter(doProjeto).map((p) => ({ id: p.id, nome: p.nome, funcao: p.funcao, registro: p.registro || '', vinculo: p.vinculo, equipe: p.equipe || '', time: p.time || '', ativo: p.ativo }));
   // equipe de campo: só quem está ativo nos projetos dela, sem dados internos
   return t.filter((p) => p.ativo !== 'não' && doProjeto(p))
-    .map((p) => ({ id: p.id, nome: p.nome, funcao: p.funcao, registro: p.registro || '', vinculo: p.vinculo, equipe: p.equipe || '' }));
+    .map((p) => ({ id: p.id, nome: p.nome, funcao: p.funcao, registro: p.registro || '', vinculo: p.vinculo, equipe: p.equipe || '', time: p.time || '' }));
 }
 function pessoaNoProjeto(p, projetos) { return p.projeto === '*' || !p.projeto || String(p.projeto).split(',').some((x) => projetos.indexOf(x.trim()) >= 0); }
 // a dupla que vem do celular é conferida com o cadastro: nome, registro e vínculo saem da aba Pessoas, nunca do aparelho
@@ -1081,7 +1136,7 @@ function conferirDupla(linha, projetoId) {
 }
 function salvarPessoa(d) {
   const txt = (v, n) => String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' ').trim().slice(0, n);
-  const o = { nome: txt(d.nome, 80), funcao: txt(d.funcao, 20), registro: txt(d.registro, 40), vinculo: txt(d.vinculo, 20), empresa: txt(d.empresa, 80), projeto: txt(d.projeto, 200), equipe: txt(d.equipe, 60), ativo: d.ativo === 'não' ? 'não' : 'sim', atualizado_em: new Date().toISOString() };
+  const o = { nome: txt(d.nome, 80), funcao: txt(d.funcao, 20), registro: txt(d.registro, 40), vinculo: txt(d.vinculo, 20), empresa: txt(d.empresa, 80), projeto: txt(d.projeto, 200), equipe: txt(d.equipe, 60), time: txt(d.time, 60), ativo: d.ativo === 'não' ? 'não' : 'sim', atualizado_em: new Date().toISOString() };
   if (!o.nome) throw new Error('Informe o nome.');
   if (FUNCOES.indexOf(o.funcao) < 0) throw new Error('Escolha a função: Avaliador ou Auxiliar.');
   if (VINCULOS.indexOf(o.vinculo) < 0) throw new Error('Escolha o vínculo: CLT ou Parceiro.');
@@ -1165,10 +1220,37 @@ function gravarSetor(sh, o) {
 // Árvore que conta: validada pela coordenação, com 2 m de altura ou mais, foto e coordenada.
 // Valor por árvore só para parceiros (dividido entre avaliador e auxiliar); CLT entra no prêmio por árvore acima da meta do dia
 // (pago por cartão prêmio, fora da folha); bônus de qualidade por árvore dos setores aprovados na auditoria com erro baixo.
-function regrasProducao(p) {
+const REGRAS_CAMPOS = ['prod_valor', 'prod_avaliador_pct', 'indicacao_valor', 'meta_dia', 'teto_dia', 'premio_meta_av', 'premio_meta_ax', 'sup_av', 'sup_ax', 'peso_face'];
+// regras do projeto no dia pedido: a regra anterior continua valendo para as semanas de antes da mudança
+function regrasProducao(p, diaRef) {
+  let b = p;
+  if (diaRef && p.regras_hist) { try { const ant = JSON.parse(p.regras_hist).filter((x) => x && x.ate).sort((x, y) => (x.ate < y.ate ? -1 : 1)).find((x) => diaRef <= x.ate); if (ant) b = Object.assign({}, p, ant); } catch (e) { b = p; } }
   const n = (v, d) => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(x) && x >= 0 ? x : d; };
-  return { valor: n(p.prod_valor, 2.5), pctAvaliador: Math.min(100, n(p.prod_avaliador_pct, 50)), premio: n(p.premio_valor, 1.5), meta: n(p.premio_meta, 90), bonus: n(p.bonus_valor, 0), bonusErroMax: n(p.bonus_erro_max, 2), indicacao: n(p.indicacao_valor, 0.5),
+  return { valor: n(b.prod_valor, 2.5), pctAvaliador: Math.min(100, n(b.prod_avaliador_pct, 50)), indicacao: n(b.indicacao_valor, 0.5), meta: n(b.meta_dia, 100), teto: Math.max(n(b.meta_dia, 100), n(b.teto_dia, 130)), premioMetaAv: n(b.premio_meta_av, 250), premioMetaAx: n(b.premio_meta_ax, 150), supAv: n(b.sup_av, 2.5), supAx: n(b.sup_ax, 1.5), pesoFace: n(b.peso_face, 1),
+    bonus: n(p.bonus_valor, 0), bonusErroMax: n(p.bonus_erro_max, 2), vigenteDesde: p.regras_de || '',
     auditoriaPct: Math.min(100, Math.max(1, n(p.auditoria_pct, 10))), auditoriaErroMax: n(p.auditoria_erro_max, 5), parceiroVeValor: !/^n[aã]o$/i.test(String(p.parceiro_ve_valor || 'sim').trim()) };
+}
+function somaDias(d, n) { return Utilities.formatDate(new Date(new Date(d + 'T12:00:00-03:00').getTime() + n * 864e5), FUSO, 'yyyy-MM-dd'); }
+function segundaDe(d) { const t = new Date(d + 'T12:00:00-03:00'); return somaDias(d, -((t.getUTCDay() + 6) % 7)); }
+// face de quadra sem árvore vale como registro: é o cadastro de calçada ligado à face, com foto, validado como os outros
+function facesVazias(projetoId) { const fv = {}; try { if (infoQuadras(projetoId)) lerSitFaces(projetoId).forEach((f) => { if (f.situacao === 'Levantada, sem árvores' && f.registro) fv[f.registro] = 1; }); } catch (e) { /* projeto sem faces */ } return fv; }
+// ---------- Dias de campo: parada por chuva e dia trabalhado, parcial ou perdido ----------
+const COLS_DIAS = ['id', 'dia', 'equipe', 'login', 'hora', 'foto', 'obs', 'situacao', 'marcado_por', 'marcado_em', 'registrado_em'];
+const SITUACOES_DIA = ['Trabalhado', 'Parcial', 'Perdido'];
+function abaDias(projetoId) { const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Dias'); if (!sh) { sh = ss.insertSheet('Dias'); sh.appendRow(COLS_DIAS); sh.setFrozenRows(1); } return garantirCab(sh, COLS_DIAS); }
+function lerDias(projetoId) { const sh = SpreadsheetApp.openById(projeto(projetoId).planilha_id).getSheetByName('Dias'); if (!sh || sh.getLastRow() < 2) return []; return lerOS(sh); }
+function registrarChuva(projetoId, d, usr) {
+  const txt = (v, n) => seguro(String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' ').trim().slice(0, n)); let agora = new Date(); const q = d.quando ? new Date(d.quando) : null; if (q && !isNaN(q) && q <= new Date(agora.getTime() + 6e5) && q >= new Date(agora.getTime() - 7 * 864e5)) agora = q; // registrado sem internet: vale a hora do aparelho
+  const o = { id: 'C' + Utilities.getUuid().replace(/-/g, '').slice(0, 10), dia: dia(agora.toISOString()), equipe: usr.equipe || '', login: usr.login, hora: Utilities.formatDate(agora, FUSO, 'HH:mm'), foto: txt(d.foto, 300), obs: txt(d.obs, 300), situacao: '', registrado_em: agora.toISOString() };
+  gravarSetor(abaDias(projetoId), o); auditar(usr.login, 'chuva_registrar', projetoId, o.dia + ' ' + o.hora); return { id: o.id, dia: o.dia, hora: o.hora };
+}
+function marcarDia(projetoId, d, usr) {
+  if (d.situacao && SITUACOES_DIA.indexOf(d.situacao) < 0) throw new Error('Situação do dia inválida.');
+  const sh = abaDias(projetoId); const todos = lerOS(sh); let o = d.id ? todos.find((x) => x.id === String(d.id)) : null;
+  if (d.id && !o) throw new Error('Registro do dia não encontrado.');
+  if (!o) { if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d.dia || '')) || !String(d.equipe || '').trim()) throw new Error('Informe o dia e a equipe.'); o = todos.filter((x) => x.dia === d.dia && x.equipe === String(d.equipe).trim()).pop() || { id: 'D' + Utilities.getUuid().replace(/-/g, '').slice(0, 10), dia: d.dia, equipe: seguro(String(d.equipe).trim().slice(0, 60)), login: '', hora: '', foto: '', obs: seguro(String(d.obs || '').slice(0, 300)), registrado_em: new Date().toISOString() }; }
+  o.situacao = d.situacao || ''; o.marcado_por = usr.login; o.marcado_em = new Date().toISOString();
+  gravarSetor(sh, o); auditar(usr.login, 'dia_marcar', projetoId, o.dia + ' ' + o.equipe + ': ' + (o.situacao || 'sem marcação')); return { id: o.id };
 }
 function camposProducao(form) {
   const alt = form.campos.find((c) => /altura total/i.test(c.nome)) || form.campos.find((c) => /altura/i.test(c.nome) && c.tipo !== 'photo');
@@ -1180,7 +1262,7 @@ function linhasProducao(projetoId) {
   const p = projeto(projetoId); const form = lerFormulario(p.formulario); const F = camposProducao(form);
   const campos = ['uuid', 'equipe', 'usuario', 'criado_em', 'validacao', 'validacao_obs', 'avaliador_id', 'avaliador', 'avaliador_vinculo', 'auxiliar_id', 'auxiliar', 'auxiliar_vinculo', 'setor', 'latitude', 'longitude', 'pagamento', F.alt, F.foto, F.foto ? F.foto + ' link' : null, F.cod, F.esp].filter(Boolean);
   const c = colunas(projetoId, campos, { perfil: 'admin' }); const ix = indiceSetores(projetoId);
-  return { p: p, F: F, linhas: c.linhas.map((l) => { const o = {}; campos.forEach((k, i) => { o[k] = l[i]; }); if (ix) o.setor = o.latitude !== '' && o.latitude != null ? ix(+o.longitude, +o.latitude) : ''; return o; }) }; // o setor sai da coordenada, não do aparelho
+  return { p: p, F: F, FV: facesVazias(projetoId), linhas: c.linhas.map((l) => { const o = {}; campos.forEach((k, i) => { o[k] = l[i]; }); if (ix) o.setor = o.latitude !== '' && o.latitude != null ? ix(+o.longitude, +o.latitude) : ''; return o; }) }; // o setor sai da coordenada, não do aparelho
 }
 // setor de um ponto pela camada do projeto (dentro do polígono); null quando o projeto não tem setores
 function indiceSetores(projetoId) {
@@ -1190,81 +1272,124 @@ function indiceSetores(projetoId) {
   const dentro = (lon, lat, q) => { if (lon < q.b[0] || lon > q.b[2] || lat < q.b[1] || lat > q.b[3]) return false; let d = false; q.a.forEach((a) => { for (let i = 0, j = a.length - 2; i < a.length; j = i, i += 2) { const xi = a[i], yi = a[i + 1], xj = a[j], yj = a[j + 1]; if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) d = !d; } }); return d; };
   return (lon, lat) => { if (!isFinite(lon) || !isFinite(lat)) return ''; const l = g[Math.floor(lon / passo) + ':' + Math.floor(lat / passo)] || []; for (const i of l) if (dentro(lon, lat, sts[i])) return sts[i].n; return ''; };
 }
-function contaParaProducao(l, F) {
-  if (l.pagamento) return { conta: true, motivo: '' }; // árvore paga numa medição continua contando como foi paga
-  if (l.validacao !== 'Validado') return { conta: false };
-  const alt = valorNum(F.alt ? l[F.alt] : '', false); const foto = F.foto ? !!l[F.foto + ' link'] : true; const coord = l.latitude !== '' && l.latitude != null; // a foto precisa ter chegado
+function contaParaProducao(l, F, FV) {
+  const face = !!(FV && FV[l.uuid]) && !(valorNum(F.alt ? l[F.alt] : '', false) > 0); // cadastro de árvore (com altura) ligado a uma face continua valendo como árvore
+  if (l.pagamento) return { conta: true, motivo: '', face: face }; // registro pago numa medição continua contando como foi pago
+  if (l.validacao !== 'Validado') return { conta: false, face: face };
+  const foto = F.foto ? !!l[F.foto + ' link'] : true; // a foto precisa ter chegado
+  if (face) return { conta: foto, motivo: foto ? '' : 'sem foto', face: true };
+  const alt = valorNum(F.alt ? l[F.alt] : '', false); const coord = l.latitude !== '' && l.latitude != null;
   const motivo = !(alt >= 2) ? 'altura abaixo de 2 m' : !foto ? 'sem foto' : !coord ? 'sem coordenada' : '';
-  return { conta: !motivo, motivo: motivo };
+  return { conta: !motivo, motivo: motivo, face: false };
 }
-function producao(projetoId, de, ate, soLogin) {
-  const X = linhasProducao(projetoId); const R = regrasProducao(X.p); const F = X.F;
+// Produção do período. Parceiro recebe por registro que conta (a parte do time sai desse valor).
+// Dupla com carteira recebe prêmio por semana: prêmio de meta quando a média dos dias trabalhados chega à meta, e superação pelo que a média passar da meta, até o teto.
+function producao(projetoId, de, ate, soLogin, X0, comMarcar) {
+  const X = X0 || linhasProducao(projetoId); const F = X.F; const FV = X.FV; const RG = {}; const regra = (d) => RG[d] || (RG[d] = regrasProducao(X.p, d));
+  const r2 = (x) => Math.round(x * 100) / 100; const hoje = dia(new Date().toISOString());
   const st = {}; lerSetores(projetoId).forEach((x) => { st[x.numero] = x; });
-  const pessoas = {}, equipes = {}, setores = {}, dias = {}; const devolvidas = [];
-  // o time da dupla (empresa júnior, por exemplo) recebe um valor por árvore que conta, além do que a dupla recebe
-  const trouxe = {}; tabela('Usuarios').forEach((u) => { if (u.indicacao) trouxe[String(u.login).toLowerCase()] = u.indicacao; }); const indic = {};
-  const pes = (id, nome, vinc) => (pessoas[id] = pessoas[id] || { id: id, nome: nome, vinculo: vinc, coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0, arvoresPagar: 0, valorPagar: 0, premioPagar: 0, bonusPagar: 0 });
+  const pessoas = {}, equipes = {}, setores = {}, dias = {}, sem = {}; const devolvidas = [];
+  const tipoTime = tiposDosTimes(); const trouxe = {}; tabela('Usuarios').forEach((u) => { const t = String(u.indicacao || '').trim(); if (t && tipoTime(t) === 'parceiro') trouxe[String(u.login).toLowerCase()] = t; }); const indic = {};
+  const pes = (id, nome, vinc) => (pessoas[id] = pessoas[id] || { id: id, nome: nome, vinculo: vinc, coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, premioPrevisto: 0, bonus: 0, arvoresPagar: 0, valorPagar: 0, premioPagar: 0, bonusPagar: 0 });
   const zero = () => ({ coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0 });
-  let arvoresPagar = 0;
+  let arvoresPagar = 0, semDuplaPagar = 0; const marcar = {};
   X.linhas.forEach((l) => {
     if (l.validacao === 'Descartado' || !l.criado_em) return; const d = dia(l.criado_em);
-    if (ate && d > ate) return; if (soLogin && String(l.usuario).toLowerCase() !== soLogin) return;
-    const noPeriodo = !de || d >= de; const k = contaParaProducao(l, F);
+    if (soLogin && String(l.usuario).toLowerCase() !== soLogin) return;
+    const R = regra(d); const k = contaParaProducao(l, F, FV); const w = k.face ? R.pesoFace : 1; const e = l.equipe || '-';
+    const membros = [l.avaliador_id ? { id: l.avaliador_id, nome: l.avaliador, v: l.avaliador_vinculo, pct: l.auxiliar_id ? R.pctAvaliador : 100, papel: 'av' } : null, l.auxiliar_id ? { id: l.auxiliar_id, nome: l.auxiliar, v: l.auxiliar_vinculo, pct: l.avaliador_id ? 100 - R.pctAvaliador : 100, papel: 'ax' } : null].filter(Boolean);
+    // semana da dupla com carteira: entra o registro de qualquer data, porque a média é da semana inteira
+    if (membros.some((m) => m.v === 'CLT')) {
+      const s0 = segundaDe(d); const ks = s0 + '|' + membros.map((m) => m.id).sort().join('+');
+      const S = sem[ks] = sem[ks] || { semana: s0, ate: somaDias(s0, 6), equipe: e, dupla: membros.map((m) => m.nome).join(' + '), av: null, ax: null, dias: {}, pendentes: 0 };
+      membros.forEach((m) => { if (m.v === 'CLT') S[m.papel] = { id: m.id, nome: m.nome }; });
+      const D = S.dias[d] = S.dias[d] || { n: 0, col: 0, t: [] }; D.col++; D.t.push(new Date(l.criado_em).getTime());
+      if (k.conta) D.n += w; else if (l.validacao !== 'Validado') S.pendentes++; // sem decisão do auditor (em validação ou devolvido)
+    }
+    if (ate && d > ate) return;
+    const noPeriodo = !de || d >= de;
     if (!noPeriodo && !(k.conta && !l.pagamento)) return; // antes do período só entra o que ficou sem pagar (validação tardia)
-    const sit = situacaoReg(l); const e = l.equipe || '-';
-    const membros = [l.avaliador_id ? { id: l.avaliador_id, nome: l.avaliador, v: l.avaliador_vinculo, pct: l.auxiliar_id ? R.pctAvaliador : 100 } : null, l.auxiliar_id ? { id: l.auxiliar_id, nome: l.auxiliar, v: l.auxiliar_vinculo, pct: l.avaliador_id ? 100 - R.pctAvaliador : 100 } : null].filter(Boolean);
+    const sit = situacaoReg(l);
     const E = equipes[e] = equipes[e] || Object.assign({ equipe: e }, zero());
     const sn = l.setor || ''; const S_ = setores[sn] = setores[sn] || Object.assign({ setor: sn, situacao: (st[sn] || {}).situacao || '', erro_pct: (st[sn] || {}).erro_pct || '' }, zero());
     const alvo = [E, S_].concat(membros.map((m) => pes(m.id, m.nome, m.v)));
     if (noPeriodo) alvo.forEach((a) => { a.coletadas++; if (sit === 'Em validação') a.emValidacao++; if (sit === 'Devolvida') a.devolvidas++; if (sit === 'Paga') a.pagas++; if (k.conta) a.validadas++; else if (l.validacao === 'Validado') a.naoContam++; });
     if (sit === 'Devolvida' && noPeriodo) devolvidas.push({ uuid: l.uuid, codigo: F.cod ? l[F.cod] : '', especie: F.esp ? l[F.esp] : '', motivo: l.validacao_obs || '', dia: d });
     if (!k.conta) return;
-    const aPagar = !l.pagamento; if (aPagar) arvoresPagar++; const sx = st[sn];
-    const quem = trouxe[String(l.usuario).toLowerCase()]; if (quem && R.indicacao > 0) { const I = indic[quem] = indic[quem] || { nome: quem, arvores: 0, valor: 0, arvoresPagar: 0, valorPagar: 0 }; if (noPeriodo) { I.arvores++; I.valor += R.indicacao; } if (aPagar) { I.arvoresPagar++; I.valorPagar += R.indicacao; } } const comBonus = R.bonus > 0 && sx && sx.situacao === 'Aprovado' && sx.erro_pct !== '' && +sx.erro_pct < R.bonusErroMax;
-    const valorDupla = quem && R.indicacao > 0 ? Math.max(0, R.valor - R.indicacao) : R.valor; // dupla de um time: a parte do time sai do valor da árvore (2,50 = 2,00 da dupla + 0,50 do time)
-    membros.forEach((m) => { const P = pes(m.id, m.nome, m.v); const v = m.v === 'Parceiro' ? valorDupla * m.pct / 100 : 0; const bn = comBonus ? R.bonus * m.pct / 100 : 0; if (noPeriodo) { P.valor += v; P.bonus += bn; E.valor += v; E.bonus += bn; S_.valor += v; S_.bonus += bn; } if (aPagar) { P.arvoresPagar++; P.valorPagar += v; P.bonusPagar += bn; } });
-    // meta do dia é por dupla (avaliador + auxiliar); registro antigo sem dupla conta pelo acesso da dupla
-    const kd = d + '|' + (membros.length ? membros.map((m) => m.id).sort().join('+') : 'acesso:' + String(l.usuario).toLowerCase()); const D = dias[kd] = dias[kd] || { dia: d, equipe: e, dupla: membros.length ? membros.map((m) => m.nome).join(' + ') : l.usuario, n: 0, nPagar: 0, clt: {}, noPeriodo: noPeriodo }; D.n++; if (aPagar) D.nPagar++;
-    membros.forEach((m) => { if (m.v === 'CLT') D.clt[m.id] = { nome: m.nome }; });
+    const sx = st[sn]; const quem = trouxe[String(l.usuario).toLowerCase()]; const vTime = quem && R.indicacao > 0 ? R.indicacao * w : 0;
+    // entra na medição o registro de parceiro ou de time parceiro (e o sem dupla, como antes); o de dupla só com carteira fica fora: o prêmio dela é por semana
+    const pagavel = !membros.length || vTime > 0 || membros.some((m) => m.v === 'Parceiro'); const aPagar = !l.pagamento && pagavel;
+    if (aPagar) { arvoresPagar++; marcar[l.uuid] = 1; if (!membros.length) semDuplaPagar++; }
+    if (vTime) { const I = indic[quem] = indic[quem] || { nome: quem, arvores: 0, valor: 0, arvoresPagar: 0, valorPagar: 0 }; if (noPeriodo) { I.arvores++; I.valor += vTime; } if (aPagar) { I.arvoresPagar++; I.valorPagar += vTime; } }
+    const comBonus = R.bonus > 0 && sx && sx.situacao === 'Aprovado' && sx.erro_pct !== '' && +sx.erro_pct < R.bonusErroMax;
+    const valorDupla = Math.max(0, R.valor * w - vTime); // registro de um time parceiro: a parte do time sai do valor (2,50 = 2,00 de quem coleta + 0,50 do time)
+    membros.forEach((m) => { const P = pes(m.id, m.nome, m.v); const v = m.v === 'Parceiro' ? valorDupla * m.pct / 100 : 0; const bn = comBonus && m.v === 'Parceiro' ? R.bonus * m.pct / 100 : 0; if (noPeriodo) { P.valor += v; P.bonus += bn; E.valor += v; E.bonus += bn; S_.valor += v; S_.bonus += bn; } if (aPagar) { P.arvoresPagar++; P.valorPagar += v; P.bonusPagar += bn; } });
+    if (noPeriodo) { const kd = d + '|' + (membros.length ? membros.map((m) => m.id).sort().join('+') : 'acesso:' + String(l.usuario).toLowerCase()); const D = dias[kd] = dias[kd] || { dia: d, equipe: e, dupla: membros.length ? membros.map((m) => m.nome).join(' + ') : l.usuario, n: 0, clt: membros.some((m) => m.v === 'CLT') }; D.n += w; }
   });
-  // dia anterior ao período só aparece se ganhou árvore validada depois (o prêmio já pago sai da conta)
-  const listaDias = Object.keys(dias).sort().filter((kd) => dias[kd].noPeriodo || dias[kd].nPagar).map((kd) => {
-    const D = dias[kd]; const acima = Math.max(0, D.n - R.meta); const total = acima * R.premio; const ids = Object.keys(D.clt);
-    const jaPago = Math.max(0, D.n - D.nPagar - R.meta) * R.premio; const pagar = Math.max(0, total - jaPago);
-    if (total && ids.length) ids.forEach((id) => { const P = pessoas[id]; if (P) { if (D.noPeriodo) P.premio += total / ids.length; P.premioPagar += pagar / ids.length; } }); if (equipes[D.equipe] && D.noPeriodo) equipes[D.equipe].premio += ids.length ? total : 0;
-    return { dia: D.dia, equipe: D.equipe, dupla: D.dupla, validadas: D.n, meta: R.meta, acima: acima, premio: ids.length ? total : 0, clt: ids.map((id) => D.clt[id].nome) };
-  });
-  const r2 = (x) => Math.round(x * 100) / 100;
-  const arred = (o) => { ['valor', 'premio', 'bonus', 'valorPagar', 'premioPagar', 'bonusPagar'].forEach((k) => { if (k in o) o[k] = r2(o[k]); }); o.total = r2(o.valor + o.premio + o.bonus); if ('valorPagar' in o) o.totalPagar = r2(o.valorPagar + o.premioPagar + o.bonusPagar); return o; };
+  // semanas das duplas com carteira
+  const sitDia = {}; lerDias(projetoId).forEach((x) => { if (x.situacao) sitDia[x.dia + '|' + x.equipe] = x.situacao; });
+  const hm = (ms) => Utilities.formatDate(new Date(ms), FUSO, 'HH:mm'); const jornada = [];
+  const semanas = Object.keys(sem).sort().map((ks) => {
+    const S = sem[ks]; const R = regra(S.semana); let soma = 0, nd = 0; const det = [];
+    Object.keys(S.dias).sort().forEach((d) => {
+      const D = S.dias[d]; const sd = sitDia[d + '|' + S.equipe] || 'Trabalhado'; det.push({ dia: d, registros: r2(D.n), situacao: sd }); if (sd === 'Trabalhado') { soma += D.n; nd++; } // dia parcial ou perdido não entra na média
+      if (!soLogin && (!de || d >= de) && (!ate || d <= ate)) { // horas de campo: só no relatório de gestão da coordenação
+        const t = D.t.sort((x, y) => x - y); let intervalo = 0; for (let i = 1; i < t.length; i++) { const g = t[i] - t[i - 1]; const h = hm(t[i - 1]); if (g > intervalo && g >= 30 * 6e4 && h >= '10:30' && h <= '14:30') intervalo = g; }
+        const horas = Math.max(0, (t[t.length - 1] - t[0] - intervalo) / 36e5); jornada.push({ dia: d, equipe: S.equipe, dupla: S.dupla, inicio: hm(t[0]), fim: hm(t[t.length - 1]), intervaloMin: Math.round(intervalo / 6e4), horas: r2(horas), coletados: D.col, porHora: horas >= 0.5 ? r2(D.col / horas) : 0, situacao: sd });
+      }
+    });
+    const media = nd ? soma / nd : 0; const bateu = nd > 0 && media >= R.meta; const acima = Math.max(0, Math.min(media, R.teto) - R.meta) * nd;
+    const aberta = S.pendentes > 0 || S.ate >= hoje; // semana em andamento, ou com registro esperando o auditor
+    const parte = (x, pm, sup) => (x ? { id: x.id, nome: x.nome, meta: bateu ? r2(pm / 4) : 0, superacao: r2(acima * sup), total: r2((bateu ? pm / 4 : 0) + acima * sup) } : null);
+    return { semana: S.semana, ate: S.ate, equipe: S.equipe, dupla: S.dupla, dias: det, diasTrabalhados: nd, registros: r2(soma), media: r2(media), meta: R.meta, teto: R.teto, bateu: bateu, pendentes: S.pendentes, situacao: aberta ? 'Aberta' : 'Apurada', avaliador: parte(S.av, R.premioMetaAv, R.supAv), auxiliar: parte(S.ax, R.premioMetaAx, R.supAx) };
+  }).filter((S) => (!de || S.ate >= de) && (!ate || S.semana <= ate));
+  semanas.forEach((S) => { [S.avaliador, S.auxiliar].forEach((x) => { if (!x || !x.total) return; const P = pessoas[x.id] || pes(x.id, x.nome, 'CLT'); if (S.situacao === 'Apurada') { P.premio += x.total; if (equipes[S.equipe]) equipes[S.equipe].premio += x.total; } else P.premioPrevisto += x.total; }); });
+  const listaDias = Object.keys(dias).sort().map((kd) => { const D = dias[kd]; const R = regra(D.dia); return { dia: D.dia, equipe: D.equipe, dupla: D.dupla, validadas: r2(D.n), meta: R.meta, acima: r2(Math.max(0, D.n - R.meta)), clt: D.clt, situacao: sitDia[D.dia + '|' + D.equipe] || '' }; });
+  const arred = (o) => { ['valor', 'premio', 'premioPrevisto', 'bonus', 'valorPagar', 'premioPagar', 'bonusPagar'].forEach((k) => { if (k in o) o[k] = r2(o[k]); }); o.total = r2(o.valor + o.premio + o.bonus); if ('valorPagar' in o) o.totalPagar = r2(o.valorPagar + o.bonusPagar); return o; };
   const ps = Object.keys(pessoas).map((k) => arred(pessoas[k])).sort((a, b) => a.nome.localeCompare(b.nome));
-  const tot = ps.reduce((a, x) => { ['valor', 'premio', 'bonus', 'valorPagar', 'premioPagar', 'bonusPagar'].forEach((k) => { a[k] += x[k]; }); return a; }, { valor: 0, premio: 0, bonus: 0, valorPagar: 0, premioPagar: 0, bonusPagar: 0 });
+  const tot = ps.reduce((a, x) => { ['valor', 'premio', 'premioPrevisto', 'bonus', 'valorPagar', 'premioPagar', 'bonusPagar'].forEach((k) => { a[k] += x[k]; }); return a; }, { valor: 0, premio: 0, premioPrevisto: 0, bonus: 0, valorPagar: 0, premioPagar: 0, bonusPagar: 0 });
   const inds = Object.keys(indic).sort().map((k) => { const I = indic[k]; I.valor = r2(I.valor); I.valorPagar = r2(I.valorPagar); return I; });
   tot.indicacao = inds.reduce((a, x) => a + x.valor, 0); tot.indicacaoPagar = inds.reduce((a, x) => a + x.valorPagar, 0);
-  return { regras: R, de: de || '', ate: ate || '', indicacoes: inds, pessoas: ps, equipes: Object.keys(equipes).map((k) => arred(equipes[k])), setores: Object.keys(setores).map((k) => arred(setores[k])), dias: listaDias, devolvidas: devolvidas.slice(-100),
+  const out = { regras: regra(ate || hoje), de: de || '', ate: ate || '', indicacoes: inds, pessoas: ps, equipes: Object.keys(equipes).map((k) => arred(equipes[k])), setores: Object.keys(setores).map((k) => arred(setores[k])), dias: listaDias, semanas: semanas, devolvidas: devolvidas.slice(-100),
     totais: (() => { const t = arred(tot); t.indicacao = r2(t.indicacao); t.indicacaoPagar = r2(t.indicacaoPagar); t.total = r2(t.total + t.indicacao); t.totalPagar = r2(t.totalPagar + t.indicacaoPagar); t.arvoresPagar = arvoresPagar; return t; })(), medicoes: lerMedicoes(projetoId) };
+  if (comMarcar) { out._marcar = marcar; out._semDupla = semDuplaPagar; }
+  if (!soLogin) out.jornada = jornada.sort((a, b) => (a.dia + a.equipe < b.dia + b.equipe ? -1 : 1));
+  return out;
 }
-// painel da dupla: só os registros deste acesso; parceiro vê o valor se o projeto deixar
-function producaoDaDupla(projetoId, de, ate, usr) {
-  const r = producao(projetoId, de, ate, usr.login.toLowerCase()); // meta e prêmio são por dupla: bastam os registros deste acesso
-  const out = { regras: { meta: r.regras.meta, premio: r.regras.premio, parceiroVeValor: r.regras.parceiroVeValor }, de: r.de, ate: r.ate, dias: r.dias.map((d) => ({ dia: d.dia, dupla: d.dupla, validadas: d.validadas, meta: d.meta, acima: d.acima, premio: d.premio })), devolvidas: r.devolvidas,
-    pessoas: r.pessoas.map((x) => { const o = { id: x.id, nome: x.nome, vinculo: x.vinculo, coletadas: x.coletadas, validadas: x.validadas, emValidacao: x.emValidacao, devolvidas: x.devolvidas, pagas: x.pagas, naoContam: x.naoContam };
-      if (x.vinculo === 'Parceiro' && r.regras.parceiroVeValor) { o.valor = x.valor; o.bonus = x.bonus; } if (x.vinculo === 'CLT') { o.premio = x.premio; o.bonus = x.bonus; } return o; }) };
-  const t = r.equipes.reduce((a, e) => { ['coletadas', 'validadas', 'emValidacao', 'devolvidas', 'pagas'].forEach((k) => { a[k] += e[k]; }); return a; }, { coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0 });
-  out.totais = t; return out;
+// painel de quem coleta e do auxiliar: registros de hoje, da semana e do mês, distância da meta e valor estimado. Sem horas trabalhadas nem rendimento por hora.
+function producaoPainel(projetoId, usr) {
+  const hoje = dia(new Date().toISOString()); const seg = segundaDe(hoje); const mes0 = hoje.slice(0, 8) + '01'; const de = mes0 < seg ? mes0 : seg;
+  const X = linhasProducao(projetoId); const aux = usr.perfil === 'auxiliar'; const eu = aux ? String(usr.auxiliar_id || '') : ''; const lg = usr.login.toLowerCase();
+  if (aux && !eu) throw new Error('Este acesso não está ligado a uma pessoa do cadastro. Peça à coordenação.');
+  const meu = (l) => (aux ? l.auxiliar_id === eu || l.avaliador_id === eu : String(l.usuario).toLowerCase() === lg);
+  const Xm = { p: X.p, F: X.F, FV: X.FV, linhas: X.linhas.filter(meu) }; const r = producao(projetoId, de, hoje, null, Xm);
+  const z = () => ({ coletados: 0, validados: 0, pendentes: 0, devolvidos: 0, reprovados: 0 }); const c = { hoje: z(), semana: z(), mes: z() };
+  Xm.linhas.forEach((l) => { if (!l.criado_em) return; const d = dia(l.criado_em); if (d < de || d > hoje) return; const k = contaParaProducao(l, X.F, X.FV);
+    [['hoje', d === hoje], ['semana', d >= seg], ['mes', d >= mes0]].forEach((b) => { if (!b[1]) return; const a = c[b[0]]; a.coletados++; if (l.validacao === 'Descartado') a.reprovados++; else if (k.conta || l.validacao === 'Validado') a.validados++; else if (l.validacao === 'Devolvido') a.devolvidos++; else a.pendentes++; }); });
+  const R = r.regras; const minhas = r.pessoas.filter((x) => !aux || x.id === eu); const clt = minhas.some((x) => x.vinculo === 'CLT');
+  const sAtual = r.semanas.filter((S) => S.semana === seg && (!aux || (S.auxiliar && S.auxiliar.id === eu) || (S.avaliador && S.avaliador.id === eu)))[0] || null;
+  const parte = (S) => { const ps = [S.avaliador, S.auxiliar].filter((x) => x && (!aux || x.id === eu)); return ps.map((x) => ({ nome: x.nome, meta: x.meta, superacao: x.superacao, total: x.total })); };
+  const out = { hoje: c.hoje, semana: c.semana, mes: c.mes, de: de, ate: hoje, comCarteira: clt, devolvidas: r.devolvidas,
+    semanas: clt ? r.semanas.filter((S) => !aux || (S.auxiliar && S.auxiliar.id === eu) || (S.avaliador && S.avaliador.id === eu)).map((S) => ({ semana: S.semana, ate: S.ate, dupla: S.dupla, diasTrabalhados: S.diasTrabalhados, registros: S.registros, media: S.media, meta: S.meta, teto: S.teto, bateu: S.bateu, pendentes: S.pendentes, situacao: S.situacao, premios: parte(S) })) : [],
+    meta: clt ? { porDia: R.meta, teto: R.teto, mediaSemana: sAtual ? sAtual.media : 0, falta: sAtual ? Math.max(0, Math.round((R.meta - sAtual.media) * 100) / 100) : R.meta, diasTrabalhados: sAtual ? sAtual.diasTrabalhados : 0 } : null,
+    pessoas: minhas.map((x) => { const o = { nome: x.nome, vinculo: x.vinculo, validados: x.validadas, pagos: x.pagas };
+      if (x.vinculo === 'CLT') { o.premioApurado = x.premio; o.premioPrevisto = x.premioPrevisto; o.estimado = Math.round((x.premio + x.premioPrevisto) * 100) / 100; }
+      if (x.vinculo === 'Parceiro' && R.parceiroVeValor) { o.aReceber = x.valorPagar; o.estimado = x.valorPagar; } return o; }) };
+  return out;
 }
 // painel do time: árvores e valor do time por dupla, e o histórico do que já foi pago nas medições fechadas
 function producaoDoTime(projetoId, usr) {
   const time = String(usr.indicacao || '').trim(); if (!time) throw new Error('Este acesso não tem time definido. Peça à coordenação.');
   const igual = (x) => String(x || '').trim().toLowerCase() === time.toLowerCase();
-  const X = linhasProducao(projetoId); const R = regrasProducao(X.p); const doTime = {};
+  const X = linhasProducao(projetoId); const R = regrasProducao(X.p); const RG = {}; const regra = (d) => RG[d] || (RG[d] = regrasProducao(X.p, d)); const doTime = {};
   tabela('Usuarios').forEach((u) => { if (u.perfil === 'coletor' && igual(u.indicacao)) doTime[String(u.login).toLowerCase()] = u; });
   const duplas = {}; const r2 = (x) => Math.round(x * 100) / 100;
   Object.keys(doTime).forEach((lg) => { const u = doTime[lg]; duplas[lg] = { equipe: u.equipe || u.nome || lg, coletadas: 0, emValidacao: 0, devolvidas: 0, validadas: 0, pagas: 0, aPagar: 0, valor: 0, valorPagar: 0 }; });
   X.linhas.forEach((l) => {
     const D = duplas[String(l.usuario).toLowerCase()]; if (!D || l.validacao === 'Descartado' || !l.criado_em) return;
-    const sit = situacaoReg(l); const k = contaParaProducao(l, X.F); D.coletadas++;
+    const sit = situacaoReg(l); const k = contaParaProducao(l, X.F, X.FV); const Rd = regra(dia(l.criado_em)); const vt = Rd.indicacao * (k.face ? Rd.pesoFace : 1); D.coletadas++;
     if (sit === 'Em validação') D.emValidacao++; if (sit === 'Devolvida') D.devolvidas++;
-    if (k.conta) { D.validadas++; D.valor += R.indicacao; if (l.pagamento) D.pagas++; else { D.aPagar++; D.valorPagar += R.indicacao; } }
+    if (k.conta) { D.validadas++; D.valor += vt; if (l.pagamento) D.pagas++; else { D.aPagar++; D.valorPagar += vt; } }
   });
   const lista = Object.keys(duplas).map((k) => { const D = duplas[k]; D.valor = r2(D.valor); D.valorPagar = r2(D.valorPagar); return D; }).sort((a, b) => String(a.equipe).localeCompare(String(b.equipe)));
   const tot = lista.reduce((a, D) => { Object.keys(a).forEach((c) => { a[c] += D[c]; }); return a; }, { coletadas: 0, emValidacao: 0, devolvidas: 0, validadas: 0, pagas: 0, aPagar: 0, valor: 0, valorPagar: 0 }); tot.valor = r2(tot.valor); tot.valorPagar = r2(tot.valorPagar);
@@ -1286,14 +1411,13 @@ function fecharMedicao(projetoId, de, ate, usr) {
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
     // paga tudo o que conta e ainda não foi pago até o fim do período (inclui validação tardia de dias anteriores)
-    const r = producao(projetoId, de, ate); const X = linhasProducao(projetoId); const marcar = {};
-    X.linhas.forEach((l) => { const d = l.criado_em ? dia(l.criado_em) : ''; if (d && d <= ate && l.validacao !== 'Descartado' && !l.pagamento && contaParaProducao(l, X.F).conta) marcar[l.uuid] = 1; });
+    const r = producao(projetoId, de, ate, null, null, true); const marcar = r._marcar;
     const n = Object.keys(marcar).length; if (!n) throw new Error('Nenhuma árvore validada a pagar até o fim deste período.');
     const sh = planilha(projetoId); const cab = cabecalho(sh, COLS_SISTEMA); const tot = sh.getLastRow() - 1;
     const uu = sh.getRange(2, cab.indexOf('uuid') + 1, tot, 1).getValues(); const rg = sh.getRange(2, cab.indexOf('pagamento') + 1, tot, 1); const pg = rg.getValues();
     const txt = 'Medição ' + de + ' a ' + ate; uu.forEach((u, i) => { if (marcar[String(u[0])]) pg[i] = [txt]; });
     rg.setNumberFormat('@').setValues(pg);
-    const semDupla = n - r.totais.arvoresPagar; // conferência: árvores sem dupla informada também ficam pagas (sem valor a ninguém)
+    const semDupla = r._semDupla; // conferência: árvores sem dupla informada também ficam pagas (sem valor a ninguém)
     const resumo = r.pessoas.filter((x) => x.arvoresPagar || x.totalPagar).map((x) => ({ nome: x.nome, vinculo: x.vinculo, arvores: x.arvoresPagar, valor: x.valorPagar, premio: x.premioPagar, bonus: x.bonusPagar, total: x.totalPagar }));
     const T = r.totais; const m = { id: id, de: de, ate: ate, fechada_em: new Date().toISOString(), fechada_por: usr.nome || usr.login, arvores: n, valor: T.valorPagar, premio: T.premioPagar, bonus: T.bonusPagar, indicacao: T.indicacaoPagar, total: T.totalPagar, resumo: JSON.stringify({ pessoas: resumo, indicacoes: r.indicacoes.filter((x) => x.arvoresPagar).map((x) => ({ nome: x.nome, arvores: x.arvoresPagar, valor: x.valorPagar })), sem_dupla: Math.max(0, semDupla) }).slice(0, 45000) }; // só o que ainda não foi pago
     gravarSetor(abaMedicoes(projetoId), m);
