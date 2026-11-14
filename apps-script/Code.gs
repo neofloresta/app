@@ -130,7 +130,7 @@ function doPost(e) {
       case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
       case 'quadras_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarQuadras(d.projeto, d.camada, usr)));
       case 'quadras_camada': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaQuadras(d.projeto, d.versao)));
-      case 'quadras_situacao': { exigeProjeto(d.projeto); const cli = usr.perfil === 'cliente'; const pub = (o) => { const x = publicoOS(o); if (cli) { delete x.equipe; delete x.marcada_por; delete x.historico; delete x.atribuida; delete x.foto; } return x; }; return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(pub), faces: d.faces ? lerSitFaces(d.projeto).map(pub) : undefined }); }
+      case 'quadras_situacao': { exigeProjeto(d.projeto); try { vencerReservas(d.projeto); } catch (er) { /* tenta na próxima consulta */ } const cli = usr.perfil === 'cliente'; const pub = (o) => { const x = publicoOS(o); if (cli) { delete x.equipe; delete x.marcada_por; delete x.historico; delete x.atribuida; delete x.foto; delete x.reservada_em; delete x.fechada_em; } return x; }; return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(pub), faces: d.faces ? lerSitFaces(d.projeto).map(pub) : undefined }); }
       case 'trajeto_salvar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarTrajeto(d.projeto, d.trecho || {}, usr)));
       case 'trajetos': pode('revisor'); exigeProjeto(d.projeto); return json({ ok: true, trechos: lerTrajetos(d.projeto, d.dia) });
       case 'quadras_marcar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, marcarQuadras(d.projeto, d.itens, usr)));
@@ -366,7 +366,7 @@ function salvarUsuario(dados) {
   salvarLinha('Usuarios', COLS_USUARIOS, 'login', o);
   if (dados.senha && existe) encerrarSessoesDe(o.login);
 }
-function publico(u) { const pf = normalizarPerfil(u.perfil); return { login: u.login, nome: u.nome, perfil: pf, equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: pf === 'coletor' && String(u.indicacao || '').trim() ? (timeParceiroDo(u) ? 'raios2' : 'area') : u.modo_copa || 'raios', trajeto: u.trajeto === 'sim' ? 'sim' : '', dupla: pf === 'coletor' ? duplaDoUsuario(u) : null, time: u.indicacao || '', escolheAuxiliar: pf === 'coletor' && !!u.avaliador_id && !u.auxiliar_id && timeParceiroDo(u) }; }
+function publico(u) { const pf = normalizarPerfil(u.perfil); return { login: u.login, nome: u.nome, perfil: pf, equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: pf === 'coletor' && String(u.indicacao || '').trim() ? (timeParceiroDo(u) ? 'raios2' : 'area') : u.modo_copa || 'raios', trajeto: u.trajeto === 'sim' ? 'sim' : '', dupla: pf === 'coletor' ? duplaDoUsuario(u) : null, time: u.indicacao || '', escolheAuxiliar: pf === 'coletor' && !!u.avaliador_id && !u.auxiliar_id && timeParceiroDo(u), modoQuadra: pf === 'coletor' && timeParceiroDo(u) }; }
 // coordenação e auditor: de que time é cada equipe (cores e nomes da legenda do mapa)
 function equipesInfo(usr) {
   if (usr.perfil !== 'admin' && usr.perfil !== 'revisor') return [];
@@ -1029,7 +1029,7 @@ function andamentoOS(projetoId, id, etapa, d, usr) {
 
 // ---------- Quadras ----------
 // A camada (polígonos e números) fica num arquivo no Drive do projeto; a situação de cada quadra fica na aba "Quadras".
-const COLS_QUADRAS = ['numero', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'obs', 'historico', 'atualizado_em', 'atribuida'];
+const COLS_QUADRAS = ['numero', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'obs', 'historico', 'atualizado_em', 'atribuida', 'reservada_em', 'fechada_em'];
 // atribuida: 'sim' quando a coordenação definiu a equipe; 'nao' quando a equipe pegou sozinha (aí não prende as faces de outras equipes)
 function garantirCab(sh, cols) { const cab = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String); const faltam = cols.filter((c) => cab.indexOf(c) < 0); if (faltam.length) sh.getRange(1, cab.filter(String).length + 1, 1, faltam.length).setValues([faltam]); return sh; }
 const SITUACOES_QUADRA = ['A levantar', 'Em levantamento', 'Levantada'];
@@ -1097,6 +1097,29 @@ function abaQuadras(projetoId) {
   return garantirCab(sh, COLS_QUADRAS);
 }
 function lerSitQuadras(projetoId) { return lerOS(abaQuadras(projetoId)); }
+// reserva de quadra de time parceiro: 5 dias para começar (uma face encerrada); começou, ganha mais 3 dias para fechar. Vencida, a quadra volta a ficar livre; as árvores já enviadas ficam.
+const RESERVA_DIAS = 5, RESERVA_EXTRA = 3;
+function vencerReservas(projetoId) {
+  const cache = CacheService.getScriptCache(); const ck = 'reservas:' + projetoId; if (cache.get(ck)) return 0; cache.put(ck, '1', 1200);
+  if (!infoQuadras(projetoId)) return 0;
+  const parc = {}; tabela('Usuarios').forEach((u) => { if (normalizarPerfil(u.perfil) === 'coletor' && u.equipe && timeParceiroDo(u)) parc[u.equipe] = 1; });
+  if (!Object.keys(parc).length) return 0;
+  const agora = Date.now(); const cand = lerSitQuadras(projetoId).filter((q) => q.equipe && parc[q.equipe] && q.reservada_em && !q.fechada_em && agora - new Date(q.reservada_em).getTime() > RESERVA_DIAS * 864e5);
+  if (!cand.length) return 0;
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const shF = abaFaces(projetoId); const faces = lerOS(shF); const shQ = abaQuadras(projetoId); let n = 0;
+    cand.forEach((q) => {
+      const fq = faces.filter((f) => f.quadra === q.numero); const iniciada = fq.some((f) => FACE_FEITA.indexOf(f.situacao) >= 0); const dias = (agora - new Date(q.reservada_em).getTime()) / 864e5;
+      if (iniciada && dias <= RESERVA_DIAS + RESERVA_EXTRA) return;
+      const era = q.equipe; q.historico = [q.historico, new Date().toISOString().slice(0, 16).replace('T', ' ') + ' sistema: reserva da ' + era + ' vencida (' + (iniciada ? 'não fechada em ' + (RESERVA_DIAS + RESERVA_EXTRA) : 'não começada em ' + RESERVA_DIAS) + ' dias)'].filter(Boolean).join(' | ').slice(-5000);
+      q.equipe = ''; q.atribuida = ''; q.reservada_em = ''; q.situacao = iniciada ? 'Em levantamento' : 'A levantar'; q.atualizado_em = new Date().toISOString(); gravarSetor(shQ, q);
+      fq.forEach((f) => { if (FACE_FEITA.indexOf(f.situacao) >= 0 || (!f.equipe && f.situacao === 'A levantar')) return; f.equipe = ''; f.atribuida = ''; f.situacao = 'A levantar'; f.atualizado_em = q.atualizado_em; gravarSetor(shF, f); });
+      auditar('sistema', 'reserva_vencida', projetoId, 'quadra ' + q.numero + ' (' + era + ')'); n++;
+    });
+    return n;
+  } finally { lock.releaseLock(); }
+}
 const COLS_FACES = ['numero', 'quadra', 'rua', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'largura', 'registro', 'obs', 'historico', 'atualizado_em', 'atribuida', 'foto'];
 const SITUACOES_FACE = ['A levantar', 'Em levantamento', 'Levantada', 'Levantada, sem árvores'];
 const FACE_FEITA = ['Levantada', 'Levantada, sem árvores'];
@@ -1279,9 +1302,10 @@ function camposProducao(form) {
 const situacaoReg = (l) => (l.validacao === 'Descartado' ? 'Descartada' : l.pagamento ? 'Paga' : l.validacao === 'Validado' ? 'Validada' : l.validacao === 'Devolvido' ? 'Devolvida' : 'Em validação');
 function linhasProducao(projetoId) {
   const p = projeto(projetoId); const form = lerFormulario(p.formulario); const F = camposProducao(form);
-  const campos = ['uuid', 'equipe', 'usuario', 'criado_em', 'validacao', 'validacao_obs', 'avaliador_id', 'avaliador', 'avaliador_vinculo', 'auxiliar_id', 'auxiliar', 'auxiliar_vinculo', 'setor', 'latitude', 'longitude', 'pagamento', F.alt, F.cat, F.foto, F.foto ? F.foto + ' link' : null, F.cod, F.esp].filter(Boolean);
+  const campos = ['uuid', 'equipe', 'usuario', 'criado_em', 'validacao', 'validacao_obs', 'avaliador_id', 'avaliador', 'avaliador_vinculo', 'auxiliar_id', 'auxiliar', 'auxiliar_vinculo', 'setor', 'latitude', 'longitude', 'pagamento', 'quadra', F.alt, F.cat, F.foto, F.foto ? F.foto + ' link' : null, F.cod, F.esp].filter(Boolean);
   const c = colunas(projetoId, campos, { perfil: 'admin' }); const ix = indiceSetores(projetoId);
-  return { p: p, F: F, FV: facesVazias(projetoId), linhas: c.linhas.map((l) => { const o = {}; campos.forEach((k, i) => { o[k] = l[i]; }); if (ix) o.setor = o.latitude !== '' && o.latitude != null ? ix(+o.longitude, +o.latitude) : ''; return o; }) }; // o setor sai da coordenada, não do aparelho
+  let QF = null; try { if (infoQuadras(projetoId)) { QF = {}; lerSitQuadras(projetoId).forEach((q) => { QF[q.numero] = q.fechada_em ? 1 : 0; }); } } catch (e) { QF = null; }
+  return { p: p, F: F, QF: QF, FV: facesVazias(projetoId), linhas: c.linhas.map((l) => { const o = {}; campos.forEach((k, i) => { o[k] = l[i]; }); if (ix) o.setor = o.latitude !== '' && o.latitude != null ? ix(+o.longitude, +o.latitude) : ''; return o; }) }; // o setor sai da coordenada, não do aparelho
 }
 // setor de um ponto pela camada do projeto (dentro do polígono); null quando o projeto não tem setores
 function indiceSetores(projetoId) {
@@ -1312,7 +1336,7 @@ function producao(projetoId, de, ate, soLogin, X0, comMarcar) {
   const tipoTime = tiposDosTimes(); const trouxe = {}; tabela('Usuarios').forEach((u) => { const t = String(u.indicacao || '').trim(); if (t && tipoTime(t) === 'parceiro') trouxe[String(u.login).toLowerCase()] = t; }); const indic = {};
   const pes = (id, nome, vinc) => (pessoas[id] = pessoas[id] || { id: id, nome: nome, vinculo: vinc, coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, premioPrevisto: 0, bonus: 0, arvoresPagar: 0, valorPagar: 0, premioPagar: 0, bonusPagar: 0 });
   const zero = () => ({ coletadas: 0, validadas: 0, emValidacao: 0, devolvidas: 0, pagas: 0, naoContam: 0, valor: 0, premio: 0, bonus: 0 });
-  let arvoresPagar = 0, semDuplaPagar = 0; const marcar = {};
+  let arvoresPagar = 0, semDuplaPagar = 0, quadraAberta = 0; const marcar = {};
   X.linhas.forEach((l) => {
     if (l.validacao === 'Descartado' || !l.criado_em) return; const d = dia(l.criado_em);
     if (soLogin && String(l.usuario).toLowerCase() !== soLogin) return;
@@ -1338,7 +1362,9 @@ function producao(projetoId, de, ate, soLogin, X0, comMarcar) {
     if (!k.conta) return;
     const sx = st[sn]; const quem = trouxe[String(l.usuario).toLowerCase()]; const vTime = quem && R.indicacao > 0 ? R.indicacao * w : 0;
     // entra na medição o registro de parceiro ou de time parceiro (e o sem dupla, como antes); o de dupla só com carteira fica fora: o prêmio dela é por semana
-    const pagavel = !membros.length || vTime > 0 || membros.some((m) => m.v === 'Parceiro'); const aPagar = !l.pagamento && pagavel;
+    const aberta = !!(quem && X.QF && l.quadra && !X.QF[String(l.quadra)]) && !l.pagamento; // time parceiro trabalha por quadra: o registro só entra na medição com a quadra fechada
+    if (aberta && noPeriodo) { quadraAberta++; membros.forEach((m) => { const P = pes(m.id, m.nome, m.v); P.quadraAberta = (P.quadraAberta || 0) + 1; }); }
+    const pagavel = !aberta && (!membros.length || vTime > 0 || membros.some((m) => m.v === 'Parceiro')); const aPagar = !l.pagamento && pagavel;
     if (aPagar) { arvoresPagar++; marcar[l.uuid] = 1; if (!membros.length) semDuplaPagar++; }
     if (vTime) { const I = indic[quem] = indic[quem] || { nome: quem, arvores: 0, valor: 0, arvoresPagar: 0, valorPagar: 0 }; if (noPeriodo) { I.arvores++; I.valor += vTime; } if (aPagar) { I.arvoresPagar++; I.valorPagar += vTime; } }
     const comBonus = R.bonus > 0 && sx && sx.situacao === 'Aprovado' && sx.erro_pct !== '' && +sx.erro_pct < R.bonusErroMax;
@@ -1369,7 +1395,7 @@ function producao(projetoId, de, ate, soLogin, X0, comMarcar) {
   const inds = Object.keys(indic).sort().map((k) => { const I = indic[k]; I.valor = r2(I.valor); I.valorPagar = r2(I.valorPagar); return I; });
   tot.indicacao = inds.reduce((a, x) => a + x.valor, 0); tot.indicacaoPagar = inds.reduce((a, x) => a + x.valorPagar, 0);
   const out = { regras: regra(ate || hoje), de: de || '', ate: ate || '', indicacoes: inds, pessoas: ps, equipes: Object.keys(equipes).map((k) => arred(equipes[k])), setores: Object.keys(setores).map((k) => arred(setores[k])), dias: listaDias, semanas: semanas, devolvidas: devolvidas.slice(-100),
-    totais: (() => { const t = arred(tot); t.indicacao = r2(t.indicacao); t.indicacaoPagar = r2(t.indicacaoPagar); t.total = r2(t.total + t.indicacao); t.totalPagar = r2(t.totalPagar + t.indicacaoPagar); t.arvoresPagar = arvoresPagar; return t; })(), medicoes: lerMedicoes(projetoId) };
+    totais: (() => { const t = arred(tot); t.indicacao = r2(t.indicacao); t.indicacaoPagar = r2(t.indicacaoPagar); t.total = r2(t.total + t.indicacao); t.totalPagar = r2(t.totalPagar + t.indicacaoPagar); t.arvoresPagar = arvoresPagar; t.quadraAberta = quadraAberta; return t; })(), medicoes: lerMedicoes(projetoId) };
   if (comMarcar) { out._marcar = marcar; out._semDupla = semDuplaPagar; }
   if (!soLogin) out.jornada = jornada.sort((a, b) => (a.dia + a.equipe < b.dia + b.equipe ? -1 : 1));
   return out;
@@ -1380,7 +1406,7 @@ function producaoPainel(projetoId, usr) {
   const X = linhasProducao(projetoId); const aux = usr.perfil === 'auxiliar'; const eu = aux ? String(usr.auxiliar_id || '') : ''; const lg = usr.login.toLowerCase();
   if (aux && !eu) throw new Error('Este acesso não está ligado a uma pessoa do cadastro. Peça à coordenação.');
   const meu = (l) => (aux ? l.auxiliar_id === eu || l.avaliador_id === eu : String(l.usuario).toLowerCase() === lg);
-  const Xm = { p: X.p, F: X.F, FV: X.FV, linhas: X.linhas.filter(meu) }; const r = producao(projetoId, de, hoje, null, Xm);
+  const Xm = { p: X.p, F: X.F, FV: X.FV, QF: X.QF, linhas: X.linhas.filter(meu) }; const r = producao(projetoId, de, hoje, null, Xm);
   const z = () => ({ coletados: 0, validados: 0, pendentes: 0, devolvidos: 0, reprovados: 0 }); const c = { hoje: z(), semana: z(), mes: z() };
   Xm.linhas.forEach((l) => { if (!l.criado_em) return; const d = dia(l.criado_em); if (d < de || d > hoje) return; const k = contaParaProducao(l, X.F, X.FV);
     [['hoje', d === hoje], ['semana', d >= seg], ['mes', d >= mes0]].forEach((b) => { if (!b[1]) return; const a = c[b[0]]; a.coletados++; if (l.validacao === 'Descartado') a.reprovados++; else if (k.conta || l.validacao === 'Validado') a.validados++; else if (l.validacao === 'Devolvido') a.devolvidos++; else a.pendentes++; }); });
@@ -1392,7 +1418,7 @@ function producaoPainel(projetoId, usr) {
     meta: clt ? { porDia: R.meta, teto: R.teto, mediaSemana: sAtual ? sAtual.media : 0, falta: sAtual ? Math.max(0, Math.round((R.meta - sAtual.media) * 100) / 100) : R.meta, diasTrabalhados: sAtual ? sAtual.diasTrabalhados : 0 } : null,
     pessoas: minhas.map((x) => { const o = { nome: x.nome, vinculo: x.vinculo, validados: x.validadas, pagos: x.pagas };
       if (x.vinculo === 'CLT') { o.premioApurado = x.premio; o.premioPrevisto = x.premioPrevisto; o.estimado = Math.round((x.premio + x.premioPrevisto) * 100) / 100; }
-      if (x.vinculo === 'Parceiro' && R.parceiroVeValor) { o.aReceber = x.valorPagar; o.estimado = x.valorPagar; } return o; }) };
+      if (x.vinculo === 'Parceiro' && R.parceiroVeValor) { o.aReceber = x.valorPagar; o.estimado = x.valorPagar; } if (x.quadraAberta) o.quadraAberta = x.quadraAberta; return o; }) };
   return out;
 }
 // painel do time: árvores e valor do time por dupla, e o histórico do que já foi pago nas medições fechadas
@@ -1537,7 +1563,7 @@ function marcarQuadras(projetoId, itens, usr) {
     const itF = itens.filter((it) => it && it.tipo === 'face'); const itQ = itens.filter((it) => !(it && it.tipo === 'face')).map((it) => { const o = Object.assign({}, it); delete o.sistema; delete o.soDe; return o; }); // 'sistema' só vale para o efeito interno das faces
     let rf = { alteradas: 0, recusadas: [], quadras: [] };
     if (itF.length) rf = marcarFacesSemTrava(projetoId, itF, usr, coord, idx);
-    const rq = itQ.length || rf.quadras.length ? marcarQuadrasSemTrava(projetoId, itQ.concat(rf.quadras), usr, coord, idx.nums) : { alteradas: 0, recusadas: [] };
+    const rq = itQ.length || rf.quadras.length ? marcarQuadrasSemTrava(projetoId, itQ.concat(rf.quadras), usr, coord, idx.nums, idx.faces) : { alteradas: 0, recusadas: [] };
     return { alteradas: rf.alteradas + rq.alteradas, recusadas: rf.recusadas.concat(rq.recusadas) };
   } finally { lock.releaseLock(); }
 }
@@ -1604,8 +1630,10 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
   }).filter(Boolean);
   return { alteradas: mudou.length, recusadas, quadras };
 }
-function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums) {
+function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums, facesIdx) {
   {
+    const soReservada = !coord && usr.perfil === 'coletor' && timeParceiroDo(usr);
+    let sitF = null; const facesDe = facesIdx ? (n) => { const fs = facesIdx[n]; if (!Array.isArray(fs) || !fs.length) return null; if (!sitF) { sitF = {}; lerSitFaces(projetoId).forEach((f) => { sitF[f.numero] = f.situacao; }); } return { falta: fs.filter((l) => FACE_FEITA.indexOf(sitF[n + '-' + l]) < 0).length }; } : null;
     const sh = abaQuadras(projetoId); const todas = lerOS(sh); const por = {}; todas.forEach((q) => { por[q.numero] = q; });
     const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
     const mudou = []; const recusadas = [];
@@ -1627,12 +1655,19 @@ function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums) {
       if (!coord) {
         if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
         if (q.equipe && q.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Quadra da ' + q.equipe + '.' }); return; }
-        if (!q.equipe) { q.equipe = usr.equipe; q.atribuida = 'nao'; }
-      } else if (it.equipe != null) { q.equipe = String(it.equipe).slice(0, 60); q.atribuida = q.equipe ? 'sim' : ''; }
+        if (!q.equipe && soReservada) { if (!it.auto) recusadas.push({ numero: n, motivo: 'Quadra não reservada para a sua equipe. Peça a reserva à coordenação.' }); return; } // time parceiro só trabalha em quadra reservada pela coordenação
+        if (!q.equipe) { q.equipe = usr.equipe; q.atribuida = 'nao'; q.reservada_em = new Date().toISOString(); }
+      } else if (it.equipe != null) { const nova = String(it.equipe).slice(0, 60); if (nova !== (q.equipe || '')) q.reservada_em = nova ? new Date().toISOString() : ''; q.equipe = nova; q.atribuida = q.equipe ? 'sim' : ''; }
+      if (it.fechar) { // fechar a quadra: todas as faces precisam estar encerradas
+        if (!coord && q.equipe !== usr.equipe) { recusadas.push({ numero: n, motivo: 'Só a equipe da quadra pode fechá-la.' }); return; }
+        const fq = facesDe ? facesDe(n) : null; if (fq && fq.falta) { recusadas.push({ numero: n, motivo: 'Faltam ' + fq.falta + ' face(s) para encerrar antes de fechar a quadra.' }); return; }
+        it = Object.assign({}, it, { situacao: 'Levantada' }); q.fechada_em = new Date().toISOString();
+      } else if (it.situacao != null && it.situacao !== 'Levantada' && q.fechada_em) { if (!coord) { recusadas.push({ numero: n, motivo: 'Quadra fechada. Só a coordenação reabre.' }); return; } q.fechada_em = ''; }
       if (it.auto && (q.situacao || 'A levantar') !== 'A levantar') return; // automática ao salvar árvore: só vale para quadra ainda a levantar
       if (it.situacao != null && it.em && q.marcada_em && new Date(it.em) < new Date(q.marcada_em)) { recusadas.push({ numero: n, motivo: 'A quadra foi marcada depois por ' + q.marcada_por + ' (' + q.situacao.toLowerCase() + ').' }); return; }
       const txt = [];
       if (it.situacao != null && it.situacao !== q.situacao) { q.situacao = it.situacao; q.marcada_por = usr.login; q.marcada_em = dataAparelho(it.em); txt.push(it.situacao.toLowerCase()); }
+      if (it.fechar) txt.push('quadra fechada');
       if (coord && it.equipe != null) txt.push('equipe ' + (q.equipe || 'nenhuma'));
       if (it.obs != null) q.obs = String(it.obs).slice(0, 300);
       if (!txt.length && it.obs == null) return;

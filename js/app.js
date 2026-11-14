@@ -490,7 +490,7 @@
         ehCoord() ? h('div', { class: 'linha-btn coord-atalhos' }, h('button', { class: 'btn sec', onclick: () => ir('#hoje') }, 'Hoje no campo'), h('button', { class: 'btn sec', onclick: () => ir('#painel') }, 'Panorama geral')) : null,
         h('div', { id: 'encerrar-face' }),
         h('div', { id: 'aviso-versao' }),
-        h('div', { id: 'turno' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'continuar' }),
+        h('div', { id: 'turno' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-reserva' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'continuar' }),
         h('div', { id: 'devolvidos' }),
         h('div', { id: 'os-equipe' }),
         h('div', { class: 'resumo', id: 'stats' }), h('small', { class: 'ult-envio', id: 'ult-envio' }),
@@ -771,8 +771,41 @@
     S.abrindoNova = false;
     if (marcou === false) { await Store.apagarRegistro(r.uuid); return; } // saiu da tela no meio da marcação: não deixa rascunho vazio
     if (!(await conferirPonto(r))) { await Store.apagarRegistro(r.uuid); toast('Cadastro não aberto.'); return; }
+    if (!(await conferirQuadra(r))) { await Store.apagarRegistro(r.uuid); return; }
     await Store.salvarRegistro(r);
     ir('#form/' + r.uuid);
+  }
+
+  // quadra e face do ponto (vão no registro). Equipe de time parceiro trabalha por quadra: ponto fora das quadras reservadas para ela, ou em quadra já fechada, não abre cadastro.
+  const modoQuadra = () => perfil() === 'coletor' && !!(S.sessao.usuario.modoQuadra);
+  async function conferirQuadra(r) {
+    try {
+      if (r.lat == null || r.faceId) return true; const cam = await carregarQuadras(); if (!cam || !S.qdIdx) return true;
+      const sit = await carregarSitQd(false); const minha = minhaEquipe(); const comFaces = S.qdTemFaces === S.projeto.id;
+      const fcs = comFaces ? S.qdIdx.idx.faces(+r.lon, +r.lat, 15) : []; const dentro = S.qdIdx.idx.achar(+r.lon, +r.lat);
+      const cands = fcs.map((x) => ({ q: x.q, face: x.id })).concat(dentro ? [{ q: dentro, face: (fcs.find((x) => x.q.n === dentro.n) || {}).id || '' }] : []);
+      let esc = cands[0] || null;
+      if (modoQuadra() && comFaces) {
+        esc = cands.find((c) => (sit.get(c.q.n) || {}).equipe === minha) || null;
+        if (!esc) { await modal('Fora das quadras reservadas', h('p', null, 'Este ponto não fica em uma quadra reservada para a sua equipe. Confira o lugar no mapa ou peça uma nova reserva à coordenação.'), [{ texto: 'Entendi', valor: true }]); return false; }
+        if ((sit.get(esc.q.n) || {}).fechada_em) { await modal('Quadra já fechada', h('p', null, `A quadra ${esc.q.n} já foi fechada. Para incluir uma árvore nela, peça à coordenação para reabrir.`), [{ texto: 'Entendi', valor: true }]); return false; }
+      }
+      if (esc) { r.quadra = esc.q.n; r.face = esc.face || ''; }
+      return true;
+    } catch (e) { return true; } // sem a camada no aparelho: não trava a coleta
+  }
+  // aviso da reserva: 5 dias para começar a quadra e mais 3 para fechar
+  async function pintarAvisoReserva() {
+    const el = document.getElementById('aviso-reserva'); if (!el || !modoQuadra()) return;
+    try {
+      const cam = await carregarQuadras(); if (!cam || !document.body.contains(el)) return; const sit = await carregarSitQd(false); const minha = minhaEquipe(); const fs = sit.faces || new Map();
+      const av = []; for (const [n, q] of sit) { if (q.equipe !== minha || !q.reservada_em || q.fechada_em) continue; const dias = (Date.now() - new Date(q.reservada_em).getTime()) / 864e5;
+        const ini = [...fs.values()].some((f) => f.quadra === n && FACE_FEITA.includes(f.situacao)); const fim = new Date(new Date(q.reservada_em).getTime() + (ini ? 8 : 5) * 864e5);
+        if (dias >= 5 && ini) av.push([fim, `Quadra ${n}: os 5 dias da reserva passaram. Feche a quadra até ${fim.toLocaleDateString('pt-BR').slice(0, 5)} ou ela volta a ficar livre.`]);
+        else if (dias >= 3) av.push([fim, `Quadra ${n}: ${ini ? 'feche' : 'comece (encerre uma face)'} até ${fim.toLocaleDateString('pt-BR').slice(0, 5)} ou a reserva vence.`]); }
+      if (!document.body.contains(el)) return; av.sort((a, b) => a[0] - b[0]);
+      el.replaceChildren(...av.slice(0, 2).map((x) => h('div', { class: 'faixa-cont faixa-gps', role: 'status' }, h('b', null, 'Reserva de quadra'), h('span', null, x[1]))));
+    } catch (e) { /* sem quadras */ }
   }
 
   // ---------- Turno e trajeto ----------
@@ -1792,7 +1825,7 @@
     const fab = campo ? h('button', { class: 'btn bt-principal', id: 'bt-principal' }, '...') : null; // "Começar o turno" ou "Nova árvore" (pintarDia)
     // faixa embaixo do mapa: o que antes ficava na tela inicial (envio, cadastro não terminado, turno, avisos, encerrar face, meus registros)
     // tela de coleta limpa: só a etiqueta do dia, a do GPS e o cadastro não terminado; os avisos ficam atrás do sino
-    const avisos = campo ? h('div', { class: 'avisos-lista' }, h('div', { id: 'aviso-versao' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'devolvidos' }), h('div', { id: 'os-equipe' })) : null;
+    const avisos = campo ? h('div', { class: 'avisos-lista' }, h('div', { id: 'aviso-versao' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-reserva' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'devolvidos' }), h('div', { id: 'os-equipe' })) : null;
     const seloSino = h('span', { class: 'selo-sino oculto' });
     // os avisos são pintados num canto escondido e vão para a janela só quando a dupla toca no sino
     const guardaAvisos = campo ? h('div', { class: 'oculto' }, avisos) : null;
@@ -1807,7 +1840,7 @@
     const telaM = h('div', { class: 'tela-mapa' + (campo ? ' modo-campo' : '') }, topoM, S.expirada && campo ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo')) : null, barra, div, bts, fab, base, barraSel, guardaAvisos);
     if (campo) barra.classList.add('oculto');
     $app.replaceChildren(telaM);
-    if (campo) { Dupla.carregar(); atualizarSync(); listarRegistros(); pintarOSEquipe(); pintarAvisoVersao(); pintarAvisoGps(); pintarEspaco(); pintarDia(); pintarGpsPill();
+    if (campo) { Dupla.carregar(); atualizarSync(); listarRegistros(); pintarOSEquipe(); pintarAvisoVersao(); pintarAvisoGps(); pintarAvisoReserva(); pintarEspaco(); pintarDia(); pintarGpsPill();
       const ouvP = (p) => { if (!document.body.contains(telaM)) return Gps.ouvintes.delete(ouvP); pintarGpsPill(p); }; Gps.ouvintes.add(ouvP); const tmP = setInterval(() => { if (!document.body.contains(telaM)) return clearInterval(tmP); pintarGpsPill(); }, 10000); }
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
     const render = L.canvas({ padding: 0.3, tolerance: 8 });
@@ -1900,6 +1933,21 @@
     }
     let zAnt = mapa.getZoom();
     mapa.on('moveend zoomend', () => setTimeout(() => { if (!document.body.contains(div)) return; sincQdVista(); pintarRotulos(); const z = mapa.getZoom(); if ((z >= ZOOM_FACES) !== (zAnt >= ZOOM_FACES)) { legenda(); desenharQuadras(); } if (z !== zAnt) ajustarRaios(); zAnt = z; }, 0)); window.__app.mapa = mapa;
+    // fechar quadra: conferência curta (árvores por face, faces sem encerrar, cadastros não terminados, o que falta enviar) antes de fechar
+    async function fecharQuadra(q, s, marcar) {
+      if (somenteVer()) return; const fsit = fcSit(); const regs = (await Store.registros(S.projeto.id)).filter((r) => String(r.quadra || '') === String(q.n));
+      const rasc = regs.filter((r) => r.status === 'rascunho' && r.mexido).length; const pend = regs.filter((r) => r.status === 'pendente' || r.erroSync).length;
+      const linhas = q.f.map((f) => { const id = q.n + '-' + f.i; const st2 = (fsit.get(id) || {}).situacao || 'A levantar'; const n = regs.filter((r) => r.face === id && r.status !== 'rascunho').length; return { f, st: st2, n, ok: FACE_FEITA.includes(st2) }; });
+      const falta = linhas.filter((x) => !x.ok).length;
+      const corpo = h('div', null, h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Face'), h('th', null, 'Situação'), h('th', null, 'Árvores deste aparelho')), linhas.map((x) => h('tr', null, h('td', null, `${x.f.i} · ${x.f.r}`), h('td', null, x.ok ? x.st : h('b', { class: 'ruim' }, x.st)), h('td', null, x.st === 'Levantada, sem árvores' ? 'sem árvores' : fmtN(x.n))))),
+        falta ? h('div', { class: 'aviso' }, `${falta === 1 ? 'Falta 1 face' : `Faltam ${falta} faces`} para encerrar. Encerre cada face (com a foto) antes de fechar a quadra.`) : null,
+        rasc ? h('div', { class: 'aviso' }, `${rasc === 1 ? 'Há 1 cadastro não terminado' : `Há ${rasc} cadastros não terminados`} nesta quadra. Termine ou cancele antes de fechar.`) : null,
+        pend ? h('p', { class: 'dica' }, `${pend === 1 ? '1 registro ainda vai ser enviado' : `${pend} registros ainda vão ser enviados`}: o app envia ao fechar.`) : null,
+        !falta && !rasc ? h('p', null, 'Depois de fechada, a quadra não recebe mais árvores sem a coordenação reabrir.') : null);
+      const ok = await modal('Fechar a quadra ' + q.n, corpo, falta || rasc ? [{ texto: 'Voltar', classe: 'sec', valor: false }] : [{ texto: 'Voltar', classe: 'sec', valor: false }, { texto: 'Fechar quadra', valor: true }]);
+      if (!ok) return; if (pend) sincronizar(true);
+      marcar([{ numero: q.n, fechar: true }]);
+    }
     const podeMarcarQd = (s) => ehCoord() || (perfil() === 'coletor' && (!s.equipe || s.equipe === minhaEquipe()));
     // ---- ficha: no celular sobe de baixo (folha) e o mapa se desloca para o item continuar à vista; no computador, balão ----
     let folha = null, aoFecharFicha = null;
@@ -1960,8 +2008,12 @@
         h('small', null, `${pl(arv, 'árvore cadastrada', 'árvores cadastradas')} dentro dela` + (s.marcada_por ? ` · marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` : '')),
         q.f ? h('small', null, `Faces: ${fFeitas} de ${q.f.length} levantadas.` + (mapa.getZoom() < ZOOM_FACES ? '' : ' Toque na linha de uma face para marcar.')) : null,
         q.f && mapa.getZoom() < ZOOM_FACES ? h('button', { class: 'btn sec peq', onclick: () => { fecharFicha(); mapa.setView(Quadras.centro(q), 18); } }, 'Aproximar para marcar faces') : null,
-        perfil() === 'coletor' && !s.equipe ? h('button', { class: 'btn peq', onclick: () => marcar([{ numero: q.n, situacao: st === 'A levantar' ? 'Em levantamento' : st }]) }, 'Assumir esta quadra para a minha equipe') : null,
-        podeMarcarQd(s) ? h('div', { class: 'chips qd-chips' }, SIT_QD.map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: q.n, situacao: x }]) }, x))) : null,
+        perfil() === 'coletor' && !s.equipe && !modoQuadra() ? h('button', { class: 'btn peq', onclick: () => marcar([{ numero: q.n, situacao: st === 'A levantar' ? 'Em levantamento' : st }]) }, 'Assumir esta quadra para a minha equipe') : null,
+        perfil() === 'coletor' && !s.equipe && modoQuadra() ? h('small', { class: 'dica' }, 'Quadra sem reserva. Peça a reserva à coordenação.') : null,
+        s.fechada_em ? h('small', null, h('b', null, 'Quadra fechada'), ' em ' + dataAno(s.fechada_em)) : null,
+        s.reservada_em && !s.fechada_em && perfil() !== 'cliente' ? h('small', { class: 'dica' }, 'Reservada em ' + dataAno(s.reservada_em)) : null,
+        q.f && !s.fechada_em && s.equipe && (ehCoord() || (perfil() === 'coletor' && s.equipe === minhaEquipe())) ? h('button', { class: 'btn peq acao', onclick: () => fecharQuadra(q, s, marcar) }, ico('check'), 'Fechar quadra') : null,
+        podeMarcarQd(s) && !(s.fechada_em && !ehCoord()) && !(modoQuadra() && !s.equipe) ? h('div', { class: 'chips qd-chips' }, SIT_QD.map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: q.n, situacao: x }]) }, x))) : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn.el, h('button', { class: 'btn sec peq', onclick: () => { const v = eqIn.valor(); if (v == null) return toast('Escolha a equipe.'); marcar([{ numero: q.n, equipe: v }]); } }, 'Definir equipe')) : null,
         ehCoord() ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'qd'; selecao = new Set([q.n]); pintarSelecao(); restilizar([q.n]); } }, 'Escolher várias quadras') : null);
       abrirFicha(pop, ll);
@@ -2587,6 +2639,7 @@
         h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Pessoa'), h('th', null, 'Validados'), h('th', null, 'Estimado')),
           P.pessoas.map((x) => h('tr', null, h('td', null, x.nome), h('td', null, fmtN(x.validados)),
             h('td', null, x.vinculo === 'Parceiro' ? (x.aReceber != null ? [h('b', null, R$(x.aReceber)), h('br'), h('small', { class: 'dica' }, 'a receber')] : 'com a coordenação') : [h('b', null, R$(x.estimado || 0)), h('br'), h('small', { class: 'dica' }, x.premioPrevisto ? `prêmio; ${R$(x.premioPrevisto)} ainda em semana aberta` : 'prêmio das semanas apuradas')]))))),
+        P.pessoas.some((x) => x.quadraAberta) ? h('p', { class: 'dica' }, `${fmtN(Math.max(...P.pessoas.map((x) => x.quadraAberta || 0)))} registro(s) em quadra ainda aberta: entram no valor quando a quadra for fechada.`) : null,
         h('p', { class: 'dica' }, 'Estimativa. O valor final sai no fechamento feito pela coordenação.')) : null,
       sem.length ? h('div', { class: 'cartao' }, h('h3', null, 'Semanas'), h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, ['Semana', varios ? 'Pessoa' : null, 'Dias', 'Média por dia', 'Prêmio', 'Situação'].filter(Boolean).map((c) => h('th', null, c))),
         sem.map((s) => h('tr', null, h('td', null, `${dBRc(s.semana).slice(0, 5)} a ${dBRc(s.ate).slice(0, 5)}`), varios ? h('td', null, s.nome) : null, h('td', null, fmtN(s.diasTrabalhados)), h('td', null, fmtN(s.media)), h('td', null, R$(s.total)), h('td', null, s.situacao === 'Apurada' ? 'Apurada' : s.pendentes ? `Aberta: ${fmtN(s.pendentes)} em validação` : 'Em andamento'))))),
@@ -2655,7 +2708,7 @@
           kpi('Parceiros', R$(P.totais.valor), `${R$(Math.max(0, Rg.valor - Rg.indicacao))} por registro para quem coleta; com auxiliar, metade para cada`),
           kpi('Times parceiros', R$(P.totais.indicacao), `${R$(Rg.indicacao)} por registro, já dentro dos ${R$(Rg.valor)}`),
           kpi('Prêmio com carteira', R$(P.totais.premio), P.totais.premioPrevisto ? `semanas apuradas; ${R$(P.totais.premioPrevisto)} em semanas abertas` : 'semanas apuradas no período'),
-          kpi('A pagar na medição', R$(P.totais.totalPagar), 'parceiros e times parceiros')),
+          kpi('A pagar na medição', R$(P.totais.totalPagar), P.totais.quadraAberta ? `parceiros e times; ${fmtN(P.totais.quadraAberta)} registro(s) esperando a quadra fechar` : 'parceiros e times parceiros')),
         h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: exportar }, 'Exportar planilha'), h('button', { class: 'btn', disabled: !aPagar, onclick: fechar }, aPagar ? `Fechar medição (${fmtN(aPagar)} registros a pagar)` : 'Nada a pagar até o fim do período'), h('button', { class: 'btn sec', onclick: () => ir('#auditoria') }, 'Auditoria por setor')),
         h('p', { class: 'dica' }, 'Conta o registro validado pelo auditor: árvore com 2 m de altura ou mais, foto e coordenada, e face de quadra sem árvore com foto. Validados que não contam: ' + fmtN(soma('naoContam')) + '. A planilha traz a folha do RH com os prêmios apurados. As regras de valor ficam no cadastro do projeto.')),
       abas, conteudo);

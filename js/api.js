@@ -10,6 +10,7 @@ const Api = (() => {
       endereco_aprox: r.endereco || '', bairro_aprox: r.bairro || '',
       ...(r.dupla ? { avaliador: r.dupla.av ? r.dupla.av.nome : '', avaliador_id: r.dupla.av ? r.dupla.av.id : '', avaliador_registro: r.dupla.av ? r.dupla.av.registro || '' : '', avaliador_vinculo: r.dupla.av ? r.dupla.av.vinculo : '', auxiliar: r.dupla.ax ? r.dupla.ax.nome : '', auxiliar_id: r.dupla.ax ? r.dupla.ax.id : '', auxiliar_vinculo: r.dupla.ax ? r.dupla.ax.vinculo : '' } : {}),
       ...(r.posManual ? { ponto_ajustado: 'sim', ponto_dist_m: r.posDist ?? '' } : {}),
+      ...(r.quadra ? { quadra: String(r.quadra), face: r.face || '' } : {}),
       ...(r.setor != null ? { setor: r.setor || '', fora_do_setor: r.foraSetor ? 'sim' : '' } : {}),
       historico: (r.historico || []).map((x) => `${String(x.em).slice(0, 16).replace('T', ' ')} ${x.por}: ${x.mud.join('; ')}`).join(' | '),
     };
