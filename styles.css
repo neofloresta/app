@@ -712,3 +712,12 @@ body.vendo-como .tela-mapa { height: calc(100vh - 52px); height: calc(100dvh - 5
 .proj-card small { color: var(--suave); }
 .entrada.peq { padding: 6px 8px; font-size: 14px; min-width: 150px; }
 details.campo b.rot { display: block; margin: 12px 0 4px; }
+
+/* 2.11: localização destravada (alvo no centro do mapa) */
+.mp-mapa-cx { position: relative; margin: 8px 0; }
+.mp-mapa { height: 46vh; min-height: 240px; border-radius: var(--raio); overflow: hidden; }
+.mp-alvo { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border: 3px solid #D32F2F; border-radius: 50%; pointer-events: none; z-index: 500; box-shadow: 0 0 0 2px #fff; }
+.mp-alvo::before, .mp-alvo::after { content: ''; position: absolute; background: #D32F2F; }
+.mp-alvo::before { left: 50%; top: -10px; width: 2px; height: 54px; margin-left: -1px; }
+.mp-alvo::after { top: 50%; left: -10px; height: 2px; width: 54px; margin-top: -1px; }
+.mp-dist.ruim { color: #B3261E; font-weight: 600; }

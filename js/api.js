@@ -9,6 +9,7 @@ const Api = (() => {
       latitude: r.lat ?? '', longitude: r.lon ?? '', precisao_gps_m: r.prec ?? '',
       endereco_aprox: r.endereco || '', bairro_aprox: r.bairro || '',
       ...(r.dupla ? { avaliador: r.dupla.av ? r.dupla.av.nome : '', avaliador_id: r.dupla.av ? r.dupla.av.id : '', avaliador_registro: r.dupla.av ? r.dupla.av.registro || '' : '', avaliador_vinculo: r.dupla.av ? r.dupla.av.vinculo : '', auxiliar: r.dupla.ax ? r.dupla.ax.nome : '', auxiliar_id: r.dupla.ax ? r.dupla.ax.id : '', auxiliar_vinculo: r.dupla.ax ? r.dupla.ax.vinculo : '' } : {}),
+      ...(r.posManual ? { ponto_ajustado: 'sim', ponto_dist_m: r.posDist ?? '' } : {}),
       ...(r.setor != null ? { setor: r.setor || '', fora_do_setor: r.foraSetor ? 'sim' : '' } : {}),
       historico: (r.historico || []).map((x) => `${String(x.em).slice(0, 16).replace('T', ' ')} ${x.por}: ${x.mud.join('; ')}`).join(' | '),
     };
@@ -165,7 +166,7 @@ const Api = (() => {
   // ---------- Servidor Google ----------
   const Remoto = {
     async login(u, s, aparelho) { const j = await chamar('login', { u, s, aparelho }, true); return { token: j.token || '', versaoScript: j.versaoScript || '1', usuario: j.usuario, projetos: j.projetos, formularios: j.formularios || {} }; },
-    async sessao() { const j = await chamar('sessao'); return { usuario: j.usuario, projetos: j.projetos, versaoScript: j.versaoScript }; },
+    async sessao() { const j = await chamar('sessao'); return { usuario: j.usuario, projetos: j.projetos, versaoScript: j.versaoScript, equipes: j.equipes }; },
     async sair() { if (cred && cred.t) await chamar('sair').catch(() => {}); },
     async aceitarTermo(versao) { return chamar('aceitar_termo', { versao }); },
     async trocarSenha(atual, nova) { return chamar('trocar_senha', { atual, nova }); },

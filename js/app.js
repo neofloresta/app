@@ -177,7 +177,7 @@
       }
       const r = await Api.b.sessao(); if (!r) return;
       if (S.termoLocal === TERMO_VERSAO && r.usuario && r.usuario.termo_versao !== TERMO_VERSAO) Object.assign(r.usuario, { termo_versao: TERMO_VERSAO, termo_aceito_em: r.usuario.termo_aceito_em || S.sessao.usuario.termo_aceito_em || agoraISO() }); // aceite no aparelho ainda indo ao servidor
-      Object.assign(S.sessao, { usuario: r.usuario, projetos: r.projetos, versaoScript: r.versaoScript }); await guardarSessao();
+      Object.assign(S.sessao, { usuario: r.usuario, projetos: r.projetos, versaoScript: r.versaoScript }, r.equipes ? { equipes: r.equipes } : {}); await guardarSessao();
     } catch (e) { /* sem conexão ou sessão expirada: o aviso já aparece */ }
   }
   const aparelho = () => { const u = navigator.userAgent; const m = u.match(/Android [\d.]+;[^)]*|iPhone OS [\d_]+|Windows NT [\d.]+|Mac OS X [\d_]+/); return (m ? m[0] : u).slice(0, 100); };
@@ -279,7 +279,7 @@
         if (r.usuario.perfil === 'campo') r.usuario.perfil = 'coletor';
         if (r.usuario.termo_aceito_em === undefined) r.usuario.termo_aceito_em = (await Store.get('termo:' + usuario)) || ''; // servidor antigo: aceite guardado no aparelho
         if (!r.projetos.length && r.usuario.perfil !== 'admin') throw new Error('Este usuário não tem projeto liberado.');
-        S.sessao = { u: usuario, t: r.token || '', usuario: r.usuario, projetos: r.projetos, projetoAtual: r.projetos.length ? r.projetos[0].id : null, servidor: Api.servidor || '', versaoScript: r.versaoScript || '' };
+        S.sessao = { u: usuario, t: r.token || '', usuario: r.usuario, equipes: r.equipes || [], projetos: r.projetos, projetoAtual: r.projetos.length ? r.projetos[0].id : null, servidor: Api.servidor || '', versaoScript: r.versaoScript || '' };
         if (!r.token) S.sessao.s = senha; // servidor antigo ou demonstração: sem sessão, guarda a senha como antes
         Api.credenciais(credDe(S.sessao)); S.expirada = false; S.termoLocal = await Store.get('termoV:' + usuario); S.configurado = !!(await Store.get('configurado:' + usuario));
         await guardarSessao();
@@ -510,6 +510,15 @@
       el.replaceChildren(h('button', { class: 'btn contorno encerrar-face', onclick: () => encerrarFace(minhas) }, ico('check'), minhas.length > 1 ? `Encerrar face (${minhas.length} em andamento)` : 'Encerrar face'));
     } catch (e) { /* sem quadras */ }
   }
+  // foto da face ao encerrar: uma foto só, da calçada no sentido do comprimento, para a auditoria conferir se ficou árvore para trás
+  async function pedirFotoFace(txt) {
+    let foto = null; const prev = h('small', { class: 'dica' }, ' Sem foto ainda.');
+    const cam = h('input', { type: 'file', accept: 'image/*', capture: 'environment', class: 'oculto', onchange: async () => { const a = cam.files[0]; if (!a) return; try { foto = await reduzir(a, 1600, 0.75); prev.textContent = ' Foto pronta.'; } catch (e) { toast('Não foi possível ler a foto. Tente de novo.', 4000); } } });
+    const ok = await modal('Foto da face', h('div', null, h('p', null, txt), h('p', { class: 'dica' }, 'Uma foto só, da calçada no sentido do comprimento, mostrando o trecho inteiro.'), h('div', { class: 'campo' }, h('button', { class: 'btn sec', type: 'button', onclick: () => cam.click() }, ico('camera'), 'Tirar foto'), cam, prev)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Encerrar a face', valor: true }]);
+    if (!ok) return null; if (!foto) { toast('Tire a foto da face para encerrar.', 4000); return pedirFotoFace(txt); }
+    return foto;
+  }
+  const exigeFotoFace = () => perfil() === 'coletor';
   async function encerrarFace(minhas) {
     const idx = S.qdIdx; const achar = (id) => { const k = id.lastIndexOf('-'); const q = idx.porN.get(id.slice(0, k)); const f = q && q.f && q.f.find((y) => y.i === id.slice(k + 1)); return q && f ? { q, f, id } : null; };
     let fs = minhas.map((x) => achar(x.numero)).filter(Boolean);
@@ -524,7 +533,8 @@
       [{ texto: 'Cancelar', classe: 'sec', valor: null }, { texto: 'Levantada, sem árvores (foto)', classe: 'sec', valor: 'sem' }, { texto: 'Sim, levantada', valor: 'ok' }]);
     if (v === 'sem') return iniciarCalcadaFace(alvo.q, alvo.f);
     if (v !== 'ok') return;
-    try { const r = await marcarQuadras([{ tipo: 'face', numero: alvo.id, situacao: 'Levantada', rua: alvo.f.r }]); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Face encerrada. Vai quando houver rede.' : `Face ${alvo.f.i} da quadra ${alvo.q.n} encerrada.`, 3500); pintarEncerrarFace(); } catch (e) { toast(e.message, 5000); }
+    let fotoBlob = null; if (exigeFotoFace()) { if (somenteVer()) return; fotoBlob = await pedirFotoFace(`Face ${alvo.f.i} da quadra ${alvo.q.n} (${alvo.f.r}).`); if (!fotoBlob) return; }
+    try { const r = await marcarQuadras([Object.assign({ tipo: 'face', numero: alvo.id, situacao: 'Levantada', rua: alvo.f.r }, fotoBlob ? { fotoBlob } : {})]); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Face encerrada. Vai quando houver rede.' : `Face ${alvo.f.i} da quadra ${alvo.q.n} encerrada.`, 3500); pintarEncerrarFace(); } catch (e) { toast(e.message, 5000); }
   }
   async function pintarOSEquipe() {
     const el = document.getElementById('os-equipe'); if (!el || perfil() !== 'coletor') return;
@@ -1054,9 +1064,10 @@
       Store.get(hojeK).then((v) => { if (!v) { dicas.open = true; Store.set(hojeK, 1); } }); // primeira marcação do dia: dicas abertas (teste do GPS do dia)
       const btAgora = h('button', { class: 'btn cheio', disabled: true, onclick: () => travar(true) }, 'Marcar agora');
       const btSem = h('button', { class: 'btn sec oculto', onclick: () => { pronto = true; sair(true); } }, 'Continuar sem GPS');
+      const btMapa = h('button', { class: 'btn sec', onclick: async () => { if (pronto) return; pronto = true; const ok = await escolherNoMapa(r); if (ok) { sair(true); } else if (!sair.feito) { pronto = false; } } }, 'Marcar no mapa (destravar)');
       const veu = h('div', { class: 'veu mp-veu' }, h('div', { class: 'folha mp' }, h('h3', null, 'Marcando o ponto'),
         h('div', { class: 'mp-orienta' }, ORIENTA_GPS), num, st, det, h('div', { class: 'mp-meta' }, `Espere o erro ficar em até ${META} m. O app marca sozinho quando estabilizar.`),
-        h('div', { class: 'linha-btn col' }, btAgora, btSem), dicas));
+        h('div', { class: 'linha-btn col' }, btAgora, btSem, btMapa), dicas));
       document.body.append(veu);
       const dist = (a, b) => Math.hypot((a.lon - b.lon) * 111320 * Math.cos(a.lat * Math.PI / 180), (a.lat - b.lat) * 110540);
       const media = () => { const melhor = Math.min(...leituras.map((x) => x.prec)); const us = leituras.filter((x) => x.prec <= melhor * 1.5); let sw = 0, la = 0, lo = 0; for (const x of us) { const w = 1 / (x.prec * x.prec); sw += w; la += x.lat * w; lo += x.lon * w; } return { lat: la / sw, lon: lo / sw, prec: Math.round(melhor * 10) / 10, n: us.length }; };
@@ -1092,6 +1103,29 @@
       const tm = setInterval(() => { Gps.ler(); if (!leituras.length && Date.now() - t0 > 12000) { btSem.classList.remove('oculto'); st.textContent = 'Sem sinal de GPS ainda. Vá para um lugar aberto ou continue sem GPS.'; } }, 1000);
     });
   }
+  // localização destravada: a pessoa leva o alvo com o dedo até o pé da árvore. Pede confirmação, marca o registro como ajustado e trava de novo ao marcar.
+  function escolherNoMapa(r) {
+    return new Promise(async (fim) => {
+      if (!(await confirmar('Destravar a localização', 'Você vai marcar o ponto com o dedo, no mapa, e não pelo GPS. Use quando o GPS não dá a posição certa da árvore. O registro fica marcado como ajustado no mapa. Ao marcar, a localização trava de novo.', 'Destravar', 'perigo'))) return fim(false);
+      const div = h('div', { class: 'mp-mapa' }); const info = h('p', { class: 'dica mp-dist' }, 'Arraste o mapa.');
+      const distM = (a, b) => Math.hypot((a.lng - b.lon) * 111320 * Math.cos(a.lat * Math.PI / 180), (a.lat - b.lat) * 110540);
+      let mapa = null; const fechar = (ok) => { if (fechar.feito) return; fechar.feito = true; window.removeEventListener('hashchange', aoSair);
+        if (ok && mapa) { const c = mapa.getCenter(); const d = S.pos ? Math.round(distM(c, S.pos)) : null; Object.assign(r, { lat: c.lat, lon: c.lng, prec: S.pos ? S.pos.prec : null, posManual: true, posDist: d, gpsAuto: false, marcadoEm: agoraISO() }); Store.salvarRegistro(r); }
+        try { if (mapa) mapa.remove(); } catch (e) { /* já saiu */ } veu.remove(); fim(!!ok); };
+      const aoSair = () => fechar(false); window.addEventListener('hashchange', aoSair);
+      const veu = h('div', { class: 'veu mp-veu' }, h('div', { class: 'folha mp' }, h('h3', null, 'Localização destravada'), h('div', { class: 'mp-orienta' }, 'Arraste o mapa até o alvo ficar no pé da árvore.'),
+        h('div', { class: 'mp-mapa-cx' }, div, h('div', { class: 'mp-alvo', 'aria-hidden': 'true' })), info,
+        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: () => fechar(false) }, 'Cancelar'), h('button', { class: 'btn', id: 'mp-marcar', onclick: () => fechar(true) }, 'Marcar aqui e travar'))));
+      document.body.append(veu);
+      setTimeout(() => { if (fechar.feito) return;
+        const cam = !r.lat && !S.pos && S.qdCentro ? S.qdCentro : null; const c0 = r.lat != null ? [r.lat, r.lon] : S.pos ? [S.pos.lat, S.pos.lon] : cam || [-15.8, -47.9];
+        mapa = L.map(div, { maxZoom: 21 }).setView(c0, r.lat != null || S.pos ? 19 : cam ? 15 : 4); camadasFundo(mapa, false);
+        if (S.pos) { L.circle([S.pos.lat, S.pos.lon], { radius: Math.max(2, S.pos.prec || 5), color: '#1E88E5', weight: 1, fillOpacity: 0.12, interactive: false }).addTo(mapa); L.circleMarker([S.pos.lat, S.pos.lon], { radius: 6, color: '#fff', weight: 2, fillColor: '#1E88E5', fillOpacity: 1, interactive: false }).addTo(mapa); }
+        const pintar = () => { if (!S.pos) { info.textContent = 'Sem sinal de GPS: confira bem o lugar no mapa.'; return; } const d = Math.round(distM(mapa.getCenter(), S.pos)); info.textContent = d > 30 ? `O alvo está a ${fmtN(d)} m de onde você está. Confira se é isso mesmo.` : `O alvo está a ${fmtN(d)} m de onde você está.`; info.classList.toggle('ruim', d > 30); };
+        mapa.on('move', pintar); pintar();
+      }, 60);
+    });
+  }
   // aviso de pouco espaço: nada é apagado sozinho; a equipe libera as fotos já confirmadas em Preferências
   async function pintarEspaco() {
     const el = document.getElementById('aviso-espaco'); if (!el || !navigator.storage || !navigator.storage.estimate) return;
@@ -1109,7 +1143,10 @@
 
   // preferências de cada login neste aparelho
   // a coordenação define no cadastro do usuário como a dupla mede a copa (4 raios ou área com trena a laser)
-  async function prefCopa() { const u = S.sessao && S.sessao.usuario; if (u && u.modo_copa) return u.modo_copa; return (await Store.get('pref:copa:' + (S.sessao && S.sessao.u))) || 'raios'; }
+  // a copa segue o time do avaliador (definido no servidor): time da casa mede a área direto, time parceiro mede dois raios
+  async function prefCopa() { const u = S.sessao && S.sessao.usuario; let m = (u && u.modo_copa) || (await Store.get('pref:copa:' + (S.sessao && S.sessao.u))) || 'raios';
+    if (m === 'raios2' && !(S.form && (S.form.regras || []).some((r) => r.campo === 'Modo de copa' && r.por && r.por.raios2))) m = 'raios'; // formulário antigo, sem os dois raios
+    return m; }
   async function telaPreferencias() {
     const copa = await prefCopa(); const wifi = await fotosSoWifi(); const sol = !!(await Store.get('modoSol'));
     let esp = ''; try { const e = await navigator.storage.estimate(); esp = `${(e.usage / 1e9).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} GB usados pelo app de ${(e.quota / 1e9).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} GB disponíveis.`; } catch (e) { /* sem informação */ }
@@ -1120,7 +1157,7 @@
           h('p', { class: 'dica' }, 'As fotos ficam na qualidade original e continuam guardadas no celular depois de enviadas. ' + esp),
           h('button', { class: 'btn sec', onclick: liberarEspaco }, 'Liberar espaço: apagar do celular fotos já confirmadas no servidor há mais de 30 dias')),
         h('div', { class: 'cartao' }, h('h3', null, 'Tela'), chave('Modo Sol (alto contraste)', 'Letras pretas, bordas mais fortes e texto maior, para ler no sol forte.', sol, async (v) => { await Store.set('modoSol', v); document.documentElement.classList.toggle('sol', v); })),
-        S.form && S.form.campos.some((c) => c.auto === 'modocopa') ? h('div', { class: 'cartao' }, h('h3', null, 'Como medir a copa'), h('p', null, copa === 'area' ? 'Área direto, com trena a laser.' : '4 raios com trena (o app calcula a área).'), h('p', { class: 'dica' }, 'Definido pela coordenação no seu usuário.')) : null));
+        S.form && S.form.campos.some((c) => c.auto === 'modocopa') ? h('div', { class: 'cartao' }, h('h3', null, 'Como medir a copa'), h('p', null, copa === 'area' ? 'Área direto, com trena a laser.' : copa === 'raios2' ? 'Dois raios com trena: um ao longo da calçada e outro perpendicular (o app calcula a área).' : '4 raios com trena (o app calcula a área).'), h('p', { class: 'dica' }, 'Definido pelo time da sua equipe.')) : null));
   }
   async function liberarEspaco() {
     const lim = Date.now() - 30 * 864e5; let n = 0;
@@ -1529,7 +1566,10 @@
         rec.replaceChildren(...vistos.map((e) => h('button', { onclick: () => escolher(e) }, e)));
       });
       conferir();
-      return h('div', null, h('div', { class: 'esp-linha' }, h('div', { class: 'esp-box' }, i, drop), semId), nova, rec);
+      // espécie suspeita: quem coleta marca que não tem certeza; o app pede as fotos de identificação e o auditor confere
+      const cS = form.campos.find((x) => x.nome === 'Especie suspeita'); let susp = null;
+      if (cS) { const lig = () => r.valores[cS.nome] === 'sim'; susp = h('button', { class: 'chip bt-suspeita' + (lig() ? ' sel' : ''), type: 'button', 'aria-pressed': lig() ? 'true' : 'false', onclick: () => { const novo = lig() ? '' : 'sim'; mudar(cS, novo); susp.classList.toggle('sel', novo === 'sim'); susp.setAttribute('aria-pressed', novo === 'sim' ? 'true' : 'false'); if (novo) toast('Tire as fotos de identificação: folha dos dois lados, ramo e tronco.', 4500); } }, 'Não tenho certeza da espécie'); }
+      return h('div', null, h('div', { class: 'esp-linha' }, h('div', { class: 'esp-box' }, i, drop), semId), nova, susp, rec);
     }
 
     function fotoEl(c) {
@@ -1963,7 +2003,8 @@
       const pop = h('div', { class: 'ficha qd-ficha' }, h('b', null, `Face ${f.i} da quadra ${q.n}`), h('small', null, `${f.r} · ${fmtN(f.c)} m`),
         h('div', null, h('span', { class: 'os-st', style: `background:${COR_FC[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', perfil() === 'cliente' ? '' : s.equipe ? s.equipe : eqDaQuadra(q) ? 'quadra da ' + eqDaQuadra(q) : 'sem equipe'),
         s.marcada_por ? h('small', null, `marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}`) : null,
-        pode && !FACE_FEITA.includes(st) ? h('button', { class: 'btn cheio acao', onclick: () => marcar([{ numero: id, situacao: 'Levantada' }]) }, ico('check'), 'Marcar como levantada') : null,
+        s.foto && ehCoord() ? (() => { const a = h('div', { class: 'face-foto' }); verFotoOS(s.foto, a); return a; })() : null,
+        pode && !FACE_FEITA.includes(st) ? h('button', { class: 'btn cheio acao', onclick: async () => { let fotoBlob = null; if (exigeFotoFace()) { if (somenteVer()) return; fotoBlob = await pedirFotoFace(`Face ${f.i} da quadra ${q.n} (${f.r}).`); if (!fotoBlob) return; } marcar([Object.assign({ numero: id, situacao: 'Levantada' }, fotoBlob ? { fotoBlob } : {})]); } }, ico('check'), 'Marcar como levantada') : null,
         pode && st === 'A levantar' ? h('button', { class: 'btn sec cheio acao', onclick: () => marcar([{ numero: id, situacao: 'Em levantamento' }]) }, 'Em levantamento') : null,
         pode ? h('button', { class: 'btn sec cheio acao', onclick: () => { mapa.closePopup(); iniciarCalcadaFace(q, f); } }, ico('camera'), st === 'Levantada, sem árvores' ? 'Refazer o cadastro da calçada sem árvores' : 'Sem árvores (só a foto)') : null,
         mais.length ? h('details', { class: 'qd-mais' }, h('summary', null, 'Mais opções'), mais) : null);
@@ -2063,8 +2104,11 @@
     function legenda() {
       if (leg) leg.remove();
       leg = L.control({ position: 'bottomleft' });
-      const itens = selCor.value === 'os' ? [...Object.entries(COR_OS), ['Sem ordem', '#C9D3D6']] : selCor.value === 'risco' ? Object.entries(corRisco) : equipes.map((e) => [e, corEq(e)]);
-      const itQd = qdDados && selQd.value && !(mapa.getZoom() >= ZOOM_FACES && selQd.value === 'sit') ? (selQd.value === 'eq' ? [...new Set([...qdSit.values()].map((s) => s.equipe).filter(Boolean))].sort().map((e) => [e, corEq(e)]).concat([['Sem equipe', '#9AA9B0']]) : Object.entries(COR_QD)) : [];
+      const porEq = selCor.value !== 'os' && selCor.value !== 'risco';
+      let itens = selCor.value === 'os' ? [...Object.entries(COR_OS), ['Sem ordem', '#C9D3D6']] : selCor.value === 'risco' ? Object.entries(corRisco) : equipes.map((e) => [e, corEq(e)]);
+      let itQd = qdDados && selQd.value && !(mapa.getZoom() >= ZOOM_FACES && selQd.value === 'sit') ? (selQd.value === 'eq' ? [...new Set([...qdSit.values()].map((s) => s.equipe).filter(Boolean))].sort().map((e) => [e, corEq(e)]).concat([['Sem equipe', '#9AA9B0']]) : Object.entries(COR_QD)) : [];
+      if (porEq && itQd.length && selQd.value === 'eq') { const tem = new Set(itens.map((x) => x[0])); itQd.forEach((x) => { if (!tem.has(x[0])) itens.push(x); }); itQd = []; } // pontos e quadras por equipe: um bloco só
+      if (porEq) itens = itens.map(([t, c]) => [rotEquipe(t), c]);
       const itFc = qdDados && selQd.value === 'sit' && fcLayers.size ? Object.entries(COR_FC).filter(([t]) => t !== 'A levantar') : [];
       // em tela pequena a legenda começa recolhida (um botão): aberta, ela tapava boa parte do mapa
       if (S.legAberta == null) S.legAberta = mapa.getSize().y >= 520;
@@ -2287,7 +2331,6 @@
       const em = h('input', { class: 'entrada', type: 'email', value: u.email || '', placeholder: 'opcional' });
       const pe = h('select', { class: 'entrada' }, PERFIS.map(([v, t]) => h('option', { value: v, selected: (u.perfil === 'campo' ? 'coletor' : u.perfil) === v }, t)));
       const at = h('input', { type: 'checkbox', checked: String(u.ativo || 'sim').toLowerCase() !== 'nao' });
-      const mc = h('select', { class: 'entrada' }, h('option', { value: 'raios', selected: (u.modo_copa || 'raios') === 'raios' }, '4 raios com trena (o app calcula a área)'), h('option', { value: 'area', selected: u.modo_copa === 'area' }, 'Área direto, com trena a laser'));
       const tj = h('input', { type: 'checkbox', checked: u.trajeto === 'sim' });
       // dupla fixa do acesso: avaliador responsável e auxiliar (cadastro de Pessoas)
       const opPe = (f, sel) => pessoas.filter((x) => (!f || x.funcao === f) && (x.ativo !== 'não' || x.id === sel)).sort((a, b) => a.nome.localeCompare(b.nome, 'pt')).map((x) => h('option', { value: x.id, selected: x.id === sel }, `${x.nome} (${x.funcao === 'Avaliador' ? x.registro || 'avaliador' : 'auxiliar'}, ${x.vinculo})`));
@@ -2298,7 +2341,7 @@
       const cAux = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Quem é este auxiliar'), sPx, h('div', { class: 'dica' }, 'Do cadastro de Pessoas. O auxiliar entra só para ver a produção e o valor dele.'));
       const bAx = h('div', null, h('small', null, 'Auxiliar'), sAx); const dTime = h('div', { class: 'dica' });
       const verDupla = () => { const pa = pessoas.find((x) => x.id === sAv.value); const parc = !!(pa && pa.time && timeParc(pa.time)); bAx.classList.toggle('oculto', parc);
-        dTime.textContent = !pa ? 'Cada registro deste acesso fica gravado com esta dupla. Se alguém mudar, troque aqui.' : pa.time ? `Time do avaliador: ${pa.time}.` + (parc ? ' No time parceiro o avaliador diz no celular, a cada começo de turno, se coleta sozinho ou com auxiliar.' : ' Cada registro fica gravado com esta dupla.') : 'Este avaliador ainda não tem time: defina em Coordenação, Pessoas.'; };
+        dTime.textContent = !pa ? 'Cada registro deste acesso fica gravado com esta dupla. Se alguém mudar, troque aqui.' : pa.time ? `Time do avaliador: ${pa.time}.` + (parc ? ' Mede a copa por dois raios. O avaliador diz no celular, a cada começo de turno, se coleta sozinho ou com auxiliar.' : ' Mede a área de copa direto. Cada registro fica gravado com esta dupla.') : 'Este avaliador ainda não tem time: defina em Coordenação, Pessoas.'; };
       sAv.onchange = verDupla;
       const cDupla = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Dupla deste acesso'), pessoas.length ? h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Avaliador responsável'), sAv), bAx) : h('div', { class: 'dica' }, 'Cadastre antes as pessoas em Coordenação, Pessoas.'), dTime);
       const marcados = new Set(String(u.projeto || '').split(',').map((x) => x.trim()));
@@ -2312,14 +2355,13 @@
         h('div', { class: 'grade2' }, so('coletor revisor cliente time admin', h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), no)), so('coletor', h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Equipe'), eq))),
         h('div', { class: 'grade2' }, so('coletor', h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Código da equipe'), cod)), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Email'), em)),
         so('coletor', h('div', { class: 'dica' }, 'O código da equipe vira o prefixo dos códigos das árvores (E1 gera E1-0001, E1-0002...). Use um diferente para cada equipe.')),
-        so('coletor', h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Como mede a copa'), mc)),
         so('coletor', cDupla), so('coletor', h('label', { class: 'campo' }, tj, ' Registrar o trajeto do turno (liga em "Começar o turno", só com o app aberto; não vale para dupla com parceiro)')),
         so('coletor auxiliar revisor cliente time', h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Projetos liberados'), prj)), h('label', null, at, ' Usuário ativo'));
       const verPf = () => { fm.querySelectorAll('[data-pf]').forEach((el) => el.classList.toggle('oculto', !el.dataset.pf.split(' ').includes(pe.value))); verDupla(); }; pe.onchange = verPf; verPf();
       const ok = await modal(novo ? 'Novo usuário' : 'Editar usuário', fm, [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
       if (!ok) return;
       const login = lo.value.trim().toLowerCase();
-      const digitado = () => ({ login: lo.value.trim().toLowerCase(), nome: no.value, perfil: pe.value, projeto: [...marcados].filter(Boolean).join(','), equipe: eq.value, codigo: cod.value, email: em.value, ativo: at.checked ? 'sim' : 'nao', modo_copa: mc.value, trajeto: tj.checked ? 'sim' : '', avaliador_id: sAv.value, auxiliar_id: pe.value === 'auxiliar' ? sPx.value : sAx.value, indicacao: pe.value === 'time' ? ind.value : u.indicacao || '' });
+      const digitado = () => ({ login: lo.value.trim().toLowerCase(), nome: no.value, perfil: pe.value, projeto: [...marcados].filter(Boolean).join(','), equipe: eq.value, codigo: cod.value, email: em.value, ativo: at.checked ? 'sim' : 'nao', trajeto: tj.checked ? 'sim' : '', avaliador_id: sAv.value, auxiliar_id: pe.value === 'auxiliar' ? sPx.value : sAx.value, indicacao: pe.value === 'time' ? ind.value : u.indicacao || '' });
       const erro = (m) => { toast(m, 5000, null, true); return editar(digitado(), novo, se.value); }; // o formulário volta com o que foi digitado
       if (!login) return erro('Preencha o usuário.');
       if (se.value.trim() && se.value.trim().length < 8 && !Api.demo) return erro('A senha precisa ter pelo menos 8 caracteres.');
@@ -2328,7 +2370,7 @@
       const pfv = pe.value; const col = pfv === 'coletor'; const pa = pessoas.find((x) => x.id === sAv.value); const parc = !!(pa && pa.time && timeParc(pa.time));
       if (pfv === 'auxiliar' && !sPx.value) return erro('Escolha quem é este auxiliar (cadastro de Pessoas).');
       if (pfv === 'time' && !ind.value) return erro('Escolha o time parceiro deste acesso (os times ficam em Coordenação, Times).');
-      const dados = { login, nome: pfv === 'auxiliar' ? nomePe(sPx.value) || login : no.value.trim() || login, perfil: pfv, projeto: pfv === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: col ? eq.value.trim() : '', codigo: col ? cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') : '', email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', modo_copa: col ? mc.value : '', trajeto: col && tj.checked ? 'sim' : '', avaliador_id: col ? sAv.value : '', auxiliar_id: col ? (parc ? '' : sAx.value) : pfv === 'auxiliar' ? sPx.value : '', indicacao: pfv === 'time' ? ind.value : col ? u.indicacao || '' : '' };
+      const dados = { login, nome: pfv === 'auxiliar' ? nomePe(sPx.value) || login : no.value.trim() || login, perfil: pfv, projeto: pfv === 'admin' ? '*' : [...marcados].filter(Boolean).join(','), equipe: col ? eq.value.trim() : '', codigo: col ? cod.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') : '', email: em.value.trim(), ativo: at.checked ? 'sim' : 'nao', trajeto: col && tj.checked ? 'sim' : '', avaliador_id: col ? sAv.value : '', auxiliar_id: col ? (parc ? '' : sAx.value) : pfv === 'auxiliar' ? sPx.value : '', indicacao: pfv === 'time' ? ind.value : col ? u.indicacao || '' : '' };
       if (se.value.trim()) dados.senha = se.value.trim();
       if (pe.value === 'coletor' && !dados.codigo) return erro('Defina o código da equipe (ex.: E1).');
       if (pe.value === 'coletor' && us.some((x) => x.login !== login && x.codigo === dados.codigo && String(x.projeto).split(',').some((p) => dados.projeto.split(',').includes(p)))) return erro('Outra equipe deste projeto já usa o código ' + dados.codigo + '.');
@@ -2819,7 +2861,7 @@
     if (fotos && fotos.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Fotos'), h('div', { class: 'ficha-fotos' }, fotos.map((f) => h(linkSeguro(f.link) || f.src ? 'a' : 'div', { href: linkSeguro(f.link) || f.src, target: '_blank', rel: 'noopener', class: 'ficha-foto', 'data-drive': f.drive || null }, f.src ? h('img', { src: f.src, alt: f.rotulo, loading: 'lazy', onerror: (e) => e.target.remove() }) : null, h('span', null, f.rotulo))))));
     return secoes;
   }
-  const ROT_VAL = { Pendente: 'Aguardando validação', Validado: 'Validado', Devolvido: 'Devolvido para correção', Corrigido: 'Corrigido, aguardando nova validação', Descartado: 'Descartado' };
+  const ROT_VAL = { Pendente: 'Aguardando validação', Validado: 'Validado', Devolvido: 'Devolvido para correção', Corrigido: 'Corrigido, aguardando nova validação', Descartado: 'Apagado (na lixeira)' };
   async function telaFichaLocal(r) {
     const form = S.form; const pe = podeEditar(r);
     const fotos = [];
@@ -2993,12 +3035,16 @@
   // ---------- Painel, relatório e validação ----------
   // paletas acessíveis a daltônicos (Okabe-Ito): risco, validação e ordens de serviço; sempre acompanhadas de texto
   const COR_RISCO = { Baixo: '#009E73', 'Médio': '#F0E442', Alto: '#D55E00', Severo: '#3B0F70', Extremo: '#3B0F70' };
-  const ROT_CURTO = { Pendente: 'Aguardando', Validado: 'Validados', Corrigido: 'Corrigidos', Devolvido: 'Devolvidos', Descartado: 'Descartados' };
+  const ROT_CURTO = { Pendente: 'Aguardando', Validado: 'Validados', Corrigido: 'Corrigidos', Devolvido: 'Devolvidos', Descartado: 'Lixeira' };
   const COR_VAL = { Validado: '#1B7F3B', Pendente: '#8A969C', Corrigido: '#0072B2', Devolvido: '#E69F00', Descartado: '#B0BEC5' };
   const CORES = ['#00546E', '#CD834C', '#12A6C8', '#5B8C5A', '#8E6C8A', '#C9A227'];
   // uma paleta de equipes para o painel e o mapa (acessível a daltônicos e sem o vermelho do risco); a mesma equipe tem sempre a mesma cor
-  const CORES_EQ = ['#00546E', '#E69F00', '#56B4E9', '#CC79A7', '#009E73', '#3B0F70', '#8C6D31', '#0072B2'];
-  function corEquipe(e) { const m = String(e || '').match(/(\d+)\s*$/); if (m) return CORES_EQ[(+m[1] - 1 + CORES_EQ.length) % CORES_EQ.length]; let hsh = 0; for (const ch of String(e)) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0; return CORES_EQ[hsh % CORES_EQ.length]; }
+  // equipes da casa: azul e terracota primeiro; equipes de time parceiro usam outra família de cores e aparecem como "Time · avaliador"
+  const CORES_EQ = ['#00546E', '#CD834C', '#56B4E9', '#CC79A7', '#009E73', '#3B0F70', '#8C6D31', '#0072B2']; const CORES_PARC = ['#6A3D9A', '#1B7837', '#C51B7D', '#35978F', '#9E6A00', '#762A83'];
+  const infoEq = (e) => ((S.sessao && S.sessao.equipes) || []).find((x) => x.equipe === e);
+  const rotEquipe = (e) => { const i = infoEq(e); return i && i.parceiro ? `${i.time} · ${i.av || e}` : e; };
+  function corEquipe(e) { const i = infoEq(e); if (i && i.parceiro) { const ps = S.sessao.equipes.filter((x) => x.parceiro).map((x) => x.equipe); return CORES_PARC[ps.indexOf(e) % CORES_PARC.length]; }
+    const m = String(e || '').match(/(\d+)\s*$/); if (m) return CORES_EQ[(+m[1] - 1 + CORES_EQ.length) % CORES_EQ.length]; let hsh = 0; for (const ch of String(e)) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0; return CORES_EQ[hsh % CORES_EQ.length]; }
   const pl = (n, um, varios) => `${fmtN(n)} ${n === 1 ? um : varios}`;
   const fmtN = (n) => (n == null ? '' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 1 }));
   const fmtP = (x) => (x == null || !isFinite(x) ? '' : (x * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%');
@@ -3301,7 +3347,7 @@
         h('p', { class: 'rel-data' }, `Período: ${dBR(de.value)} a ${dBR(ate.value)}. Conta os registros pela data da validação técnica.`),
         h('h2', null, '1. Resumo do período'),
         tab(['Item', 'Quantidade'], [['Registros validados no período', fmtN(val.length)], ['Indivíduos (árvores, arbustos e palmeiras)', fmtN(val.filter(ehInd).length)], ['Pontos sem árvore (locais de plantio e calçadas)', fmtN(val.filter((l) => !ehInd(l)).length)],
-          ehCoord() ? ['Devolvidos para correção no período', fmtN(dev.length)] : null, ehCoord() ? ['Descartados no período', fmtN(desc.length)] : null,
+          ehCoord() ? ['Devolvidos para correção no período', fmtN(dev.length)] : null, ehCoord() ? ['Apagados no período (lixeira)', fmtN(desc.length)] : null,
           ['Validados acumulados até o fim do período', fmtN(acum) + (p.meta ? ` (${fmtP(acum / p.meta)} da meta de ${fmtN(p.meta)})` : '')]].filter(Boolean)),
         perfil() === 'cliente' ? null : h('h2', null, '2. Validados por equipe'),
         perfil() === 'cliente' ? null : tab(['Equipe', 'Indivíduos', 'Pontos sem árvore', 'Total'], [...equipes.map((e) => { const x = val.filter((l) => (l.equipe || '-') === e); return [e, fmtN(x.filter(ehInd).length), fmtN(x.filter((l) => !ehInd(l)).length), fmtN(x.length)]; }), ['Total', fmtN(val.filter(ehInd).length), fmtN(val.filter((l) => !ehInd(l)).length), fmtN(val.length)]]),
@@ -3340,16 +3386,16 @@
       const t = h('textarea', { class: 'entrada', placeholder: estado === 'Devolvido' ? 'Ex.: conferir a espécie e refazer a foto 1' : 'Ex.: registro duplicado' });
       const als = cache ? [...new Set(cache.linhas.filter((l) => uuids.includes(l.uuid)).flatMap((l) => l.__alertas || []))] : [];
       const sug = [...new Set(MOTIVO_ALERTA.filter(([r]) => als.some((a) => r.test(a))).map(([, m]) => m).concat(estado === 'Devolvido' ? ['Refazer as fotos (fora de foco ou sem a árvore inteira).'] : ['Registro duplicado.', 'Registro de teste.']))];
-      const ok = await modal(estado === 'Devolvido' ? 'Devolver para a equipe' : 'Descartar', h('div', null, h('p', null, `${uuids.length} registro(s). Escreva o motivo${estado === 'Devolvido' ? ', que a equipe vê no aparelho' : ''}:`), sug.length ? h('div', { class: 'motivos' }, sug.map((m) => h('button', { class: 'chip', onclick: () => { t.value = t.value ? t.value + ' ' + m : m; } }, m))) : null, t), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: estado === 'Devolvido' ? 'Devolver' : 'Descartar', classe: estado === 'Descartado' ? 'perigo' : '', valor: true }]);
+      const ok = await modal(estado === 'Devolvido' ? 'Devolver para a equipe' : 'Apagar registros', h('div', null, h('p', null, `${uuids.length} registro(s). Escreva o motivo${estado === 'Devolvido' ? ', que a equipe vê no aparelho' : '. Eles vão para a lixeira: saem do mapa, dos painéis e das entregas, e dá para restaurar depois'}:`), sug.length ? h('div', { class: 'motivos' }, sug.map((m) => h('button', { class: 'chip', onclick: () => { t.value = t.value ? t.value + ' ' + m : m; } }, m))) : null, t), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: estado === 'Devolvido' ? 'Devolver' : 'Apagar', classe: estado === 'Descartado' ? 'perigo' : '', valor: true }]);
       if (!ok) return false; obs = t.value.trim(); if (!obs) { toast('Informe o motivo.'); return false; }
-    } else if (uuids.length > 1 && !amostra && !(await confirmar('Validar registros', `Validar ${uuids.length} registro(s)? Depois de validados, a equipe não consegue mais alterar.`, 'Validar'))) return false;
+    } else if (estado === 'Validado' && uuids.length > 1 && !amostra && !(await confirmar('Validar registros', `Validar ${uuids.length} registro(s)? Depois de validados, a equipe não consegue mais alterar.`, 'Validar'))) return false;
     try {
       for (let i = 0; i < uuids.length; i += 500) await Api.b.validar(S.projeto.id, uuids.slice(i, i + 500).map((u) => ({ uuid: u, estado, obs, amostra: !!amostra })));
       const c = S.linhas[S.projeto.id]; const agora = agoraISO(); const set = new Set(uuids);
       if (c) for (const l of c.linhas) if (set.has(l.uuid)) Object.assign(l, { validacao: estado, validacao_obs: obs, validado_por: S.sessao.u, validado_em: agora });
       S.painel = null;
       const desfazer = Object.keys(antes).length ? { texto: 'Desfazer', fn: async () => { try { const its = Object.entries(antes).map(([u, a]) => ({ uuid: u, estado: a.st, obs: a.validacao_obs, desfazer: { validacao_obs: a.validacao_obs, validado_por: a.validado_por, validado_em: a.validado_em } })); for (let k = 0; k < its.length; k += 500) await Api.b.validar(S.projeto.id, its.slice(k, k + 500)); if (c) for (const l of c.linhas) if (antes[l.uuid]) { const a = antes[l.uuid]; Object.assign(l, { validacao: a.st, validacao_obs: a.validacao_obs, validado_por: a.validado_por, validado_em: a.validado_em }); } S.painel = null; toast('Desfeito.'); if (location.hash.startsWith('#validacao')) telaValidacao(); } catch (er) { toast('Não foi possível desfazer: ' + er.message, 5000); } } } : null;
-      const nome = { Validado: 'validado(s)', Devolvido: 'devolvido(s)', Descartado: 'descartado(s)' }[estado] || estado.toLowerCase();
+      const nome = { Validado: 'validado(s)', Devolvido: 'devolvido(s)', Descartado: 'apagado(s), na lixeira', Pendente: 'restaurado(s)' }[estado] || estado.toLowerCase();
       toast(`${uuids.length} registro(s) ${nome}.`, 2600, desfazer); return true;
     } catch (e) { toast(e.message, 5000); return false; }
   }
@@ -3365,6 +3411,7 @@
       if (/altura/i.test(c.nome) && v > 35) a.push('Altura alta: ' + numBR(v) + ' m');
       if (/dap/i.test(c.nome) && v > 200) a.push('DAP alto: ' + numBR(Math.round(v)) + ' cm');
       if (/cap/i.test(c.nome) && v > 628) a.push('CAP alto: ' + numBR(Math.round(v)) + ' cm');
+      if (c.nome === 'Especie suspeita' && l[c.nome] === 'sim') a.push('Espécie a confirmar');
       if (/raio/i.test(c.nome) && v > 20) { if (!a.some((x) => /^Raio/.test(x))) a.push('Raio de copa alto'); }
       if (c.min != null && v < c.min) a.push(c.limiteMsg ? c.rotulo.replace(/\s*\(.*\)/, '') + ' ' + c.limiteMsg.replace(/\s*\(.*\)/, '') : c.rotulo + ' abaixo de ' + numBR(c.min));
     }
@@ -3390,7 +3437,7 @@
     linhas.forEach((l) => { l.__alertas = alertasDe(l, form, dups); l.validacao = l.validacao || 'Pendente'; });
     const F = S.filtroVal = Object.assign({ sit: 'revisar', eq: '', alerta: '', q: '', limite: 100, per: '', ordem: 'antigos' }, S.filtroVal || {});
     const sel = new Set();
-    const selSit = h('select', { class: 'entrada' }, [['revisar', 'A revisar'], ['Pendente', 'Aguardando validação'], ['Corrigido', 'Corrigidos'], ['Devolvido', 'Devolvidos'], ['Validado', 'Validados'], ['Descartado', 'Descartados'], ['', 'Todos']].map(([v, t]) => h('option', { value: v, selected: F.sit === v }, t)));
+    const selSit = h('select', { class: 'entrada' }, [['revisar', 'A revisar'], ['Pendente', 'Aguardando validação'], ['Corrigido', 'Corrigidos'], ['Devolvido', 'Devolvidos'], ['Validado', 'Validados'], ['Descartado', 'Lixeira (apagados)'], ['', 'Todos']].map(([v, t]) => h('option', { value: v, selected: F.sit === v }, t)));
     const eqs = [...new Set(linhas.map((l) => l.equipe || ''))].filter(Boolean).sort();
     const selEq = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Todas as equipes'), eqs.map((e) => h('option', { value: e, selected: F.eq === e }, e)));
     const selAl = h('select', { class: 'entrada' }, [['', 'Com e sem alerta'], ['com', 'Só com alerta'], ['sem', 'Só sem alerta']].map(([v, t]) => h('option', { value: v, selected: F.alerta === v }, t)));
@@ -3426,7 +3473,7 @@
       acoes.replaceChildren(h('label', { class: 'tudo' }, h('input', { type: 'checkbox', checked: vis.length && vis.slice(0, F.limite).every((l) => sel.has(l.uuid)), onchange: (e) => { vis.slice(0, F.limite).forEach((l) => (e.target.checked ? sel.add(l.uuid) : sel.delete(l.uuid))); desenhar(); } }), ' Marcar os visíveis'),
         h('button', { class: 'btn peq', disabled: !sel.size, onclick: () => validarSel() }, `Validar (${sel.size})`),
         h('button', { class: 'btn sec peq', disabled: !sel.size, onclick: () => aplicar('Devolvido', [...sel]) }, 'Devolver'),
-        h('button', { class: 'btn perigo peq', disabled: !sel.size, onclick: () => aplicar('Descartado', [...sel]) }, 'Descartar'),
+        F.sit === 'Descartado' ? h('button', { class: 'btn sec peq', disabled: !sel.size, onclick: () => aplicar('Pendente', [...sel]) }, 'Restaurar da lixeira') : h('button', { class: 'btn perigo peq', disabled: !sel.size, onclick: () => aplicar('Descartado', [...sel]) }, 'Apagar'),
         semAlerta.length ? h('button', { class: 'btn sec peq', onclick: () => validarLote(semAlerta) }, `Validar todos sem alerta (${fmtN(semAlerta.length)})`) : null);
     }
     // validar os marcados: se algum tem alerta, avisa e oferece validar só os sem alerta
@@ -3481,7 +3528,7 @@
         fichaConteudo(form, valores, fotos),
         secaoOSArvore(uuidR, true),
         l.historico ? h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Histórico de alterações'), String(l.historico).split(' | ').map((x) => h('p', { class: 'hist' }, x))) : null,
-        ehCoord() ? h('button', { class: 'link-perigo', style: 'margin:4px 0 90px', onclick: () => decidir('Descartado') }, 'Descartar este registro') : null,
+        ehCoord() ? h('button', { class: 'link-perigo', style: 'margin:4px 0 90px', onclick: () => decidir('Descartado') }, 'Apagar este registro') : null,
         ehCoord() ? h('footer', { class: 'rodape val-dec' },
           h('button', { class: 'btn sec ic-nav', disabled: i <= 0, onclick: () => irPara(i - 1), 'aria-label': 'Anterior', title: 'Anterior (seta para a esquerda)' }, ico('esq')),
           h('button', { class: 'btn sec', style: 'flex:1', onclick: () => decidir('Devolvido'), title: 'Devolver (D)' }, 'Devolver'),
@@ -3870,17 +3917,20 @@
   // marca na hora; sem internet guarda no aparelho
   async function marcarQuadras(itens) {
     const item = { chave: uuid(), usuario: S.sessao.u, projeto: S.projeto.id, itens: itens.map((i) => Object.assign({ em: agoraISO() }, i)) };
+    if (S.real) return { alteradas: 0, recusadas: [{ numero: '', motivo: 'Você está vendo as telas de outro perfil: nada é gravado.' }] };
     if (navigator.onLine && !S.expirada) {
-      try { const r = await Api.b.quadrasMarcar(item.projeto, item.itens); S.qdSitEm = null; return r; } catch (e) { if (!/Sem conexão|Servidor respondeu 5/i.test(e.message)) throw e; }
+      try { await subirFotosQd(item); const r = await Api.b.quadrasMarcar(item.projeto, item.itens); S.qdSitEm = null; return r; } catch (e) { if (!/Sem conexão|Servidor respondeu 5/i.test(e.message)) throw e; }
     }
     await mexerFilaQd((f) => { f.push(item); }); atualizarSync();
     return { fila: true, alteradas: itens.length, recusadas: [] };
   }
+  // foto da face: sobe antes da marcação; sem internet fica guardada junto, na fila
+  async function subirFotosQd(item) { for (const i of item.itens) if (i.fotoBlob) { const r = await Api.b.foto(item.projeto, `face_${String(i.numero).replace(/[^\w.-]/g, '_')}_${String(i.em || agoraISO()).replace(/\D/g, '').slice(0, 14)}.jpg`, i.fotoBlob); i.foto = r.url || ''; delete i.fotoBlob; } }
   async function enviarFilaQd(silencioso) {
     const u = S.sessao && S.sessao.u; const fila = (await filaTodaQd()).filter((x) => x.usuario === u && !x.recusado); if (!fila.length) return;
     let ok = 0, rec = [];
     for (const it of fila) {
-      try { const r = await Api.b.quadrasMarcar(it.projeto, it.itens); rec = rec.concat(r.recusadas || []); await mexerFilaQd((f) => f.filter((y) => y.chave !== it.chave)); ok++; } catch (e) {
+      try { await subirFotosQd(it); const r = await Api.b.quadrasMarcar(it.projeto, it.itens); rec = rec.concat(r.recusadas || []); await mexerFilaQd((f) => f.filter((y) => y.chave !== it.chave)); ok++; } catch (e) {
         if (e.sessao) break; if (/Sem conexão|Servidor respondeu 5/i.test(e.message)) break;
         await mexerFilaQd((f) => { const x = f.find((y) => y.chave === it.chave); if (x) { x.erro = e.message; x.recusado = true; } }); rec.push({ numero: '', motivo: e.message });
       }

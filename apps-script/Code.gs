@@ -92,7 +92,7 @@ function doPost(e) {
       const prjs = projetosDoUsuario(usr); const forms = {};
       // os formulários vão junto no login: o app abre sem esperar outra consulta
       prjs.slice(0, 5).forEach((p) => { if (p.formulario && !forms[p.formulario]) try { forms[p.formulario] = lerFormulario(p.formulario); } catch (er) { /* app busca depois */ } });
-      return json({ ok: true, versaoScript: VERSAO_SCRIPT, token: token, expira_em: token ? new Date(Date.now() + SESSAO_DIAS * 864e5).toISOString() : '', usuario: publico(usr), projetos: prjs, formularios: forms });
+      return json({ ok: true, versaoScript: VERSAO_SCRIPT, token: token, expira_em: token ? new Date(Date.now() + SESSAO_DIAS * 864e5).toISOString() : '', usuario: publico(usr), projetos: prjs, formularios: forms, equipes: equipesInfo(usr) });
     }
     let usr = d.chave_api ? autenticarChave(d.chave_api, d.acao) : d.t ? autenticarSessao(d.t) : autenticarSenha(d.u, d.s, true);
     if (d.como) { // a coordenação olha as telas de outro usuário: o servidor responde como se fosse ele, só em consultas
@@ -112,7 +112,7 @@ function doPost(e) {
     if (perfil === 'time' && ACOES_TIME.indexOf(d.acao) < 0) throw new Error('Seu perfil não tem acesso a esta função.');
     if (perfil === 'auxiliar' && ACOES_AUX.indexOf(d.acao) < 0) throw new Error('Seu perfil não tem acesso a esta função.');
     switch (d.acao) {
-      case 'sessao': return json({ ok: true, versaoScript: VERSAO_SCRIPT, usuario: publico(usr), projetos: projetosDoUsuario(usr) });
+      case 'sessao': return json({ ok: true, versaoScript: VERSAO_SCRIPT, usuario: publico(usr), projetos: projetosDoUsuario(usr), equipes: equipesInfo(usr) });
       case 'sair': encerrarSessao(d.t); return json({ ok: true });
       case 'aceitar_termo': atualizarUsuario(usr.login, { termo_aceito_em: new Date().toISOString(), termo_versao: String(d.versao || '').slice(0, 30) }); auditar(usr.login, 'aceitar_termo', '', d.versao || ''); return json({ ok: true });
       case 'trocar_senha': trocarSenha(usr, d.atual, d.nova, d.t); return json({ ok: true });
@@ -130,7 +130,7 @@ function doPost(e) {
       case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
       case 'quadras_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarQuadras(d.projeto, d.camada, usr)));
       case 'quadras_camada': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaQuadras(d.projeto, d.versao)));
-      case 'quadras_situacao': { exigeProjeto(d.projeto); const cli = usr.perfil === 'cliente'; const pub = (o) => { const x = publicoOS(o); if (cli) { delete x.equipe; delete x.marcada_por; delete x.historico; delete x.atribuida; } return x; }; return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(pub), faces: d.faces ? lerSitFaces(d.projeto).map(pub) : undefined }); }
+      case 'quadras_situacao': { exigeProjeto(d.projeto); const cli = usr.perfil === 'cliente'; const pub = (o) => { const x = publicoOS(o); if (cli) { delete x.equipe; delete x.marcada_por; delete x.historico; delete x.atribuida; delete x.foto; } return x; }; return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(pub), faces: d.faces ? lerSitFaces(d.projeto).map(pub) : undefined }); }
       case 'trajeto_salvar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarTrajeto(d.projeto, d.trecho || {}, usr)));
       case 'trajetos': pode('revisor'); exigeProjeto(d.projeto); return json({ ok: true, trechos: lerTrajetos(d.projeto, d.dia) });
       case 'quadras_marcar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, marcarQuadras(d.projeto, d.itens, usr)));
@@ -366,7 +366,15 @@ function salvarUsuario(dados) {
   salvarLinha('Usuarios', COLS_USUARIOS, 'login', o);
   if (dados.senha && existe) encerrarSessoesDe(o.login);
 }
-function publico(u) { const pf = normalizarPerfil(u.perfil); return { login: u.login, nome: u.nome, perfil: pf, equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: u.modo_copa || 'raios', trajeto: u.trajeto === 'sim' ? 'sim' : '', dupla: pf === 'coletor' ? duplaDoUsuario(u) : null, time: u.indicacao || '', escolheAuxiliar: pf === 'coletor' && !!u.avaliador_id && !u.auxiliar_id && timeParceiroDo(u) }; }
+function publico(u) { const pf = normalizarPerfil(u.perfil); return { login: u.login, nome: u.nome, perfil: pf, equipe: u.equipe, email: u.email || '', termo_aceito_em: u.termo_aceito_em || '', termo_versao: u.termo_versao || '', modo_copa: pf === 'coletor' && String(u.indicacao || '').trim() ? (timeParceiroDo(u) ? 'raios2' : 'area') : u.modo_copa || 'raios', trajeto: u.trajeto === 'sim' ? 'sim' : '', dupla: pf === 'coletor' ? duplaDoUsuario(u) : null, time: u.indicacao || '', escolheAuxiliar: pf === 'coletor' && !!u.avaliador_id && !u.auxiliar_id && timeParceiroDo(u) }; }
+// coordenação e auditor: de que time é cada equipe (cores e nomes da legenda do mapa)
+function equipesInfo(usr) {
+  if (usr.perfil !== 'admin' && usr.perfil !== 'revisor') return [];
+  const tipo = tiposDosTimes(); const ps = {}; tabela('Pessoas').forEach((p) => { ps[p.id] = p; }); const out = []; const visto = {};
+  tabela('Usuarios').forEach((u) => { if (normalizarPerfil(u.perfil) !== 'coletor' || !u.equipe || visto[u.equipe]) return; visto[u.equipe] = 1; const t = String(u.indicacao || '').trim(); const av = ps[u.avaliador_id];
+    out.push({ equipe: u.equipe, time: t, parceiro: !!t && tipo(t) === 'parceiro', av: av ? String(av.nome).split(' ')[0] : '' }); });
+  return out;
+}
 // time de parceiro (empresa júnior, por exemplo): a parte do time sai do valor do registro e o avaliador diz, no começo do turno, se está sozinho ou com auxiliar
 function timeParceiroDo(u) { const t = String(u.indicacao || '').trim(); return !!t && tiposDosTimes()(t) === 'parceiro'; }
 function auxiliarDoTurno(id, usr, projetoId) {
@@ -1089,7 +1097,7 @@ function abaQuadras(projetoId) {
   return garantirCab(sh, COLS_QUADRAS);
 }
 function lerSitQuadras(projetoId) { return lerOS(abaQuadras(projetoId)); }
-const COLS_FACES = ['numero', 'quadra', 'rua', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'largura', 'registro', 'obs', 'historico', 'atualizado_em', 'atribuida'];
+const COLS_FACES = ['numero', 'quadra', 'rua', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'largura', 'registro', 'obs', 'historico', 'atualizado_em', 'atribuida', 'foto'];
 const SITUACOES_FACE = ['A levantar', 'Em levantamento', 'Levantada', 'Levantada, sem árvores'];
 const FACE_FEITA = ['Levantada', 'Levantada, sem árvores'];
 function abaFaces(projetoId) {
@@ -1567,6 +1575,7 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
       f.situacao = it.situacao; f.marcada_por = usr.login; f.marcada_em = dataAparelho(it.em); txt.push(it.situacao.toLowerCase());
       if (it.situacao === 'Levantada, sem árvores') { f.registro = String(it.registro).slice(0, 60); f.largura = lgNova; } else { f.registro = ''; f.largura = ''; }
     }
+    if (it.foto && /^https:\/\/drive\.google\.com\/file\/d\/[\w-]+\/view$/.test(String(it.foto)) && it.foto !== f.foto && it.situacao != null && f.situacao === it.situacao) { f.foto = String(it.foto); txt.push('foto da face'); }
     if (coord && it.equipe != null) txt.push('equipe ' + (f.equipe || 'nenhuma'));
     if (it.obs != null) f.obs = String(it.obs).slice(0, 300);
     if (!txt.length && it.obs == null) return;

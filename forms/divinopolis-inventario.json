@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 6,
+ "versao": 7,
  "campos": [
   {
    "armazenar": "text",
@@ -107,6 +107,13 @@
   },
   {
    "armazenar": "text",
+   "nome": "Especie suspeita",
+   "rotulo": "Espécie a confirmar",
+   "tipo": "hidden",
+   "ajuda": "Marcado quando quem coletou não tem certeza da espécie: o app pede as fotos de identificação e o auditor confere."
+  },
+  {
+   "armazenar": "text",
    "nome": "CAP (cm)",
    "rotulo": "CAP (cm)",
    "tipo": "multinumber",
@@ -131,7 +138,7 @@
    "rotulo": "Modo de medir a copa",
    "tipo": "hidden",
    "auto": "modocopa",
-   "ajuda": "Raios ou área medida, conforme a preferência de quem coletou."
+   "ajuda": "Área medida direto, dois raios ou quatro raios, conforme o time de quem coletou."
   },
   {
    "armazenar": "real",
@@ -140,7 +147,7 @@
    "tipo": "number",
    "avisoMin": 0.1,
    "avisoMax": 20,
-   "ajuda": "Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).",
+   "ajuda": "Distância do centro do tronco até a borda da copa, em metros. Com dois raios: um ao longo da calçada e outro perpendicular a ela.",
    "oculto": true
   },
   {
@@ -150,7 +157,7 @@
    "tipo": "number",
    "avisoMin": 0.1,
    "avisoMax": 20,
-   "ajuda": "Distância do centro do tronco até a borda da copa, em metros, em quatro direções em cruz (ao longo da calçada e perpendicular a ela).",
+   "ajuda": "Distância do centro do tronco até a borda da copa, em metros. Com dois raios: um ao longo da calçada e outro perpendicular a ela.",
    "oculto": true
   },
   {
@@ -180,8 +187,8 @@
    "tipo": "text",
    "calculado": true,
    "oculto": true,
-   "expr": "round(3.1416 * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4) * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4), 2)",
-   "ajuda": "Calculada pelos quatro raios: área do círculo com o raio médio."
+   "expr": "round(3.1416 * CASE WHEN \"Raio de copa 3 (m)\" IS NULL THEN ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\") / 2) * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\") / 2) ELSE ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4) * ((\"Raio de copa 1 (m)\" + \"Raio de copa 2 (m)\" + \"Raio de copa 3 (m)\" + \"Raio de copa 4 (m)\") / 4) END, 2)",
+   "ajuda": "Calculada pelos raios: área do círculo com o raio médio (dois ou quatro raios)."
   },
   {
    "armazenar": "real",
@@ -778,6 +785,9 @@
     },
     {
      "campo": "Especie"
+    },
+    {
+     "campo": "Especie suspeita"
     },
     {
      "campo": "CAP (cm)"
@@ -1416,7 +1426,8 @@
      "Foto 2": "oculto",
      "Foto 3": "oculto",
      "Foto 4": "oculto",
-     "Observacoes": "oculto"
+     "Observacoes": "oculto",
+     "Especie suspeita": "oculto"
     }
    }
   },
@@ -1438,6 +1449,14 @@
      "Raio de copa 4 (m)": "oculto",
      "Area de copa (m2)": "oculto",
      "Area de copa medida (m2)": "obrig"
+    },
+    "raios2": {
+     "Raio de copa 1 (m)": "obrig",
+     "Raio de copa 2 (m)": "obrig",
+     "Raio de copa 3 (m)": "oculto",
+     "Raio de copa 4 (m)": "oculto",
+     "Area de copa (m2)": "mostrar",
+     "Area de copa medida (m2)": "oculto"
     }
    }
   },
@@ -1445,6 +1464,17 @@
    "campo": "Especie",
    "por": {
     "Não identificada": {
+     "Foto folha face superior": "obrig",
+     "Foto folha face inferior": "obrig",
+     "Foto ramo filotaxia": "obrig",
+     "Foto tronco detalhe": "obrig"
+    }
+   }
+  },
+  {
+   "campo": "Especie suspeita",
+   "por": {
+    "sim": {
      "Foto folha face superior": "obrig",
      "Foto folha face inferior": "obrig",
      "Foto ramo filotaxia": "obrig",
@@ -1523,7 +1553,8 @@
      "Foto 2": "oculto",
      "Foto 3": "oculto",
      "Foto 4": "oculto",
-     "Observacoes": "oculto"
+     "Observacoes": "oculto",
+     "Especie suspeita": "oculto"
     }
    }
   }
