@@ -1,5 +1,5 @@
 /**
- * Árvores de Rua · dados de demonstração (arquivo separado do Código.gs)
+ * ArborizIA · dados de demonstração (arquivo separado do Código.gs)
  *
  * gerarDemonstracao(): cria o projeto "Demonstração (dados de teste)" com mais de 1.000 coletas inventadas,
  *   de duas equipes da Neofloresta (CLT) e três avaliadores do parceiro Gap, com registros validados,
