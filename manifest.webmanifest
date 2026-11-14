@@ -1,7 +1,7 @@
 {
-  "name": "Árvores de Rua",
-  "short_name": "Árvores de Rua",
-  "description": "Inventário de florestas urbanas",
+  "name": "ArborizIA Coletor",
+  "short_name": "ArborizIA",
+  "description": "App de campo do ArborizIA: gestão das árvores da cidade",
   "id": "./",
   "start_url": "./",
   "scope": "./",
