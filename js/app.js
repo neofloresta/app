@@ -71,6 +71,8 @@
   };
   function ico(n) { const s = document.createElement('span'); s.className = 'ico'; s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONES[n]}</svg>`; return s; }
 
+  // a página não tem zoom de pinça: foto e desenho ampliam com um toque (e arrasta-se para ver o resto)
+  function ampliavel(img, tipo) { const cx = h('div', { class: 'zoom-cx' + (tipo ? ' ' + tipo : ''), onclick: () => { const g = cx.classList.toggle('grande'); dica.textContent = g ? 'Toque para reduzir' : 'Toque para ampliar'; if (g) { cx.scrollLeft = (cx.scrollWidth - cx.clientWidth) / 2; cx.scrollTop = (cx.scrollHeight - cx.clientHeight) / 2; } } }, img); const dica = h('small', { class: 'dica zoom-dica' }, 'Toque para ampliar'); return h('div', null, cx, dica); }
   function topo(titulo, sub, esquerda, direita) {
     return h('header', { class: 'topo' }, esquerda, h('h1', null, titulo, sub ? h('small', null, sub) : null), direita);
   }
@@ -768,9 +770,9 @@
     await Store.salvarRegistro(r);
     S.aba = 0; S.tentou = false;
     // ponto marcado: a tela fica em "Abrindo o cadastro..." até o formulário aparecer (sem voltar ao mapa no meio do caminho)
-    const abrindo = h('div', { class: 'abrindo-cad', role: 'status' }, h('div', { class: 'abrindo-cx' }, h('div', { class: 'abrindo-roda', 'aria-hidden': 'true' }), h('b', null, 'Ponto marcado'), h('span', null, 'Abrindo o cadastro...')));
+    const abrindo = h('div', { class: 'abrindo-cad', role: 'status' }, h('div', { class: 'abrindo-cx' }, h('div', { class: 'abrindo-roda', 'aria-hidden': 'true' }), h('b', { class: 'abrindo-pm' }, 'Ponto marcado'), h('span', null, 'Abrindo o cadastro...')));
     const tirar = () => abrindo.remove();
-    S.aoMarcar = () => { document.body.append(abrindo); setTimeout(tirar, 8000); }; // entra antes de a tela de marcação sair
+    S.aoMarcar = () => { abrindo.querySelector('.abrindo-pm').classList.toggle('oculto', r.lat == null); document.body.append(abrindo); }; // entra antes de a tela de marcação sair
     let marcou; try { marcou = await marcarPonto(r); } finally { S.aoMarcar = null; } // o ponto é travado aqui, antes de medir: não acompanha o celular enquanto a dupla dá a volta na árvore
     S.abrindoNova = false;
     if (marcou === false) { tirar(); await Store.apagarRegistro(r.uuid); return; } // saiu da tela no meio da marcação: não deixa rascunho vazio
@@ -779,7 +781,7 @@
       if (!(await conferirQuadra(r))) { await Store.apagarRegistro(r.uuid); tirar(); return; }
       await Store.salvarRegistro(r);
     } catch (e) { tirar(); throw e; }
-    const obs = new MutationObserver(() => { if ($app.querySelector('.prog')) { obs.disconnect(); tirar(); } }); obs.observe($app, { childList: true, subtree: true }); setTimeout(() => obs.disconnect(), 8000);
+    const obs = new MutationObserver(() => { if ($app.querySelector('.prog')) { obs.disconnect(); tirar(); } }); obs.observe($app, { childList: true, subtree: true }); setTimeout(() => { obs.disconnect(); tirar(); }, 8000); // se o formulário não abrir, a tela não fica presa
     ir('#form/' + r.uuid);
   }
 
@@ -1380,13 +1382,15 @@
     if (abaParam != null) S.aba = +abaParam || 0;
     const form = S.form; const abas = form.abas;
     for (const c of form.campos) if (c.auto === 'modocopa' && !r.valores[c.nome]) r.valores[c.nome] = await prefCopa();
+    // registro de formulário anterior: "Ausente" marcado junto com outra opção que passou para o mesmo grupo (ex.: poda de raiz); vale a opção marcada
+    for (const g of form.gruposObrig || []) { const cs = camposDoGrupo(form, g).map((n) => form.campos.find((x) => x.nome === n)).filter(Boolean); const ex = cs.find((x) => x.exclusivo); if (ex && r.valores[ex.nome] === true && cs.some((x) => x !== ex && r.valores[x.nome] === true)) r.valores[ex.nome] = false; }
     S.aba = Math.min(Math.max(0, S.aba), abas.length - 1);
 
     const gpsBtn = h('button', { class: 'gps', onclick: abrirLocal });
     function pintarGps() {
       gpsBtn.className = 'gps ' + classeGps(r.prec);
       if (r.lat == null && !S.posErro) gpsBtn.className = 'gps medio';
-      gpsBtn.textContent = r.lat == null ? (S.posErro ? 'Sem GPS' : 'Aguardando GPS') : `${r.posManual ? 'Ajustado' : 'GPS'} ±${Math.round(r.prec)} m`;
+      gpsBtn.textContent = r.lat == null ? (S.posErro ? 'Sem GPS' : 'Aguardando GPS') : r.prec == null ? 'Ajustado no mapa' : `${r.posManual ? 'Ajustado' : 'GPS'} ±${Math.round(r.prec)} m`;
     }
     const ouvinte = (p) => {
       if (!p || !r.gpsAuto || r.posManual) return pintarGps();
@@ -1572,7 +1576,7 @@
     }
 
     function caixaAjuda(textos, img) {
-      const box = h('div', { class: 'ajuda-box oculto' }, textos.map(([t, d]) => h('p', null, t ? h('b', null, t + ': ') : null, d)), img ? h('img', { src: img, alt: 'Desenho de ajuda', class: 'ajuda-img', loading: 'lazy' }) : null);
+      const box = h('div', { class: 'ajuda-box oculto' }, textos.map(([t, d]) => h('p', null, t ? h('b', null, t + ': ') : null, d)), img ? ampliavel(h('img', { src: img, alt: 'Desenho de ajuda', class: 'ajuda-img', loading: 'lazy' })) : null);
       const bt = h('button', { type: 'button', class: 'ajuda-bt', 'aria-label': 'Ajuda', onclick: (e) => { e.preventDefault(); e.stopPropagation(); box.classList.toggle('oculto'); } }, '?');
       return [bt, box];
     }
@@ -1709,7 +1713,7 @@
         const f = r.fotos[c.nome];
         let u = null; if (f) { const b = await Store.foto(f.chave); if (b) u = URL.createObjectURL(b); }
         const opcoes = async () => {
-          const v = await modal(c.rotulo, u ? h('img', { src: u, style: 'width:100%;border-radius:12px;max-height:55vh;object-fit:contain;background:#000' }) : h('p', null, 'Foto já enviada ao servidor.'),
+          const v = await modal(c.rotulo, u ? ampliavel(h('img', { src: u, alt: c.rotulo }), 'foto') : h('p', null, 'Foto já enviada ao servidor.'),
             [{ texto: 'Remover', classe: 'perigo', valor: 'rm' }, { texto: 'Galeria', classe: 'sec', valor: 'gal' }, { texto: 'Tirar outra', valor: 'cam' }]);
           if (v === 'cam') cam.click(); else if (v === 'gal') gal.click();
           else if (v === 'rm' && await confirmar('Remover foto', 'Remover esta foto do registro?', 'Remover', 'perigo')) { delete r.fotos[c.nome]; mudar(c, r.valores[c.nome]); desenhar(); }
@@ -1806,7 +1810,7 @@
       if (!r.__base) return [];
       const antes = JSON.parse(r.__base); const mud = [];
       const fmt = (c, v) => v == null || v === '' ? 'vazio' : v === true ? 'sim' : v === false ? 'não' : typeof v === 'number' ? numBR(v) : c.tipo === 'choice' ? rotuloOpcao(c, v) : String(v);
-      for (const c of form.campos) if (!c.calculado && c.tipo !== 'photo' && fmt(c, antes[c.nome]) !== fmt(c, r.valores[c.nome])) mud.push(`${c.rotulo}: ${fmt(c, antes[c.nome])} → ${fmt(c, r.valores[c.nome])}`);
+      for (const c of form.campos) if (!c.calculado && c.tipo !== 'photo' && fmt(c, antes[c.nome]) !== fmt(c, r.valores[c.nome])) mud.push(`${form.campos.filter((x) => x.rotulo === c.rotulo).length > 1 ? c.nome : c.rotulo}: ${fmt(c, antes[c.nome])} → ${fmt(c, r.valores[c.nome])}`);
       const bp = JSON.parse(r.__basePos || 'null');
       if (bp && (bp.lat !== r.lat || bp.lon !== r.lon)) { const d = bp.lat == null || r.lat == null ? null : distM(bp.lat, bp.lon, r.lat, r.lon); mud.push(`Posição: ${bp.lat == null ? 'sem GPS' : 'ajustada'}${d != null ? ` (${numBR(Math.round(d * 10) / 10)} m)` : ''}`); }
       const fa = JSON.parse(r.__baseFotos || '{}');
@@ -2882,7 +2886,10 @@
       } catch (e) { msg.replaceChildren(h('div', { class: 'aviso' }, e.message)); }
     }
     async function exemplo() {
-      try { for (const arq of ['divinopolis-inventario', 'seade-risco']) { const f = await (await fetch(`forms/${arq}.json`)).json(); const q = await fetch(`forms/${arq}.qml`).then((r) => (r.ok ? r.text() : null)).catch(() => null); await Api.b.formularioSalvar(f, q); } toast('Formulários instalados.'); if (S.form) S.form = await carregarForm(S.form.id, false, true); telaAdmin('formularios'); } catch (e) { toast(e.message, 5000); }
+      try { for (const arq of ['divinopolis-inventario', 'seade-risco']) { const f = await (await fetch(`forms/${arq}.json`, { cache: 'no-store' })).json(); const q = await fetch(`forms/${arq}.qml`).then((r) => (r.ok ? r.text() : null)).catch(() => null);
+        // a lista de espécies ajustada pela coordenação no servidor é mantida (entram só as que faltam)
+        if (forms.some((x) => x.id === f.id)) { const atual = await Api.b.formulario(f.id).catch(() => null); if (atual && (atual.versao || 0) > (f.versao || 0)) continue; if (atual && (atual.especies || []).length) { const tem = new Set(atual.especies.map((e) => norm(e.cientifico))); f.especies = [...atual.especies, ...(f.especies || []).filter((e) => !tem.has(norm(e.cientifico)))]; } }
+        await Api.b.formularioSalvar(f, q); } toast('Formulários instalados.'); if (S.form) S.form = await carregarForm(S.form.id, false, true); telaAdmin('formularios'); } catch (e) { toast(e.message, 5000); }
     }
     async function editar(id) { const form = await Api.b.formulario(id); S.revisao = { form: JSON.parse(JSON.stringify(form)), qml: null, novo: false }; ir('#admin/revisao'); }
     corpo.replaceChildren(
@@ -3584,7 +3591,8 @@
     }
     if (cc && l[cc.nome] && dups.has(String(l[cc.nome]))) a.push('Código repetido');
     const sim = (v) => v === 1 || v === '1' || v === true;
-    for (const g of form.gruposObrig || []) { const cs = form.abas.flatMap((x) => x.campos).filter((x) => x.grupo === g).map((x) => form.campos.find((c) => c.nome === x.campo)).filter(Boolean); const ex = cs.find((c) => c.exclusivo); if (ex && sim(l[ex.nome]) && cs.some((c) => c !== ex && sim(l[c.nome]))) a.push('Contradição em ' + g); }
+    const antigo = form.marcaVersao && ind && (l[form.marcaVersao] == null || l[form.marcaVersao] === ''); // registro de formulário anterior: os grupos eram outros, não cobra contradição
+    if (!antigo) for (const g of form.gruposObrig || []) { const cs = form.abas.flatMap((x) => x.campos).filter((x) => x.grupo === g).map((x) => form.campos.find((c) => c.nome === x.campo)).filter(Boolean); const ex = cs.find((c) => c.exclusivo); if (ex && sim(l[ex.nome]) && cs.some((c) => c !== ex && sim(l[c.nome]))) a.push('Contradição em ' + g); }
     return a;
   }
   async function linhasProjeto(forcar, progresso) {
@@ -4226,7 +4234,7 @@
       const cols = [...ordem.filter((c) => todas.includes(c)), ...todas.filter((c) => !ordem.includes(c) && !['projeto', 'servidor_em'].includes(c))];
       // planilhas com rótulos legíveis e opções por extenso
       const rot = (c) => { const k = form.campos.find((x) => x.nome === c); return k && k.rotulo !== c ? `${k.rotulo}` : c; };
-      const legivel = (l) => { const o = {}; for (const c of cols) { const k = form.campos.find((x) => x.nome === c); let v = l[c]; if (k && k.tipo === 'choice') v = rotuloOpcao(k, v); else if (k && k.tipo === 'bool') v = v === 1 || v === '1' || v === true ? 'Sim' : 'Não'; else if ((k && (k.tipo === 'datetime' || k.tipo === 'date')) || /_em$/.test(c)) { const d = v ? new Date(v) : null; if (d && !isNaN(d)) v = d.toLocaleString('pt-BR', k && k.tipo === 'date' ? { dateStyle: 'short' } : { dateStyle: 'short', timeStyle: 'short' }); } o[c] = v; } return o; };
+      const legivel = (l) => { const o = {}; for (const c of cols) { const k = form.campos.find((x) => x.nome === c); let v = l[c]; if (k && k.tipo === 'choice') v = rotuloOpcao(k, v); else if (k && k.tipo === 'bool') v = v == null || v === '' ? '' : v === 1 || v === '1' || v === true ? 'Sim' : 'Não'; else if ((k && (k.tipo === 'datetime' || k.tipo === 'date')) || /_em$/.test(c)) { const d = v ? new Date(v) : null; if (d && !isNaN(d)) v = d.toLocaleString('pt-BR', k && k.tipo === 'date' ? { dateStyle: 'short' } : { dateStyle: 'short', timeStyle: 'short' }); } o[c] = v; } return o; };
       const epsgNum = () => { if (/^\d+$/.test(String(p.epsg))) return +p.epsg; const lons = linhas.map((l) => +l.longitude).filter((x) => isFinite(x) && x); return UTM.epsgDoFuso(UTM.fuso(lons.length ? lons.reduce((a, b) => a + b, 0) / lons.length : -45)); };
       if (formato === 'gpkg') {
         const estilo = await Api.b.estilo(form.id).catch(() => null);
@@ -4402,7 +4410,8 @@
     const n = Number(t); return isFinite(n) ? n : null;
   }
   function planejarImportacao(dados, form, p) {
-    const chaveCampo = new Map(); form.campos.forEach((c) => { chaveCampo.set(norm(c.nome).replace(/[^a-z0-9]/g, ''), c); chaveCampo.set(norm(c.rotulo).replace(/[^a-z0-9]/g, ''), c); });
+    const chaveCampo = new Map(); { const k = (t) => norm(t).replace(/[^a-z0-9]/g, ''); const vezes = {}; form.campos.forEach((c) => { vezes[k(c.rotulo)] = (vezes[k(c.rotulo)] || 0) + 1; });
+      form.campos.forEach((c) => { if (vezes[k(c.rotulo)] === 1) chaveCampo.set(k(c.rotulo), c); }); form.campos.forEach((c) => chaveCampo.set(k(c.nome), c)); } // o nome do campo ganha do rótulo; rótulo repetido (ex.: "Fungo" em três partes) não entra
     const avisos = []; const mapeadas = []; const soltas = []; const destino = {};
     const ehLat = (c) => /^(lat|latitude|y_?lat|coord_?y_?geo)$/.test(norm(c).replace(/\s+/g, '')); const ehLon = (c) => /^(lon|long|longitude|lng|x_?lon)$/.test(norm(c).replace(/\s+/g, ''));
     const ehX = (c) => /^(x|este|utm_?e|easting|coord_?x|e)$/.test(norm(c).replace(/\s+/g, '')); const ehY = (c) => /^(y|norte|utm_?n|northing|coord_?y|n)$/.test(norm(c).replace(/\s+/g, ''));

@@ -74,7 +74,8 @@ const cat = f.regras.find((r) => r.campo === 'Categoria').por; const sit = f.reg
 for (const k of ['1', '2', '3']) cat[k]['Galhos secos ou podres'] = 'obrig';
 const novos = ['Galhos secos ou podres', 'Fungo na copa', 'Cupim na copa', 'Broca na copa', 'Pragas na copa ausente', 'Fungo no tronco', 'Cupim no tronco', 'Broca no tronco', 'Pragas no tronco ausente', 'Fungo nas raízes', 'Cupim nas raízes', 'Pragas nas raízes ausente', 'Foto 5'];
 for (const n of novos) { cat['5'][n] = 'oculto'; sit.Morta[n] = 'oculto'; }
-for (const n of LEGADO) { delete cat['5'][n]; delete sit.Morta[n]; }
+// os campos antigos continuam escondidos em morta e calçada (registro antigo editado para morta não guarda praga)
+f.marcaVersao = 'Galhos secos ou podres'; // registro de árvore viva sem este campo é de formulário anterior
 f.versao = 8;
 fs.writeFileSync(arq, JSON.stringify(f, null, 1));
 console.log(C.length, 'campos;', f.abas.map((a) => a.nome + ':' + a.campos.length).join(' | '));

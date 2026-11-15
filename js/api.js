@@ -52,7 +52,7 @@ const Api = (() => {
   const DEMO_PERFIL = { campo: 'coletor' };
   const Demo = {
     async base() {
-      const VERSAO_DEMO = 5;
+      const VERSAO_DEMO = 6;
       let b = await Store.get('demo:base');
       if (!b || b.versao !== VERSAO_DEMO) {
         const form = await (await fetch('forms/divinopolis-inventario.json')).json();

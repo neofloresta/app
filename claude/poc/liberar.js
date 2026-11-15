@@ -54,6 +54,7 @@ const suites = [
   ['servidor 2.11: modo quadra, reserva de 5 mais 3 dias, fechar quadra, foto da face, copa e legenda por time', 'node s211.js', /(\d+) falha\(s\) de (\d+)/],
   ['2.11: ponto fora da reserva, destravar o ponto, dois raios, espécie a confirmar, altura pelo celular, foto da face, fechar quadra, lixeira e legenda', 'node b211.js'],
   ['2.11.1: formulário 8 por parte da árvore, risco no fim, fotos 2 a 5, abrindo o cadastro, apagar a espécie, aviso da trava e zoom', 'node b2111.js'],
+  ['2.11.1: registro do formulário 7 depois da troca para o 8 (ficha, edição e campos antigos)', 'node b2111m.js'],
   ['estresse: 2 mil cadastros em 6 celulares (5 equipes), servidor lento, sem internet e quedas', 'node bstress.js 2000', null, { LATENCIA: '300', UI: '2' }],
   ['velocidade com servidor lento (1,5 s por consulta) e celular fraco', 'node perf.js', null, { LATENCIA: '1500', ROTULO: 'liberar' }],
 ];

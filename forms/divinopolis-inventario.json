@@ -1546,6 +1546,7 @@
      "Interfere veículos": "oculto",
      "Tráfego sem interferência": "oculto",
      "Danos por podas": "oculto",
+     "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
      "Poda de raiz": "oculto",
      "Podas ausente": "oculto",
@@ -1557,9 +1558,13 @@
      "Afloramento da raiz na calçada": "oculto",
      "Raízes ausente": "oculto",
      "Qualidade da copa": "oculto",
+     "Fungo": "oculto",
+     "Cupim": "oculto",
+     "Broca": "oculto",
      "Erva-de-passarinho": "oculto",
      "Doença aparente": "oculto",
      "Praga aparente": "oculto",
+     "Fitossanidade ausente": "oculto",
      "Risco": "oculto",
      "Probabilidade de falha": "oculto",
      "Probabilidade de impacto": "oculto",
@@ -1681,6 +1686,7 @@
      "Interfere veículos": "oculto",
      "Tráfego sem interferência": "oculto",
      "Danos por podas": "oculto",
+     "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
      "Poda de raiz": "oculto",
      "Podas ausente": "oculto",
@@ -1692,9 +1698,13 @@
      "Afloramento da raiz na calçada": "oculto",
      "Raízes ausente": "oculto",
      "Qualidade da copa": "oculto",
+     "Fungo": "oculto",
+     "Cupim": "oculto",
+     "Broca": "oculto",
      "Erva-de-passarinho": "oculto",
      "Doença aparente": "oculto",
      "Praga aparente": "oculto",
+     "Fitossanidade ausente": "oculto",
      "Risco": "oculto",
      "Probabilidade de falha": "oculto",
      "Probabilidade de impacto": "oculto",
@@ -1734,5 +1744,6 @@
     }
    }
   }
- ]
+ ],
+ "marcaVersao": "Galhos secos ou podres"
 }

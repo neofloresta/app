@@ -54,7 +54,7 @@ const foco = (p) => p.evaluate(() => { const a = document.activeElement; const c
   const vp = await p.evaluate(() => ({ meta: document.querySelector('meta[name=viewport]').content, ta: getComputedStyle(document.documentElement).touchAction }));
   ok('Z.7', tit.cabe && /user-scalable=no/.test(vp.meta) && /maximum-scale=1/.test(vp.meta) && vp.ta === 'pan-x pan-y', `a 360 px: título "${tit.txt}" cabe: ${tit.cabe} (GPS "${tit.gps}"); viewport "${vp.meta}"; toque na página: ${vp.ta}`);
   
-  // 8. registro antigo (formulário 7) continua com os campos gerais na ficha; conclui um novo e confere o que foi gravado
+  // 8. cadastro completo no formulário 8: o que foi gravado (registro antigo: ver b2111m.js)
   await p.setViewportSize({ width: 412, height: 915 }); await A.excluir(p).catch(() => {}); await p.waitForSelector('button.nova'); await p.waitForTimeout(400);
   const f = await A.arvoreCompleta(p); const rs = await p.evaluate(async () => Store.todosRegistros()); const r = rs.find((x) => x.status !== 'rascunho');
   const v = (r && r.valores) || {};
