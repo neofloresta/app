@@ -76,8 +76,8 @@ function gerarDemonstracao() {
   especies.sort((x, y) => { const ix = COMUNS.indexOf(x), iy = COMUNS.indexOf(y); return (ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy); }); // as mais comuns de rua primeiro
   if (!especies.length) especies.push('Moquilea tomentosa', 'Cenostigma pluviosum', 'Handroanthus chrysotrichus', 'Murraya paniculata', 'Lagerstroemia indica');
   const GRUPOS = [['Fiação ausente', ['Fiação baixa isolada', 'Fiação baixa nua', 'Fiação média compacta', 'Fiação derivação', 'Fiação serviços gerais'], 0.4], ['Tráfego sem interferência', ['Interfere pedestres', 'Interfere veículos'], 0.15],
-    ['Podas ausente', ['Danos por podas', 'Galhos secos, podres ou com risco de queda', 'Poda drástica'], 0.3], ['Danos ausente', ['Lesões no tronco', 'Codominância de troncos'], 0.2], ['Raízes ausente', ['Afloramento da raiz no canteiro', 'Afloramento da raiz na calçada'], 0.3],
-    ['Fitossanidade ausente', ['Cupim', 'Erva-de-passarinho', 'Fungo', 'Broca'], 0.14], ['Manejo nenhum', ['Manejo poda', 'Manejo poda', 'Manejo aumento de canteiro', 'Manejo tutoramento', 'Manejo adubação'], 0.38]];
+    ['Podas ausente', ['Danos por podas', 'Poda drástica'], 0.25], ['Danos ausente', ['Lesões no tronco', 'Codominância de troncos'], 0.2], ['Raízes ausente', ['Poda de raiz', 'Afloramento da raiz no canteiro', 'Afloramento da raiz na calçada'], 0.3],
+    ['Pragas na copa ausente', ['Erva-de-passarinho', 'Praga aparente', 'Doença aparente', 'Broca na copa'], 0.1], ['Pragas no tronco ausente', ['Cupim no tronco', 'Fungo no tronco', 'Broca no tronco'], 0.08], ['Pragas nas raízes ausente', ['Cupim nas raízes', 'Fungo nas raízes'], 0.04], ['Manejo nenhum', ['Manejo poda', 'Manejo poda', 'Manejo aumento de canteiro', 'Manejo tutoramento', 'Manejo adubação'], 0.38]];
   const BAIRROS = ['Centro', 'Sidil', 'Bom Pastor', 'Esplanada', 'Niterói'];
   const OBS_DEV = ['Foto sem a árvore inteira', 'CAP parece errado, conferir', 'Espécie não confere com a foto', 'Ponto longe da calçada'];
   const linhas = []; let num = 0; const agora = new Date().toISOString();
@@ -100,7 +100,7 @@ function gerarDemonstracao() {
         if (e.copa === 'area') { const ar = Math.round(Math.PI * raio * raio * 10) / 10; por('Area de copa medida (m2)', ar); }
         else { por('Raio de copa 1 (m)', r1); por('Raio de copa 2 (m)', r2); por('Raio de copa 3 (m)', r1); por('Raio de copa 4 (m)', r2); por('Area de copa (m2)', String(Math.round(Math.PI * Math.pow((r1 + r2) / 2, 2) * 100) / 100)); }
         por('Conflitos no raio de 2 m', rnd() < 0.76 ? 'Ausente' : 'Presente'); por('Marquise ou toldo', rnd() < 0.9 ? 'Ausente' : 'Presente');
-        por('Ocos e cavidades', sorteio([['Ausente', 88], ['Presente (menor que 1/3)', 9], ['Presente (maior que 1/3)', 3]])); por('Qualidade da copa', sorteio([['Normal', 85], ['Estressada', 10], ['Sem folhagem (sazonal)', 3], ['Sem folhagem (poda)', 2]]));
+        por('Ocos e cavidades', sorteio([['Ausente', 88], ['Presente (menor que 1/3)', 9], ['Presente (maior que 1/3)', 3]])); por('Qualidade da copa', sorteio([['Normal', 85], ['Estressada', 10], ['Sem folhagem (sazonal)', 3], ['Sem folhagem (poda)', 2]])); por('Galhos secos ou podres', sorteio([['Ausente', 62], ['0-25%', 28], ['25-50%', 7], ['50-75%', 2], ['acima de 75%', 1]]));
         GRUPOS.forEach((g) => { if (!temCampo[g[0]]) return; if (rnd() < g[2]) { const k = g[1][Math.floor(rnd() * g[1].length)]; if (temCampo[k]) { o[k] = 1; o[g[0]] = 0; return; } } o[g[0]] = 1; });
         const risco = sorteio([['Baixo', 84], ['Médio', 11], ['Alto', 4], ['Severo', 1]]); por('Risco', risco);
         por('Probabilidade de falha', { Baixo: '4', 'Médio': '3', Alto: '2', Severo: '1' }[risco]); por('Probabilidade de impacto', { Baixo: '2', 'Médio': '3', Alto: '3', Severo: '4' }[risco]); por('Consequencias', { Baixo: '1', 'Médio': '2', Alto: '3', Severo: '4' }[risco]);

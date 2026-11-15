@@ -1,10 +1,10 @@
 {
- "versao": "2.11.0",
- "data": "2026-11-14",
+ "versao": "2.11.1",
+ "data": "2026-11-15",
  "notas": [
-  "Marcar o ponto no mapa com o dedo, quando o GPS não ajuda",
-  "Foto da face ao encerrar e botão Fechar quadra",
-  "Altura pelo celular (opcional) e \"Não tenho certeza da espécie\"",
-  "Equipes de parceiros trabalham por quadra reservada"
+  "Etapas por parte da árvore: Copa, Tronco e Raízes, com pragas em cada parte",
+  "Galhos secos ou podres em percentual",
+  "Risco calculado no fim da etapa e fotos 2 a 5 livres",
+  "Depois de marcar o ponto, o cadastro abre direto"
  ]
 }

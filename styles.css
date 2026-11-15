@@ -734,3 +734,17 @@ details.campo b.rot { display: block; margin: 12px 0 4px; }
 .clin-res { text-align: center; margin: 10px 0; } .clin-res b { display: block; font-size: 40px; color: var(--teal); } .clin-res small { color: var(--suave); }
 .bt-medir { margin-top: 8px; min-height: 44px; }
 .face-foto img { width: 100%; border-radius: 10px; margin-top: 6px; }
+
+/* 2.11.1 */
+html { touch-action: pan-x pan-y; } /* sem zoom de pinça na página (o mapa tem o zoom dele) */
+.abrindo-cad { position: fixed; inset: 0; z-index: 49; display: grid; place-items: center; background: var(--teal); } /* fica abaixo das perguntas (.veu) e acima do resto */
+.abrindo-cx { display: grid; justify-items: center; gap: 8px; color: #fff; font-size: 17px; }
+.abrindo-cx b { font-size: 21px; }
+.abrindo-roda { width: 44px; height: 44px; border-radius: 50%; border: 4px solid rgba(255,255,255,.3); border-top-color: #fff; animation: abrindo-gira .8s linear infinite; margin-bottom: 8px; }
+@keyframes abrindo-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .abrindo-roda { animation: none; } }
+.esp-box .entrada { padding-right: 46px; }
+.esp-limpar { position: absolute; right: 2px; top: 2px; width: 44px; height: calc(100% - 4px); max-height: 52px; border: 0; background: transparent; color: var(--suave); font-size: 26px; line-height: 1; cursor: pointer; }
+.calc.resultado { font-size: 20px; justify-content: center; min-height: 64px; }
+.calc.resultado.vazio { font-size: 15px; }
+.topo .bt-cancelar { padding: 0 10px; }

@@ -24,11 +24,11 @@ async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, al
     if (await campo(p, 'Area de copa medida (m2)').count()) await num(p, 'Area de copa medida (m2)', 18);
     await aba(p, 'Meio'); await op(p, 'Conflitos no raio de 2 m', 'Ausente'); await p.locator('.chip[data-campo="Fiação ausente"]').click(); await op(p, 'Marquise ou toldo', 'Ausente');
     await p.locator('.chip[data-campo="Tráfego sem interferência"]').click();
-    await aba(p, 'Podas e danos');
-    for (const n of ['Podas ausente', 'Danos ausente', 'Raízes ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();
+    await aba(p, 'Copa'); await op(p, 'Qualidade da copa', 'Normal'); await op(p, 'Galhos secos ou podres', 'Ausente');
+    for (const n of ['Podas ausente', 'Pragas na copa ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();
+    await aba(p, 'Tronco'); for (const n of ['Danos ausente', 'Pragas no tronco ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();
     await op(p, 'Ocos e cavidades', 'Ausente');
-    await aba(p, 'Fitossanidade');
-    await op(p, 'Qualidade da copa', 'Normal'); await p.locator('.chip[data-campo="Fitossanidade ausente"]').click();
+    await aba(p, 'Raízes'); for (const n of ['Raízes ausente', 'Pragas nas raízes ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();
     await aba(p, 'Risco'); await op(p, 'Probabilidade de falha', 'Improvável'); await campo(p, 'Probabilidade de impacto').locator('.op').nth(1).click(); await op(p, 'Consequencias', 'Menor');
     await aba(p, 'Manejo'); if (manejoNenhum) await p.locator('.chip[data-campo="Manejo nenhum"]').click();
     if (fotos > 1) { await aba(p, 'Fotos e observações'); await foto(p, 'Foto 2'); if (fotos > 2) await foto(p, 'Foto 3'); }

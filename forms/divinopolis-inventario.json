@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 7,
+ "versao": 8,
  "campos": [
   {
    "armazenar": "text",
@@ -356,7 +356,8 @@
    "nome": "Galhos secos, podres ou com risco de queda",
    "rotulo": "Galhos secos, podres ou com risco de queda",
    "tipo": "bool",
-   "ajuda": "Galhos mortos, ocos, rachados ou pendurados."
+   "ajuda": "Galhos mortos, ocos, rachados ou pendurados.",
+   "legado": true
   },
   {
    "armazenar": "bool",
@@ -378,7 +379,7 @@
    "rotulo": "Ausente",
    "tipo": "bool",
    "exclusivo": true,
-   "ajuda": "Nenhum sinal de poda ou dano por poda."
+   "ajuda": "Nenhum dano por poda na copa."
   },
   {
    "armazenar": "bool",
@@ -443,7 +444,7 @@
    "rotulo": "Ausente",
    "tipo": "bool",
    "exclusivo": true,
-   "ajuda": "Nenhuma raiz aparente."
+   "ajuda": "Sem poda de raiz e sem raiz aparente."
   },
   {
    "armazenar": "text",
@@ -471,25 +472,57 @@
    "ajuda": "Estressada: folhas pequenas, amareladas ou copa rala para a espécie."
   },
   {
+   "armazenar": "text",
+   "nome": "Galhos secos ou podres",
+   "rotulo": "Galhos secos ou podres",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Ausente",
+     "t": "Ausente"
+    },
+    {
+     "v": "0-25%",
+     "t": "0-25%"
+    },
+    {
+     "v": "25-50%",
+     "t": "25-50%"
+    },
+    {
+     "v": "50-75%",
+     "t": "50-75%"
+    },
+    {
+     "v": "acima de 75%",
+     "t": "acima de 75%"
+    }
+   ],
+   "ajuda": "Parte da copa com galhos mortos, secos ou podres, em relação à copa inteira. Ausente: nenhum galho seco ou podre."
+  },
+  {
    "armazenar": "bool",
    "nome": "Fungo",
-   "rotulo": "Fungo",
+   "rotulo": "Fungo (formulário anterior)",
    "tipo": "bool",
-   "ajuda": "Corpos de fungo (orelhas, chapéus) no tronco, nos galhos ou na base."
+   "ajuda": "Corpos de fungo (orelhas, chapéus) no tronco, nos galhos ou na base.",
+   "legado": true
   },
   {
    "armazenar": "bool",
    "nome": "Cupim",
-   "rotulo": "Cupim",
+   "rotulo": "Cupim (formulário anterior)",
    "tipo": "bool",
-   "ajuda": "Galerias de terra no tronco ou cupinzeiro."
+   "ajuda": "Galerias de terra no tronco ou cupinzeiro.",
+   "legado": true
   },
   {
    "armazenar": "bool",
    "nome": "Broca",
-   "rotulo": "Broca",
+   "rotulo": "Broca (formulário anterior)",
    "tipo": "bool",
-   "ajuda": "Furos com serragem no tronco ou nos galhos."
+   "ajuda": "Furos com serragem no tronco ou nos galhos.",
+   "legado": true
   },
   {
    "armazenar": "bool",
@@ -503,22 +536,102 @@
    "nome": "Doença aparente",
    "rotulo": "Doença aparente",
    "tipo": "bool",
-   "ajuda": "Manchas, cancros ou exsudação (resina, seiva escorrendo)."
+   "ajuda": "Manchas nas folhas, cancros ou exsudação (resina, seiva escorrendo) nos ramos."
   },
   {
    "armazenar": "bool",
    "nome": "Praga aparente",
    "rotulo": "Praga aparente",
    "tipo": "bool",
-   "ajuda": "Insetos em quantidade: cochonilhas, lagartas, pulgões."
+   "ajuda": "Insetos em quantidade nas folhas e ramos: cochonilhas, lagartas, pulgões."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Fungo na copa",
+   "rotulo": "Fungo",
+   "tipo": "bool",
+   "ajuda": "Corpos de fungo (orelhas, chapéus) nos galhos."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Cupim na copa",
+   "rotulo": "Cupim",
+   "tipo": "bool",
+   "ajuda": "Galerias de terra ou cupinzeiro nos galhos."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Broca na copa",
+   "rotulo": "Broca",
+   "tipo": "bool",
+   "ajuda": "Furos com serragem nos galhos."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Pragas na copa ausente",
+   "rotulo": "Ausente",
+   "tipo": "bool",
+   "ajuda": "Nenhum sinal de praga ou doença na copa.",
+   "exclusivo": true
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Fungo no tronco",
+   "rotulo": "Fungo",
+   "tipo": "bool",
+   "ajuda": "Corpos de fungo (orelhas, chapéus) no tronco."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Cupim no tronco",
+   "rotulo": "Cupim",
+   "tipo": "bool",
+   "ajuda": "Galerias de terra no tronco ou cupinzeiro preso a ele."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Broca no tronco",
+   "rotulo": "Broca",
+   "tipo": "bool",
+   "ajuda": "Furos com serragem no tronco."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Pragas no tronco ausente",
+   "rotulo": "Ausente",
+   "tipo": "bool",
+   "ajuda": "Nenhum sinal de praga no tronco.",
+   "exclusivo": true
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Fungo nas raízes",
+   "rotulo": "Fungo",
+   "tipo": "bool",
+   "ajuda": "Corpos de fungo na base do tronco ou nas raízes aparentes."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Cupim nas raízes",
+   "rotulo": "Cupim",
+   "tipo": "bool",
+   "ajuda": "Galerias de terra ou cupinzeiro na base do tronco ou nas raízes."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Pragas nas raízes ausente",
+   "rotulo": "Ausente",
+   "tipo": "bool",
+   "ajuda": "Nenhum sinal de praga na base nem nas raízes.",
+   "exclusivo": true
   },
   {
    "armazenar": "bool",
    "nome": "Fitossanidade ausente",
-   "rotulo": "Ausente",
+   "rotulo": "Fitossanidade ausente (formulário anterior)",
    "tipo": "bool",
-   "exclusivo": true,
-   "ajuda": "Nenhum sinal de praga ou doença."
+   "ajuda": "Nenhum sinal de praga ou doença.",
+   "legado": true
   },
   {
    "armazenar": "text",
@@ -644,7 +757,7 @@
     }
    ],
    "expr": "CASE\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+2' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+3' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+4' THEN 'Severo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+2' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+3' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+4' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+2' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+3' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+4' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+2' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+3' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+4' THEN 'Baixo'\r\nEND",
-   "ajuda": "Calculado pelo app: probabilidade de falha com a de impacto dá a probabilidade; com as consequências dá o risco (matriz da ISA)."
+   "ajuda": "Calculado pelo app depois das três respostas acima: probabilidade de falha com a de impacto dá a probabilidade; com as consequências dá o risco (matriz da ISA)."
   },
   {
    "armazenar": "bool",
@@ -727,23 +840,30 @@
   {
    "armazenar": "text",
    "nome": "Foto 2",
-   "rotulo": "Foto 2: copa e entorno",
+   "rotulo": "Foto 2",
    "tipo": "photo",
-   "ajuda": "Opcional: a copa e o que está em volta (fiação, fachada, poste)."
+   "ajuda": "Opcional."
   },
   {
    "armazenar": "text",
    "nome": "Foto 3",
-   "rotulo": "Foto 3: base e calçada",
+   "rotulo": "Foto 3",
    "tipo": "photo",
-   "ajuda": "Opcional: a base do tronco, o canteiro e a calçada."
+   "ajuda": "Opcional."
   },
   {
    "armazenar": "text",
    "nome": "Foto 4",
-   "rotulo": "Foto 4: detalhe",
+   "rotulo": "Foto 4",
    "tipo": "photo",
-   "ajuda": "Opcional: um detalhe que precisa de atenção (lesão, oco, praga, poda malfeita)."
+   "ajuda": "Opcional."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Foto 5",
+   "rotulo": "Foto 5",
+   "tipo": "photo",
+   "ajuda": "Opcional."
   },
   {
    "armazenar": "text",
@@ -882,14 +1002,20 @@
    ]
   },
   {
-   "nome": "Podas e danos",
+   "nome": "Copa",
    "campos": [
     {
-     "campo": "Danos por podas",
+     "campo": "Qualidade da copa"
+    },
+    {
+     "campo": "Galhos secos ou podres"
+    },
+    {
+     "campo": "Podas ausente",
      "grupo": "Podas"
     },
     {
-     "campo": "Galhos secos, podres ou com risco de queda",
+     "campo": "Danos por podas",
      "grupo": "Podas"
     },
     {
@@ -897,27 +1023,81 @@
      "grupo": "Podas"
     },
     {
-     "campo": "Poda de raiz",
-     "grupo": "Podas"
+     "campo": "Pragas na copa ausente",
+     "grupo": "Pragas e doenças na copa"
     },
     {
-     "campo": "Podas ausente",
-     "grupo": "Podas"
+     "campo": "Fungo na copa",
+     "grupo": "Pragas e doenças na copa"
+    },
+    {
+     "campo": "Cupim na copa",
+     "grupo": "Pragas e doenças na copa"
+    },
+    {
+     "campo": "Broca na copa",
+     "grupo": "Pragas e doenças na copa"
+    },
+    {
+     "campo": "Erva-de-passarinho",
+     "grupo": "Pragas e doenças na copa"
+    },
+    {
+     "campo": "Doença aparente",
+     "grupo": "Pragas e doenças na copa"
+    },
+    {
+     "campo": "Praga aparente",
+     "grupo": "Pragas e doenças na copa"
+    }
+   ]
+  },
+  {
+   "nome": "Tronco",
+   "campos": [
+    {
+     "campo": "Danos ausente",
+     "grupo": "Danos no tronco"
     },
     {
      "campo": "Lesões no tronco",
-     "grupo": "Danos"
+     "grupo": "Danos no tronco"
     },
     {
      "campo": "Codominância de troncos",
-     "grupo": "Danos"
-    },
-    {
-     "campo": "Danos ausente",
-     "grupo": "Danos"
+     "grupo": "Danos no tronco"
     },
     {
      "campo": "Ocos e cavidades"
+    },
+    {
+     "campo": "Pragas no tronco ausente",
+     "grupo": "Pragas no tronco"
+    },
+    {
+     "campo": "Fungo no tronco",
+     "grupo": "Pragas no tronco"
+    },
+    {
+     "campo": "Cupim no tronco",
+     "grupo": "Pragas no tronco"
+    },
+    {
+     "campo": "Broca no tronco",
+     "grupo": "Pragas no tronco"
+    }
+   ]
+  },
+  {
+   "nome": "Raízes",
+   "campos": [
+    {
+     "campo": "Raízes ausente",
+     "grupo": "Raízes"
+    },
+    {
+     "campo": "Poda de raiz",
+     "grupo": "Raízes"
     },
     {
      "campo": "Afloramento da raiz no canteiro",
@@ -928,53 +1108,22 @@
      "grupo": "Raízes"
     },
     {
-     "campo": "Raízes ausente",
-     "grupo": "Raízes"
-    }
-   ]
-  },
-  {
-   "nome": "Fitossanidade",
-   "campos": [
-    {
-     "campo": "Qualidade da copa"
+     "campo": "Pragas nas raízes ausente",
+     "grupo": "Pragas nas raízes"
     },
     {
-     "campo": "Fungo",
-     "grupo": "Fitossanidade"
+     "campo": "Fungo nas raízes",
+     "grupo": "Pragas nas raízes"
     },
     {
-     "campo": "Cupim",
-     "grupo": "Fitossanidade"
-    },
-    {
-     "campo": "Broca",
-     "grupo": "Fitossanidade"
-    },
-    {
-     "campo": "Erva-de-passarinho",
-     "grupo": "Fitossanidade"
-    },
-    {
-     "campo": "Doença aparente",
-     "grupo": "Fitossanidade"
-    },
-    {
-     "campo": "Praga aparente",
-     "grupo": "Fitossanidade"
-    },
-    {
-     "campo": "Fitossanidade ausente",
-     "grupo": "Fitossanidade"
+     "campo": "Cupim nas raízes",
+     "grupo": "Pragas nas raízes"
     }
    ]
   },
   {
    "nome": "Risco",
    "campos": [
-    {
-     "campo": "Risco"
-    },
     {
      "campo": "Probabilidade de falha"
     },
@@ -992,6 +1141,9 @@
     },
     {
      "campo": "Matriz de Prob + Conseq"
+    },
+    {
+     "campo": "Risco"
     }
    ]
   },
@@ -1056,6 +1208,9 @@
      "campo": "Foto 4"
     },
     {
+     "campo": "Foto 5"
+    },
+    {
      "campo": "Observacoes"
     }
    ]
@@ -1065,9 +1220,11 @@
   "Fiação aérea",
   "Interferência no tráfego",
   "Podas",
-  "Danos",
+  "Pragas e doenças na copa",
+  "Danos no tronco",
+  "Pragas no tronco",
   "Raízes",
-  "Fitossanidade"
+  "Pragas nas raízes"
  ],
  "gruposConfirmar": [
   {
@@ -1329,7 +1486,8 @@
      "Qualidade da copa": "obrig",
      "Probabilidade de falha": "obrig",
      "Probabilidade de impacto": "obrig",
-     "Consequencias": "obrig"
+     "Consequencias": "obrig",
+     "Galhos secos ou podres": "obrig"
     },
     "2": {
      "Situacao": "obrig",
@@ -1342,7 +1500,8 @@
      "Qualidade da copa": "obrig",
      "Probabilidade de falha": "obrig",
      "Probabilidade de impacto": "obrig",
-     "Consequencias": "obrig"
+     "Consequencias": "obrig",
+     "Galhos secos ou podres": "obrig"
     },
     "3": {
      "Situacao": "obrig",
@@ -1355,7 +1514,8 @@
      "Qualidade da copa": "obrig",
      "Probabilidade de falha": "obrig",
      "Probabilidade de impacto": "obrig",
-     "Consequencias": "obrig"
+     "Consequencias": "obrig",
+     "Galhos secos ou podres": "obrig"
     },
     "5": {
      "Situacao": "oculto",
@@ -1386,7 +1546,6 @@
      "Interfere veículos": "oculto",
      "Tráfego sem interferência": "oculto",
      "Danos por podas": "oculto",
-     "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
      "Poda de raiz": "oculto",
      "Podas ausente": "oculto",
@@ -1398,13 +1557,9 @@
      "Afloramento da raiz na calçada": "oculto",
      "Raízes ausente": "oculto",
      "Qualidade da copa": "oculto",
-     "Fungo": "oculto",
-     "Cupim": "oculto",
-     "Broca": "oculto",
      "Erva-de-passarinho": "oculto",
      "Doença aparente": "oculto",
      "Praga aparente": "oculto",
-     "Fitossanidade ausente": "oculto",
      "Risco": "oculto",
      "Probabilidade de falha": "oculto",
      "Probabilidade de impacto": "oculto",
@@ -1427,7 +1582,20 @@
      "Foto 3": "oculto",
      "Foto 4": "oculto",
      "Observacoes": "oculto",
-     "Especie suspeita": "oculto"
+     "Especie suspeita": "oculto",
+     "Galhos secos ou podres": "oculto",
+     "Fungo na copa": "oculto",
+     "Cupim na copa": "oculto",
+     "Broca na copa": "oculto",
+     "Pragas na copa ausente": "oculto",
+     "Fungo no tronco": "oculto",
+     "Cupim no tronco": "oculto",
+     "Broca no tronco": "oculto",
+     "Pragas no tronco ausente": "oculto",
+     "Fungo nas raízes": "oculto",
+     "Cupim nas raízes": "oculto",
+     "Pragas nas raízes ausente": "oculto",
+     "Foto 5": "oculto"
     }
    }
   },
@@ -1513,7 +1681,6 @@
      "Interfere veículos": "oculto",
      "Tráfego sem interferência": "oculto",
      "Danos por podas": "oculto",
-     "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
      "Poda de raiz": "oculto",
      "Podas ausente": "oculto",
@@ -1525,13 +1692,9 @@
      "Afloramento da raiz na calçada": "oculto",
      "Raízes ausente": "oculto",
      "Qualidade da copa": "oculto",
-     "Fungo": "oculto",
-     "Cupim": "oculto",
-     "Broca": "oculto",
      "Erva-de-passarinho": "oculto",
      "Doença aparente": "oculto",
      "Praga aparente": "oculto",
-     "Fitossanidade ausente": "oculto",
      "Risco": "oculto",
      "Probabilidade de falha": "oculto",
      "Probabilidade de impacto": "oculto",
@@ -1554,7 +1717,20 @@
      "Foto 3": "oculto",
      "Foto 4": "oculto",
      "Observacoes": "oculto",
-     "Especie suspeita": "oculto"
+     "Especie suspeita": "oculto",
+     "Galhos secos ou podres": "oculto",
+     "Fungo na copa": "oculto",
+     "Cupim na copa": "oculto",
+     "Broca na copa": "oculto",
+     "Pragas na copa ausente": "oculto",
+     "Fungo no tronco": "oculto",
+     "Cupim no tronco": "oculto",
+     "Broca no tronco": "oculto",
+     "Pragas no tronco ausente": "oculto",
+     "Fungo nas raízes": "oculto",
+     "Cupim nas raízes": "oculto",
+     "Pragas nas raízes ausente": "oculto",
+     "Foto 5": "oculto"
     }
    }
   }

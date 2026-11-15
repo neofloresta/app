@@ -1,6 +1,6 @@
 // ArborizIA Coletor: app de campo do ArborizIA, gestão das árvores da cidade (por Neofloresta)
 (() => {
-  const VERSAO = '2.11.0';
+  const VERSAO = '2.11.1';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -767,12 +767,19 @@
     if (ex) { r.faceId = ex.faceId; r.faceRua = ex.faceRua; r.faceTxt = ex.faceTxt; r.valores[ex.cat[0]] = ex.cat[1]; Object.assign(r.valores, ex.extra || {}); }
     await Store.salvarRegistro(r);
     S.aba = 0; S.tentou = false;
-    const marcou = await marcarPonto(r); // o ponto é travado aqui, antes de medir: não acompanha o celular enquanto a dupla dá a volta na árvore
+    // ponto marcado: a tela fica em "Abrindo o cadastro..." até o formulário aparecer (sem voltar ao mapa no meio do caminho)
+    const abrindo = h('div', { class: 'abrindo-cad', role: 'status' }, h('div', { class: 'abrindo-cx' }, h('div', { class: 'abrindo-roda', 'aria-hidden': 'true' }), h('b', null, 'Ponto marcado'), h('span', null, 'Abrindo o cadastro...')));
+    const tirar = () => abrindo.remove();
+    S.aoMarcar = () => { document.body.append(abrindo); setTimeout(tirar, 8000); }; // entra antes de a tela de marcação sair
+    let marcou; try { marcou = await marcarPonto(r); } finally { S.aoMarcar = null; } // o ponto é travado aqui, antes de medir: não acompanha o celular enquanto a dupla dá a volta na árvore
     S.abrindoNova = false;
-    if (marcou === false) { await Store.apagarRegistro(r.uuid); return; } // saiu da tela no meio da marcação: não deixa rascunho vazio
-    if (!(await conferirPonto(r))) { await Store.apagarRegistro(r.uuid); toast('Cadastro não aberto.'); return; }
-    if (!(await conferirQuadra(r))) { await Store.apagarRegistro(r.uuid); return; }
-    await Store.salvarRegistro(r);
+    if (marcou === false) { tirar(); await Store.apagarRegistro(r.uuid); return; } // saiu da tela no meio da marcação: não deixa rascunho vazio
+    try {
+      if (!(await conferirPonto(r))) { await Store.apagarRegistro(r.uuid); tirar(); toast('Cadastro não aberto.'); return; }
+      if (!(await conferirQuadra(r))) { await Store.apagarRegistro(r.uuid); tirar(); return; }
+      await Store.salvarRegistro(r);
+    } catch (e) { tirar(); throw e; }
+    const obs = new MutationObserver(() => { if ($app.querySelector('.prog')) { obs.disconnect(); tirar(); } }); obs.observe($app, { childList: true, subtree: true }); setTimeout(() => obs.disconnect(), 8000);
     ir('#form/' + r.uuid);
   }
 
@@ -1127,7 +1134,7 @@
         st.textContent = manual ? 'Ponto marcado.' : 'Ponto marcado ✓'; btAgora.disabled = true;
         setTimeout(() => { if (!sair.feito) sair(true); }, 700);
       }
-      function sair(v) { if (sair.feito) return; sair.feito = true; clearInterval(tm); Gps.ouvintes.delete(ouv); window.removeEventListener('hashchange', aoSair); veu.remove(); fim(v !== false); }
+      function sair(v) { if (sair.feito) return; sair.feito = true; if (v !== false && S.aoMarcar) S.aoMarcar(); clearInterval(tm); Gps.ouvintes.delete(ouv); window.removeEventListener('hashchange', aoSair); veu.remove(); fim(v !== false); }
       // Voltar do Android (ou qualquer troca de tela) cancela a marcação: nada fica lendo GPS nem abre o cadastro depois
       const aoSair = () => { const marcado = pronto && !noMapa; pronto = true; sair(marcado); }; // com o mapa de marcar aberto e sem ponto escolhido, voltar cancela // marcado e saiu logo: o ponto vale; ainda marcando: cancela
       window.addEventListener('hashchange', aoSair);
@@ -1379,7 +1386,7 @@
     function pintarGps() {
       gpsBtn.className = 'gps ' + classeGps(r.prec);
       if (r.lat == null && !S.posErro) gpsBtn.className = 'gps medio';
-      gpsBtn.textContent = r.lat == null ? (S.posErro ? 'Sem GPS' : 'Aguardando GPS') : `GPS ±${Math.round(r.prec)} m${r.posManual ? ' (ajustado)' : ''}`;
+      gpsBtn.textContent = r.lat == null ? (S.posErro ? 'Sem GPS' : 'Aguardando GPS') : `${r.posManual ? 'Ajustado' : 'GPS'} ±${Math.round(r.prec)} m`;
     }
     const ouvinte = (p) => {
       if (!p || !r.gpsAuto || r.posManual) return pintarGps();
@@ -1470,7 +1477,7 @@
       if (i < 0 || i >= abas.length) return; if (!abaVisivel(abas[i])) { const k = vizinha(i, 1) >= 0 ? vizinha(i, 1) : vizinha(i, -1); if (k < 0) return; i = k; }
       if (i > S.aba && r.mexido) {
         const lista = pendOrdenadas(); const bloq = lista.find((x) => x.aba >= S.aba && x.aba < i && abaVisivel(abas[x.aba]));
-        if (bloq) { S.tentou = true; if (navigator.vibrate) navigator.vibrate(120); toast(`Complete "${abas[bloq.aba].nome}" antes de seguir. Falta: ${bloq.c.rotulo}.`, 3500); return irPendente(lista.indexOf(bloq)); }
+        if (bloq) { S.tentou = true; if (navigator.vibrate) navigator.vibrate(120); toast(`Complete "${abas[bloq.aba].nome}" antes de seguir. Falta: ${bloq.c.rotulo}.`, 3500); { const tt = [...document.querySelectorAll('.toast')].pop(); if (tt) tt.classList.add('de-trava'); } return irPendente(lista.indexOf(bloq)); }
       }
       S.aba = i; S.abaMax = Math.max(S.abaMax || 0, i); history.replaceState(null, '', '#form/' + r.uuid + '/' + i); render(); window.scrollTo(0, 0);
     }
@@ -1480,15 +1487,23 @@
       const antes = camposRegra.has(c.nome) ? JSON.stringify(E) : '';
       E = estadoCampos(form, r.valores);
       // campo de regra (ex.: Espécie "Não identificada" mostra as fotos): redesenha só se o que aparece mudou; senão o teclado fecharia a cada letra
-      if (camposRegra.has(c.nome) && JSON.stringify(E) !== antes) { salvarRascunho(); return render(); }
+      document.querySelectorAll('.toast.de-trava').forEach((x) => x.remove()); // o aviso "Complete a etapa" some assim que a pessoa preenche algo
+      if (camposRegra.has(c.nome) && JSON.stringify(E) !== antes) {
+        // redesenhou com o teclado aberto (ex.: apagando "Não identificada"): devolve o cursor ao mesmo campo, no mesmo lugar
+        const at = document.activeElement; const cx = at && at.matches && at.matches('input, textarea') && at.closest('[data-campo]'); const nomeF = cx && cx.dataset.campo; const pos = cx ? [at.selectionStart, at.selectionEnd] : null;
+        salvarRascunho(); render();
+        if (nomeF) { const novo = conteudo.querySelector(`[data-campo="${CSS.escape(nomeF)}"] input:not([type=file]), [data-campo="${CSS.escape(nomeF)}"] textarea`); if (novo) { novo.focus({ preventScroll: true }); try { novo.setSelectionRange(pos[0], pos[1]); } catch (e) { /* tipo sem seleção */ } } }
+        return;
+      }
       for (const [nome, el] of calcEls) pintarCalc(el, form.campos.find((x) => x.nome === nome));
       salvarRascunho(); pintarAbas();
       if (S.tentou) { const box = conteudo.querySelector(`[data-campo="${CSS.escape(c.nome)}"]`); if (box) box.classList.toggle('falta', E[c.nome].obrig && vazio(c, valorDe(r, c))); }
     }
     function pintarCalc(el, c) {
       const v = r.valores[c.nome];
-      el.className = 'calc' + (v == null || v === '' ? ' vazio' : '') + (/risco/i.test(c.nome) && v ? ' risco-' + v : '');
-      el.textContent = v == null || v === '' ? 'Calculado automaticamente' : typeof v === 'number' ? numBR(v) : Q2F.bonito(v);
+      const ehRisco = /^risco/i.test(c.nome);
+      el.className = 'calc' + (v == null || v === '' ? ' vazio' : '') + (ehRisco ? ' resultado' : '') + (/risco/i.test(c.nome) && v ? ' risco-' + v : '');
+      el.textContent = v == null || v === '' ? (ehRisco ? 'Responda as três perguntas acima' : 'Calculado automaticamente') : typeof v === 'number' ? numBR(v) : Q2F.bonito(v);
     }
 
     function render() {
@@ -1661,10 +1676,11 @@
       const drop = h('div', { class: 'esp-lista oculto' });
       const nova = h('div', { class: 'esp-nova oculto' }, 'Espécie fora da lista do projeto. Confira a grafia.');
       const conferir = () => { const v = (r.valores[c.nome] || '').trim(); nova.classList.toggle('oculto', !v || lista.some((e) => norm(e.cientifico) === norm(v))); };
-      const escolher = (nome) => { i.value = nome; drop.classList.add('oculto'); mudar(c, nome); conferir(); };
+      const limpar = h('button', { class: 'esp-limpar' + (i.value ? '' : ' oculto'), type: 'button', 'aria-label': 'Apagar a espécie', onmousedown: (ev) => ev.preventDefault(), onclick: () => { i.value = ''; limpar.classList.add('oculto'); drop.classList.add('oculto'); nova.classList.add('oculto'); mudar(c, ''); const n = conteudo.querySelector(`[data-campo="${CSS.escape(c.nome)}"] input`) || i; n.focus({ preventScroll: true }); } }, '×');
+      const escolher = (nome) => { i.value = nome; limpar.classList.remove('oculto'); drop.classList.add('oculto'); mudar(c, nome); conferir(); };
       // busca por semelhança: começo das palavras, sem acento, e aceita 1 ou 2 letras erradas; o campo nunca fecha
       i.addEventListener('input', () => {
-        const q = norm(i.value).trim(); mudar(c, i.value.replace(/\s+/g, ' ').trim()); nova.classList.add('oculto');
+        const q = norm(i.value).trim(); limpar.classList.toggle('oculto', !i.value); mudar(c, i.value.replace(/\s+/g, ' ').trim()); nova.classList.add('oculto');
         if (!q) { drop.classList.add('oculto'); return; }
         const achados = buscaEspecie(lista, q).slice(0, 20);
         drop.replaceChildren(...achados.map((e) => h('button', { onmousedown: (ev) => ev.preventDefault(), onclick: () => escolher(e.cientifico) }, h('i', null, e.cientifico), e.popular ? h('small', null, e.popular) : null)),
@@ -1682,7 +1698,7 @@
       // espécie suspeita: quem coleta marca que não tem certeza; o app pede as fotos de identificação e o auditor confere
       const cS = form.campos.find((x) => x.nome === 'Especie suspeita'); let susp = null;
       if (cS) { const lig = () => r.valores[cS.nome] === 'sim'; susp = h('button', { class: 'chip bt-suspeita' + (lig() ? ' sel' : ''), type: 'button', 'aria-pressed': lig() ? 'true' : 'false', onclick: () => { const novo = lig() ? '' : 'sim'; mudar(cS, novo); susp.classList.toggle('sel', novo === 'sim'); susp.setAttribute('aria-pressed', novo === 'sim' ? 'true' : 'false'); if (novo) toast('Tire as fotos de identificação: folha dos dois lados, ramo e tronco.', 4500); } }, 'Não tenho certeza da espécie'); }
-      return h('div', null, h('div', { class: 'esp-linha' }, h('div', { class: 'esp-box' }, i, drop), semId), nova, susp, rec);
+      return h('div', null, h('div', { class: 'esp-linha' }, h('div', { class: 'esp-box' }, i, limpar, drop), semId), nova, susp, rec);
     }
 
     function fotoEl(c) {
@@ -3006,6 +3022,9 @@
       if (marc.length) linhas.push(h('div', { class: 'fl col' }, h('span', null, 'Marcados'), h('div', { class: 'chips-leitura' }, marc.map((m) => h('span', { class: 'chip-leit' }, m)))));
       if (linhas.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, a.nome), linhas));
     }
+    // campos que saíram da tela de coleta (formulário anterior): aparecem só nos registros antigos que têm valor
+    const ant = form.campos.filter((c) => c.legado).map((c) => [c, valorTexto(c, valores[c.nome])]).filter((x) => x[1]);
+    if (ant.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Formulário anterior'), ant.map(([c, t]) => h('div', { class: 'fl', 'data-campo': c.nome }, h('span', null, c.rotulo.replace(/\s*\(formulário anterior\)/, '')), h('b', null, c.tipo === 'bool' ? 'Sim' : t)))));
     if (fotos && fotos.length) secoes.push(h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Fotos'), h('div', { class: 'ficha-fotos' }, fotos.map((f) => h(linkSeguro(f.link) || f.src ? 'a' : 'div', { href: linkSeguro(f.link) || f.src, target: '_blank', rel: 'noopener', class: 'ficha-foto', 'data-drive': f.drive || null }, f.src ? h('img', { src: f.src, alt: f.rotulo, loading: 'lazy', onerror: (e) => e.target.remove() }) : null, h('span', null, f.rotulo))))));
     return secoes;
   }
@@ -3248,7 +3267,7 @@
     const ind = cCat ? ['1', '2', '3'].reduce((a, v) => a + ((d.escolhas[cCat.nome] || {})[v] || 0), 0) : d.total;
     const sit = cSit ? cSit.opcoes.map((o) => ({ rot: o.t, n: (d.escolhas[cSit.nome] || {})[o.v] || 0 })) : [];
     const manejo = form.campos.filter((c) => c.tipo === 'bool' && /^manejo/i.test(c.nome) && !/nenhum/i.test(c.nome)).map((c) => ({ rot: c.rotulo, n: d.marcados[c.nome] || 0 })).sort((a, b) => b.n - a.n);
-    const ocorr = form.campos.filter((c) => c.tipo === 'bool' && !/^manejo|ausente|nenhum|sem interfer/i.test(c.nome)).map((c) => ({ rot: c.rotulo + (form.abas.some((a) => a.campos.some((x) => x.campo === c.nome && x.grupo)) ? '' : ''), n: d.marcados[c.nome] || 0 })).filter((x) => x.n).sort((a, b) => b.n - a.n).slice(0, 12);
+    const ocorr = form.campos.filter((c) => c.tipo === 'bool' && !/^manejo|ausente|nenhum|sem interfer/i.test(c.nome)).map((c) => ({ rot: form.campos.filter((x) => x.tipo === 'bool' && x.rotulo === c.rotulo).length > 1 ? c.nome : c.rotulo, n: d.marcados[c.nome] || 0 })).filter((x) => x.n).sort((a, b) => b.n - a.n).slice(0, 12);
     const val = ['Validado', 'Corrigido', 'Pendente', 'Devolvido'].map((k) => ({ rot: ROT_CURTO[k], n: d.validacao[k] || 0, cor: COR_VAL[k] }));
     const esp = (d.especies || []).map(([e, n]) => ({ rot: e, n, it: true }));
     const nEsp = d.especies.reduce((a, [, n]) => a + n, 0);
