@@ -52,7 +52,7 @@ function gerar(n, projeto = 'divinopolis', semente = 1) {
     for (const f of FORM.campos) {
       let v = '';
       if (f.auto === 'codigo') v = `${eq}-${String(Math.floor(i / 2) + 1).padStart(4, '0')}`;
-      else if (f.tipo === 'choice') v = f.opcoes[Math.floor(rnd() * f.opcoes.length)].v;
+      else if (f.tipo === 'choice') { const ops = f.opcoes.filter((o) => !/sem acesso/i.test(o.t)); v = f.oculto ? '' : ops[Math.floor(rnd() * ops.length)].v; } // quadra sem acesso e risco nível 1 não entram na base sorteada
       else if (f.tipo === 'bool') v = rnd() < 0.2 ? 1 : 0;
       else if (f.tipo === 'species') v = esp[Math.floor(rnd() * esp.length)];
       else if (f.tipo === 'number') v = Math.round(rnd() * 100) / 10;
