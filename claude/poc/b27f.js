@@ -96,7 +96,9 @@ let ANA, BRUNO;
   const b = await chromium.launch();
   const C = await L.celular(b, { viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false }); const q = C.p;
   await L.logar(q, 'admin', L.senha()); await q.waitForTimeout(1200);
-  await q.evaluate(() => { window.__app.S.perProd = ['2026-11-01', '2026-11-15']; }); await q.goto(L.WEB + '#producao'); await q.waitForSelector('.kpis', { timeout: 20000 });
+  await q.goto(L.WEB + '#producao'); await q.waitForSelector('.kpis', { timeout: 20000 });
+  // o período do teste é fixo (registros de 03 e 04/11): escolhe depois de a tela abrir, para não depender da quinzena do dia em que o teste roda
+  await q.evaluate(() => { window.__app.S.perProd = ['2026-11-01', '2026-11-15']; location.hash = '#admin'; }); await q.waitForTimeout(600); await q.evaluate(() => { location.hash = '#producao'; }); await q.waitForSelector('.kpis', { timeout: 20000 }); await q.waitForTimeout(800);
   const kp = await q.locator('.kpis').innerText(); const linhasP = await q.locator('.tab tr').count();
   await q.screenshot({ path: 'b27f-producao.png', fullPage: true });
   await q.goto(L.WEB + '#auditoria'); await q.waitForSelector('text=Setores com coleta', { timeout: 20000 }); const aud = await q.locator('main').innerText();
