@@ -130,7 +130,7 @@ function doPost(e) {
       case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
       case 'quadras_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarQuadras(d.projeto, d.camada, usr)));
       case 'quadras_camada': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaQuadras(d.projeto, d.versao)));
-      case 'quadras_situacao': { exigeProjeto(d.projeto); try { vencerReservas(d.projeto); } catch (er) { /* tenta na próxima consulta */ } const cli = usr.perfil === 'cliente'; const pub = (o) => { const x = publicoOS(o); if (cli) { delete x.equipe; delete x.marcada_por; delete x.historico; delete x.atribuida; delete x.foto; delete x.reservada_em; delete x.fechada_em; } return x; }; return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(pub), faces: d.faces ? lerSitFaces(d.projeto).map(pub) : undefined }); }
+      case 'quadras_situacao': { exigeProjeto(d.projeto); try { vencerReservas(d.projeto); } catch (er) { /* tenta na próxima consulta */ } const cli = usr.perfil === 'cliente'; const pub = (o) => { const x = publicoOS(o); if (cli) { delete x.equipe; delete x.marcada_por; delete x.historico; delete x.atribuida; delete x.foto; delete x.reservada_em; delete x.fechada_em; delete x.cond_motivo; delete x.registro; delete x.obs; } return x; }; return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(pub), faces: d.faces ? lerSitFaces(d.projeto).map(pub) : undefined }); }
       case 'trajeto_salvar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarTrajeto(d.projeto, d.trecho || {}, usr)));
       case 'trajetos': pode('revisor'); exigeProjeto(d.projeto); return json({ ok: true, trechos: lerTrajetos(d.projeto, d.dia) });
       case 'quadras_marcar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, marcarQuadras(d.projeto, d.itens, usr)));
@@ -709,7 +709,7 @@ function clienteVeTodos(projetoId) { return String(projeto(projetoId).cliente_ve
 // colunas que o cliente não recebe: dados internos das equipes (quem coletou, histórico com logins)
 function ocultasCliente(projetoId) {
   let auto = []; try { auto = lerFormulario(projeto(projetoId).formulario).campos.filter((c) => c.auto === 'coletor').map((c) => c.nome); } catch (e) { /* sem formulário */ }
-  return COLS_INTERNAS.concat(['equipe', 'validado_por', 'historico', 'validacao_hist', 'pagamento', 'ponto_ajustado', 'ponto_dist_m', 'altura_dist_m', 'altura_ang_base', 'altura_ang_topo'], COLS_DUPLA, auto);
+  return COLS_INTERNAS.concat(['equipe', 'validado_por', 'historico', 'validacao_hist', 'pagamento', 'ponto_ajustado', 'ponto_dist_m', 'altura_dist_m', 'altura_ang_base', 'altura_ang_topo', 'Motivo sem acesso'], COLS_DUPLA, auto);
 }
 function paraCliente(projetoId, linhas) {
   const todos = clienteVeTodos(projetoId); const oc = ocultasCliente(projetoId);
@@ -1286,8 +1286,20 @@ function regrasProducao(p, diaRef) {
 function somaDias(d, n) { return Utilities.formatDate(new Date(new Date(d + 'T12:00:00-03:00').getTime() + n * 864e5), FUSO, 'yyyy-MM-dd'); }
 function segundaDe(d) { const t = new Date(d + 'T12:00:00-03:00'); return somaDias(d, -((t.getUTCDay() + 6) % 7)); }
 // face de quadra sem árvore vale como registro: é o cadastro de calçada ligado à face, com foto, validado como os outros
-// faces sem árvores por cadastro; '#uuid' guarda quantas faces o cadastro cobre (quadra sem acesso: um cadastro para todas as faces)
-function facesVazias(projetoId) { const fv = {}; try { if (infoQuadras(projetoId)) lerSitFaces(projetoId).forEach((f) => { if (f.situacao !== 'Levantada, sem árvores' || !f.registro) return; if (!fv[f.registro]) fv[f.registro] = String(f.marcada_por || '').toLowerCase() || '-'; fv['#' + f.registro] = (fv['#' + f.registro] || 0) + 1; }); } catch (e) { /* projeto sem faces */ } return fv; }
+// faces sem árvores por cadastro: quem marcou (logins) e, para quadra sem acesso, quantas faces cada login marcou em cada quadra apontando para o cadastro.
+// O cadastro só conta para quem marcou a face; "sem acesso" vale por face da mesma quadra do registro, marcada pelo mesmo acesso, até o número de faces da quadra na camada.
+function facesVazias(projetoId) {
+  const fv = {};
+  try {
+    if (!infoQuadras(projetoId)) return fv; let nFaces = {}; try { nFaces = indiceCamada(projetoId).faces || {}; } catch (e) { nFaces = {}; }
+    lerSitFaces(projetoId).forEach((f) => {
+      if (f.situacao !== 'Levantada, sem árvores' || !f.registro) return; const lg = String(f.marcada_por || '').toLowerCase() || '-';
+      const o = fv[f.registro] = fv[f.registro] || { logins: {}, sa: {} }; o.logins[lg] = 1;
+      if (f.cond === 'sem_acesso') { const k = lg + '|' + f.quadra; const teto = Array.isArray(nFaces[f.quadra]) ? nFaces[f.quadra].length : 1; o.sa[k] = Math.min(teto, (o.sa[k] || 0) + 1); }
+    });
+  } catch (e) { /* projeto sem faces */ }
+  return fv;
+}
 // ---------- Dias de campo: parada por chuva e dia trabalhado, parcial ou perdido ----------
 const COLS_DIAS = ['id', 'dia', 'equipe', 'login', 'hora', 'foto', 'obs', 'situacao', 'marcado_por', 'marcado_em', 'registrado_em'];
 const SITUACOES_DIA = ['Trabalhado', 'Parcial', 'Perdido'];
@@ -1310,7 +1322,8 @@ function camposProducao(form) {
   const alt = form.campos.find((c) => /altura total/i.test(c.nome)) || form.campos.find((c) => /altura/i.test(c.nome) && c.tipo !== 'photo');
   const foto = form.campos.find((c) => c.tipo === 'photo'); const cod = form.campos.find((c) => c.auto === 'codigo'); const esp = form.campos.find((c) => c.tipo === 'species');
   const cat = form.campos.find((c) => /categoria/i.test(c.nome) && Array.isArray(c.opcoes)); const cal = {}; if (cat) cat.opcoes.forEach((o) => { if (o && /cal[cç]ada|sem acesso/i.test(String(o.t || o))) cal[String(o.v != null ? o.v : o)] = 1; });
-  return { alt: alt && alt.nome, foto: foto && foto.nome, cod: cod && cod.nome, esp: esp && esp.nome, cat: cat && cat.nome, cal: cal };
+  const sa = {}; if (cat) cat.opcoes.forEach((o) => { if (o && /sem acesso/i.test(String(o.t || o))) sa[String(o.v != null ? o.v : o)] = 1; }); // só a categoria "Sem acesso" vale por mais de uma face
+  return { alt: alt && alt.nome, foto: foto && foto.nome, cod: cod && cod.nome, esp: esp && esp.nome, cat: cat && cat.nome, cal: cal, sa: sa };
 }
 const situacaoReg = (l) => (l.validacao === 'Descartado' ? 'Descartada' : l.pagamento ? 'Paga' : l.validacao === 'Validado' ? 'Validada' : l.validacao === 'Devolvido' ? 'Devolvida' : 'Em validação');
 function linhasProducao(projetoId) {
@@ -1331,8 +1344,10 @@ function indiceSetores(projetoId) {
 }
 function contaParaProducao(l, F, FV) {
   // face sem árvore: só o cadastro de calçada (categoria do formulário), feito pelo mesmo acesso que marcou a face. Árvore ou toco ligado a uma face segue a regra da árvore.
-  const face = !!(FV && FV[l.uuid]) && FV[l.uuid] === String(l.usuario || '').toLowerCase() && !!(F.cat && F.cal[String(l[F.cat])]) && !(valorNum(F.alt ? l[F.alt] : '', false) > 0);
-  const nf = face ? Math.max(1, +FV['#' + l.uuid] || 1) : 1; // quadra sem acesso: um cadastro vale pelas faces que cobre
+  const fvr = FV && FV[l.uuid]; const lg = String(l.usuario || '').toLowerCase();
+  const face = !!(fvr && fvr.logins && fvr.logins[lg]) && !!(F.cat && F.cal[String(l[F.cat])]) && !(valorNum(F.alt ? l[F.alt] : '', false) > 0);
+  // quadra sem acesso: o cadastro vale pelas faces sem acesso da quadra dele, marcadas pelo mesmo acesso; calçada sem árvores vale sempre 1
+  const nf = face && F.sa && F.sa[String(l[F.cat])] ? Math.max(1, +(fvr.sa[lg + '|' + String(l.quadra == null ? '' : l.quadra).trim()] || 1)) : 1;
   if (l.pagamento) return { conta: true, motivo: '', face: face, nf: nf }; // registro pago numa medição continua contando como foi pago
   if (l.validacao !== 'Validado') return { conta: false, face: face, nf: nf };
   const foto = F.foto ? !!l[F.foto + ' link'] : true; // a foto precisa ter chegado
@@ -1608,11 +1623,15 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     if (cut < 1 || !Array.isArray(idx.faces[qn]) || idx.faces[qn].indexOf(letra) < 0) { recusadas.push({ numero: id, motivo: 'Face não existe na camada.' }); return; }
     const f0 = por[id]; const f = Object.assign({}, f0 || { numero: id, quadra: qn, situacao: 'A levantar', equipe: '' }); // cópia: item recusado não muda nada
     if (it.situacao != null && SITUACOES_FACE.indexOf(it.situacao) < 0) { recusadas.push({ numero: id, motivo: 'Situação inválida.' }); return; }
-    if (it.cond != null && CONDS_FACE.indexOf(String(it.cond)) < 0) { recusadas.push({ numero: id, motivo: 'Condição da face inválida.' }); return; }
+    if (it.cond != null) { if (typeof it.cond !== 'string' || CONDS_FACE.indexOf(it.cond) < 0) { recusadas.push({ numero: id, motivo: 'Condição da face inválida.' }); return; } }
     if (it.cond === 'sem_acesso' && it.situacao !== 'Levantada, sem árvores') { recusadas.push({ numero: id, motivo: 'Face sem acesso precisa do cadastro com a foto da entrada.' }); return; }
     if (it.situacao === 'Levantada, sem árvores') {
       const lt = String(it.largura == null ? '' : it.largura).trim(); const lg = +lt.replace(',', '.'); // largura é opcional desde a 2.6 (só a foto)
       if (!/^[0-9a-f-]{8,60}$/i.test(String(it.registro || '')) || (lt && (!/^\d{1,2}([.,]\d{1,3})?$/.test(lt) || !(lg > 0)))) { recusadas.push({ numero: id, motivo: 'Face sem árvores precisa da foto da calçada (cadastro de calçada).' }); return; }
+      // um cadastro de calçada serve a uma face só; o de quadra sem acesso, às faces de uma quadra só; e nunca a faces marcadas por outro acesso
+      const reg = String(it.registro); const eu = String(usr.login || '').toLowerCase(); const semAc = it.cond === 'sem_acesso';
+      const outra = todas.find((o) => o.numero !== id && o.registro === reg && o.situacao === 'Levantada, sem árvores' && (!semAc || o.cond !== 'sem_acesso' || o.quadra !== qn || String(o.marcada_por || '').toLowerCase() !== eu));
+      if (outra) { recusadas.push({ numero: id, motivo: 'Este cadastro já está ligado à face ' + outra.numero + '.' }); return; }
     }
     const qi = qInfo[qn] || {};
     if (!coord && qi.fechada_em) { if (!it.auto) recusadas.push({ numero: id, motivo: 'Quadra fechada. Só a coordenação reabre.' }); return; }

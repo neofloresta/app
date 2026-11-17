@@ -1866,7 +1866,7 @@
         clearTimeout(salvarTimer); await descartarEdicao(r); S.editando.delete(r.uuid); Gps.ouvintes.delete(ouvinte); S.reg = null; return ir('#form/' + r.uuid);
       }
       const nf = Object.values(r.fotos || {}).filter((f) => f && f.chave).length;
-      if (!(await confirmar('Cancelar registro', `Cancelar ${r.faceId ? 'este cadastro de calçada' : 'esta árvore'}? ${nf ? `O que foi preenchido e ${nf === 1 ? 'a foto serão apagados' : `as ${nf} fotos serão apagados`}` : 'O que foi preenchido será apagado'} do celular. Isso não pode ser desfeito.`, 'Cancelar registro', 'perigo', 'Continuar preenchendo'))) return;
+      if (!(await confirmar('Cancelar registro', `Cancelar ${r.semAcesso ? 'este cadastro de quadra sem acesso' : r.faceId ? 'este cadastro de calçada' : 'esta árvore'}? ${nf ? `O que foi preenchido e ${nf === 1 ? 'a foto serão apagados' : `as ${nf} fotos serão apagados`}` : 'O que foi preenchido será apagado'} do celular. Isso não pode ser desfeito.`, 'Cancelar registro', 'perigo', 'Continuar preenchendo'))) return;
       clearTimeout(salvarTimer); Gps.ouvintes.delete(ouvinte);
       for (const f of Object.values(r.fotos)) if (f && f.chave) await Store.apagarFoto(f.chave);
       await Store.apagarRegistro(r.uuid); S.reg = null; toast('Registro cancelado.'); ir('#inicio');
@@ -1892,6 +1892,7 @@
     const cCat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
     const cFoto = form.campos.find((c) => c.tipo === 'photo');
     const cArea = form.campos.find((c) => /^area de copa \(m2\)$/i.test(norm(c.nome))) || form.campos.find((c) => /area de copa/i.test(norm(c.nome)));
+    const semPonto = new Set(cCat ? cCat.opcoes.filter((o) => /cal[cç]ada|sem acesso/i.test(o.t)).map((o) => String(o.v)) : []); // quadra sem acesso também não é ponto de árvore
     const opCalc = cCat && cCat.opcoes.find((o) => /cal[cç]ada/i.test(o.t)); // calçada sem árvores aparece só como a linha tracejada da face
     const raioCopa = (a) => { const v = +String(a == null ? '' : a).replace(',', '.'); return v > 0 ? Math.sqrt(v / Math.PI) : 0; };
     const rotOp = (c, v) => { if (!c || v == null || v === '') return ''; const o = c.opcoes.find((x) => String(x.v) === String(v)); return o ? o.t : String(v); };
@@ -1976,7 +1977,7 @@
     const equipes = []; const corEq = (e) => { if (!equipes.includes(e)) equipes.push(e); return e === '-' ? '#8A969C' : corEquipe(e); };
     // pontos: os do aparelho primeiro (podem ter edição ainda não enviada), depois os do servidor
     const pts = []; const vistos = new Set();
-    const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; if (opCalc && String(o.cat) === String(opCalc.v)) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
+    const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; if (semPonto.has(String(o.cat))) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
     if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, bairro: r.bairro || '', dia: diaLocal(r.criado_em), cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: (cRisco && r.valores[cRisco.nome]) || (cRisco1 && r.valores[cRisco1.nome]) || '', n1: !!(cRisco1 && r.valores[cRisco1.nome] && !(cRisco && r.valores[cRisco.nome])), cat: cCat ? r.valores[cCat.nome] : '', rm: raioCopa(cArea ? r.valores[cArea.nome] : 0), foto: '', local: true });
     // quadras: desenhadas antes dos pontos, no mesmo canvas, para o toque no ponto ter prioridade
     // setores censitários (quando o projeto tem): os da minha equipe com borda forte, os outros finos; não pegam o toque
@@ -3610,6 +3611,7 @@
     const a = []; const cc = campoCodigo(form), ce = campoEspecie(form);
     const cat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
     const ind = !cat || ['1', '2', '3'].includes(String(l[cat.nome]));
+    { const oc = cat && cat.opcoes.find((o) => String(o.v) === String(l[cat.nome])); if (oc && /sem acesso/i.test(oc.t)) a.push('Quadra sem acesso (vale uma vez por face): confira a foto da entrada'); }
     if (l.latitude === '' || l.latitude == null) a.push('Sem coordenada'); else if (+l.precisao_gps_m > 10) a.push(`GPS ±${Math.round(l.precisao_gps_m)} m`);
     const f1 = form.campos.find((c) => c.tipo === 'photo'); if (f1 && !l[f1.nome]) a.push('Sem foto');
     if (ind && ce) { const e = String(l[ce.nome] || '').trim(); if (!e) a.push('Sem espécie'); else if ((form.especies || []).length && !form.especies.some((x) => norm(x.cientifico) === norm(e))) a.push('Espécie fora da lista'); }
@@ -4164,8 +4166,11 @@
         const mt = String((r.valores[(S.form.campos.find((c) => /motivo sem acesso/i.test(c.nome)) || {}).nome] || '')).trim();
         const itens = r.semAcesso.faces.map((id) => ({ tipo: 'face', numero: id, situacao: 'Levantada, sem árvores', registro: r.uuid, cond: 'sem_acesso', motivo: mt }));
         itens.push({ numero: r.semAcesso.quadra, fechar: true, obs: 'Sem acesso' + (mt ? ': ' + mt : '') });
-        const res = await marcarQuadras(itens);
-        if (res.recusadas && res.recusadas.length) toast('A quadra não foi marcada como sem acesso: ' + res.recusadas[0].motivo, 7000); else toast(`Quadra ${r.semAcesso.quadra} marcada como sem acesso.`, 4000);
+        if ((sit.get(r.semAcesso.quadra) || {}).fechada_em) return; // cadastro corrigido depois: a quadra já está marcada e fechada
+        try { const res = await marcarQuadras(itens);
+          if (res.recusadas && res.recusadas.length) await modal('Quadra não marcada', h('p', null, `O cadastro foi guardado, mas a quadra ${r.semAcesso.quadra} não foi marcada como sem acesso: ${res.recusadas[0].motivo} Avise a coordenação.`), [{ texto: 'Entendi', valor: true }]);
+          else toast(`Quadra ${r.semAcesso.quadra} marcada como sem acesso.`, 4000);
+        } catch (e) { await modal('Quadra não marcada', h('p', null, `O cadastro foi guardado, mas a quadra ${r.semAcesso.quadra} não foi marcada como sem acesso (${e.message}). Abra a quadra no mapa e marque de novo, ou avise a coordenação.`), [{ texto: 'Entendi', valor: true }]); }
         return;
       }
       if (r.faceId) {
@@ -4206,6 +4211,9 @@
     if (servidorAntigo(2.12)) return;
     const fs = (await carregarSitQd(false)).faces || new Map(); const faltam = (q.f || []).filter((f) => !FACE_FEITA.includes((fs.get(q.n + '-' + f.i) || {}).situacao));
     if (!faltam.length) return toast('Todas as faces desta quadra já foram encerradas.');
+    // face com árvore já cadastrada não vira "sem acesso": a equipe encerra essa face antes
+    const regs = (await Store.registros(S.projeto.id)).filter((r) => r.status !== 'rascunho' && !r.faceId && r.face); const comArv = faltam.filter((f) => regs.some((r) => r.face === q.n + '-' + f.i));
+    if (comArv.length) return modal('Encerre antes as faces com árvores', h('p', null, `${comArv.length === 1 ? 'A face ' + comArv[0].i + ' já tem' : 'As faces ' + comArv.map((f) => f.i).join(', ') + ' já têm'} árvore cadastrada. Encerre ${comArv.length === 1 ? 'essa face' : 'essas faces'} (Marcar como levantada) e depois marque a quadra como sem acesso: só as faces que faltarem entram.`), [{ texto: 'Entendi', valor: true }]);
     const rasc = (await Store.registros(S.projeto.id)).find((r) => r.semAcesso && r.semAcesso.quadra === q.n && r.status === 'rascunho');
     if (rasc) { toast('Continuando o cadastro desta quadra que ficou guardado.', 3000); S.aba = 0; S.tentou = false; return ir('#form/' + rasc.uuid); }
     const ok = await modal('Quadra sem acesso', h('div', null, h('p', null, `A equipe não consegue entrar na quadra ${q.n}? Tire a foto da entrada (portaria, portão ou cerca) e escreva o motivo.`),
@@ -4323,8 +4331,8 @@
             abas.push({ nome: 'Quadras', cols: ['Quadra', ...extrasQ, 'Equipe', 'Situação', 'Marcada por', 'Marcada em', 'Registros neste arquivo'], linhas: camQd.quadras.map((q) => { const s = sq.get(q.n) || {}; const d = s.marcada_em ? new Date(s.marcada_em) : null; return Object.assign({ Quadra: /^\d+$/.test(q.n) ? +q.n : q.n }, Object.fromEntries(extrasQ.map((k) => [k, (q.p || {})[k] || ''])), { Equipe: s.equipe || '', 'Situação': s.situacao || 'A levantar', 'Marcada por': s.marcada_por || '', 'Marcada em': dtQ(s.marcada_em), 'Registros neste arquivo': nArv[q.n] || 0 }); }) });
             if (camQd.quadras.some((q) => q.f)) { // faces de quadra: uma linha por face
               const sf = new Map(sitR.faces.map((f) => [f.numero, f])); const lin = [];
-              for (const q of camQd.quadras) for (const f of q.f || []) { const x = sf.get(q.n + '-' + f.i) || {}; const d = x.marcada_em ? new Date(x.marcada_em) : null; lin.push({ Face: q.n + '-' + f.i, Quadra: /^\d+$/.test(q.n) ? +q.n : q.n, Rua: f.r, 'Comprimento (m)': f.c, Equipe: x.equipe || '', 'Situação': x.situacao || 'A levantar', 'Marcada por': x.marcada_por || '', 'Marcada em': dtQ(x.marcada_em), 'Largura da calçada (m)': x.largura ? +x.largura : '', 'Registro da calçada': x.registro || '' }); }
-              abas.push({ nome: 'Faces de quadra', cols: ['Face', 'Quadra', 'Rua', 'Comprimento (m)', 'Equipe', 'Situação', 'Marcada por', 'Marcada em', 'Largura da calçada (m)', 'Registro da calçada'], linhas: lin });
+              for (const q of camQd.quadras) for (const f of q.f || []) { const x = sf.get(q.n + '-' + f.i) || {}; const d = x.marcada_em ? new Date(x.marcada_em) : null; lin.push({ Face: q.n + '-' + f.i, Quadra: /^\d+$/.test(q.n) ? +q.n : q.n, Rua: f.r, 'Comprimento (m)': f.c, Equipe: x.equipe || '', 'Situação': x.cond === 'sem_acesso' ? 'Sem acesso' : x.situacao || 'A levantar', 'Calçada': x.cond === 'irregular' ? 'Irregular' : x.cond === 'sem_acesso' ? 'Sem acesso' : '', 'Motivo': x.cond_motivo || '', 'Marcada por': x.marcada_por || '', 'Marcada em': dtQ(x.marcada_em), 'Largura da calçada (m)': x.largura ? +x.largura : '', 'Registro da calçada': x.registro || '' }); }
+              abas.push({ nome: 'Faces de quadra', cols: ['Face', 'Quadra', 'Rua', 'Comprimento (m)', 'Equipe', 'Situação', 'Calçada', 'Motivo', 'Marcada por', 'Marcada em', 'Largura da calçada (m)', 'Registro da calçada'], linhas: lin });
             }
           } catch (e) { /* segue sem a aba */ }
         }

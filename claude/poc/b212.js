@@ -70,6 +70,15 @@ const tocar = async (p, lat, lon, z = 19) => { const xy = await p.evaluate(([a, 
   const P0 = await L.post('producao', per); await L.post('validar', { projeto: PJ, itens: [{ uuid: arv.uuid, estado: 'Validado' }, { uuid: sa.uuid, estado: 'Validado' }] }); const P1 = await L.post('producao', per);
   const esperado = P1.regras.valor * (1 + P1.regras.pesoFace * fq.length);
   ok('I.5', P0.totais.valor === 0 && Math.abs(P1.totais.valor - esperado) < 0.001 && fq.length >= 3, `antes do auditor: R$ ${P0.totais.valor}; depois: R$ ${P1.totais.valor} = ${P1.regras.valor} x (1 árvore + ${fq.length} faces sem acesso)`);
+  // 8. fraude pelo servidor: o mesmo cadastro não vale por faces de outra quadra, por faces comuns nem por faces marcadas por outro acesso
+  const qo = viz.find((x) => x.f && x.f.length >= 3 && x.n !== auto.q.n && x.n !== qs.n); const fo = qo.f.map((f) => qo.n + '-' + f.i);
+  const t1 = await L.post('quadras_marcar', { projeto: PJ, itens: fo.map((n) => ({ tipo: 'face', numero: n, situacao: 'Levantada, sem árvores', registro: sa.uuid, cond: 'sem_acesso' })) }, 'div-1', 'equipe01');
+  const t2 = await L.post('quadras_marcar', { projeto: PJ, itens: fo.map((n) => ({ tipo: 'face', numero: n, situacao: 'Levantada, sem árvores', registro: sa.uuid })) }, 'div-1', 'equipe01');
+  const t3 = await L.post('quadras_marcar', { projeto: PJ, itens: [{ tipo: 'face', numero: fo[0], situacao: 'Levantada, sem árvores', registro: sa.uuid }] }, 'div-2', 'equipe02');
+  const t4 = await L.post('quadras_marcar', { projeto: PJ, itens: [{ tipo: 'face', numero: fo[0], cond: ['sem_acesso'] }] }, 'div-1', 'equipe01');
+  const P2 = await L.post('producao', per); F = await faces();
+  ok('I.8', t1.recusadas.length === fo.length && t2.recusadas.length === fo.length && t3.recusadas.length === 1 && t4.recusadas.length === 1 && Math.abs(P2.totais.valor - esperado) < 0.001 && fo.every((n) => !(F[n] || {}).registro),
+    `faces de outra quadra com o mesmo cadastro: ${t1.recusadas.length} de ${fo.length} recusadas ("${(t1.recusadas[0] || {}).motivo}"); como calçada comum: ${t2.recusadas.length} recusadas; por outro acesso: ${t3.recusadas.length} recusada; condição em lista: recusada (${t4.recusadas.length}); valor continua R$ ${P2.totais.valor}`);
   // 6. painel: risco nível 1 à parte e as faces irregulares e sem acesso
   const Ad = await L.celular(b, { viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false }); const q = Ad.p; await L.logar(q, 'admin', L.senha()); await q.waitForTimeout(1500);
   await q.goto(L.WEB + '#painel'); await q.waitForSelector('.kpis', { timeout: 20000 }); await q.waitForTimeout(2500); let tp = limpo(await q.locator('main').innerText()); await q.click('.painel-abas button:has-text("Inventário")'); await q.waitForTimeout(600); tp += ' ' + limpo(await q.locator('main').innerText()); await q.screenshot({ path: 'b212-painel.png', fullPage: true });
