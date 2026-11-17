@@ -296,7 +296,7 @@
     s.addEventListener('keydown', (e) => e.key === 'Enter' && entrar());
     if (S.ultimoUsuario) u.value = S.ultimoUsuario;
     $app.replaceChildren(h('div', { class: 'tela-login' }, h('div', { class: 'login' },
-      h('div', { class: 'marca' }, h('img', { src: 'icons/neofloresta-inventario-entrada-titulo.svg', alt: 'Inventário da Arborização Urbana', width: 176, height: 199 })),
+      h('div', { class: 'marca' }, h('img', { src: 'icons/neofloresta-inventario-entrada-titulo.svg', alt: 'Inventário da Arborização Urbana', width: 176, height: 208 })),
       h('div', { class: 'login-cx' },
       S.expirada ? h('div', { class: 'aviso' }, 'Sua sessão expirou. Entre de novo: os registros guardados no aparelho continuam salvos e serão enviados.') : null,
       Api.demo ? h('div', { class: 'info' }, 'Modo demonstração: os dados ficam só neste aparelho. Usuários de teste (senha 1234): ', h('b', null, 'admin'), ', ', h('b', null, 'revisor'), ' e ', h('b', null, 'prefeitura'), '. Equipes de campo: ', h('b', null, 'equipe1 / 1111'), ' e ', h('b', null, 'equipe2 / 2222'), '.') : null,
