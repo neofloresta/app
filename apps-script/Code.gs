@@ -1618,6 +1618,8 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
   v0.forEach((l, i) => { if (l[0] === '') return; const o = { __linha: i + 2 }; cab0.forEach((c, k) => { if (c) o[c] = texto(l[k]); }); todas.push(o); por[o.numero] = o; }); // linha real na planilha, mesmo com linhas em branco no meio
   const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   const mudou = []; const recusadas = []; const qds = {};
+  // dono de cada cadastro que já chegou ao servidor (lido uma vez, só quando alguma face aponta para um cadastro)
+  let donos = null; const donoDe = (uuid) => { if (!donos) { donos = {}; try { const sp = planilha(projetoId); const cb = cabecalho(sp, []); const n = sp.getLastRow() - 1; const iu = cb.indexOf('uuid'), ius = cb.indexOf('usuario'); if (n > 0 && iu >= 0 && ius >= 0) { const us = sp.getRange(2, iu + 1, n, 1).getValues(); const ds = sp.getRange(2, ius + 1, n, 1).getValues(); us.forEach((u, i) => { donos[String(u[0])] = String(ds[i][0] || '').toLowerCase(); }); } } catch (e) { donos = {}; } } return donos[String(uuid)]; };
   itens.forEach((it) => {
     const id = String(it.numero || '').slice(0, 45); const cut = id.lastIndexOf('-'); const qn = id.slice(0, cut), letra = id.slice(cut + 1);
     if (cut < 1 || !Array.isArray(idx.faces[qn]) || idx.faces[qn].indexOf(letra) < 0) { recusadas.push({ numero: id, motivo: 'Face não existe na camada.' }); return; }
@@ -1630,11 +1632,14 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
       if (!/^[0-9a-f-]{8,60}$/i.test(String(it.registro || '')) || (lt && (!/^\d{1,2}([.,]\d{1,3})?$/.test(lt) || !(lg > 0)))) { recusadas.push({ numero: id, motivo: 'Face sem árvores precisa da foto da calçada (cadastro de calçada).' }); return; }
       // um cadastro de calçada serve a uma face só; o de quadra sem acesso, às faces de uma quadra só; e nunca a faces marcadas por outro acesso
       const reg = String(it.registro); const eu = String(usr.login || '').toLowerCase(); const semAc = it.cond === 'sem_acesso';
-      const outra = todas.find((o) => o.numero !== id && o.registro === reg && o.situacao === 'Levantada, sem árvores' && (!semAc || o.cond !== 'sem_acesso' || o.quadra !== qn || String(o.marcada_por || '').toLowerCase() !== eu));
+      const dono = donoDe(reg); // cadastro de outra pessoa não serve para a face de quem está marcando (a coordenação pode remarcar)
+      if (!coord && dono && dono !== eu) { recusadas.push({ numero: id, motivo: 'Este cadastro é de outro acesso.' }); return; }
+      const outra = todas.find((o) => { if (o.numero === id || o.registro !== reg || o.situacao !== 'Levantada, sem árvores') return false; const quem = String(o.marcada_por || '').toLowerCase(); if (dono && quem !== dono && !coord) return false; // face ligada por quem não é o dono do cadastro não atrapalha o dono
+        return !semAc || o.cond !== 'sem_acesso' || o.quadra !== qn || (!coord && quem !== eu); });
       if (outra) { recusadas.push({ numero: id, motivo: 'Este cadastro já está ligado à face ' + outra.numero + '.' }); return; }
     }
     const qi = qInfo[qn] || {};
-    if (!coord && qi.fechada_em) { if (!it.auto) recusadas.push({ numero: id, motivo: 'Quadra fechada. Só a coordenação reabre.' }); return; }
+    if (!coord && qi.fechada_em) { const igual = f0 && it.situacao === f0.situacao && String(it.registro || '') === String(f0.registro || '') && (it.cond == null || it.cond === (f0.cond || '')); if (!it.auto && !igual) recusadas.push({ numero: id, motivo: 'Quadra fechada. Só a coordenação reabre.' }); return; } // o mesmo pedido reenviado pela fila não é recusa
     if (soReservada && qi.equipe !== usr.equipe) { if (!it.auto) recusadas.push({ numero: id, motivo: 'Quadra não reservada para a sua equipe. Peça a reserva à coordenação.' }); return; } // time parceiro só mexe em face de quadra reservada para ele
     if (!coord) {
       if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
