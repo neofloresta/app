@@ -1,7 +1,7 @@
 {
-  "name": "ArborizIA Coletor",
-  "short_name": "ArborizIA",
-  "description": "App de campo do ArborizIA: gestão das árvores da cidade",
+  "name": "Neofloresta Inventário",
+  "short_name": "Neo Inventário",
+  "description": "Neofloresta: inventário da arborização urbana (app de campo)",
   "id": "./",
   "start_url": "./",
   "scope": "./",

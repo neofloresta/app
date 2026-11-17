@@ -1,4 +1,4 @@
-# ArborizIA Coletor (por Neofloresta)
+# Neofloresta Inventário (app de campo do Inventário da Arborização Urbana)
 
 Sistema de inventário da arborização urbana da Neofloresta Serviços Ecossistêmicos: coleta em campo pelo celular (funciona sem internet), validação técnica, painel de indicadores, portal do cliente e entrega dos dados em formatos de SIG e de planilha.
 
