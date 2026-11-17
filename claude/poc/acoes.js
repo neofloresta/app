@@ -29,6 +29,7 @@ async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, al
     await aba(p, 'Tronco'); for (const n of ['Danos ausente', 'Pragas no tronco ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();
     await op(p, 'Ocos e cavidades', 'Ausente');
     await aba(p, 'Raízes'); for (const n of ['Raízes ausente', 'Pragas nas raízes ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();
+    await op(p, 'Fitossanidade', 'Boa');
     await aba(p, 'Risco'); await op(p, 'Probabilidade de falha', 'Improvável'); await campo(p, 'Probabilidade de impacto').locator('.op').nth(1).click(); await op(p, 'Consequencias', 'Menor');
     await aba(p, 'Manejo'); if (manejoNenhum) await p.locator('.chip[data-campo="Manejo nenhum"]').click();
     if (fotos > 1) { await aba(p, 'Fotos e observações'); await foto(p, 'Foto 2'); if (fotos > 2) await foto(p, 'Foto 3'); }

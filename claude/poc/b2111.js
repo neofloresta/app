@@ -20,15 +20,15 @@ const foco = (p) => p.evaluate(() => { const a = document.activeElement; const c
   await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva'); await p.waitForTimeout(200);
   await p.click('.prog-topo'); const etapasV = (await p.locator('.folha .menu-it').allInnerTexts()).map((t) => limpo(t).replace(/ (Completa|Em andamento|Falta obrigatório)$/, '')); await p.evaluate(() => document.querySelectorAll('.veu').forEach((v) => v.remove()));
   const ESP = ['Identificação', 'Indivíduo', 'Meio', 'Copa', 'Tronco', 'Raízes', 'Risco', 'Manejo', 'Fotos e observações'];
-  ok('Z.2', form.versao === 8 && JSON.stringify(etapasV) === JSON.stringify(ESP), `formulário ${form.versao}; etapas: ${etapasV.join(', ')} (antes de escolher a categoria: ${etapas.length})`);
+  ok('Z.2', form.versao >= 8 && JSON.stringify(etapasV) === JSON.stringify(ESP), `formulário ${form.versao}; etapas: ${etapasV.join(', ')} (antes de escolher a categoria: ${etapas.length})`);
   // 3. o que aparece em Copa, Tronco e Raízes
   const naTela = async (et) => { await A.abaLivre(p, et); return p.evaluate(() => [...document.querySelectorAll('main .campo')].map((c) => (c.dataset.grupo ? c.dataset.grupo + ': ' + [...c.querySelectorAll('.chip')].map((x) => x.textContent.trim()).join('/') : (c.querySelector('.rot') || c).textContent.trim().replace(/\?$/, '') + (c.querySelector('.op') ? ': ' + [...c.querySelectorAll('.op')].map((x) => x.textContent.trim()).join('/') : '')))); };
   await A.abaLivre(p, 'Copa'); await p.screenshot({ path: __dirname + '/b2111-copa.png' });
   const copa = await naTela('Copa'), tronco = await naTela('Tronco'), raiz = await naTela('Raízes');
   const tem = (l, re) => l.some((x) => re.test(x));
-  ok('Z.3', tem(copa, /^Qualidade da copa/) && tem(copa, /^Galhos secos ou podres.*Ausente\/0-25%\/25-50%\/50-75%\/acima de 75%/) && tem(copa, /^Podas: Ausente\/Danos por podas\/Poda drástica$/) && tem(copa, /^Pragas e doenças na copa: Ausente\/Fungo\/Cupim\/Broca\/Erva-de-passarinho\/Doença aparente\/Praga aparente$/)
+  ok('Z.3', tem(copa, /^Qualidade da copa/) && tem(copa, /^Galhos secos ou podres.*Ausente\/0-25%\/25-50%\/50-75%\/acima de 75%/) && tem(copa, /^Podas: Ausente\/Danos por podas\/Poda drástica$/) && tem(copa, /^Pragas e doenças na copa: Ausente\/Fungo\/Cupim\/Broca\/Erva-de-passarinho$/)
     && tem(tronco, /^Danos no tronco: Ausente\/Lesões no tronco\/Codominância de troncos$/) && tem(tronco, /^Ocos e cavidades/) && tem(tronco, /^Pragas no tronco: Ausente\/Fungo\/Cupim\/Broca$/)
-    && tem(raiz, /^Raízes: Ausente\/Poda de raiz\/Afloramento da raiz no canteiro\/Afloramento da raiz na calçada$/) && tem(raiz, /^Pragas nas raízes: Ausente\/Fungo\/Cupim$/) && copa.length === 4 && tronco.length === 3 && raiz.length === 2,
+    && tem(raiz, /^Raízes: Ausente\/Poda de raiz\/Afloramento da raiz no canteiro\/Afloramento da raiz na calçada$/) && tem(raiz, /^Pragas nas raízes: Ausente\/Fungo\/Cupim$/) && tem(raiz, /^Fitossanidade.*Boa\/Regular\/Ruim/) && copa.length === 4 && tronco.length === 3 && raiz.length === 3,
     `Copa: ${copa.join(' | ')} || Tronco: ${tronco.join(' | ')} || Raízes: ${raiz.join(' | ')}`);
   // 4. risco calculado é o último da etapa e as fotos vão de 2 a 5, sem descrição
   await A.abaLivre(p, 'Risco'); const ordemR = await p.evaluate(() => [...document.querySelectorAll('main .campo[data-campo]')].map((c) => c.dataset.campo)); const antesR = limpo(await A.campo(p, 'Risco').locator('.calc').innerText());

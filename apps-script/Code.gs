@@ -11,7 +11,7 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.11';
+const VERSAO_SCRIPT = '2.12';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id', 'indicacao'];
 const COLS_TIMES = ['id', 'nome', 'tipo', 'projeto', 'ativo', 'criado_em'];
 const TIPOS_TIME = ['Próprio', 'Parceiro'];
@@ -1131,7 +1131,8 @@ function vencerReservas(projetoId) {
     return n;
   } finally { lock.releaseLock(); }
 }
-const COLS_FACES = ['numero', 'quadra', 'rua', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'largura', 'registro', 'obs', 'historico', 'atualizado_em', 'atribuida', 'foto'];
+const COLS_FACES = ['numero', 'quadra', 'rua', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'largura', 'registro', 'obs', 'historico', 'atualizado_em', 'atribuida', 'foto', 'cond', 'cond_motivo'];
+const CONDS_FACE = ['', 'irregular', 'sem_acesso']; // calçada irregular: cadastro rápido (risco nível 1); sem acesso: quadra onde a equipe não entra
 const SITUACOES_FACE = ['A levantar', 'Em levantamento', 'Levantada', 'Levantada, sem árvores'];
 const FACE_FEITA = ['Levantada', 'Levantada, sem árvores'];
 function abaFaces(projetoId) {
@@ -1285,7 +1286,8 @@ function regrasProducao(p, diaRef) {
 function somaDias(d, n) { return Utilities.formatDate(new Date(new Date(d + 'T12:00:00-03:00').getTime() + n * 864e5), FUSO, 'yyyy-MM-dd'); }
 function segundaDe(d) { const t = new Date(d + 'T12:00:00-03:00'); return somaDias(d, -((t.getUTCDay() + 6) % 7)); }
 // face de quadra sem árvore vale como registro: é o cadastro de calçada ligado à face, com foto, validado como os outros
-function facesVazias(projetoId) { const fv = {}; try { if (infoQuadras(projetoId)) lerSitFaces(projetoId).forEach((f) => { if (f.situacao === 'Levantada, sem árvores' && f.registro && !fv[f.registro]) fv[f.registro] = String(f.marcada_por || '').toLowerCase() || '-'; }); } catch (e) { /* projeto sem faces */ } return fv; }
+// faces sem árvores por cadastro; '#uuid' guarda quantas faces o cadastro cobre (quadra sem acesso: um cadastro para todas as faces)
+function facesVazias(projetoId) { const fv = {}; try { if (infoQuadras(projetoId)) lerSitFaces(projetoId).forEach((f) => { if (f.situacao !== 'Levantada, sem árvores' || !f.registro) return; if (!fv[f.registro]) fv[f.registro] = String(f.marcada_por || '').toLowerCase() || '-'; fv['#' + f.registro] = (fv['#' + f.registro] || 0) + 1; }); } catch (e) { /* projeto sem faces */ } return fv; }
 // ---------- Dias de campo: parada por chuva e dia trabalhado, parcial ou perdido ----------
 const COLS_DIAS = ['id', 'dia', 'equipe', 'login', 'hora', 'foto', 'obs', 'situacao', 'marcado_por', 'marcado_em', 'registrado_em'];
 const SITUACOES_DIA = ['Trabalhado', 'Parcial', 'Perdido'];
@@ -1307,7 +1309,7 @@ function marcarDia(projetoId, d, usr) {
 function camposProducao(form) {
   const alt = form.campos.find((c) => /altura total/i.test(c.nome)) || form.campos.find((c) => /altura/i.test(c.nome) && c.tipo !== 'photo');
   const foto = form.campos.find((c) => c.tipo === 'photo'); const cod = form.campos.find((c) => c.auto === 'codigo'); const esp = form.campos.find((c) => c.tipo === 'species');
-  const cat = form.campos.find((c) => /categoria/i.test(c.nome) && Array.isArray(c.opcoes)); const cal = {}; if (cat) cat.opcoes.forEach((o) => { if (o && /cal[cç]ada/i.test(String(o.t || o))) cal[String(o.v != null ? o.v : o)] = 1; });
+  const cat = form.campos.find((c) => /categoria/i.test(c.nome) && Array.isArray(c.opcoes)); const cal = {}; if (cat) cat.opcoes.forEach((o) => { if (o && /cal[cç]ada|sem acesso/i.test(String(o.t || o))) cal[String(o.v != null ? o.v : o)] = 1; });
   return { alt: alt && alt.nome, foto: foto && foto.nome, cod: cod && cod.nome, esp: esp && esp.nome, cat: cat && cat.nome, cal: cal };
 }
 const situacaoReg = (l) => (l.validacao === 'Descartado' ? 'Descartada' : l.pagamento ? 'Paga' : l.validacao === 'Validado' ? 'Validada' : l.validacao === 'Devolvido' ? 'Devolvida' : 'Em validação');
@@ -1330,10 +1332,11 @@ function indiceSetores(projetoId) {
 function contaParaProducao(l, F, FV) {
   // face sem árvore: só o cadastro de calçada (categoria do formulário), feito pelo mesmo acesso que marcou a face. Árvore ou toco ligado a uma face segue a regra da árvore.
   const face = !!(FV && FV[l.uuid]) && FV[l.uuid] === String(l.usuario || '').toLowerCase() && !!(F.cat && F.cal[String(l[F.cat])]) && !(valorNum(F.alt ? l[F.alt] : '', false) > 0);
-  if (l.pagamento) return { conta: true, motivo: '', face: face }; // registro pago numa medição continua contando como foi pago
-  if (l.validacao !== 'Validado') return { conta: false, face: face };
+  const nf = face ? Math.max(1, +FV['#' + l.uuid] || 1) : 1; // quadra sem acesso: um cadastro vale pelas faces que cobre
+  if (l.pagamento) return { conta: true, motivo: '', face: face, nf: nf }; // registro pago numa medição continua contando como foi pago
+  if (l.validacao !== 'Validado') return { conta: false, face: face, nf: nf };
   const foto = F.foto ? !!l[F.foto + ' link'] : true; // a foto precisa ter chegado
-  if (face) return { conta: foto, motivo: foto ? '' : 'sem foto', face: true };
+  if (face) return { conta: foto, motivo: foto ? '' : 'sem foto', face: true, nf: nf };
   const alt = valorNum(F.alt ? l[F.alt] : '', false); const coord = l.latitude !== '' && l.latitude != null;
   const motivo = !(alt >= 2) ? 'altura abaixo de 2 m' : !foto ? 'sem foto' : !coord ? 'sem coordenada' : '';
   return { conta: !motivo, motivo: motivo, face: false };
@@ -1363,7 +1366,7 @@ function producao(projetoId, de, ate, soLogin, X0, comMarcar) {
   X.linhas.forEach((l) => {
     if (l.validacao === 'Descartado' || !l.criado_em) return; const d = dia(l.criado_em);
     if (soLogin && String(l.usuario).toLowerCase() !== soLogin) return;
-    const R = regra(d); const k = contaParaProducao(l, F, FV); const w = k.face ? R.pesoFace : 1; const e = l.equipe || '-';
+    const R = regra(d); const k = contaParaProducao(l, F, FV); const w = k.face ? R.pesoFace * (k.nf || 1) : 1; const e = l.equipe || '-';
     const membros = [l.avaliador_id ? { id: l.avaliador_id, nome: l.avaliador, v: l.avaliador_vinculo, pct: l.auxiliar_id ? R.pctAvaliador : 100, papel: 'av' } : null, l.auxiliar_id ? { id: l.auxiliar_id, nome: l.auxiliar, v: l.auxiliar_vinculo, pct: l.avaliador_id ? 100 - R.pctAvaliador : 100, papel: 'ax' } : null].filter(Boolean);
     // semana de quem tem carteira, por pessoa: entra o registro de qualquer data, porque a média é da semana inteira
     const comClt = membros.filter((m) => m.v === 'CLT');
@@ -1456,7 +1459,7 @@ function producaoDoTime(projetoId, usr) {
   Object.keys(doTime).forEach((lg) => { const u = doTime[lg]; duplas[lg] = { equipe: u.equipe || u.nome || lg, coletadas: 0, emValidacao: 0, devolvidas: 0, validadas: 0, pagas: 0, aPagar: 0, valor: 0, valorPagar: 0 }; });
   X.linhas.forEach((l) => {
     const D = duplas[String(l.usuario).toLowerCase()]; if (!D || l.validacao === 'Descartado' || !l.criado_em) return;
-    const sit = situacaoReg(l); const k = contaParaProducao(l, X.F, X.FV); const Rd = regra(dia(l.criado_em)); const vt = Rd.indicacao * (k.face ? Rd.pesoFace : 1); D.coletadas++;
+    const sit = situacaoReg(l); const k = contaParaProducao(l, X.F, X.FV); const Rd = regra(dia(l.criado_em)); const vt = Rd.indicacao * (k.face ? Rd.pesoFace * (k.nf || 1) : 1); D.coletadas++;
     if (sit === 'Em validação') D.emValidacao++; if (sit === 'Devolvida') D.devolvidas++;
     if (k.conta) { D.validadas++; D.valor += vt; if (l.pagamento) D.pagas++; else if (esperaQuadra(l, X)) D.quadraAberta = (D.quadraAberta || 0) + 1; else { D.aPagar++; D.valorPagar += vt; } }
   });
@@ -1605,6 +1608,8 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     if (cut < 1 || !Array.isArray(idx.faces[qn]) || idx.faces[qn].indexOf(letra) < 0) { recusadas.push({ numero: id, motivo: 'Face não existe na camada.' }); return; }
     const f0 = por[id]; const f = Object.assign({}, f0 || { numero: id, quadra: qn, situacao: 'A levantar', equipe: '' }); // cópia: item recusado não muda nada
     if (it.situacao != null && SITUACOES_FACE.indexOf(it.situacao) < 0) { recusadas.push({ numero: id, motivo: 'Situação inválida.' }); return; }
+    if (it.cond != null && CONDS_FACE.indexOf(String(it.cond)) < 0) { recusadas.push({ numero: id, motivo: 'Condição da face inválida.' }); return; }
+    if (it.cond === 'sem_acesso' && it.situacao !== 'Levantada, sem árvores') { recusadas.push({ numero: id, motivo: 'Face sem acesso precisa do cadastro com a foto da entrada.' }); return; }
     if (it.situacao === 'Levantada, sem árvores') {
       const lt = String(it.largura == null ? '' : it.largura).trim(); const lg = +lt.replace(',', '.'); // largura é opcional desde a 2.6 (só a foto)
       if (!/^[0-9a-f-]{8,60}$/i.test(String(it.registro || '')) || (lt && (!/^\d{1,2}([.,]\d{1,3})?$/.test(lt) || !(lg > 0)))) { recusadas.push({ numero: id, motivo: 'Face sem árvores precisa da foto da calçada (cadastro de calçada).' }); return; }
@@ -1617,7 +1622,7 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
       if (f.equipe && f.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Face da ' + f.equipe + '.' }); return; }
       // face ainda sem equipe numa quadra de outra equipe: só a coordenação passa a face para outra equipe
       if (!f.equipe && eqQuadra[qn] && eqQuadra[qn] !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Quadra da ' + eqQuadra[qn] + '.' }); return; }
-      if (!f.equipe && it.situacao != null && it.situacao !== 'A levantar') { f.equipe = usr.equipe; f.atribuida = 'nao'; }
+      if (!f.equipe && ((it.situacao != null && it.situacao !== 'A levantar') || it.cond)) { f.equipe = usr.equipe; f.atribuida = 'nao'; }
       if (it.situacao === 'A levantar' && f.atribuida !== 'sim') f.equipe = ''; // desmarcou: a face volta a ficar livre (se não foi a coordenação que deu a equipe)
     } else if (it.equipe != null) { f.equipe = String(it.equipe).slice(0, 60); f.atribuida = f.equipe ? 'sim' : ''; }
     if (it.rua != null) f.rua = String(it.rua).slice(0, 60);
@@ -1631,6 +1636,10 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
       if (it.situacao === 'Levantada, sem árvores') { f.registro = String(it.registro).slice(0, 60); f.largura = lgNova; } else { f.registro = ''; f.largura = ''; }
     }
     if (it.foto && /^https:\/\/drive\.google\.com\/file\/d\/[\w-]+\/view$/.test(String(it.foto)) && it.foto !== f.foto && it.situacao != null && f.situacao === it.situacao) { f.foto = String(it.foto); txt.push('foto da face'); }
+    if (it.cond != null) { // condição da calçada (irregular ou sem acesso), com o motivo escrito pela equipe
+      const c = String(it.cond); const mt = c ? String(it.motivo == null ? (f.cond === c ? f.cond_motivo || '' : '') : it.motivo).slice(0, 200) : '';
+      if (c !== (f.cond || '') || mt !== (f.cond_motivo || '')) { f.cond = c; f.cond_motivo = mt; txt.push((c === 'irregular' ? 'calçada irregular' : c === 'sem_acesso' ? 'sem acesso' : 'calçada sem restrição') + (mt ? ' (' + mt + ')' : '')); }
+    } else if (f.cond === 'sem_acesso' && it.situacao != null && it.situacao !== 'Levantada, sem árvores') { f.cond = ''; f.cond_motivo = ''; txt.push('deixou de ser sem acesso'); } // face reaberta
     if (coord && it.equipe != null) txt.push('equipe ' + (f.equipe || 'nenhuma'));
     if (it.obs != null) f.obs = String(it.obs).slice(0, 300);
     if (!txt.length && it.obs == null) return;

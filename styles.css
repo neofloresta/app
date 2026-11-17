@@ -756,3 +756,8 @@ html { touch-action: pan-x pan-y; } /* sem zoom de pinça na página (o mapa tem
 .zoom-dica { display: block; text-align: center; margin-top: 4px; }
 /* 2.11.2: tela de entrada em celular baixo */
 @media (max-height: 700px) { .marca { margin-bottom: 16px; } .marca img { width: 128px; } .login { padding-top: 18px; } .login-neo { width: 120px; margin-top: 16px; } }
+
+/* 2.12: cadastro rápido, calçada irregular e quadra sem acesso */
+.campo-nota { margin: 8px 2px 0; font-size: 14px; color: var(--suave); }
+.faixa-rapido { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: #FFF4E0; border: 1px solid #E7A774; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; color: #5A3A12; font-size: 15px; }
+.face-cond { display: block; margin-top: 4px; }

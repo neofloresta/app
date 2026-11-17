@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 8,
+ "versao": 9,
  "campos": [
   {
    "armazenar": "text",
@@ -68,6 +68,10 @@
     {
      "v": "5",
      "t": "Calçada sem árvores"
+    },
+    {
+     "v": "6",
+     "t": "Sem acesso"
     }
    ],
    "obrigatorio": true,
@@ -79,7 +83,15 @@
    "rotulo": "Foto geral",
    "tipo": "photo",
    "obrigatorio": true,
-   "ajuda": "Árvore, arbusto ou palmeira: o indivíduo inteiro, da base ao topo da copa. Calçada sem árvores: a calçada inteira, no sentido do comprimento."
+   "ajuda": "Árvore, arbusto ou palmeira: o indivíduo inteiro, da base ao topo da copa. Calçada sem árvores: a calçada inteira, no sentido do comprimento. Quadra sem acesso: a entrada (portaria, portão ou cerca)."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Motivo sem acesso",
+   "rotulo": "Por que não dá para entrar?",
+   "tipo": "text",
+   "oculto": true,
+   "ajuda": "Exemplos: condomínio fechado, área particular, área de risco."
   },
   {
    "armazenar": "text",
@@ -534,16 +546,18 @@
   {
    "armazenar": "bool",
    "nome": "Doença aparente",
-   "rotulo": "Doença aparente",
+   "rotulo": "Doença aparente (formulário anterior)",
    "tipo": "bool",
-   "ajuda": "Manchas nas folhas, cancros ou exsudação (resina, seiva escorrendo) nos ramos."
+   "ajuda": "Manchas nas folhas, cancros ou exsudação (resina, seiva escorrendo) nos ramos.",
+   "legado": true
   },
   {
    "armazenar": "bool",
    "nome": "Praga aparente",
-   "rotulo": "Praga aparente",
+   "rotulo": "Praga aparente (formulário anterior)",
    "tipo": "bool",
-   "ajuda": "Insetos em quantidade nas folhas e ramos: cochonilhas, lagartas, pulgões."
+   "ajuda": "Insetos em quantidade nas folhas e ramos: cochonilhas, lagartas, pulgões.",
+   "legado": true
   },
   {
    "armazenar": "bool",
@@ -624,6 +638,27 @@
    "tipo": "bool",
    "ajuda": "Nenhum sinal de praga na base nem nas raízes.",
    "exclusivo": true
+  },
+  {
+   "armazenar": "text",
+   "nome": "Fitossanidade",
+   "rotulo": "Fitossanidade",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Boa",
+     "t": "Boa"
+    },
+    {
+     "v": "Regular",
+     "t": "Regular"
+    },
+    {
+     "v": "Ruim",
+     "t": "Ruim"
+    }
+   ],
+   "ajuda": "Nota da árvore inteira. Boa: sem sinais de praga ou doença. Regular: sinais leves ou localizados, sem comprometer a árvore. Ruim: ataque intenso ou generalizado, com comprometimento visível."
   },
   {
    "armazenar": "bool",
@@ -760,6 +795,41 @@
    "ajuda": "Calculado pelo app depois das três respostas acima: probabilidade de falha com a de impacto dá a probabilidade; com as consequências dá o risco (matriz da ISA)."
   },
   {
+   "armazenar": "text",
+   "nome": "Risco nivel 1",
+   "rotulo": "Risco",
+   "tipo": "choice",
+   "oculto": true,
+   "opcoes": [
+    {
+     "v": "Baixo",
+     "t": "Baixo"
+    },
+    {
+     "v": "Médio",
+     "t": "Médio"
+    },
+    {
+     "v": "Alto",
+     "t": "Alto"
+    },
+    {
+     "v": "Severo",
+     "t": "Severo"
+    }
+   ],
+   "nota": "Avaliação de risco nível 1 (ABNT NBR 16246-3): visual, sem a matriz.",
+   "ajuda": "Avaliação de risco nível 1 (ABNT NBR 16246-3): julgamento visual, sem a matriz de probabilidade e consequências. Usada no cadastro rápido das faces com calçada irregular."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Nivel da avaliacao",
+   "rotulo": "Nível da avaliação de risco",
+   "tipo": "hidden",
+   "nivelAuto": true,
+   "ajuda": "Preenchido pelo app (ABNT NBR 16246-3): 1 no cadastro rápido das faces com calçada irregular; 2 no cadastro completo."
+  },
+  {
    "armazenar": "bool",
    "nome": "Manejo remoção do indivíduo",
    "rotulo": "Remoção do indivíduo",
@@ -894,6 +964,9 @@
     },
     {
      "campo": "Foto 1"
+    },
+    {
+     "campo": "Motivo sem acesso"
     }
    ]
   },
@@ -1041,14 +1114,6 @@
     {
      "campo": "Erva-de-passarinho",
      "grupo": "Pragas e doenças na copa"
-    },
-    {
-     "campo": "Doença aparente",
-     "grupo": "Pragas e doenças na copa"
-    },
-    {
-     "campo": "Praga aparente",
-     "grupo": "Pragas e doenças na copa"
     }
    ]
   },
@@ -1118,8 +1183,12 @@
     {
      "campo": "Cupim nas raízes",
      "grupo": "Pragas nas raízes"
+    },
+    {
+     "campo": "Fitossanidade"
     }
-   ]
+   ],
+   "nomeRapido": "Fitossanidade"
   },
   {
    "nome": "Risco",
@@ -1144,6 +1213,12 @@
     },
     {
      "campo": "Risco"
+    },
+    {
+     "campo": "Risco nivel 1"
+    },
+    {
+     "campo": "Nivel da avaliacao"
     }
    ]
   },
@@ -1487,7 +1562,8 @@
      "Probabilidade de falha": "obrig",
      "Probabilidade de impacto": "obrig",
      "Consequencias": "obrig",
-     "Galhos secos ou podres": "obrig"
+     "Galhos secos ou podres": "obrig",
+     "Fitossanidade": "obrig"
     },
     "2": {
      "Situacao": "obrig",
@@ -1501,7 +1577,8 @@
      "Probabilidade de falha": "obrig",
      "Probabilidade de impacto": "obrig",
      "Consequencias": "obrig",
-     "Galhos secos ou podres": "obrig"
+     "Galhos secos ou podres": "obrig",
+     "Fitossanidade": "obrig"
     },
     "3": {
      "Situacao": "obrig",
@@ -1515,7 +1592,8 @@
      "Probabilidade de falha": "obrig",
      "Probabilidade de impacto": "obrig",
      "Consequencias": "obrig",
-     "Galhos secos ou podres": "obrig"
+     "Galhos secos ou podres": "obrig",
+     "Fitossanidade": "obrig"
     },
     "5": {
      "Situacao": "oculto",
@@ -1600,7 +1678,99 @@
      "Fungo nas raízes": "oculto",
      "Cupim nas raízes": "oculto",
      "Pragas nas raízes ausente": "oculto",
-     "Foto 5": "oculto"
+     "Foto 5": "oculto",
+     "Fitossanidade": "oculto",
+     "Risco nivel 1": "oculto"
+    },
+    "6": {
+     "Local do registro": "oculto",
+     "Situacao": "oculto",
+     "Especie": "oculto",
+     "Especie suspeita": "oculto",
+     "CAP (cm)": "oculto",
+     "Altura total (m)": "oculto",
+     "Modo de copa": "oculto",
+     "Raio de copa 1 (m)": "oculto",
+     "Raio de copa 2 (m)": "oculto",
+     "Raio de copa 3 (m)": "oculto",
+     "Raio de copa 4 (m)": "oculto",
+     "Area de copa (m2)": "oculto",
+     "Area de copa medida (m2)": "oculto",
+     "Foto folha face superior": "oculto",
+     "Foto folha face inferior": "oculto",
+     "Foto ramo filotaxia": "oculto",
+     "Foto tronco detalhe": "oculto",
+     "Conflitos no raio de 2 m": "oculto",
+     "Fiação baixa isolada": "oculto",
+     "Fiação baixa nua": "oculto",
+     "Fiação média compacta": "oculto",
+     "Fiação média nua": "oculto",
+     "Fiação derivação": "oculto",
+     "Fiação serviços gerais": "oculto",
+     "Fiação ausente": "oculto",
+     "Marquise ou toldo": "oculto",
+     "Interfere pedestres": "oculto",
+     "Interfere veículos": "oculto",
+     "Tráfego sem interferência": "oculto",
+     "Danos por podas": "oculto",
+     "Galhos secos, podres ou com risco de queda": "oculto",
+     "Poda drástica": "oculto",
+     "Poda de raiz": "oculto",
+     "Podas ausente": "oculto",
+     "Lesões no tronco": "oculto",
+     "Codominância de troncos": "oculto",
+     "Danos ausente": "oculto",
+     "Ocos e cavidades": "oculto",
+     "Afloramento da raiz no canteiro": "oculto",
+     "Afloramento da raiz na calçada": "oculto",
+     "Raízes ausente": "oculto",
+     "Qualidade da copa": "oculto",
+     "Galhos secos ou podres": "oculto",
+     "Fungo": "oculto",
+     "Cupim": "oculto",
+     "Broca": "oculto",
+     "Erva-de-passarinho": "oculto",
+     "Doença aparente": "oculto",
+     "Praga aparente": "oculto",
+     "Fungo na copa": "oculto",
+     "Cupim na copa": "oculto",
+     "Broca na copa": "oculto",
+     "Pragas na copa ausente": "oculto",
+     "Fungo no tronco": "oculto",
+     "Cupim no tronco": "oculto",
+     "Broca no tronco": "oculto",
+     "Pragas no tronco ausente": "oculto",
+     "Fungo nas raízes": "oculto",
+     "Cupim nas raízes": "oculto",
+     "Pragas nas raízes ausente": "oculto",
+     "Fitossanidade": "oculto",
+     "Fitossanidade ausente": "oculto",
+     "Probabilidade de falha": "oculto",
+     "Probabilidade de impacto": "oculto",
+     "Falha+Impacto": "oculto",
+     "Matriz de Probabilidade": "oculto",
+     "Consequencias": "oculto",
+     "Matriz de Prob + Conseq": "oculto",
+     "Risco": "oculto",
+     "Risco nivel 1": "oculto",
+     "Manejo remoção do indivíduo": "oculto",
+     "Manejo remoção do alvo": "oculto",
+     "Manejo poda": "oculto",
+     "Manejo tutoramento": "oculto",
+     "Manejo adubação": "oculto",
+     "Manejo aumento de canteiro": "oculto",
+     "Manejo limpeza de epífitas e parasitas": "oculto",
+     "Manejo suporte complementar": "oculto",
+     "Manejo avaliação nível 2 ou 3": "oculto",
+     "Manejo nenhum": "oculto",
+     "Outras mitigacoes": "oculto",
+     "Foto 2": "oculto",
+     "Foto 3": "oculto",
+     "Foto 4": "oculto",
+     "Foto 5": "oculto",
+     "Observacoes": "oculto",
+     "Foto 1": "obrig",
+     "Motivo sem acesso": "opcional"
     }
    }
   },
@@ -1740,7 +1910,84 @@
      "Fungo nas raízes": "oculto",
      "Cupim nas raízes": "oculto",
      "Pragas nas raízes ausente": "oculto",
-     "Foto 5": "oculto"
+     "Foto 5": "oculto",
+     "Fitossanidade": "oculto",
+     "Risco nivel 1": "oculto"
+    }
+   }
+  },
+  {
+   "campo": "Nivel da avaliacao",
+   "por": {
+    "1": {
+     "Modo de copa": "oculto",
+     "Raio de copa 1 (m)": "oculto",
+     "Raio de copa 2 (m)": "oculto",
+     "Raio de copa 3 (m)": "oculto",
+     "Raio de copa 4 (m)": "oculto",
+     "Area de copa (m2)": "oculto",
+     "Area de copa medida (m2)": "oculto",
+     "Conflitos no raio de 2 m": "oculto",
+     "Fiação baixa isolada": "oculto",
+     "Fiação baixa nua": "oculto",
+     "Fiação média compacta": "oculto",
+     "Fiação média nua": "oculto",
+     "Fiação derivação": "oculto",
+     "Fiação serviços gerais": "oculto",
+     "Fiação ausente": "oculto",
+     "Marquise ou toldo": "oculto",
+     "Interfere pedestres": "oculto",
+     "Interfere veículos": "oculto",
+     "Tráfego sem interferência": "oculto",
+     "Danos por podas": "oculto",
+     "Poda drástica": "oculto",
+     "Poda de raiz": "oculto",
+     "Podas ausente": "oculto",
+     "Lesões no tronco": "oculto",
+     "Codominância de troncos": "oculto",
+     "Danos ausente": "oculto",
+     "Ocos e cavidades": "oculto",
+     "Afloramento da raiz no canteiro": "oculto",
+     "Afloramento da raiz na calçada": "oculto",
+     "Raízes ausente": "oculto",
+     "Qualidade da copa": "oculto",
+     "Galhos secos ou podres": "oculto",
+     "Erva-de-passarinho": "oculto",
+     "Fungo na copa": "oculto",
+     "Cupim na copa": "oculto",
+     "Broca na copa": "oculto",
+     "Pragas na copa ausente": "oculto",
+     "Fungo no tronco": "oculto",
+     "Cupim no tronco": "oculto",
+     "Broca no tronco": "oculto",
+     "Pragas no tronco ausente": "oculto",
+     "Fungo nas raízes": "oculto",
+     "Cupim nas raízes": "oculto",
+     "Pragas nas raízes ausente": "oculto",
+     "Probabilidade de falha": "oculto",
+     "Probabilidade de impacto": "oculto",
+     "Falha+Impacto": "oculto",
+     "Matriz de Probabilidade": "oculto",
+     "Consequencias": "oculto",
+     "Matriz de Prob + Conseq": "oculto",
+     "Risco": "oculto",
+     "Manejo remoção do indivíduo": "oculto",
+     "Manejo remoção do alvo": "oculto",
+     "Manejo poda": "oculto",
+     "Manejo tutoramento": "oculto",
+     "Manejo adubação": "oculto",
+     "Manejo aumento de canteiro": "oculto",
+     "Manejo limpeza de epífitas e parasitas": "oculto",
+     "Manejo suporte complementar": "oculto",
+     "Manejo avaliação nível 2 ou 3": "oculto",
+     "Manejo nenhum": "oculto",
+     "Outras mitigacoes": "oculto",
+     "Foto 2": "oculto",
+     "Foto 3": "oculto",
+     "Foto 4": "oculto",
+     "Foto 5": "oculto",
+     "Observacoes": "oculto",
+     "Risco nivel 1": "obrig"
     }
    }
   }
