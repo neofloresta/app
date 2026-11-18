@@ -2390,7 +2390,7 @@
     function ajustarRaios() { const mpp = metrosPorPixel(); const n = camada.getLayers().length; camada.eachLayer((l) => { if (l.__o) l.setRadius(raioPx(l.__o, mpp, n)); }); }
     function ficha(o, ll) {
       const pop = h('div', { class: 'ficha' }, h('b', null, o.cod || 'Sem código'), o.esp ? h('i', null, o.esp) : null,
-        o.cat ? h('div', null, rotOp(cCat, o.cat)) : null, o.risco ? h('div', null, 'Risco ' + String(rotOp(cRisco, o.risco)).toLowerCase() + (o.n1 ? ' (avaliação nível 1)' : '')) : null,
+        o.cat ? h('div', null, rotOp(cCat, o.cat)) : null, o.risco ? h('div', null, 'Risco ' + String(rotOp(cRisco, o.risco)).toLowerCase()) : null,
         perfil() !== 'cliente' ? h('small', null, o.equipe || '') : null,
         linkSeguro(o.foto) ? h('a', { href: linkSeguro(o.foto), target: '_blank', rel: 'noopener' }, 'Ver foto') : null,
         osPorArv && osPorArv.get(o.uid) ? h('button', { class: 'btn sec peq', onclick: () => ir('#os/' + encodeURIComponent(osPorArv.get(o.uid).id)) }, `${numOS(osPorArv.get(o.uid))} · ${osPorArv.get(o.uid).status}`) : null,
@@ -2604,9 +2604,9 @@
     if (!Api.demo) {
       conta.textContent = navigator.onLine ? 'Carregando pontos...' : ''; pintarConta();
       try {
-        const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link', 'bairro_aprox', 'criado_em', cArea && cArea.nome, cRisco1 && cRisco1.nome].map((x) => x || '');
+        const campos = ['uuid', 'latitude', 'longitude', 'equipe', cc && cc.nome, ce && ce.nome, cRisco && cRisco.nome, cCat && cCat.nome, cFoto && cFoto.nome + ' link', 'bairro_aprox', 'criado_em', cArea && cArea.nome].map((x) => x || '');
         // abre com os pontos da última consulta e troca pelos do servidor quando chegarem
-        const addLinhas = (ls) => { for (const l of ls) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6] || l[12] || '', n1: !l[6] && !!l[12], cat: l[7], foto: l[8], bairro: l[9] || '', dia: l[10] ? diaLocal(l[10]) : '', rm: raioCopa(l[11]), local: false }); };
+        const addLinhas = (ls) => { for (const l of ls) add({ uid: l[0], lat: l[1], lon: l[2], equipe: l[3], cod: l[4] || '', esp: l[5] || '', risco: l[6] || '', cat: l[7], foto: l[8], bairro: l[9] || '', dia: l[10] ? diaLocal(l[10]) : '', rm: raioCopa(l[11]), local: false }); };
         const kc = 'mapapts:' + S.projeto.id + ':' + (S.sessao ? S.sessao.u : '');
         const antes = await Store.get(kc);
         if (antes && antes.campos === campos.join('|') && document.body.contains(div)) { addLinhas(antes.linhas); preencherEquipes(); aplicarFiltroPainel(); desenhar(true); conta.textContent += navigator.onLine ? ' · atualizando...' : ''; }
