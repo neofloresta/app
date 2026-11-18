@@ -32,7 +32,7 @@ const tocar = async (p, lat, lon, z = 17) => { const xy = await p.evaluate(([a, 
   // 2. tocar de novo: agora "Cancelar o pedido"
   await tocar(m, ...cc(q1)); const f1 = limpo(await m.locator('.qd-ficha').innerText().catch(() => '')); const cancela = await m.locator('.qd-ficha button:has-text("Cancelar o pedido")').count(); const pedeDeNovo = await m.locator('.qd-ficha button:has-text("Pedir esta quadra")').count();
   ok('M.2', cancela === 1 && pedeDeNovo === 0 && /Aguarde/.test(f1), `ficha: "${f1.slice(0, 120)}"`);
-  await m.evaluate(() => window.__app.mapa.closePopup());
+  await m.evaluate(() => { window.__app.mapa.closePopup(); });
   // 3. coordenação: botão Pedidos com selo 1; abre e vê o pedido
   await ir(r); await r.evaluate(() => window.__app.tickMapa()); await r.waitForTimeout(1200);
   const selo = limpo(await r.locator('.selo-ped').innerText().catch(() => '')); await r.click('button[aria-label="Pedidos de reserva de quadra"]'); await r.waitForSelector('.ped-lista'); const lista = limpo(await r.locator('.ped-lista').innerText());

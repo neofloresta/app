@@ -2444,7 +2444,7 @@
     function desenharSet() {
       setCamada.clearLayers(); setRotulos.clearLayers(); if (!setDados || !verSet()) return;
       for (const st of setDados.setores) {
-        for (const an of st.a) { const o = []; for (let i = 0; i < an.length; i += 2) o.push([an[i + 1], an[i]]); L.polygon(o, { renderer: render, interactive: false, color: st.cor, weight: 2.5, opacity: 0.85, dashArray: '8 7', fillColor: st.cor, fillOpacity: 0.05 }).addTo(setCamada).bringToBack(); }
+        for (const an of st.a) { const o = []; for (let i = 0; i < an.length; i += 2) o.push([an[i + 1], an[i]]); L.polygon(o, { renderer: render, interactive: false, color: st.cor, weight: 2.5, opacity: 0.85, smoothFactor: 3, fillColor: st.cor, fillOpacity: 0.05 }).addTo(setCamada).bringToBack(); }
         if (st.rot) L.marker([st.rot[1], st.rot[0]], { interactive: false, keyboard: false, icon: L.divIcon({ className: 'set-rot', html: `<span style="color:${st.cor}">${st.n}</span>`, iconSize: [120, 28], iconAnchor: [60, 14] }) }).addTo(setRotulos);
       }
       pintarRotSet();

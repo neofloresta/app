@@ -29,7 +29,7 @@ const tocar = async (p, lat, lon, z = 19) => { const xy = await p.evaluate(([a, 
   await tocar(p, ...meio(auto.q, auto.f)); await p.click('.qd-ficha .qd-mais summary'); await p.click('.qd-ficha .bt-irregular'); await p.waitForSelector('.folha:has-text("Calçada irregular") textarea');
   await p.fill('.folha textarea', 'calçada em degraus'); await p.click('.folha button:has-text("Marcar")'); await p.waitForTimeout(1800);
   let F = await faces(); const fa = F[idA] || {};
-  await tocar(p, ...meio(auto.q, auto.f)); const fichaF = limpo(await p.locator('.qd-ficha').innerText()); await p.screenshot({ path: 'b212-face.png' }); await p.evaluate(() => window.__app.mapa.closePopup());
+  await tocar(p, ...meio(auto.q, auto.f)); const fichaF = limpo(await p.locator('.qd-ficha').innerText()); await p.screenshot({ path: 'b212-face.png' }); await p.evaluate(() => { window.__app.mapa.closePopup(); });
   ok('I.1', fa.cond === 'irregular' && fa.cond_motivo === 'calçada em degraus' && fa.situacao === 'Em levantamento' && /Calçada irregular.*cadastro rápido.*calçada em degraus/.test(fichaF), `servidor: face ${idA} ${fa.situacao}, condição "${fa.cond}", motivo "${fa.cond_motivo}"; ficha: "${fichaF.slice(0, 150)}"`);
   // 2. árvore nessa face abre no cadastro rápido: só o combinado, com o risco nível 1 e a nota
   await p.goto(L.WEB + '#'); await p.waitForSelector('button.nova'); await p.waitForTimeout(800);
