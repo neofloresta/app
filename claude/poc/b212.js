@@ -1,4 +1,4 @@
-// 2.12: calçada irregular (cadastro rápido, risco nível 1), quadra sem acesso (um cadastro pelas faces, pago por face) e fitossanidade
+// 2.12 (ajustado na 2.16: sem calçada irregular): quadra sem acesso (um cadastro pelas faces, pago por face) e fitossanidade
 const { chromium } = require('playwright'); const L = require('./lib'); const fs = require('fs'); const vm = require('vm');
 const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
 const PJ = 'divinopolis'; const limpo = (t) => String(t || '').replace(/\s+/g, ' ').trim();
@@ -25,36 +25,7 @@ const tocar = async (p, lat, lon, z = 19) => { const xy = await p.evaluate(([a, 
   const quadras = async () => { const m = {}; (await L.post('quadras_situacao', { projeto: PJ })).quadras.forEach((q) => { m[q.numero] = q; }); return m; };
   const E = await L.celular(b, { geolocation: { latitude: auto.la, longitude: auto.lo, accuracy: 4 } }); const p = E.p; await L.logar(p, 'div-1', 'equipe01'); await p.waitForSelector('button.nova', { timeout: 20000 }); await p.waitForTimeout(1500);
   await p.goto(L.WEB + '#mapa'); await p.waitForTimeout(2500); await p.waitForSelector('button.nova'); await p.waitForTimeout(1400);
-  // 1. a equipe marca a face como calçada irregular, com o motivo
-  await tocar(p, ...meio(auto.q, auto.f)); await p.click('.qd-ficha .qd-mais summary'); await p.click('.qd-ficha .bt-irregular'); await p.waitForSelector('.folha:has-text("Calçada irregular") textarea');
-  await p.fill('.folha textarea', 'calçada em degraus'); await p.click('.folha button:has-text("Marcar")'); await p.waitForTimeout(1800);
-  let F = await faces(); const fa = F[idA] || {};
-  await tocar(p, ...meio(auto.q, auto.f)); const fichaF = limpo(await p.locator('.qd-ficha').innerText()); await p.screenshot({ path: 'b212-face.png' }); await p.evaluate(() => { window.__app.mapa.closePopup(); });
-  ok('I.1', fa.cond === 'irregular' && fa.cond_motivo === 'calçada em degraus' && fa.situacao === 'Em levantamento' && /Calçada irregular.*cadastro rápido.*calçada em degraus/.test(fichaF), `servidor: face ${idA} ${fa.situacao}, condição "${fa.cond}", motivo "${fa.cond_motivo}"; ficha: "${fichaF.slice(0, 150)}"`);
-  // 2. árvore nessa face abre no cadastro rápido: só o combinado, com o risco nível 1 e a nota
-  await p.goto(L.WEB + '#'); await p.waitForSelector('button.nova'); await p.waitForTimeout(800);
-  await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(500);
-  const faixa = limpo(await p.locator('.faixa-rapido').innerText().catch(() => ''));
-  await A.op(p, 'Local do registro', 'Via pública'); await A.op(p, 'Categoria', 'Árvore'); await A.foto(p, 'Foto 1'); await p.waitForTimeout(200);
-  await p.click('.prog-topo'); const etapas = (await p.locator('.folha .menu-it').allInnerTexts()).map((t) => limpo(t).replace(/ (Completa|Em andamento|Falta obrigatório)$/, '')); await p.evaluate(() => document.querySelectorAll('.veu').forEach((v) => v.remove()));
-  await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva'); await p.waitForTimeout(150);
-  const camposInd = await p.evaluate(() => [...document.querySelectorAll('main .campo[data-campo]')].map((c) => c.dataset.campo));
-  await A.campo(p, 'Especie').locator('input').first().fill('Handroanthus chrysotrichus'); await A.campo(p, 'CAP (cm)').locator('input').first().fill('64'); await A.num(p, 'Altura total (m)', 6);
-  await A.abaLivre(p, 'Fitossanidade'); const camposFit = await p.evaluate(() => [...document.querySelectorAll('main .campo[data-campo]')].map((c) => c.dataset.campo)); await A.op(p, 'Fitossanidade', 'Regular');
-  await A.abaLivre(p, 'Risco'); const camposRis = await p.evaluate(() => [...document.querySelectorAll('main .campo[data-campo]')].map((c) => c.dataset.campo)); const nota = limpo(await p.locator('.campo-nota').innerText()); await p.screenshot({ path: 'b212-risco1.png' });
-  await A.op(p, 'Risco nivel 1', 'Alto'); await A.concluir(p); for (const t of ['Está certo', 'Sim, nenhum']) if (await p.locator(`.folha button:has-text("${t}")`).count()) { await p.click(`.folha button:has-text("${t}")`); await p.waitForTimeout(300); }
-  const pend = await A.faltas(p); await p.waitForSelector('button.nova', { timeout: 15000 }).catch(() => {}); await p.waitForTimeout(3000);
-  const lin = async () => (await L.post('listar', { projeto: PJ })).linhas; let ls = await lin(); const arv = ls.find((l) => l['Risco nivel 1'] === 'Alto') || {};
-  ok('I.2', /Cadastro rápido.*calçada irregular/.test(faixa) && JSON.stringify(etapas) === JSON.stringify(['Identificação', 'Indivíduo', 'Fitossanidade', 'Risco']) && !camposInd.some((n) => /copa/i.test(n)) && JSON.stringify(camposFit) === '["Fitossanidade"]' && JSON.stringify(camposRis) === '["Risco nivel 1"]' && /nível 1 \(ABNT NBR 16246-3\)/.test(nota) && pend.length === 0
-    && String(arv['Nivel da avaliacao']) === '1' && arv.Fitossanidade === 'Regular' && !arv.Risco && !arv['Probabilidade de falha'] && String(arv.face || arv.quadra || '').length > 0,
-    `faixa "${faixa.slice(0, 60)}"; etapas: ${etapas.join(', ')}; Indivíduo: ${camposInd.join(', ')}; nota "${nota}"; pendências ao concluir: ${pend.join(', ') || 'nenhuma'}; no servidor: nível ${arv['Nivel da avaliacao']}, risco nível 1 ${arv['Risco nivel 1']}, risco da matriz "${arv.Risco || ''}", fitossanidade ${arv.Fitossanidade}`);
-  // 3. "Fazer o completo" volta às nove etapas (nível 2); árvore em face normal já nasce no completo
-  await E.ctx.setGeolocation({ latitude: auto.la + 0.00002, longitude: auto.lo + 0.00002, accuracy: 4 }); await p.waitForTimeout(600);
-  await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(500); for (const t of ['Não, é outra', 'É outra árvore', 'Cadastrar mesmo assim']) if (await p.locator(`.folha button:has-text("${t}")`).count()) { await p.click(`.folha button:has-text("${t}")`); await p.waitForTimeout(400); }
-  const tinha = await p.locator('.faixa-rapido').count(); await p.click('.faixa-rapido button'); await p.click('.folha button:has-text("Fazer o completo")'); await p.waitForTimeout(400);
-  await A.op(p, 'Categoria', 'Árvore'); await p.waitForTimeout(200); await p.click('.prog-topo'); const etapas2 = (await p.locator('.folha .menu-it').allInnerTexts()).length; await p.evaluate(() => document.querySelectorAll('.veu').forEach((v) => v.remove()));
-  const nv2 = await p.evaluate(() => window.__app.S.reg.valores['Nivel da avaliacao']); const semFaixa = await p.locator('.faixa-rapido').count(); await A.excluir(p).catch(() => {}); await p.waitForSelector('button.nova'); await p.waitForTimeout(500);
-  ok('I.3', tinha === 1 && etapas2 === 9 && String(nv2) === '2' && semFaixa === 0, `segunda árvore na mesma face abre no rápido (${tinha}); depois de "Fazer o completo": ${etapas2} etapas, nível ${nv2}, faixa some (${semFaixa})`);
+  let F = await faces(); const lin = async () => (await L.post('listar', { projeto: PJ })).linhas; let ls;
   // 4. quadra sem acesso: um cadastro com a foto e o motivo marca todas as faces e fecha a quadra
   const qs = viz.find((x) => x.f && x.f.length >= 3 && x.n !== auto.q.n); const cq = Q.centro(qs);
   await p.goto(L.WEB + '#mapa'); await p.waitForTimeout(2500); await p.waitForSelector('button.nova'); await p.waitForTimeout(1200);
@@ -62,30 +33,30 @@ const tocar = async (p, lat, lon, z = 19) => { const xy = await p.evaluate(([a, 
   await p.screenshot({ path: 'b212-quadra.png' }); await p.click('.qd-ficha .bt-sem-acesso'); await p.waitForSelector('.folha:has-text("Quadra sem acesso")'); const avisoQ = limpo(await p.locator('.folha:has-text("Quadra sem acesso")').innerText()); await p.click('.folha button:has-text("Continuar")');
   await p.waitForSelector('.prog', { timeout: 30000 }); await p.waitForTimeout(600); const titulo = limpo(await p.locator('.topo h1').innerText()); const camposQ = await p.evaluate(() => [...document.querySelectorAll('main .campo[data-campo]')].map((c) => c.dataset.campo));
   await p.click('.prog-topo'); const etapasQ = (await p.locator('.folha .menu-it').allInnerTexts()).length; await p.evaluate(() => document.querySelectorAll('.veu').forEach((v) => v.remove())); await p.screenshot({ path: 'b212-semacesso.png' });
-  await A.foto(p, 'Foto 1'); await A.campo(p, 'Motivo sem acesso').locator('input, textarea').first().fill('condomínio fechado'); await p.waitForTimeout(200); await A.concluir(p); const pendQ = await A.faltas(p);
+  await A.foto(p, 'Foto 1'); await A.op(p, 'Motivo sem acesso', 'Condomínio'); await p.waitForTimeout(200); await A.concluir(p); const pendQ = await A.faltas(p);
   await p.waitForSelector('button.nova', { timeout: 15000 }).catch(() => {}); await p.waitForTimeout(4000); await p.evaluate(() => window.__app.sincronizar && window.__app.sincronizar(true)).catch(() => {}); await p.waitForTimeout(3000);
   F = await faces(); const Qd = await quadras(); const fq = qs.f.map((f) => F[qs.n + '-' + f.i] || {}); ls = await lin(); const sa = ls.find((l) => String(l.Categoria) === '6') || {};
-  ok('I.4', /sem acesso/i.test(titulo) && camposQ.includes('Foto 1') && camposQ.includes('Motivo sem acesso') && !camposQ.includes('Local do registro') && etapasQ === 1 && pendQ.length === 0 && fq.every((f) => f.situacao === 'Levantada, sem árvores' && f.cond === 'sem_acesso' && f.registro === sa.uuid && f.cond_motivo === 'condomínio fechado') && !!(Qd[qs.n] || {}).fechada_em && sa['Motivo sem acesso'] === 'condomínio fechado',
+  ok('I.4', /sem acesso/i.test(titulo) && camposQ.includes('Foto 1') && camposQ.includes('Motivo sem acesso') && !camposQ.includes('Local do registro') && etapasQ === 1 && pendQ.length === 0 && fq.every((f) => f.situacao === 'Levantada, sem árvores' && f.cond === 'sem_acesso' && f.registro === sa.uuid && f.cond_motivo === 'Condomínio ou área particular') && !!(Qd[qs.n] || {}).fechada_em && sa['Motivo sem acesso'] === 'Condomínio ou área particular',
     `aviso "${avisoQ.slice(0, 90)}"; cadastro "${titulo}" com ${camposQ.join(', ')} em ${etapasQ} etapa; quadra ${qs.n}: ${fq.length} faces ${[...new Set(fq.map((f) => f.situacao + '/' + f.cond))].join(' | ')}, fechada: ${!!(Qd[qs.n] || {}).fechada_em}; registro categoria ${sa.Categoria}, motivo "${sa['Motivo sem acesso']}"`);
   // 5. pagamento: a árvore do cadastro rápido vale como as outras; a quadra sem acesso vale uma vez por face, depois do auditor
   const hoje = new Date(); const d = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; const per = { projeto: PJ, de: d(new Date(hoje.getFullYear(), hoje.getMonth(), 1)), ate: d(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)) };
-  const P0 = await L.post('producao', per); await L.post('validar', { projeto: PJ, itens: [{ uuid: arv.uuid, estado: 'Validado' }, { uuid: sa.uuid, estado: 'Validado' }] }); const P1 = await L.post('producao', per);
-  const esperado = P1.regras.valor * (1 + P1.regras.pesoFace * fq.length);
-  ok('I.5', P0.totais.valor === 0 && Math.abs(P1.totais.valor - esperado) < 0.001 && fq.length >= 3, `antes do auditor: R$ ${P0.totais.valor}; depois: R$ ${P1.totais.valor} = ${P1.regras.valor} x (1 árvore + ${fq.length} faces sem acesso)`);
+  const P0 = await L.post('producao', per); await L.post('validar', { projeto: PJ, itens: [{ uuid: sa.uuid, estado: 'Validado' }] }); const P1 = await L.post('producao', per);
+  const esperado = P1.regras.valor * (P1.regras.pesoFace * fq.length);
+  ok('I.5', P0.totais.valor === 0 && Math.abs(P1.totais.valor - esperado) < 0.001 && fq.length >= 3, `antes do auditor: R$ ${P0.totais.valor}; depois: R$ ${P1.totais.valor} = ${P1.regras.valor} x (${fq.length} faces sem acesso)`);
   // 8. fraude pelo servidor: o mesmo cadastro não vale por faces de outra quadra, por faces comuns nem por faces marcadas por outro acesso
   const qo = viz.find((x) => x.f && x.f.length >= 3 && x.n !== auto.q.n && x.n !== qs.n); const fo = qo.f.map((f) => qo.n + '-' + f.i);
   const t1 = await L.post('quadras_marcar', { projeto: PJ, itens: fo.map((n) => ({ tipo: 'face', numero: n, situacao: 'Levantada, sem árvores', registro: sa.uuid, cond: 'sem_acesso' })) }, 'div-1', 'equipe01');
   const t2 = await L.post('quadras_marcar', { projeto: PJ, itens: fo.map((n) => ({ tipo: 'face', numero: n, situacao: 'Levantada, sem árvores', registro: sa.uuid })) }, 'div-1', 'equipe01');
   const t3 = await L.post('quadras_marcar', { projeto: PJ, itens: [{ tipo: 'face', numero: fo[0], situacao: 'Levantada, sem árvores', registro: sa.uuid }] }, 'div-2', 'equipe02');
   const t4 = await L.post('quadras_marcar', { projeto: PJ, itens: [{ tipo: 'face', numero: fo[0], cond: ['sem_acesso'] }] }, 'div-1', 'equipe01');
-  const t5 = await L.post('quadras_marcar', { projeto: PJ, itens: [{ tipo: 'face', numero: fo[1], situacao: 'Levantada, sem árvores', registro: arv.uuid }] }, 'div-3', 'equipe03'); // cadastro de outra equipe, ainda sem face ligada
+  const t5 = await L.post('quadras_marcar', { projeto: PJ, itens: [{ tipo: 'face', numero: fo[1], situacao: 'Levantada, sem árvores', registro: sa.uuid }] }, 'div-3', 'equipe03'); // cadastro de outra equipe, ainda sem face ligada
   const P2 = await L.post('producao', per); F = await faces();
   ok('I.8', t1.recusadas.length === fo.length && t2.recusadas.length === fo.length && t3.recusadas.length === 1 && t4.recusadas.length === 1 && t5.recusadas.length === 1 && /outro acesso/.test(t5.recusadas[0].motivo) && Math.abs(P2.totais.valor - esperado) < 0.001 && fo.every((n) => !(F[n] || {}).registro),
     `faces de outra quadra com o mesmo cadastro: ${t1.recusadas.length} de ${fo.length} recusadas ("${(t1.recusadas[0] || {}).motivo}"); como calçada comum: ${t2.recusadas.length} recusadas; por outro acesso: ${t3.recusadas.length} recusada; condição em lista: recusada (${t4.recusadas.length}); face apontando para cadastro de outra equipe: "${(t5.recusadas[0] || {}).motivo}"; valor continua R$ ${P2.totais.valor}`);
-  // 6. painel: risco nível 1 à parte e as faces irregulares e sem acesso
+  // 6. painel: faces sem acesso, e nada de calçada irregular nem risco nível 1
   const Ad = await L.celular(b, { viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false }); const q = Ad.p; await L.logar(q, 'admin', L.senha()); await q.waitForTimeout(1500);
   await q.goto(L.WEB + '#painel'); await q.waitForSelector('.kpis', { timeout: 20000 }); await q.waitForTimeout(2500); let tp = limpo(await q.locator('main').innerText()); await q.click('.painel-abas button:has-text("Inventário")'); await q.waitForTimeout(600); tp += ' ' + limpo(await q.locator('main').innerText()); await q.screenshot({ path: 'b212-painel.png', fullPage: true });
-  ok('I.6', /Classe de risco \(avaliação nível 1/.test(tp) && /Sem acesso\s*\d+ faces?/.test(tp) && /Calçada irregular/.test(tp), `painel: risco nível 1 à parte (${/Classe de risco \(avaliação nível 1/.test(tp)}), sem acesso (${(tp.match(/Sem acesso\s*\d+ faces?/) || [''])[0]}), calçada irregular (${/Calçada irregular/.test(tp)})`);
+  ok('I.6', /Sem acesso\s*\d+ faces?/.test(tp) && !/Calçada irregular/.test(tp) && !/nível 1/.test(tp), `painel: sem acesso (${(tp.match(/Sem acesso\s*\d+ faces?/) || [''])[0]}), sem calçada irregular (${!/Calçada irregular/.test(tp)}), sem risco nível 1 (${!/nível 1/.test(tp)})`);
   ok('I.7', !p.erros.length && !q.erros.length, [...p.erros, ...q.erros].join(' | ') || 'sem erros de JavaScript');
   const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);
 })().catch((e) => { console.error('ERRO', e); process.exit(1); });

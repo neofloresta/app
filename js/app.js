@@ -1,6 +1,6 @@
 // Neofloresta Inventário: app de campo do Inventário da Arborização Urbana, da Neofloresta
 (() => {
-  const VERSAO = '2.15.0';
+  const VERSAO = '2.16.0';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -779,7 +779,6 @@
     try {
       if (!(await conferirPonto(r))) { await Store.apagarRegistro(r.uuid); tirar(); toast('Cadastro não aberto.'); return; }
       if (!(await conferirQuadra(r))) { await Store.apagarRegistro(r.uuid); tirar(); return; }
-      await definirNivel(r);
       await Store.salvarRegistro(r);
     } catch (e) { tirar(); throw e; }
     const obs = new MutationObserver(() => { if ($app.querySelector('.prog')) { obs.disconnect(); tirar(); } }); obs.observe($app, { childList: true, subtree: true }); setTimeout(() => { obs.disconnect(); tirar(); }, 8000); // se o formulário não abrir, a tela não fica presa
@@ -805,13 +804,6 @@
       if (esc) { r.quadra = esc.q.n; r.face = esc.face || ''; }
       return true;
     } catch (e) { return true; } // sem a camada no aparelho: não trava a coleta
-  }
-  // nível da avaliação de risco (ABNT NBR 16246-3): 1 no cadastro rápido das faces marcadas como calçada irregular; 2 no cadastro completo
-  async function definirNivel(r) {
-    const cn = S.form.campos.find((c) => c.nivelAuto); if (!cn) return;
-    let nv = '2';
-    try { if (r.face && !r.faceId) { const f = ((await carregarSitQd(false, true)).faces || new Map()).get(r.face); if (f && f.cond === 'irregular') nv = '1'; } } catch (e) { /* sem a camada: cadastro completo */ }
-    r.valores[cn.nome] = nv;
   }
   // aviso da reserva: 5 dias para começar a quadra e mais 3 para fechar
   async function pintarAvisoReserva() {
@@ -1467,8 +1459,7 @@
     S.reg = r; r.valores = r.valores || {}; r.fotos = r.fotos || {};
     if (r.status !== 'rascunho' && !r.__base) { r.__base = JSON.stringify(r.valores); r.__baseFotos = JSON.stringify(r.fotos); r.__basePos = JSON.stringify({ lat: r.lat, lon: r.lon, prec: r.prec, posManual: r.posManual }); await Store.salvarRegistro(r); }
     if (abaParam != null) S.aba = +abaParam || 0;
-    const form = S.form; const abas = form.abas.map((a) => Object.assign({}, a)); const cNivel = form.campos.find((c) => c.nivelAuto); const rapido = () => !!cNivel && String(r.valores[cNivel.nome]) === '1';
-    const nomearAbas = () => { const rp = rapido(); abas.forEach((a, i) => { a.nome = rp && form.abas[i].nomeRapido ? form.abas[i].nomeRapido : form.abas[i].nome; }); }; nomearAbas();
+    const form = S.form; const abas = form.abas.map((a) => Object.assign({}, a));
     for (const c of form.campos) if (c.auto === 'modocopa' && !r.valores[c.nome]) r.valores[c.nome] = await prefCopa();
     // registro de formulário anterior: "Ausente" marcado junto com outra opção que passou para o mesmo grupo (ex.: poda de raiz); vale a opção marcada
     for (const g of form.gruposObrig || []) { const cs = camposDoGrupo(form, g).map((n) => form.campos.find((x) => x.nome === n)).filter(Boolean); const ex = cs.find((x) => x.exclusivo); if (ex && r.valores[ex.nome] === true && cs.some((x) => x !== ex && r.valores[x.nome] === true)) r.valores[ex.nome] = false; }
@@ -1503,8 +1494,8 @@
     const vizinha = (i, passo) => { for (let k = i + passo; k >= 0 && k < abas.length; k += passo) if (abaVisivel(abas[k])) return k; return -1; };
     const btAnt = h('button', { class: 'btn sec quad', onclick: () => irAba(vizinha(S.aba, -1)), 'aria-label': 'Etapa anterior' }, ico('esq'));
     const btProx = h('button', { class: 'btn prox', onclick: () => { const k = vizinha(S.aba, 1); if (k >= 0) irAba(k); else concluir(); } });
-    $app.replaceChildren(...[topo(r.semAcesso && r.status === 'rascunho' ? 'Quadra sem acesso' : r.faceId && r.status === 'rascunho' ? 'Calçada sem árvores' : r.status === 'rascunho' && !r.mexido ? 'Nova árvore' : (codigoSo(form, r.valores) || 'Árvore'), S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, btCancelar, gpsBtn)), barraAbas,
-      r.semAcesso ? h('div', { class: 'faixa-face' }, h('b', null, `Quadra ${r.semAcesso.quadra} sem acesso`), h('span', null, `Tire a foto da entrada (portaria, portão ou cerca), escreva o motivo e toque em Concluir registro. ${pl(r.semAcesso.faces.length, 'face fica marcada', 'faces ficam marcadas')} como sem acesso e a quadra é fechada.`)) :
+    $app.replaceChildren(...[topo(r.semAcesso && r.status === 'rascunho' ? (r.semAcesso.soFace ? 'Face sem acesso' : 'Quadra sem acesso') : r.faceId && r.status === 'rascunho' ? 'Calçada sem árvores' : r.status === 'rascunho' && !r.mexido ? 'Nova árvore' : (codigoSo(form, r.valores) || 'Árvore'), S.projeto.nome, voltar, h('div', { class: 'topo-dir' }, btCancelar, gpsBtn)), barraAbas,
+      r.semAcesso ? h('div', { class: 'faixa-face' }, h('b', null, r.semAcesso.soFace ? `Face ${String(r.semAcesso.faces[0]).slice(String(r.semAcesso.faces[0]).lastIndexOf('-') + 1)} da quadra ${r.semAcesso.quadra} sem acesso` : `Quadra ${r.semAcesso.quadra} sem acesso`), h('span', null, r.semAcesso.soFace ? 'Tire a foto do local, escolha o motivo e toque em Concluir registro. Só esta face fica marcada como sem acesso.' : `Tire a foto da entrada (portaria, portão ou cerca), escolha o motivo e toque em Concluir registro. ${pl(r.semAcesso.faces.length, 'face fica marcada', 'faces ficam marcadas')} como sem acesso e a quadra é fechada.`)) :
       r.faceId ? h('div', { class: 'faixa-face' }, h('b', null, 'Face sem árvores: ' + (r.faceTxt || r.faceId)), h('span', null, 'Tire a foto da calçada inteira, no sentido do comprimento, e toque em Concluir registro. A face fica como levantada sem árvores.')) : null,
       conteudo, h('footer', { class: 'rodape' }, btAnt, btProx)].filter(Boolean));
 
@@ -1600,7 +1591,6 @@
     }
 
     function render() {
-      nomearAbas();
       if (!abaVisivel(abas[S.aba])) { const k = vizinha(S.aba, -1) >= 0 ? vizinha(S.aba, -1) : vizinha(S.aba, 1); if (k >= 0) S.aba = k; }
       pintarAbas(); calcEls.clear();
       const a = abas[S.aba];
@@ -1611,9 +1601,6 @@
       const resumoAuto = campos.filter((x) => x.c.auto === 'codigo' || x.c.auto === 'coletor' || (x.c.agora && x.c.somenteLeitura));
       const blocos = []; let grupoAtual = null; let chips = null; let nums = null; let fotos = null;
       if (resumoAuto.length) blocos.push(h('div', { class: 'resumo-auto' }, resumoAuto.map((x) => { const v = r.valores[x.c.nome]; return h('span', null, x.c.agora ? dataCurta(v) : (v || 'automático')); })));
-      // cadastro rápido (face marcada como calçada irregular): avisa e deixa voltar ao completo se a árvore não for dessa face
-      if (rapido() && S.aba === abas.findIndex((x) => abaVisivel(x))) blocos.push(h('div', { class: 'faixa-rapido', role: 'status' }, h('span', null, h('b', null, 'Cadastro rápido'), ' · calçada irregular' + (r.face ? ` (face ${String(r.face).slice(String(r.face).lastIndexOf('-') + 1)} da quadra ${r.quadra || ''})` : '')),
-        r.status === 'rascunho' ? h('button', { class: 'btn sec peq', type: 'button', onclick: async () => { if (!(await modal('Cadastro completo', h('p', null, 'Fazer o cadastro completo desta árvore? Use quando ela não estiver na calçada irregular.'), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Fazer o completo', valor: true }]))) return; mudar(cNivel, '2'); render(); } }, 'Fazer o completo') : null));
       for (const { c, grupo } of campos) {
         if (resumoAuto.some((x) => x.c === c)) continue;
         if (grupo !== grupoAtual) { grupoAtual = grupo; chips = nums = fotos = null; if (grupo) blocos.push(h('div', { class: 'grupo-tit' }, grupo === 'Manejo e mitigações' ? grupo : grupo)); }
@@ -1946,7 +1933,7 @@
         clearTimeout(salvarTimer); await descartarEdicao(r); S.editando.delete(r.uuid); Gps.ouvintes.delete(ouvinte); S.reg = null; return ir('#form/' + r.uuid);
       }
       const nf = Object.values(r.fotos || {}).filter((f) => f && f.chave).length;
-      if (!(await confirmar('Cancelar registro', `Cancelar ${r.semAcesso ? 'este cadastro de quadra sem acesso' : r.faceId ? 'este cadastro de calçada' : 'esta árvore'}? ${nf ? `O que foi preenchido e ${nf === 1 ? 'a foto serão apagados' : `as ${nf} fotos serão apagados`}` : 'O que foi preenchido será apagado'} do celular. Isso não pode ser desfeito.`, 'Cancelar registro', 'perigo', 'Continuar preenchendo'))) return;
+      if (!(await confirmar('Cancelar registro', `Cancelar ${r.semAcesso ? (r.semAcesso.soFace ? 'este cadastro de face sem acesso' : 'este cadastro de quadra sem acesso') : r.faceId ? 'este cadastro de calçada' : 'esta árvore'}? ${nf ? `O que foi preenchido e ${nf === 1 ? 'a foto serão apagados' : `as ${nf} fotos serão apagados`}` : 'O que foi preenchido será apagado'} do celular. Isso não pode ser desfeito.`, 'Cancelar registro', 'perigo', 'Continuar preenchendo'))) return;
       clearTimeout(salvarTimer); Gps.ouvintes.delete(ouvinte);
       for (const f of Object.values(r.fotos)) if (f && f.chave) await Store.apagarFoto(f.chave);
       await Store.apagarRegistro(r.uuid); S.reg = null; toast('Registro cancelado.'); ir('#inicio');
@@ -1968,7 +1955,6 @@
     const form = S.form;
     const cc = campoCodigo(form), ce = campoEspecie(form);
     const cRisco = form.campos.find((c) => c.tipo === 'choice' && /^risco$/i.test(norm(c.nome)));
-    const cRisco1 = form.campos.find((c) => c.tipo === 'choice' && /^risco nivel 1$/i.test(norm(c.nome)));
     const cCat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
     const cFoto = form.campos.find((c) => c.tipo === 'photo');
     const cArea = form.campos.find((c) => /^area de copa \(m2\)$/i.test(norm(c.nome))) || form.campos.find((c) => /area de copa/i.test(norm(c.nome)));
@@ -2061,7 +2047,7 @@
     // pontos: os do aparelho primeiro (podem ter edição ainda não enviada), depois os do servidor
     const pts = []; const vistos = new Set();
     const add = (o) => { if (o.lat == null || o.lat === '' || isNaN(+o.lat) || vistos.has(o.uid)) return; if (semPonto.has(String(o.cat))) return; vistos.add(o.uid); o.lat = +o.lat; o.lon = +o.lon; o.chave = norm(o.cod + ' ' + o.esp); corEq(o.equipe || '-'); pts.push(o); };
-    if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, bairro: r.bairro || '', dia: diaLocal(r.criado_em), cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: (cRisco && r.valores[cRisco.nome]) || (cRisco1 && r.valores[cRisco1.nome]) || '', n1: !!(cRisco1 && r.valores[cRisco1.nome] && !(cRisco && r.valores[cRisco.nome])), cat: cCat ? r.valores[cCat.nome] : '', rm: raioCopa(cArea ? r.valores[cArea.nome] : 0), foto: '', local: true });
+    if (perfil() !== 'cliente') for (const r of await Store.registros(S.projeto.id)) if (r.status !== 'rascunho') add({ uid: r.uuid, lat: r.lat, lon: r.lon, equipe: r.equipe, bairro: r.bairro || '', dia: diaLocal(r.criado_em), cod: cc ? r.valores[cc.nome] || '' : '', esp: ce ? r.valores[ce.nome] || '' : '', risco: (cRisco && r.valores[cRisco.nome]) || '', cat: cCat ? r.valores[cCat.nome] : '', rm: raioCopa(cArea ? r.valores[cArea.nome] : 0), foto: '', local: true });
     // quadras: desenhadas antes dos pontos, no mesmo canvas, para o toque no ponto ter prioridade
     // setores censitários (quando o projeto tem): os da minha equipe com borda forte, os outros finos; não pegam o toque
     const stCamada = L.layerGroup().addTo(mapa);
@@ -2085,7 +2071,7 @@
       if (!sel && !aberta && motivoBloqueio(sq0)) return { color: '#5F6B70', weight: 3, opacity: 0.55, dashArray: '3 6', lineCap: 'butt' };
       const cor = aberta ? '#1565C0' : sel ? '#6A1B9A' : selQd.value === 'eq' ? (s.equipe ? corEq(s.equipe) : COR_FC['A levantar']) : s.cond === 'sem_acesso' ? COR_SEM_ACESSO : COR_FC[st];
       const forte = aberta || sel || (selQd.value === 'eq' ? !!s.equipe : st !== 'A levantar');
-      return { color: cor, weight: aberta ? 10 : sel ? 8 : forte ? 6 : 3, opacity: forte ? 0.95 : 0.6, dashArray: !sel && !aberta && selQd.value !== 'eq' ? (s.cond === 'sem_acesso' ? '3 5' : st === 'Levantada, sem árvores' ? '10 6' : s.cond === 'irregular' ? '16 4 3 4' : null) : null, lineCap: 'butt' };
+      return { color: cor, weight: aberta ? 10 : sel ? 8 : forte ? 6 : 3, opacity: forte ? 0.95 : 0.6, dashArray: !sel && !aberta && selQd.value !== 'eq' ? (s.cond === 'sem_acesso' ? '3 5' : st === 'Levantada, sem árvores' ? '10 6' : null) : null, lineCap: 'butt' };
     };
     // de perto (zoom 16 ou mais) a quadra fica só com o contorno e o número: quem conta a história são as faces; de longe, preenchida pela situação
     const estiloQd = (q) => { const sel = selecao && selecao.has(q.n); const cor = corQd(q); const s = qdSit.get(q.n) || {}; const forte = selQd.value === 'eq' ? !!s.equipe : (s.situacao && s.situacao !== 'A levantar'); const perto = mapa.getZoom() >= ZOOM_FACES && q.f;
@@ -2298,32 +2284,22 @@
       const eqIn = escolhaEquipe(s.equipe || '');
       const pode = podeMarcarFc(s, q) && perfil() !== 'cliente' && !(modoQuadra() && ((qdSit.get(q.n) || {}).equipe !== minhaEquipe() || (qdSit.get(q.n) || {}).fechada_em)); // time parceiro: só face de quadra reservada para ele e ainda aberta
       const vaiSel = (ids) => { mapa.closePopup(); selTipo = 'fc'; selecao = new Set(ids); pintarSelecao(); restilizar([...selecao]); };
-      // calçada irregular (relevo, piso, obstrução): as árvores desta face entram no cadastro rápido, com a avaliação de risco nível 1
-      const marcarIrregular = async () => {
-        if (somenteVer() || servidorAntigo(2.12)) return;
-        if (!S.form.campos.some((c) => c.nivelAuto)) return toast('O formulário deste projeto ainda não tem o cadastro rápido. Peça à coordenação para atualizar os formulários.', 6000);
-        const mt = h('textarea', { class: 'entrada', rows: 2, maxlength: 200, placeholder: 'Ex.: calçada em degraus, piso quebrado, entulho' });
-        const ok = await modal('Calçada irregular', h('div', null, h('p', null, `Face ${f.i} da quadra ${q.n}: as árvores desta face entram no cadastro rápido (ponto, foto, espécie, CAP, altura, fitossanidade e risco).`), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'O que a calçada tem?'), mt)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Marcar', valor: true }]);
-        if (!ok) return;
-        marcar([Object.assign({ numero: id, cond: 'irregular', motivo: mt.value.replace(/\s+/g, ' ').trim() }, st === 'A levantar' ? { situacao: 'Em levantamento' } : {})]);
-      };
       const mais = [
         lado.length > 1 && (pode || ehCoord()) ? h('button', { class: 'btn sec peq', onclick: () => vaiSel(lado.map((x) => x.id)) }, `Escolher o lado todo da rua (${lado.length} faces, ${fmtM(mLado)})`) : null,
         pode ? h('button', { class: 'btn sec peq', onclick: () => vaiSel([id]) }, 'Escolher várias faces') : null,
         (() => { const sq = qdSit.get(q.n) || {}; return sq.equipe && !sq.fechada_em && (ehCoord() || (perfil() === 'coletor' && sq.equipe === minhaEquipe())) ? h('button', { class: 'btn sec peq acao', onclick: () => { mapa.closePopup(); fecharQuadra(q, sq, async (itens) => { try { const r = await marcarQuadras(itens); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Quadra fechada.'); qdSit = await carregarSitQd(!r.fila); desenhar(false); } catch (e) { toast(e.message, 5000); } }); } }, `Fechar a quadra ${q.n}`) : null; })(),
-        pode && !FACE_FEITA.includes(st) && s.cond !== 'irregular' ? h('button', { class: 'btn sec peq acao bt-irregular', onclick: marcarIrregular }, 'Calçada irregular (cadastro rápido)') : null,
-        pode && !FACE_FEITA.includes(st) && s.cond === 'irregular' ? h('button', { class: 'btn sec peq acao bt-regular', onclick: () => marcar([{ numero: id, cond: '' }]) }, 'Calçada normal (cadastro completo)') : null,
         pode && st === 'Levantada' ? h('button', { class: 'btn sec peq acao', onclick: () => marcar([{ numero: id, situacao: 'Em levantamento' }]) }, 'Voltar para Em levantamento') : null,
         pode && st !== 'A levantar' ? h('button', { class: 'btn sec peq acao', onclick: () => marcar([{ numero: id, situacao: 'A levantar' }]) }, 'Voltar para A levantar') : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn.el, h('button', { class: 'btn sec peq', onclick: () => { const v = eqIn.valor(); if (v == null) return toast('Escolha a equipe.'); marcar([{ numero: id, equipe: v }]); } }, 'Definir equipe')) : null].filter(Boolean);
       const pop = h('div', { class: 'ficha qd-ficha' }, h('b', null, `Face ${f.i} da quadra ${q.n}`), h('small', null, `${f.r} · ${fmtN(f.c)} m`),
         h('div', null, h('span', { class: 'os-st', style: `background:${s.cond === 'sem_acesso' ? COR_SEM_ACESSO : COR_FC[st]}` }, rotFace(s) + (s.__pend ? ' · a enviar' : '')), ' ', perfil() === 'cliente' ? '' : s.equipe ? s.equipe : eqDaQuadra(q) ? 'quadra da ' + eqDaQuadra(q) : 'sem equipe'),
-        s.cond ? h('small', { class: 'face-cond' }, h('b', null, s.cond === 'sem_acesso' ? 'Sem acesso' : 'Calçada irregular' + (FACE_FEITA.includes(st) ? (st === 'Levantada' ? ', com árvores' : ', sem árvores') : '') + ': cadastro rápido (risco nível 1)'), s.cond_motivo ? ' · ' + s.cond_motivo : '') : null,
+        s.cond === 'sem_acesso' ? h('small', { class: 'face-cond' }, h('b', null, 'Sem acesso'), s.cond_motivo ? ' · ' + s.cond_motivo : '') : null,
         s.marcada_por ? h('small', null, `marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}`) : null,
         s.foto && ehCoord() ? (() => { const a = h('div', { class: 'face-foto' }); verFotoOS(s.foto, a); return a; })() : null,
         pode && !FACE_FEITA.includes(st) ? h('button', { class: 'btn cheio acao', onclick: async () => { let fotoBlob = null; if (exigeFotoFace()) { if (somenteVer()) return; fotoBlob = await pedirFotoFace(`Face ${f.i} da quadra ${q.n} (${f.r}).`); if (!fotoBlob) return; } marcar([Object.assign({ numero: id, situacao: 'Levantada' }, fotoBlob ? { fotoBlob } : {})]); } }, ico('check'), 'Marcar como levantada') : null,
         pode && st === 'A levantar' ? h('button', { class: 'btn sec cheio acao', onclick: () => marcar([{ numero: id, situacao: 'Em levantamento' }]) }, 'Em levantamento') : null,
         pode ? h('button', { class: 'btn sec cheio acao', onclick: () => { mapa.closePopup(); iniciarCalcadaFace(q, f); } }, ico('camera'), st === 'Levantada, sem árvores' ? 'Refazer o cadastro da calçada sem árvores' : 'Sem árvores (só a foto)') : null,
+        pode && !FACE_FEITA.includes(st) ? h('button', { class: 'btn sec cheio acao bt-sem-acesso', onclick: () => { mapa.closePopup(); iniciarSemAcessoFace(q, f); } }, ico('camera'), 'Sem acesso (foto e motivo)') : null,
         blocoPedido(q),
         mais.length ? h('details', { class: 'qd-mais' }, h('summary', null, 'Mais opções'), mais) : null);
       fcAberta = id; restilizar([id]);
@@ -3574,12 +3550,12 @@
   }
   function analisarPainel(d, form) {
     const cRisco = form.campos.find((c) => c.tipo === 'choice' && /^risco$/i.test(norm(c.nome)));
-    const cRisco1 = form.campos.find((c) => c.tipo === 'choice' && /^risco nivel 1$/i.test(norm(c.nome)));
     const cCat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
     const cSit = form.campos.find((c) => c.tipo === 'choice' && /situacao/i.test(norm(c.nome)));
     const risco = cRisco ? cRisco.opcoes.map((o) => ({ rot: o.t, n: (d.escolhas[cRisco.nome] || {})[o.v] || 0, cor: COR_RISCO[o.v] })) : [];
     const cat = cCat ? cCat.opcoes.map((o, k) => ({ rot: o.t.replace(/\s*\(.*\)/, ''), n: (d.escolhas[cCat.nome] || {})[o.v] || 0, cor: CORES[k % CORES.length] })) : [];
     const ind = cCat ? ['1', '2', '3'].reduce((a, v) => a + ((d.escolhas[cCat.nome] || {})[v] || 0), 0) : d.total;
+    const agN = cCat ? (d.escolhas[cCat.nome] || {})['7'] || 0 : 0; const nq = (d.numeros || {})['Qtde estimada de individuos']; const agEst = nq ? Math.round(nq.soma || 0) : 0; // agrupamento: contado à parte, pela estimativa visual
     const sit = cSit ? cSit.opcoes.map((o) => ({ rot: o.t, n: (d.escolhas[cSit.nome] || {})[o.v] || 0 })) : [];
     const manejo = form.campos.filter((c) => c.tipo === 'bool' && /^manejo/i.test(c.nome) && !/nenhum/i.test(c.nome)).map((c) => ({ rot: c.rotulo, n: d.marcados[c.nome] || 0 })).sort((a, b) => b.n - a.n);
     const ocorr = form.campos.filter((c) => c.tipo === 'bool' && !/^manejo|ausente|nenhum|sem interfer/i.test(c.nome)).map((c) => ({ rot: form.campos.filter((x) => x.tipo === 'bool' && x.rotulo === c.rotulo).length > 1 ? c.nome : c.rotulo, n: d.marcados[c.nome] || 0 })).filter((x) => x.n).sort((a, b) => b.n - a.n).slice(0, 12);
@@ -3592,8 +3568,7 @@
     const altoN = cRisco ? ((d.escolhas[cRisco.nome] || {}).Alto || 0) + ((d.escolhas[cRisco.nome] || {}).Severo || 0) : 0;
     const nRisco = risco.reduce((a, x) => a + x.n, 0);
     // avaliação de risco nível 1 (cadastro rápido): contada à parte da matriz (nível 2)
-    const risco1 = cRisco1 ? cRisco1.opcoes.map((o) => ({ rot: o.t, n: (d.escolhas[cRisco1.nome] || {})[o.v] || 0, cor: COR_RISCO[o.v] })) : []; const nRisco1 = risco1.reduce((a, x) => a + x.n, 0);
-    return { risco, cat, ind, sit, manejo, ocorr, val, esp, nEsp, topEsp, gen, topGen, altoN, nRisco, risco1: nRisco1 ? risco1 : [], nRisco1 };
+    return { risco, cat, ind, sit, manejo, ocorr, val, esp, nEsp, topEsp, gen, topGen, altoN, nRisco, agN, agEst };
   }
   async function telaPainel(forcar) {
     const corpo = h('main', { class: 'painel' }, esboco('Carregando indicadores...'));
@@ -3620,7 +3595,7 @@
     // Operação: andamento do campo (coordenação). Inventário: o que foi encontrado (coordenação e cliente)
     const operacao = cli ? null : h('div', { class: 'painel-aba', 'data-aba': 'op' },
       h('div', { class: 'kpis' },
-        kpi('Registros', fmtN(d.total), `${fmtN(A.ind)} indivíduos e ${fmtN(d.total - A.ind)} pontos sem árvore` + (meta ? ` · ${fmtP(d.total / meta)} da meta de ${fmtN(meta)}` : '')),
+        kpi('Registros', fmtN(d.total), `${fmtN(A.ind)} indivíduos` + (A.agN ? `, ${fmtN(A.agN)} ${A.agN === 1 ? 'agrupamento' : 'agrupamentos'}` : '') + ` e ${fmtN(d.total - A.ind - A.agN)} pontos sem árvore` + (meta ? ` · ${fmtP(d.total / meta)} da meta de ${fmtN(meta)}` : '')),
         kpiBt(() => irVal('Validado'), 'Validados', fmtN(validados), d.total ? fmtP(validados / d.total) + ' do total' : ''),
         kpiBt(() => irVal('revisar'), 'A revisar', fmtN((d.validacao.Pendente || 0) + (d.validacao.Corrigido || 0)), 'aguardando ou corrigidos'),
         kpi('Ritmo', fmtN(Math.round(media7)), 'registros por dia (últimos 7 dias de campo)' + (previsao != null ? ` · faltam cerca de ${fmtN(previsao)} dias` : '')),
@@ -3635,17 +3610,17 @@
     const inventario = h('div', { class: 'painel-aba', 'data-aba': 'inv' },
       h('div', { class: 'kpis' },
         kpi('Indivíduos', fmtN(A.ind), 'árvores, arbustos e palmeiras'),
+        A.agN ? kpi('Agrupamentos', fmtN(A.agN), A.agEst ? `cerca de ${fmtN(A.agEst)} indivíduos, por estimativa visual` : 'estimativa visual de indivíduos') : null,
         kpi('Espécies', fmtN(d.nEspecies), A.esp[0] ? h('span', null, 'mais comum: ', h('i', null, A.esp[0].rot)) : ''),
         A.risco.length ? kpiBt(cli ? null : altoMapa, 'Risco alto ou severo', fmtN(A.altoN), A.nRisco ? fmtP(A.altoN / A.nRisco) + ' dos indivíduos avaliados' : '', A.altoN ? 'alerta' : '') : null,
         null),
       h('div', { class: 'grade-cartoes' },
         A.cat.length ? h('div', { class: 'cartao' }, h('h3', null, 'Categoria'), barras(A.cat)) : null,
-        A.risco.length ? h('div', { class: 'cartao' }, h('h3', null, A.risco1.length ? 'Classe de risco (avaliação nível 2, pela matriz)' : 'Classe de risco'), barras(A.risco)) : null,
-        A.risco1.length ? h('div', { class: 'cartao' }, h('h3', null, 'Classe de risco (avaliação nível 1, calçada irregular)'), barras(A.risco1), h('p', { class: 'dica' }, 'ABNT NBR 16246-3: avaliação visual, sem a matriz. Contada à parte.')) : null,
+        A.risco.length ? h('div', { class: 'cartao' }, h('h3', null, 'Classe de risco'), barras(A.risco)) : null,
         h('div', { class: 'cartao' }, h('h3', null, 'Espécies mais comuns'), barras(A.esp.slice(0, 12), { total: A.nEsp })),
         d.classesDap.length ? h('div', { class: 'cartao' }, h('h3', null, S.form && S.form.campos.some((c) => c.tipo === 'multinumber' && /cap/i.test(c.nome)) ? 'Classes de DAP (calculado do CAP)' : 'Classes de DAP'), barras(d.classesDap.map((c) => ({ rot: c.ate ? `${c.de} a ${c.ate} cm` : `${c.de} cm ou mais`, n: c.n })))) : null,
-        A.manejo.length ? h('div', { class: 'cartao' }, h('h3', null, 'Manejo recomendado'), barras(A.manejo.filter((x) => x.n), { total: A.ind, cor: CORES[1] })) : null,
-        A.ocorr.length ? h('div', { class: 'cartao' }, h('h3', null, 'Ocorrências observadas'), barras(A.ocorr, { total: A.ind, cor: CORES[2] })) : null));
+        A.manejo.length ? h('div', { class: 'cartao' }, h('h3', null, 'Manejo recomendado'), barras(A.manejo.filter((x) => x.n), { total: A.ind + A.agN, cor: CORES[1] })) : null,
+        A.ocorr.length ? h('div', { class: 'cartao' }, h('h3', null, 'Ocorrências observadas'), barras(A.ocorr, { total: A.ind + A.agN, cor: CORES[2] })) : null));
     if (!S.painelAba || cli) S.painelAba = cli ? 'inv' : 'op';
     const abasP = cli ? null : h('div', { class: 'subabas painel-abas', role: 'tablist' }, [['op', 'Operação'], ['inv', 'Inventário']].map(([k, t]) => h('button', { class: S.painelAba === k ? 'at' : '', role: 'tab', 'aria-selected': S.painelAba === k ? 'true' : 'false', onclick: (e) => { S.painelAba = k; corpo.querySelectorAll('.painel-abas button').forEach((b) => { b.classList.toggle('at', b === e.currentTarget); b.setAttribute('aria-selected', b === e.currentTarget ? 'true' : 'false'); }); corpo.querySelectorAll('.painel-aba').forEach((x) => x.classList.toggle('oculto', x.dataset.aba !== k)); } }, t)));
     [operacao, inventario].forEach((x) => x && x.classList.toggle('oculto', x.dataset.aba !== S.painelAba));
@@ -3778,7 +3753,7 @@
       h('p', { class: 'rel-leitura' }, 'Como ler: os números mostram o que foi levantado até a data de emissão. Indivíduos são as árvores, arbustos e palmeiras; os demais registros são pontos sem árvore (por exemplo, árvore morta ou calçada sem árvores). As porcentagens de espécies consideram só os indivíduos identificados.'),
       sec('Resumo'),
       tab(['Indicador', 'Valor'], [
-        ['Registros', fmtN(d.total)], ['Indivíduos (árvores, arbustos e palmeiras)', fmtN(A.ind)], p.meta ? ['Meta do contrato', `${fmtN(p.meta)} (${fmtP(d.total / p.meta)} concluído)`] : null,
+        ['Registros', fmtN(d.total)], ['Indivíduos (árvores, arbustos e palmeiras)', fmtN(A.ind)], A.agN ? ['Agrupamentos', `${fmtN(A.agN)}, com cerca de ${fmtN(A.agEst)} indivíduos (estimativa visual, não somados acima)`] : null, p.meta ? ['Meta do contrato', `${fmtN(p.meta)} (${fmtP(d.total / p.meta)} concluído)`] : null,
         ['Espécies distintas', fmtN(d.nEspecies)], perfil() !== 'cliente' ? ['Validados', `${fmtN(d.validacao.Validado || 0)} (${pct(d.validacao.Validado || 0, d.total)})`] : null,
         A.risco.length ? ['Indivíduos com risco alto ou severo', `${fmtN(A.altoN)} (${pct(A.altoN, A.nRisco)} dos avaliados)`] : null,
         ['Dias de campo', fmtN(dias.length)], d.gps && !cli ? ['Precisão mediana do GPS', fmtN(d.gps.mediana) + ' m'] : null].filter(Boolean)),
@@ -3787,10 +3762,9 @@
       h('p', null, `Foram registradas ${fmtN(d.nEspecies)} espécies. `, A.esp[0] ? ['A mais comum é ', h('i', null, A.esp[0].rot), `, com ${fmtP(A.topEsp)} dos indivíduos identificados` + (A.topEsp > 0.1 ? ', acima do limite de referência de 10% por espécie.' : ', dentro do limite de referência de 10% por espécie.')] : null),
       tab(['Espécie', 'Indivíduos', '%'], A.esp.slice(0, 30).map((e) => [h('i', null, e.rot), fmtN(e.n), pct(e.n, A.nEsp)])),
       d.classesDap.length ? [sec('Classes de diâmetro (DAP)'), tab(['Classe', 'Indivíduos', '%'], d.classesDap.map((c) => [c.ate ? `${c.de} a ${c.ate} cm` : `${c.de} cm ou mais`, fmtN(c.n), pct(c.n, d.classesDap.reduce((a, x) => a + x.n, 0))]))] : null,
-      A.risco.length ? [sec(A.risco1.length ? 'Classe de risco (avaliação nível 2, pela matriz)' : 'Classe de risco'), tab(['Classe', 'Indivíduos', '%'], A.risco.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.nRisco)]))] : null,
-      A.risco1.length ? [sec('Classe de risco (avaliação nível 1, ABNT NBR 16246-3)'), tab(['Classe', 'Indivíduos', '%'], A.risco1.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.nRisco1)]))] : null,
-      A.manejo.length ? [sec('Manejo recomendado'), tab(['Manejo', 'Indivíduos', '%'], A.manejo.filter((x) => x.n).map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
-      A.ocorr.length ? [sec('Ocorrências observadas'), tab(['Ocorrência', 'Indivíduos', '%'], A.ocorr.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind)]))] : null,
+      A.risco.length ? [sec('Classe de risco'), tab(['Classe', 'Indivíduos', '%'], A.risco.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.nRisco)]))] : null,
+      A.manejo.length ? [sec('Manejo recomendado'), tab(['Manejo', 'Registros', '%'], A.manejo.filter((x) => x.n).map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind + A.agN)]))] : null,
+      A.ocorr.length ? [sec('Ocorrências observadas'), tab(['Ocorrência', 'Registros', '%'], A.ocorr.map((c) => [c.rot, fmtN(c.n), pct(c.n, A.ind + A.agN)]))] : null,
       cli ? null : [sec('Produção de campo'),
         h('p', null, dias.length > 14 ? 'Registros por semana (de segunda a domingo).' : 'Registros por dia de campo.'),
         tab([dias.length > 14 ? 'Semana' : 'Data', ...equipes, 'Total'], producaoTabela(d.porDia, dias, equipes, dias.length > 14))],
@@ -3822,7 +3796,7 @@
       const noPer = (l) => { const d = diaLocal(l.validado_em); return d && d >= de.value && d <= ate.value; };
       const doPer = linhas.filter((l) => noPer(l));
       const val = doPer.filter((l) => l.validacao === 'Validado'), dev = doPer.filter((l) => l.validacao === 'Devolvido'), desc = doPer.filter((l) => l.validacao === 'Descartado');
-      const ehInd = (l) => !cat || ['1', '2', '3'].includes(String(l[cat.nome]));
+      const ehInd = (l) => !cat || ['1', '2', '3'].includes(String(l[cat.nome])); const ehAg = (l) => !!cat && String(l[cat.nome]) === '7';
       const equipes = [...new Set(val.map((l) => l.equipe || '-'))].sort();
       const tab = (cab, ls) => h('table', { class: 'tab-rel' }, h('thead', null, h('tr', null, cab.map((c) => h('th', null, c)))), h('tbody', null, ls.map((l) => h('tr', null, l.map((c) => h('td', null, c))))));
       const p = S.projeto; const dBR = (x) => x.split('-').reverse().join('/');
@@ -3832,7 +3806,7 @@
         h('header', { class: 'rel-cab' }, h('img', { src: 'icons/logo-horizontal.png', alt: 'Neofloresta' }), h('div', null, h('h1', null, 'Boletim de medição'), h('p', null, p.nome), h('small', null, [p.contratante, p.municipio, p.contrato ? 'Contrato ' + p.contrato : ''].filter(Boolean).join(' · ')))),
         h('p', { class: 'rel-data' }, `Período: ${dBR(de.value)} a ${dBR(ate.value)}. Conta os registros pela data da validação técnica.`),
         h('h2', null, '1. Resumo do período'),
-        tab(['Item', 'Quantidade'], [['Registros validados no período', fmtN(val.length)], ['Indivíduos (árvores, arbustos e palmeiras)', fmtN(val.filter(ehInd).length)], ['Pontos sem árvore (locais de plantio e calçadas)', fmtN(val.filter((l) => !ehInd(l)).length)],
+        tab(['Item', 'Quantidade'], [['Registros validados no período', fmtN(val.length)], ['Indivíduos (árvores, arbustos e palmeiras)', fmtN(val.filter(ehInd).length)], ['Agrupamentos (cerca-viva e similares, contados à parte)', fmtN(val.filter(ehAg).length)], ['Pontos sem árvore (locais de plantio e calçadas)', fmtN(val.filter((l) => !ehInd(l) && !ehAg(l)).length)],
           ehCoord() ? ['Devolvidos para correção no período', fmtN(dev.length)] : null, ehCoord() ? ['Apagados no período (lixeira)', fmtN(desc.length)] : null,
           ['Validados acumulados até o fim do período', fmtN(acum) + (p.meta ? ` (${fmtP(acum / p.meta)} da meta de ${fmtN(p.meta)})` : '')]].filter(Boolean)),
         perfil() === 'cliente' ? null : h('h2', null, '2. Validados por equipe'),
@@ -3888,7 +3862,7 @@
   function alertasDe(l, form, dups) {
     const a = []; const cc = campoCodigo(form), ce = campoEspecie(form);
     const cat = form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
-    const ind = !cat || ['1', '2', '3'].includes(String(l[cat.nome]));
+    const ind = !cat || ['1', '2', '3', '7'].includes(String(l[cat.nome]));
     { const oc = cat && cat.opcoes.find((o) => String(o.v) === String(l[cat.nome])); if (oc && /sem acesso/i.test(oc.t)) a.push('Quadra sem acesso (vale uma vez por face): confira a foto da entrada'); }
     if (l.latitude === '' || l.latitude == null) a.push('Sem coordenada'); else if (+l.precisao_gps_m > 10) a.push(`GPS ±${Math.round(l.precisao_gps_m)} m`);
     const f1 = form.campos.find((c) => c.tipo === 'photo'); if (f1 && !l[f1.nome]) a.push('Sem foto');
@@ -4351,7 +4325,7 @@
   const servidorMenos = (min) => { const v = parseFloat(S.sessao && S.sessao.versaoScript); return !Api.demo && v > 0 && v < min; }; // sem aviso
   const servidorAntigo = (min) => { const v = parseFloat(S.sessao && S.sessao.versaoScript); if (Api.demo || !(v > 0) || v >= min) return false; toast(`Esta função precisa do servidor ${String(min)}. Avise a coordenação para atualizar.`, 6000); return true; };
   const COR_SEM_ACESSO = '#5D4037'; // marrom pontilhado: face de quadra onde a equipe não entra
-  const rotFace = (s) => (s.cond === 'sem_acesso' ? 'Sem acesso' : (s.situacao || 'A levantar') + (s.cond === 'irregular' ? ' · calçada irregular' : ''));
+  const rotFace = (s) => (s.cond === 'sem_acesso' ? 'Sem acesso' : (s.situacao || 'A levantar'));
   const COR_FC = { 'A levantar': '#78909C', 'Em levantamento': '#F2A900', Levantada: '#2E7D32', 'Levantada, sem árvores': '#6B85A3' }; // cinza-azulado tracejado: longe do teal das equipes
   // quadra fechada para quem está olhando: em validação (todos, menos a coordenação), da Neofloresta (parceiro), de outra pessoa (parceiro)
   const COR_MARCA = { Validação: '#5D4037', Neofloresta: '#00546E' };
@@ -4451,14 +4425,15 @@
       const sit = await carregarSitQd(false); const fs = sit.faces || new Map(); const itens = [];
       const daOutra = (s) => perfil() === 'coletor' && s.equipe && s.equipe !== minhaEquipe();
       if (r.faceId && r.semAcesso) {
-        const mt = String((r.valores[(S.form.campos.find((c) => /motivo sem acesso/i.test(c.nome)) || {}).nome] || '')).trim();
+        const mt = motivoSemAcesso(r);
         const itens = r.semAcesso.faces.map((id) => ({ tipo: 'face', numero: id, situacao: 'Levantada, sem árvores', registro: r.uuid, cond: 'sem_acesso', motivo: mt }));
-        itens.push({ numero: r.semAcesso.quadra, fechar: true, obs: 'Sem acesso' + (mt ? ': ' + mt : '') });
-        if ((sit.get(r.semAcesso.quadra) || {}).fechada_em) return; // cadastro corrigido depois: a quadra já está marcada e fechada
+        if (!r.semAcesso.soFace) itens.push({ numero: r.semAcesso.quadra, fechar: true, obs: 'Sem acesso' + (mt ? ': ' + mt : '') });
+        if (!r.semAcesso.soFace && (sit.get(r.semAcesso.quadra) || {}).fechada_em) return; // cadastro corrigido depois: a quadra já está marcada e fechada
         try { const res = await marcarQuadras(itens);
-          if (res.recusadas && res.recusadas.length) await modal('Quadra não marcada', h('p', null, `O cadastro foi guardado, mas a quadra ${r.semAcesso.quadra} não foi marcada como sem acesso: ${res.recusadas[0].motivo} Avise a coordenação.`), [{ texto: 'Entendi', valor: true }]);
-          else toast(`Quadra ${r.semAcesso.quadra} marcada como sem acesso.`, 4000);
-        } catch (e) { await modal('Quadra não marcada', h('p', null, `O cadastro foi guardado, mas a quadra ${r.semAcesso.quadra} não foi marcada como sem acesso (${e.message}). Abra a quadra no mapa e marque de novo, ou avise a coordenação.`), [{ texto: 'Entendi', valor: true }]); }
+          const alvo = r.semAcesso.soFace ? 'a face ' + r.semAcesso.faces[0] : 'a quadra ' + r.semAcesso.quadra;
+          if (res.recusadas && res.recusadas.length) await modal('Sem acesso não marcado', h('p', null, `O cadastro foi guardado, mas ${alvo} não foi marcada como sem acesso: ${res.recusadas[0].motivo} Avise a coordenação.`), [{ texto: 'Entendi', valor: true }]);
+          else toast(`${alvo[0].toUpperCase() + alvo.slice(1)} marcada como sem acesso.`, 4000);
+        } catch (e) { await modal('Sem acesso não marcado', h('p', null, `O cadastro foi guardado, mas ${r.semAcesso.soFace ? 'a face ' + r.semAcesso.faces[0] : 'a quadra ' + r.semAcesso.quadra} não foi marcada como sem acesso (${e.message}). Abra o mapa e marque de novo, ou avise a coordenação.`), [{ texto: 'Entendi', valor: true }]); }
         return;
       }
       if (r.faceId) {
@@ -4492,6 +4467,28 @@
     const loc = S.form.campos.find((c) => c.tipo === 'choice' && /local do registro/i.test(norm(c.nome))); const opL = loc && loc.opcoes.find((o) => /cal[cç]ada|via p/i.test(o.t));
     await novoRegistro({ faceId: q.n + '-' + f.i, faceRua: f.r, faceTxt: `face ${f.i} da quadra ${q.n} (${f.r})`, cat: [cat.nome, op.v], extra: opL ? { [loc.nome]: opL.v } : {} });
   }
+  // motivo escolhido na lista; em "Outro" vale o texto escrito
+  function motivoSemAcesso(r) {
+    const c = S.form.campos.find((x) => /^motivo sem acesso$/i.test(x.nome)); if (!c) return '';
+    const v = String(r.valores[c.nome] || '').trim(); if (!/^outro/i.test(v)) return v;
+    const o = S.form.campos.find((x) => /motivo sem acesso \(outro\)/i.test(x.nome)); const t = o ? String(r.valores[o.nome] || '').replace(/\s+/g, ' ').trim() : '';
+    return t ? 'Outro: ' + t : 'Outro';
+  }
+  // face onde a equipe não entra (relevo, condomínio, obra): foto e motivo, sem ponto e sem quantidade; só esta face fica marcada
+  async function iniciarSemAcessoFace(q, f) {
+    const cat = S.form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome))); const op = cat && cat.opcoes.find((o) => /sem acesso/i.test(o.t));
+    if (!op) return toast('O formulário deste projeto ainda não tem a opção sem acesso. Peça à coordenação para atualizar os formulários.', 6000);
+    if (servidorAntigo(2.16)) return;
+    const id = q.n + '-' + f.i;
+    const regs = (await Store.registros(S.projeto.id)).filter((r) => r.status !== 'rascunho' && !r.faceId && r.face === id);
+    if (regs.length) return modal('Esta face já tem árvore', h('p', null, `A face ${f.i} já tem árvore cadastrada. Encerre a face (Marcar como levantada). Sem acesso é para a face em que a equipe não consegue entrar.`), [{ texto: 'Entendi', valor: true }]);
+    const rasc = (await Store.registros(S.projeto.id)).find((r) => r.semAcesso && r.semAcesso.soFace && r.semAcesso.faces[0] === id && r.status === 'rascunho');
+    if (rasc) { toast('Continuando o cadastro desta face que ficou guardado.', 3000); S.aba = 0; S.tentou = false; return ir('#form/' + rasc.uuid); }
+    const ok = await modal('Face sem acesso', h('div', null, h('p', null, `A equipe não consegue percorrer a face ${f.i} da quadra ${q.n} (${f.r})? Tire a foto do local e escolha o motivo.`),
+      h('p', { class: 'dica' }, 'Só esta face é marcada como sem acesso. O auditor confere a foto.')), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Continuar', valor: true }]);
+    if (!ok) return;
+    await novoRegistro({ faceId: id, faceRua: f.r, faceTxt: `face ${f.i} da quadra ${q.n}, sem acesso`, cat: [cat.nome, op.v], extra: {}, semAcesso: { quadra: q.n, faces: [id], soFace: true } });
+  }
   // quadra onde a equipe não entra (condomínio fechado, área particular): um cadastro com a foto da entrada e o motivo; vale por todas as faces que faltam
   async function iniciarSemAcesso(q) {
     const cat = S.form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome))); const op = cat && cat.opcoes.find((o) => /sem acesso/i.test(o.t));
@@ -4504,7 +4501,7 @@
     if (comArv.length) return modal('Encerre antes as faces com árvores', h('p', null, `${comArv.length === 1 ? 'A face ' + comArv[0].i + ' já tem' : 'As faces ' + comArv.map((f) => f.i).join(', ') + ' já têm'} árvore cadastrada. Encerre ${comArv.length === 1 ? 'essa face' : 'essas faces'} (Marcar como levantada) e depois marque a quadra como sem acesso: só as faces que faltarem entram.`), [{ texto: 'Entendi', valor: true }]);
     const rasc = (await Store.registros(S.projeto.id)).find((r) => r.semAcesso && r.semAcesso.quadra === q.n && r.status === 'rascunho');
     if (rasc) { toast('Continuando o cadastro desta quadra que ficou guardado.', 3000); S.aba = 0; S.tentou = false; return ir('#form/' + rasc.uuid); }
-    const ok = await modal('Quadra sem acesso', h('div', null, h('p', null, `A equipe não consegue entrar na quadra ${q.n}? Tire a foto da entrada (portaria, portão ou cerca) e escreva o motivo.`),
+    const ok = await modal('Quadra sem acesso', h('div', null, h('p', null, `A equipe não consegue entrar na quadra ${q.n}? Tire a foto da entrada (portaria, portão ou cerca) e escolha o motivo.`),
       h('p', { class: 'dica' }, `${pl(faltam.length, 'face fica marcada', 'faces ficam marcadas')} como sem acesso e a quadra é fechada. O auditor confere a foto.`)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Continuar', valor: true }]);
     if (!ok) return;
     const f0 = faltam[0]; await novoRegistro({ faceId: q.n + '-' + f0.i, faceRua: f0.r, faceTxt: `quadra ${q.n}, sem acesso`, cat: [cat.nome, op.v], extra: {}, semAcesso: { quadra: q.n, faces: faltam.map((f) => q.n + '-' + f.i) } });
@@ -4515,10 +4512,10 @@
     return { tot, por, eq };
   }
   function resumoFaces(cam, sit) {
-    const fs = sit.faces || new Map(); const o = { n: 0, mTot: 0, mFeito: 0, mSem: 0, eq: {}, irrCom: 0, irrSem: 0, irrAberta: 0, semAcesso: 0, mSemAcesso: 0 };
+    const fs = sit.faces || new Map(); const o = { n: 0, mTot: 0, mFeito: 0, mSem: 0, eq: {}, semAcesso: 0, mSemAcesso: 0 };
     for (const q of cam.quadras) for (const f of q.f || []) {
-      o.n++; o.mTot += f.c; const s = fs.get(q.n + '-' + f.i); if (s && s.cond === 'irregular' && !FACE_FEITA.includes(s.situacao)) o.irrAberta++; if (!s || !FACE_FEITA.includes(s.situacao)) continue;
-      if (s.cond === 'sem_acesso') { o.semAcesso++; o.mSemAcesso += f.c; } else if (s.cond === 'irregular') { if (s.situacao === 'Levantada') o.irrCom++; else o.irrSem++; }
+      o.n++; o.mTot += f.c; const s = fs.get(q.n + '-' + f.i); if (!s || !FACE_FEITA.includes(s.situacao)) continue;
+      if (s.cond === 'sem_acesso') { o.semAcesso++; o.mSemAcesso += f.c; }
       o.mFeito += f.c; if (s.situacao === 'Levantada, sem árvores' && s.cond !== 'sem_acesso') o.mSem += f.c; // sem acesso não é potencial de plantio
       const en = s.equipe || 'Sem equipe'; const e = o.eq[en] = o.eq[en] || { n: 0, m: 0 }; e.n++; e.m += f.c; // marcadas pela coordenação sem equipe também aparecem na tabela
     }
@@ -4534,7 +4531,6 @@
     const sec = h('section', { class: 'painel-os' }, h('h2', { class: 'painel-tit' }, 'Andamento por quadras'),
       h('div', { class: 'kpis' }, kpi('Quadras levantadas', fmtN(r.por.Levantada), `de ${fmtN(r.tot)} (${fmtP(r.tot ? r.por.Levantada / r.tot : 0)})`), kpi('Em levantamento', fmtN(r.por['Em levantamento']), ''), kpi('A levantar', fmtN(r.por['A levantar']), ''),
         F.n ? kpi('Calçada levantada', km(F.mFeito), `de ${km(F.mTot)} (${fmtP(F.mTot ? F.mFeito / F.mTot : 0)}) · ${km(F.mSem)} sem árvores`) : null,
-        F.irrCom + F.irrSem + F.irrAberta ? kpi('Calçada irregular', fmtN(F.irrCom + F.irrSem + F.irrAberta), `${pl(F.irrCom, 'face com árvores', 'faces com árvores')}, ${F.irrSem} sem árvores` + (F.irrAberta ? `, ${F.irrAberta} em andamento` : '')) : null,
         F.semAcesso ? kpi('Sem acesso', pl(F.semAcesso, 'face', 'faces'), km(F.mSemAcesso) + ' de calçada onde a equipe não entra') : null),
       h('div', { class: 'prog-qd' }, h('div', { style: `width:${(r.por.Levantada / Math.max(1, r.tot)) * 100}%;background:${COR_QD.Levantada}` }), h('div', { style: `width:${(r.por['Em levantamento'] / Math.max(1, r.tot)) * 100}%;background:${COR_QD['Em levantamento']}` })),
       Object.keys(r.eq).length ? h('div', { class: 'cartao tab-rolagem' }, h('h3', null, 'Por equipe'), h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Equipe'), h('th', null, 'Quadras atribuídas'), h('th', null, 'Levantadas'), h('th', null, 'Em levantamento'), h('th', null, 'Andamento'), F.n ? h('th', null, 'Faces levantadas') : null, F.n ? h('th', null, 'Calçada levantada') : null),
@@ -4619,7 +4615,7 @@
             abas.push({ nome: 'Quadras', cols: ['Quadra', ...extrasQ, 'Equipe', 'Situação', 'Marcada por', 'Marcada em', 'Registros neste arquivo'], linhas: camQd.quadras.map((q) => { const s = sq.get(q.n) || {}; const d = s.marcada_em ? new Date(s.marcada_em) : null; return Object.assign({ Quadra: /^\d+$/.test(q.n) ? +q.n : q.n }, Object.fromEntries(extrasQ.map((k) => [k, (q.p || {})[k] || ''])), { Equipe: s.equipe || '', 'Situação': s.situacao || 'A levantar', 'Marcada por': s.marcada_por || '', 'Marcada em': dtQ(s.marcada_em), 'Registros neste arquivo': nArv[q.n] || 0 }); }) });
             if (camQd.quadras.some((q) => q.f)) { // faces de quadra: uma linha por face
               const sf = new Map(sitR.faces.map((f) => [f.numero, f])); const lin = [];
-              for (const q of camQd.quadras) for (const f of q.f || []) { const x = sf.get(q.n + '-' + f.i) || {}; const d = x.marcada_em ? new Date(x.marcada_em) : null; lin.push({ Face: q.n + '-' + f.i, Quadra: /^\d+$/.test(q.n) ? +q.n : q.n, Rua: f.r, 'Comprimento (m)': f.c, Equipe: x.equipe || '', 'Situação': x.cond === 'sem_acesso' ? 'Sem acesso' : x.situacao || 'A levantar', 'Calçada': x.cond === 'irregular' ? 'Irregular' : x.cond === 'sem_acesso' ? 'Sem acesso' : '', 'Motivo': x.cond_motivo || '', 'Marcada por': x.marcada_por || '', 'Marcada em': dtQ(x.marcada_em), 'Largura da calçada (m)': x.largura ? +x.largura : '', 'Registro da calçada': x.registro || '' }); }
+              for (const q of camQd.quadras) for (const f of q.f || []) { const x = sf.get(q.n + '-' + f.i) || {}; const d = x.marcada_em ? new Date(x.marcada_em) : null; lin.push({ Face: q.n + '-' + f.i, Quadra: /^\d+$/.test(q.n) ? +q.n : q.n, Rua: f.r, 'Comprimento (m)': f.c, Equipe: x.equipe || '', 'Situação': x.cond === 'sem_acesso' ? 'Sem acesso' : x.situacao || 'A levantar', 'Calçada': x.cond === 'sem_acesso' ? 'Sem acesso' : '', 'Motivo': x.cond_motivo || '', 'Marcada por': x.marcada_por || '', 'Marcada em': dtQ(x.marcada_em), 'Largura da calçada (m)': x.largura ? +x.largura : '', 'Registro da calçada': x.registro || '' }); }
               abas.push({ nome: 'Faces de quadra', cols: ['Face', 'Quadra', 'Rua', 'Comprimento (m)', 'Equipe', 'Situação', 'Calçada', 'Motivo', 'Marcada por', 'Marcada em', 'Largura da calçada (m)', 'Registro da calçada'], linhas: lin });
             }
           } catch (e) { /* segue sem a aba */ }

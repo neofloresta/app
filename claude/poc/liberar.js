@@ -45,6 +45,7 @@ const suites = [
   ['servidor 2.14: correções do verificador (quadra em levantamento, reserva direta, cancelados)', 'node b214r.js'],
   ['servidor 2.15: marcas de quadra (Neofloresta e Em validação)', 'node b215s.js'],
   ['2.15 nas telas: marcas e cadeado no mapa', 'node b215.js'],
+  ['2.16: face sem acesso, agrupamento e sem calçada irregular', 'node b216.js'],
   ['2.14 nas telas: pedido de reserva pelo coletor parceiro e aprovação da coordenação', 'node b214.js'],
   ['rendimento por equipe e filtro de dia no mapa', 'node brend.js'],
   ['GPS parado, códigos em dois celulares, toque no ponto', 'node b9.js'],
@@ -63,7 +64,7 @@ const suites = [
   ['2.11: ponto fora da reserva, destravar o ponto, dois raios, espécie a confirmar, altura pelo celular, foto da face, fechar quadra, lixeira e legenda', 'node b211.js'],
   ['2.11.1: formulário 8 por parte da árvore, risco no fim, fotos 2 a 5, abrindo o cadastro, apagar a espécie, aviso da trava e zoom', 'node b2111.js'],
   ['2.11.1: registro do formulário 7 depois da troca para o 8 (ficha, edição e campos antigos)', 'node b2111m.js'],
-  ['2.12: calçada irregular com cadastro rápido e risco nível 1, quadra sem acesso paga por face e fitossanidade', 'node b212.js'],
+  ['2.12 (2.16): quadra sem acesso paga por face, sem calçada irregular', 'node b212.js'],
   ['estresse: 2 mil cadastros em 6 celulares (5 equipes), servidor lento, sem internet e quedas', 'node bstress.js 2000', null, { LATENCIA: '300', UI: '2' }],
   ['velocidade com servidor lento (1,5 s por consulta) e celular fraco', 'node perf.js', null, { LATENCIA: '1500', ROTULO: 'liberar' }],
 ];

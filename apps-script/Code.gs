@@ -11,7 +11,7 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.15';
+const VERSAO_SCRIPT = '2.16';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id', 'indicacao'];
 const COLS_TIMES = ['id', 'nome', 'tipo', 'projeto', 'ativo', 'criado_em'];
 const TIPOS_TIME = ['Próprio', 'Parceiro'];
@@ -791,7 +791,7 @@ function indicadores(form, linhas, p) {
   const marcados = {}; form.campos.filter((c) => c.tipo === 'bool').forEach((c) => (marcados[c.nome] = ativos.filter((l) => l[c.nome] === 1 || l[c.nome] === true || l[c.nome] === '1').length));
   const numeros = {}; form.campos.filter((c) => c.tipo === 'number' || c.tipo === 'multinumber' || c.armazenar === 'real').forEach((c) => {
     const vs = ativos.map((l) => valorNum(l[c.nome], c.tipo === 'multinumber')).filter((x) => x != null && isFinite(x));
-    if (vs.length) { vs.sort((a, b) => a - b); numeros[c.nome] = { n: vs.length, min: vs[0], max: vs[vs.length - 1], media: vs.reduce((a, b) => a + b, 0) / vs.length, mediana: vs[Math.floor(vs.length / 2)] }; }
+    if (vs.length) { vs.sort((a, b) => a - b); numeros[c.nome] = { n: vs.length, soma: vs.reduce((a, b) => a + b, 0), min: vs[0], max: vs[vs.length - 1], media: vs.reduce((a, b) => a + b, 0) / vs.length, mediana: vs[Math.floor(vs.length / 2)] }; }
   });
   const dap = form.campos.find((c) => c.tipo === 'multinumber' && /dap/i.test(c.nome));
   const classesDap = dap ? (() => { const cl = [[0, 10], [10, 20], [20, 30], [30, 50], [50, 80], [80, 1e9]]; const vs = ativos.map((l) => valorNum(l[dap.nome], true)).filter((x) => x != null); return cl.map(([a, b]) => ({ de: a, ate: b === 1e9 ? null : b, n: vs.filter((v) => v >= a && v < b).length })); })() : [];
@@ -1337,7 +1337,7 @@ function vencerReservas(projetoId) {
   } finally { lock.releaseLock(); }
 }
 const COLS_FACES = ['numero', 'quadra', 'rua', 'equipe', 'situacao', 'marcada_por', 'marcada_em', 'largura', 'registro', 'obs', 'historico', 'atualizado_em', 'atribuida', 'foto', 'cond', 'cond_motivo'];
-const CONDS_FACE = ['', 'irregular', 'sem_acesso']; // calçada irregular: cadastro rápido (risco nível 1); sem acesso: quadra onde a equipe não entra
+const CONDS_FACE = ['', 'sem_acesso']; // sem acesso: face (ou quadra) onde a equipe não entra, com foto e motivo
 const SITUACOES_FACE = ['A levantar', 'Em levantamento', 'Levantada', 'Levantada, sem árvores'];
 const FACE_FEITA = ['Levantada', 'Levantada, sem árvores'];
 function abaFaces(projetoId) {
@@ -1870,9 +1870,9 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
       if (it.situacao === 'Levantada, sem árvores') { f.registro = String(it.registro).slice(0, 60); f.largura = lgNova; } else { f.registro = ''; f.largura = ''; }
     }
     if (it.foto && /^https:\/\/drive\.google\.com\/file\/d\/[\w-]+\/view$/.test(String(it.foto)) && it.foto !== f.foto && it.situacao != null && f.situacao === it.situacao) { f.foto = String(it.foto); txt.push('foto da face'); }
-    if (it.cond != null) { // condição da calçada (irregular ou sem acesso), com o motivo escrito pela equipe
+    if (it.cond != null) { // condição da calçada (sem acesso), com o motivo escrito pela equipe
       const c = String(it.cond); const mt = c ? String(it.motivo == null ? (f.cond === c ? f.cond_motivo || '' : '') : it.motivo).slice(0, 200) : '';
-      if (c !== (f.cond || '') || mt !== (f.cond_motivo || '')) { f.cond = c; f.cond_motivo = mt; txt.push((c === 'irregular' ? 'calçada irregular' : c === 'sem_acesso' ? 'sem acesso' : 'calçada sem restrição') + (mt ? ' (' + mt + ')' : '')); }
+      if (c !== (f.cond || '') || mt !== (f.cond_motivo || '')) { f.cond = c; f.cond_motivo = mt; txt.push((c === 'sem_acesso' ? 'sem acesso' : 'calçada sem restrição') + (mt ? ' (' + mt + ')' : '')); }
     } else if (f.cond === 'sem_acesso' && it.situacao != null && it.situacao !== 'Levantada, sem árvores') { f.cond = ''; f.cond_motivo = ''; txt.push('deixou de ser sem acesso'); } // face reaberta
     if (coord && it.equipe != null) txt.push('equipe ' + (f.equipe || 'nenhuma'));
     if (it.obs != null) f.obs = String(it.obs).slice(0, 300);

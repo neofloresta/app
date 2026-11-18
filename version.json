@@ -1,7 +1,10 @@
 {
- "versao": "2.15.0",
- "data": "2026-11-17",
+ "versao": "2.16.0",
+ "data": "2026-11-18",
  "notas": [
+  "Sem acesso por face ou por quadra: foto e motivo da lista (condomínio ou área particular, relevo, obra ou interdição, outro)",
+  "Nova categoria Agrupamento (cerca-viva e calçada sem uso): quantidade estimada, CAP de 3 indivíduos e altura média",
+  "Sai a calçada irregular e o cadastro rápido",
   "Marcas de quadra: Da Neofloresta (parceiro não pede) e Em validação (ninguém coleta), e cadeado nas quadras bloqueadas para o coletor",
   "Coletor parceiro pede a reserva de uma quadra pelo mapa (até 5 por pessoa); a coordenação aprova na ordem de chegada",
   "Ponto de comunicação no mapa: a equipe avisa a coordenação com um balão e um texto",

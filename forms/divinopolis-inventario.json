@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 9,
+ "versao": 10,
  "campos": [
   {
    "armazenar": "text",
@@ -66,6 +66,10 @@
      "t": "Palmeira"
     },
     {
+     "v": "7",
+     "t": "Agrupamento"
+    },
+    {
      "v": "5",
      "t": "Calçada sem árvores"
     },
@@ -75,7 +79,7 @@
     }
    ],
    "obrigatorio": true,
-   "ajuda": "Árvore, arbusto e palmeira entram a partir de 2 m de altura. Calçada sem árvores: trecho de calçada sem nenhum indivíduo."
+   "ajuda": "Árvore, arbusto e palmeira entram a partir de 2 m de altura. Calçada sem árvores: trecho de calçada sem nenhum indivíduo. Agrupamento: muitos indivíduos juntos (cerca-viva, calçada sem uso). Um registro só, com a quantidade estimada, o CAP de 3 indivíduos e a altura média."
   },
   {
    "armazenar": "text",
@@ -89,9 +93,35 @@
    "armazenar": "text",
    "nome": "Motivo sem acesso",
    "rotulo": "Por que não dá para entrar?",
+   "tipo": "choice",
+   "oculto": true,
+   "ajuda": "Escolha o motivo. Em \"Outro\", escreva qual. O auditor confere a foto.",
+   "opcoes": [
+    {
+     "v": "Condomínio ou área particular",
+     "t": "Condomínio ou área particular"
+    },
+    {
+     "v": "Relevo",
+     "t": "Relevo"
+    },
+    {
+     "v": "Obra ou interdição",
+     "t": "Obra ou interdição"
+    },
+    {
+     "v": "Outro",
+     "t": "Outro"
+    }
+   ]
+  },
+  {
+   "armazenar": "text",
+   "nome": "Motivo sem acesso (outro)",
+   "rotulo": "Qual o motivo?",
    "tipo": "text",
    "oculto": true,
-   "ajuda": "Exemplos: condomínio fechado, área particular, área de risco."
+   "ajuda": "Escreva em poucas palavras."
   },
   {
    "armazenar": "text",
@@ -125,6 +155,16 @@
    "ajuda": "Marcado quando quem coletou não tem certeza da espécie: o app pede as fotos de identificação e o auditor confere."
   },
   {
+   "armazenar": "real",
+   "nome": "Qtde estimada de individuos",
+   "rotulo": "Quantidade estimada de indivíduos",
+   "tipo": "number",
+   "min": 2,
+   "avisoMax": 500,
+   "oculto": true,
+   "ajuda": "Agrupamento: quantos indivíduos há no conjunto, por contagem visual."
+  },
+  {
    "armazenar": "text",
    "nome": "CAP (cm)",
    "rotulo": "CAP (cm)",
@@ -132,7 +172,7 @@
    "maxFustes": 3,
    "avisoMin": 2,
    "avisoMax": 900,
-   "ajuda": "Circunferência do caule a 1,30 m do chão, medida com fita, em centímetros. Com mais de um caule abaixo de 1,30 m, escolha os três mais representativos (os maiores) e meça somente esses, um em cada linha (máximo de 3)."
+   "ajuda": "Circunferência do caule a 1,30 m do chão, medida com fita, em centímetros. Com mais de um caule abaixo de 1,30 m, escolha os três mais representativos (os maiores) e meça somente esses, um em cada linha (máximo de 3). Agrupamento: meça 3 indivíduos escolhidos por média visual (um em cada linha)."
   },
   {
    "armazenar": "real",
@@ -142,7 +182,7 @@
    "min": 2,
    "avisoMax": 40,
    "limiteMsg": "abaixo do critério de inclusão (altura a partir de 2 m)",
-   "ajuda": "Do chão ao ponto mais alto da copa, em metros."
+   "ajuda": "Do chão ao ponto mais alto da copa, em metros. Agrupamento: altura média dos indivíduos."
   },
   {
    "armazenar": "text",
@@ -795,41 +835,6 @@
    "ajuda": "Calculado pelo app depois das três respostas acima: probabilidade de falha com a de impacto dá a probabilidade; com as consequências dá o risco (matriz da ISA)."
   },
   {
-   "armazenar": "text",
-   "nome": "Risco nivel 1",
-   "rotulo": "Risco",
-   "tipo": "choice",
-   "oculto": true,
-   "opcoes": [
-    {
-     "v": "Baixo",
-     "t": "Baixo"
-    },
-    {
-     "v": "Médio",
-     "t": "Médio"
-    },
-    {
-     "v": "Alto",
-     "t": "Alto"
-    },
-    {
-     "v": "Severo",
-     "t": "Severo"
-    }
-   ],
-   "nota": "Avaliação de risco nível 1 (ABNT NBR 16246-3): visual, sem a matriz.",
-   "ajuda": "Avaliação de risco nível 1 (ABNT NBR 16246-3): julgamento visual, sem a matriz de probabilidade e consequências. Usada no cadastro rápido das faces com calçada irregular."
-  },
-  {
-   "armazenar": "text",
-   "nome": "Nivel da avaliacao",
-   "rotulo": "Nível da avaliação de risco",
-   "tipo": "hidden",
-   "nivelAuto": true,
-   "ajuda": "Preenchido pelo app (ABNT NBR 16246-3): 1 no cadastro rápido das faces com calçada irregular; 2 no cadastro completo."
-  },
-  {
    "armazenar": "bool",
    "nome": "Manejo remoção do indivíduo",
    "rotulo": "Remoção do indivíduo",
@@ -967,6 +972,9 @@
     },
     {
      "campo": "Motivo sem acesso"
+    },
+    {
+     "campo": "Motivo sem acesso (outro)"
     }
    ]
   },
@@ -981,6 +989,9 @@
     },
     {
      "campo": "Especie suspeita"
+    },
+    {
+     "campo": "Qtde estimada de individuos"
     },
     {
      "campo": "CAP (cm)"
@@ -1187,8 +1198,7 @@
     {
      "campo": "Fitossanidade"
     }
-   ],
-   "nomeRapido": "Fitossanidade"
+   ]
   },
   {
    "nome": "Risco",
@@ -1213,12 +1223,6 @@
     },
     {
      "campo": "Risco"
-    },
-    {
-     "campo": "Risco nivel 1"
-    },
-    {
-     "campo": "Nivel da avaliacao"
     }
    ]
   },
@@ -1679,8 +1683,7 @@
      "Cupim nas raízes": "oculto",
      "Pragas nas raízes ausente": "oculto",
      "Foto 5": "oculto",
-     "Fitossanidade": "oculto",
-     "Risco nivel 1": "oculto"
+     "Fitossanidade": "oculto"
     },
     "6": {
      "Local do registro": "oculto",
@@ -1752,7 +1755,6 @@
      "Consequencias": "oculto",
      "Matriz de Prob + Conseq": "oculto",
      "Risco": "oculto",
-     "Risco nivel 1": "oculto",
      "Manejo remoção do indivíduo": "oculto",
      "Manejo remoção do alvo": "oculto",
      "Manejo poda": "oculto",
@@ -1770,7 +1772,23 @@
      "Foto 5": "oculto",
      "Observacoes": "oculto",
      "Foto 1": "obrig",
-     "Motivo sem acesso": "opcional"
+     "Motivo sem acesso": "obrig"
+    },
+    "7": {
+     "Situacao": "obrig",
+     "Especie": "obrig",
+     "CAP (cm)": "obrig",
+     "Altura total (m)": "obrig",
+     "Conflitos no raio de 2 m": "obrig",
+     "Marquise ou toldo": "obrig",
+     "Ocos e cavidades": "obrig",
+     "Qualidade da copa": "obrig",
+     "Probabilidade de falha": "obrig",
+     "Probabilidade de impacto": "obrig",
+     "Consequencias": "obrig",
+     "Galhos secos ou podres": "obrig",
+     "Fitossanidade": "obrig",
+     "Qtde estimada de individuos": "obrig"
     }
    }
   },
@@ -1911,83 +1929,15 @@
      "Cupim nas raízes": "oculto",
      "Pragas nas raízes ausente": "oculto",
      "Foto 5": "oculto",
-     "Fitossanidade": "oculto",
-     "Risco nivel 1": "oculto"
+     "Fitossanidade": "oculto"
     }
    }
   },
   {
-   "campo": "Nivel da avaliacao",
+   "campo": "Motivo sem acesso",
    "por": {
-    "1": {
-     "Modo de copa": "oculto",
-     "Raio de copa 1 (m)": "oculto",
-     "Raio de copa 2 (m)": "oculto",
-     "Raio de copa 3 (m)": "oculto",
-     "Raio de copa 4 (m)": "oculto",
-     "Area de copa (m2)": "oculto",
-     "Area de copa medida (m2)": "oculto",
-     "Conflitos no raio de 2 m": "oculto",
-     "Fiação baixa isolada": "oculto",
-     "Fiação baixa nua": "oculto",
-     "Fiação média compacta": "oculto",
-     "Fiação média nua": "oculto",
-     "Fiação derivação": "oculto",
-     "Fiação serviços gerais": "oculto",
-     "Fiação ausente": "oculto",
-     "Marquise ou toldo": "oculto",
-     "Interfere pedestres": "oculto",
-     "Interfere veículos": "oculto",
-     "Tráfego sem interferência": "oculto",
-     "Danos por podas": "oculto",
-     "Poda drástica": "oculto",
-     "Poda de raiz": "oculto",
-     "Podas ausente": "oculto",
-     "Lesões no tronco": "oculto",
-     "Codominância de troncos": "oculto",
-     "Danos ausente": "oculto",
-     "Ocos e cavidades": "oculto",
-     "Afloramento da raiz no canteiro": "oculto",
-     "Afloramento da raiz na calçada": "oculto",
-     "Raízes ausente": "oculto",
-     "Qualidade da copa": "oculto",
-     "Galhos secos ou podres": "oculto",
-     "Erva-de-passarinho": "oculto",
-     "Fungo na copa": "oculto",
-     "Cupim na copa": "oculto",
-     "Broca na copa": "oculto",
-     "Pragas na copa ausente": "oculto",
-     "Fungo no tronco": "oculto",
-     "Cupim no tronco": "oculto",
-     "Broca no tronco": "oculto",
-     "Pragas no tronco ausente": "oculto",
-     "Fungo nas raízes": "oculto",
-     "Cupim nas raízes": "oculto",
-     "Pragas nas raízes ausente": "oculto",
-     "Probabilidade de falha": "oculto",
-     "Probabilidade de impacto": "oculto",
-     "Falha+Impacto": "oculto",
-     "Matriz de Probabilidade": "oculto",
-     "Consequencias": "oculto",
-     "Matriz de Prob + Conseq": "oculto",
-     "Risco": "oculto",
-     "Manejo remoção do indivíduo": "oculto",
-     "Manejo remoção do alvo": "oculto",
-     "Manejo poda": "oculto",
-     "Manejo tutoramento": "oculto",
-     "Manejo adubação": "oculto",
-     "Manejo aumento de canteiro": "oculto",
-     "Manejo limpeza de epífitas e parasitas": "oculto",
-     "Manejo suporte complementar": "oculto",
-     "Manejo avaliação nível 2 ou 3": "oculto",
-     "Manejo nenhum": "oculto",
-     "Outras mitigacoes": "oculto",
-     "Foto 2": "oculto",
-     "Foto 3": "oculto",
-     "Foto 4": "oculto",
-     "Foto 5": "oculto",
-     "Observacoes": "oculto",
-     "Risco nivel 1": "obrig"
+    "Outro": {
+     "Motivo sem acesso (outro)": "obrig"
     }
    }
   }

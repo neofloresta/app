@@ -12,13 +12,13 @@ async function concluir(p) { await p.click('.prog-topo'); await p.click('.folha 
 async function faltas(p) { if (await p.locator('.folha >> text=Está certo').count()) { await p.click('.folha button:has-text("Está certo")'); await p.waitForTimeout(300); } await p.waitForTimeout(150); const t = await p.locator('.barra-pend').getAttribute('data-itens').catch(() => null); return t ? JSON.parse(t) : []; }
 async function foto(p, nomeCampo) { await campo(p, nomeCampo).locator('input[capture]').setInputFiles(FOTO); await p.waitForTimeout(250); }
 // Árvore completa da categoria 1 com 3 fotos
-async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, altura = 6.5, morta = false, manejoNenhum = true } = {}) {
+async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, altura = 6.5, morta = false, manejoNenhum = true, categoria = 'Árvore', qtde = null } = {}) {
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(200);
-  await op(p, 'Local do registro', 'Via pública'); await op(p, 'Categoria', 'Árvore');
+  await op(p, 'Local do registro', 'Via pública'); await op(p, 'Categoria', categoria);
   await foto(p, 'Foto 1');
   await aba(p, 'Indivíduo'); await op(p, 'Situacao', morta ? 'Morta' : 'Viva');
   if (!morta) {
-    await campo(p, 'Especie').locator('input').first().fill(especie); await p.waitForTimeout(80);
+    await campo(p, 'Especie').locator('input').first().fill(especie); await p.waitForTimeout(80); if (qtde) await num(p, 'Qtde estimada de individuos', qtde);
     await campo(p, 'CAP (cm)').locator('input').first().fill('102'); await num(p, 'Altura total (m)', altura);
     for (const k of [1, 2, 3, 4]) if (await campo(p, `Raio de copa ${k} (m)`).count()) await num(p, `Raio de copa ${k} (m)`, 2 + k / 2);
     if (await campo(p, 'Area de copa medida (m2)').count()) await num(p, 'Area de copa medida (m2)', 18);

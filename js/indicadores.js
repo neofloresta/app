@@ -15,7 +15,7 @@ const Indicadores = (() => {
     const marcados = {}; form.campos.filter((c) => c.tipo === 'bool').forEach((c) => (marcados[c.nome] = ativos.filter((l) => l[c.nome] === 1 || l[c.nome] === true || l[c.nome] === '1').length));
     const numeros = {}; form.campos.filter((c) => c.tipo === 'number' || c.tipo === 'multinumber' || c.armazenar === 'real').forEach((c) => {
       const vs = ativos.map((l) => valorNum(l[c.nome], c.tipo === 'multinumber')).filter((x) => x != null && isFinite(x));
-      if (vs.length) { vs.sort((a, b) => a - b); numeros[c.nome] = { n: vs.length, min: vs[0], max: vs[vs.length - 1], media: vs.reduce((a, b) => a + b, 0) / vs.length, mediana: vs[Math.floor(vs.length / 2)] }; }
+      if (vs.length) { vs.sort((a, b) => a - b); numeros[c.nome] = { n: vs.length, soma: vs.reduce((a, b) => a + b, 0), min: vs[0], max: vs[vs.length - 1], media: vs.reduce((a, b) => a + b, 0) / vs.length, mediana: vs[Math.floor(vs.length / 2)] }; }
     });
     const dap = form.campos.find((c) => c.tipo === 'multinumber' && /dap|cap/i.test(c.nome)); const fat = dap && /cap/i.test(dap.nome) ? 1 / Math.PI : 1; // classes sempre em DAP (cm)
     const classesDap = dap ? (() => { const cl = [[0, 10], [10, 20], [20, 30], [30, 50], [50, 80], [80, 1e9]]; const vs = ativos.map((l) => valorNum(l[dap.nome], true)).filter((x) => x != null).map((x) => x * fat); return cl.map(([a, b]) => ({ de: a, ate: b === 1e9 ? null : b, n: vs.filter((v) => v >= a && v < b).length })); })() : [];
