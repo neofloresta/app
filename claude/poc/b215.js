@@ -1,0 +1,46 @@
+// 2.15 (telas): marcas de quadra (Neofloresta, Em validação) e cadeado
+const { chromium } = require('playwright'); const L = require('./lib'); const fs = require('fs'); const vm = require('vm');
+const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
+const PJ = 'divinopolis'; const limpo = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+const ctx = { TextDecoder, console }; vm.createContext(ctx); vm.runInContext(fs.readFileSync(L.APP + '/js/quadras.js', 'utf8') + ';this.Quadras=Quadras;', ctx); const Q = ctx.Quadras;
+const tocar = async (p, lat, lon, z = 17) => { const xy = await p.evaluate(([a, b, z]) => { const m = window.__app.mapa; m.closePopup(); m.setView([a, b], z, { animate: false }); const pt = m.latLngToContainerPoint([a, b]); const r = m.getContainer().getBoundingClientRect(); return { x: r.left + pt.x, y: r.top + pt.y }; }, [lat, lon, z]); await p.waitForTimeout(800); await p.mouse.click(xy.x, xy.y); await p.waitForTimeout(700); };
+(async () => {
+  await L.subir(); await L.configurar();
+  const vTermo = (fs.readFileSync(L.APP + '/js/app.js', 'utf8').match(/TERMO_VERSAO = '([^']+)'/) || [])[1];
+  await L.post('time_salvar', { time: { nome: 'Neofloresta', tipo: 'Próprio' } }); await L.post('time_salvar', { time: { nome: 'Gap', tipo: 'Parceiro' } });
+  const novo = async (login, senha, ind) => { await L.post('usuario_salvar', { usuario_dados: { login, senha, nome: login, perfil: 'coletor', projeto: PJ, equipe: login.toUpperCase(), codigo: login.slice(0, 3).toUpperCase(), indicacao: ind } }); await L.post('aceitar_termo', { versao: vTermo }, login, senha); };
+  await novo('maria', 'maria12345', 'Gap'); await novo('joao', 'joao12345', 'Gap');
+  const lido = await Q.lerArquivo('q.geojson', fs.readFileSync(__dirname + '/fixtures/quadras_divinopolis_faces.geojson')); const cam = Q.compactar(lido.feicoes, 'quadra', ['ruas']);
+  const centro = [-20.1436, -44.8908]; const viz = cam.quadras.filter((x) => x.f && Math.abs((x.b[1] + x.b[3]) / 2 - centro[0]) < 0.004 && Math.abs((x.b[0] + x.b[2]) / 2 - centro[1]) < 0.004).slice(0, 8);
+  await L.post('quadras_importar', { projeto: PJ, camada: JSON.stringify(Object.assign({}, cam, { total: viz.length, quadras: viz })) });
+  const q1 = viz[0], q2 = viz[1]; const cc = (q) => Q.centro(q);
+  const srv = (acao, dados, u, s) => L.post(acao, Object.assign({ projeto: PJ }, dados), u, s);
+  const sit = async () => { const m = {}; (await L.post('quadras_situacao', { projeto: PJ })).quadras.forEach((q) => { m[q.numero] = q; }); return m; };
+  const b = await chromium.launch(); const geo = { geolocation: { latitude: cc(q1)[0], longitude: cc(q1)[1], accuracy: 4 } };
+  const EM = await L.celular(b, geo); const m = EM.p; 
+  const ER = await L.celular(b, { viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false, ...geo }); const r = ER.p;
+  await L.logar(m, 'maria', 'maria12345'); await L.logar(r, 'admin', L.senha());
+  const ir = async (p) => { await p.goto(L.WEB + '#mapa'); await p.waitForFunction(() => window.__app && window.__app.mapaInfo, null, { timeout: 25000 }); await p.waitForTimeout(2500); };
+  const q3 = viz[2], q4 = viz[3], q5 = viz[4];
+  await srv('quadras_marcar', { itens: [{ tipo: 'quadra', numero: q1.n, marca: 'Validação' }, { tipo: 'quadra', numero: q2.n, marca: 'Neofloresta' }] }, 'admin', L.senha());
+  await ir(m);
+  const ficha = async (q) => { await tocar(m, ...cc(q), 15); return limpo(await m.locator('.qd-ficha').innerText().catch(() => '')); };
+  const f1 = await ficha(q1); const p1 = await m.locator('.qd-ficha button:has-text("Pedir esta quadra")').count();
+  const f2 = await ficha(q2); const p2 = await m.locator('.qd-ficha button:has-text("Pedir esta quadra")').count();
+  const f3 = await ficha(q3); const p3 = await m.locator('.qd-ficha button:has-text("Pedir esta quadra")').count();
+  ok('N.1', /em validação/i.test(f1) && p1 === 0 && /da Neofloresta/i.test(f2) && p2 === 0 && p3 === 1, `validação: "${f1.slice(0, 80)}" (botão ${p1}); Neofloresta: "${f2.slice(0, 60)}" (botão ${p2}); livre: botão ${p3}`);
+  await m.evaluate((cc0) => { window.__app.mapa.closePopup(); window.__app.mapa.setView(cc0, 16, { animate: false }); }, cc(q1)); await m.waitForTimeout(1200);
+  const rots = await m.evaluate(() => [...document.querySelectorAll('.qd-rot')].map((e) => e.textContent)); await m.screenshot({ path: 'b215-cadeado.png' });
+  ok('N.2', rots.some((t) => t.includes('🔒')), `rótulos no mapa: ${rots.slice(0, 8).join(', ')}`);
+  // coordenação: ficha da quadra livre tem as marcas; marca pela ficha e pela seleção
+  await ir(r); await tocar(r, ...cc(q4), 15); const chips = await r.locator('.qd-ficha .qd-chips .chip').allInnerTexts();
+  await r.click('.qd-ficha .qd-chips .chip:has-text("Da Neofloresta")'); await r.waitForTimeout(1800); 
+  const S1 = await sit();
+  ok('N.3', chips.includes('Em validação') && chips.includes('Da Neofloresta') && Object.values(S1).filter((x) => x.marca === 'Neofloresta').length === 2, `chips: ${chips.join(' | ')}; quadras da Neofloresta no servidor: ${Object.values(S1).filter((x) => x.marca === 'Neofloresta').map((x) => x.numero)}`);
+  await tocar(r, ...cc(q5), 15); await r.click('.qd-ficha button:has-text("Escolher várias quadras")'); await r.waitForTimeout(600);
+  await r.locator('.qd-selecao select').filter({ hasText: 'Marca...' }).selectOption('Validação');
+  await r.locator('.qd-selecao button:has-text("Aplicar")').click(); await r.waitForTimeout(1800); const S2 = await sit();
+  ok('N.4', Object.values(S2).filter((x) => x.marca === 'Validação').length === 2, `em validação no servidor: ${Object.values(S2).filter((x) => x.marca === 'Validação').map((x) => x.numero)}`);
+  const erros = [...m.erros, ...r.erros]; ok('N.5', !erros.length, erros.join(' | ') || 'sem erros de JavaScript');
+  const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);
+})().catch((e) => { console.error('ERRO', e); process.exit(1); });

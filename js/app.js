@@ -1,6 +1,6 @@
 // Neofloresta Inventário: app de campo do Inventário da Arborização Urbana, da Neofloresta
 (() => {
-  const VERSAO = '2.14.0';
+  const VERSAO = '2.15.0';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -2080,7 +2080,8 @@
     const fcSit = () => qdSit.faces || new Map();
     const estiloFc = (id) => {
       const s = fcSit().get(id) || {}; const st = s.situacao || 'A levantar'; const sel = selecao && selTipo === 'fc' && selecao.has(id);
-      const aberta = fcAberta === id;
+      const aberta = fcAberta === id; const sq0 = qdSit.get(id.slice(0, id.lastIndexOf('-'))) || {};
+      if (!sel && !aberta && motivoBloqueio(sq0)) return { color: '#5F6B70', weight: 3, opacity: 0.55, dashArray: '3 6', lineCap: 'butt' };
       const cor = aberta ? '#1565C0' : sel ? '#6A1B9A' : selQd.value === 'eq' ? (s.equipe ? corEq(s.equipe) : COR_FC['A levantar']) : s.cond === 'sem_acesso' ? COR_SEM_ACESSO : COR_FC[st];
       const forte = aberta || sel || (selQd.value === 'eq' ? !!s.equipe : st !== 'A levantar');
       return { color: cor, weight: aberta ? 10 : sel ? 8 : forte ? 6 : 3, opacity: forte ? 0.95 : 0.6, dashArray: !sel && !aberta && selQd.value !== 'eq' ? (s.cond === 'sem_acesso' ? '3 5' : st === 'Levantada, sem árvores' ? '10 6' : s.cond === 'irregular' ? '16 4 3 4' : null) : null, lineCap: 'butt' };
@@ -2088,6 +2089,8 @@
     // de perto (zoom 16 ou mais) a quadra fica só com o contorno e o número: quem conta a história são as faces; de longe, preenchida pela situação
     const estiloQd = (q) => { const sel = selecao && selecao.has(q.n); const cor = corQd(q); const s = qdSit.get(q.n) || {}; const forte = selQd.value === 'eq' ? !!s.equipe : (s.situacao && s.situacao !== 'A levantar'); const perto = mapa.getZoom() >= ZOOM_FACES && q.f;
       if (sel) return { color: '#6A1B9A', weight: 3, fillColor: '#9C4DCC', fillOpacity: 0.4 };
+      if (motivoBloqueio(s)) return { color: '#5F6B70', weight: 2, dashArray: '3 5', fillColor: '#37474F', fillOpacity: 0.28 };
+      if (ehCoord() && s.marca) return { color: COR_MARCA[s.marca], weight: 3, dashArray: s.marca === 'Validação' ? '3 5' : null, fillColor: COR_MARCA[s.marca], fillOpacity: perto ? 0.06 : 0.3 };
       return perto ? { color: '#8A9BA2', weight: 1, fillColor: cor, fillOpacity: 0.04 } : { color: cor, weight: 1, fillColor: cor, fillOpacity: forte ? 0.45 : 0.14 }; };
     // só as quadras perto da área visível ficam desenhadas: arrastar e dar zoom continuam leves com milhares de quadras
     function sincQdVista() {
@@ -2138,7 +2141,7 @@
     function pintarRotulos() {
       rotulos.clearLayers(); if (!qdDados || !selQd.value || mapa.getZoom() < ZOOM_FACES) return;
       const b = mapa.getBounds(); let n = 0;
-      for (const q of qdDados.quadras) { if (q.b[2] < b.getWest() || q.b[0] > b.getEast() || q.b[3] < b.getSouth() || q.b[1] > b.getNorth()) continue; if (++n > 400) break; L.marker(Quadras.centro(q), { interactive: false, keyboard: false, icon: L.divIcon({ className: 'qd-rot', html: h('span', null, q.n), iconSize: null }) }).addTo(rotulos); }
+      for (const q of qdDados.quadras) { if (q.b[2] < b.getWest() || q.b[0] > b.getEast() || q.b[3] < b.getSouth() || q.b[1] > b.getNorth()) continue; if (++n > 400) break; L.marker(Quadras.centro(q), { interactive: false, keyboard: false, icon: L.divIcon({ className: 'qd-rot', html: h('span', null, motivoBloqueio(qdSit.get(q.n)) ? '🔒 ' + q.n : ehCoord() && (qdSit.get(q.n) || {}).marca === 'Validação' ? '⏳ ' + q.n : q.n), iconSize: null }) }).addTo(rotulos); }
     }
     let zAnt = mapa.getZoom();
     mapa.on('moveend zoomend', () => setTimeout(() => { if (!document.body.contains(div)) return; sincQdVista(); pintarRotulos(); const z = mapa.getZoom(); if ((z >= ZOOM_FACES) !== (zAnt >= ZOOM_FACES)) { legenda(); desenharQuadras(); } if (z !== zAnt) ajustarRaios(); zAnt = z; }, 0)); window.__app.mapa = mapa;
@@ -2235,7 +2238,8 @@
     }
     // coletor parceiro: pedir (ou cancelar o pedido de) uma quadra ainda sem reserva
     function blocoPedido(q) {
-      const sq = qdSit.get(q.n) || {}; if (!(perfil() === 'coletor' && !sq.equipe && modoQuadra()) || servidorMenos(2.14)) return null;
+      const sq = qdSit.get(q.n) || {}; const mb = perfil() === 'coletor' ? motivoBloqueio(sq) : ''; if (mb) return [h('small', { class: 'dica aviso-bloq' }, '🔒 ' + mb)];
+      if (!(perfil() === 'coletor' && !sq.equipe && modoQuadra()) || servidorMenos(2.14)) return null;
       return Reservas.pedido(q.n)
         ? [h('small', { class: 'dica' }, 'Pedido enviado. Aguarde a coordenação.'), h('button', { class: 'btn sec peq', onclick: () => cancelarPedido(q) }, 'Cancelar o pedido')]
         : [h('small', { class: 'dica' }, 'Quadra sem reserva.'), h('button', { class: 'btn peq', onclick: () => pedirQuadra(q) }, 'Pedir esta quadra')];
@@ -2261,6 +2265,7 @@
         q.f && !s.fechada_em && fFeitas < q.f.length && perfil() === 'coletor' && !somenteVer() && (s.equipe === minhaEquipe() || (!s.equipe && !modoQuadra())) ? h('button', { class: 'btn sec peq acao bt-sem-acesso', onclick: () => { mapa.closePopup(); fecharFicha(); iniciarSemAcesso(q); } }, 'Quadra sem acesso (condomínio fechado, área particular)') : null,
         podeMarcarQd(s) && !(s.fechada_em && !ehCoord()) && !modoQuadra() ? h('div', { class: 'chips qd-chips' }, SIT_QD.map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: q.n, situacao: x }]) }, x))) : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn.el, h('button', { class: 'btn sec peq', onclick: () => { const v = eqIn.valor(); if (v == null) return toast('Escolha a equipe.'); marcar([{ numero: q.n, equipe: v }]); } }, 'Definir equipe')) : null,
+        ehCoord() && !s.equipe ? h('div', { class: 'chips qd-chips' }, [['', 'Livre'], ['Neofloresta', 'Da Neofloresta'], ['Validação', 'Em validação']].map(([v, t]) => h('button', { class: 'chip' + ((s.marca || '') === v ? ' sel' : ''), onclick: () => (s.marca || '') !== v && marcar([{ numero: q.n, marca: v }]) }, t))) : null,
         ehCoord() ? h('button', { class: 'btn sec peq', onclick: () => { mapa.closePopup(); selTipo = 'qd'; selecao = new Set([q.n]); pintarSelecao(); restilizar([q.n]); } }, 'Escolher várias quadras') : null);
       abrirFicha(pop, ll);
     }
@@ -2326,19 +2331,21 @@
     function pintarSelecao() {
       barraSel.classList.toggle('oculto', !selecao); if (!selecao) { bts.classList.remove('oculto'); return; }
       const fc = selTipo === 'fc'; const eqSel = escolhaEquipe('', true); const eqIn = { get value() { const v = eqSel.valor(); return v == null ? '' : v === '' ? 'Sem equipe' : v; } };
+      const marcaSel = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Marca...'), h('option', { value: 'Neofloresta' }, 'Da Neofloresta (parceiro não pede)'), h('option', { value: 'Validação' }, 'Em validação (ninguém coleta)'), h('option', { value: '__tirar' }, 'Tirar a marca'));
       const sitSel = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Situação...'), (fc ? SIT_FC.filter((x) => x !== 'Levantada, sem árvores') : SIT_QD).map((x) => h('option', { value: x }, x)));
       const ruaDe = (id) => { const k = id.lastIndexOf('-'); const q = qdPorN && qdPorN.m.get(id.slice(0, k)); const f = q && q.f && q.f.find((y) => y.i === id.slice(k + 1)); return f ? f.r : ''; };
       const aplicar = async () => {
         if (!selecao.size) return toast(fc ? 'Toque nas faces para escolher.' : 'Toque nas quadras para escolher.');
-        const it = [...selecao].map((n) => { const o = fc ? { tipo: 'face', numero: n, rua: ruaDe(n) } : { numero: n }; if (eqIn.value.trim() === 'Sem equipe') o.equipe = ''; else if (eqIn.value.trim()) o.equipe = eqIn.value.trim(); if (sitSel.value) o.situacao = sitSel.value; return o; });
-        if (!it.some((o) => o.equipe != null || o.situacao)) return toast('Escolha a equipe ou a situação.');
+        const it = [...selecao].map((n) => { const o = fc ? { tipo: 'face', numero: n, rua: ruaDe(n) } : { numero: n }; if (eqIn.value.trim() === 'Sem equipe') o.equipe = ''; else if (eqIn.value.trim()) o.equipe = eqIn.value.trim(); if (sitSel.value) o.situacao = sitSel.value; if (!fc && marcaSel.value) o.marca = marcaSel.value === '__tirar' ? '' : marcaSel.value; return o; });
+        if (!it.some((o) => o.equipe != null || o.situacao || o.marca !== undefined)) return toast('Escolha a equipe, a situação ou a marca.');
+        if (it.some((o) => o.marca !== undefined) && servidorAntigo(2.15)) return;
         try { const r = await marcarQuadras(it); toast(r.fila ? 'Sem internet: guardado no aparelho. Vai quando o sinal voltar.' : (fc ? `${pl(it.length - (r.recusadas || []).length, 'face atualizada', 'faces atualizadas')}.` : `${pl(r.alteradas, 'quadra atualizada', 'quadras atualizadas')}.`) + (r.recusadas && r.recusadas.length ? ` ${r.recusadas.length} não aceita(s): ${r.recusadas[0].motivo}` : ''), 5000); qdSit = await carregarSitQd(!r.fila); selecao = null; pintarSelecao(); desenhar(false); } catch (e) { toast(e.message, 5000); }
       };
       const mSel = fc ? [...selecao].reduce((a, id) => { const k = id.lastIndexOf('-'); const q = qdPorN && qdPorN.m.get(id.slice(0, k)); const f = q && q.f && q.f.find((y) => y.i === id.slice(k + 1)); return a + (f ? f.c : 0); }, 0) : 0;
       const sair = () => { const v = [...selecao]; selecao = null; porArea = false; mapa.dragging.enable(); pintarSelecao(); restilizar(v); };
       barraSel.replaceChildren(h('div', { class: 'qd-sel-cab' }, h('b', null, fc ? `${pl(selecao.size, 'face escolhida', 'faces escolhidas')} (${fmtM(mSel)}). Toque nas faces ou escolha uma área.` : `${pl(selecao.size, 'quadra escolhida', 'quadras escolhidas')}. Toque nas quadras ou escolha uma área.`), h('button', { class: 'ic', 'aria-label': 'Sair da seleção', onclick: sair }, ico('fechar'))),
         h('div', { class: 'qd-sel-linha' }, h('button', { class: 'btn sec peq', onclick: () => { porArea = true; mapa.dragging.disable(); toast('Arraste o dedo sobre o mapa para marcar a área.', 3000); } }, 'Escolher por área'), selecao.size > 1 ? h('button', { class: 'btn sec peq', onclick: () => { const v = [...selecao]; selecao = new Set(); restilizar(v); pintarSelecao(); } }, 'Limpar escolha') : null),
-        h('div', { class: 'qd-sel-linha' }, ehCoord() ? eqSel.el : null, sitSel,
+        h('div', { class: 'qd-sel-linha' }, ehCoord() ? eqSel.el : null, sitSel, ehCoord() && !fc ? marcaSel : null,
           h('button', { class: 'btn peq', onclick: aplicar }, 'Aplicar'), h('button', { class: 'btn sec peq', onclick: sair }, 'Sair')));
       bts.classList.toggle('oculto', !!selecao);
     }
@@ -2427,6 +2434,7 @@
       if (S.legAberta == null) S.legAberta = mapa.getSize().y >= 520;
       leg.onAdd = () => h('div', { class: 'mapa-leg' + (S.legAberta ? '' : ' recolhida') }, h('button', { class: 'leg-bt', onclick: (e) => { L.DomEvent.stop(e); S.legAberta = !S.legAberta; e.target.closest('.mapa-leg').classList.toggle('recolhida', !S.legAberta); e.target.textContent = S.legAberta ? 'Legenda ▾' : 'Legenda ▸'; } }, S.legAberta ? 'Legenda ▾' : 'Legenda ▸'), itens.map(([t, c]) => h('div', null, h('span', { style: `background:${c}` }), t)), itQd.length ? [h('b', { class: 'leg-tit' }, 'Quadras'), itQd.map(([t, c]) => h('div', null, h('span', { class: 'leg-qd', style: `background:${c}` }), t))] : null,
         itFc.length ? [h('b', { class: 'leg-tit' }, 'Faces'), itFc.map(([t, c]) => h('div', null, h('span', { class: 'leg-fc', style: `background:${c}` }), t))] : null,
+        (() => { const vs = [...qdSit.values()]; if (ehCoord()) { const t = [['Neofloresta', 'Quadra da Neofloresta'], ['Validação', 'Quadra em validação']].filter(([m]) => vs.some((x) => x.marca === m)); return t.length ? [h('b', { class: 'leg-tit' }, 'Marcas'), t.map(([m, tx]) => h('div', null, h('span', { class: 'leg-fc', style: `background:${COR_MARCA[m]}` }), tx))] : null; } return vs.some((x) => motivoBloqueio(x)) ? [h('b', { class: 'leg-tit' }, 'Quadras'), h('div', null, h('span', { class: 'leg-fc', style: 'background:#5F6B70' }), '🔒 Bloqueada para você')] : null; })(),
         setDados || veCom ? h('b', { class: 'leg-tit' }, 'Camadas') : null,
         setDados ? [chaveCamada('Setores Norte, Sul, Leste e Oeste', verSet(), (v) => trocarCamada('set', v)), verSet() ? h('div', { class: 'leg-setores' }, setDados.setores.map((st) => h('span', null, h('i', { style: `background:${st.cor}` }), st.n))) : null] : null,
         veCom ? [chaveCamada('Pontos de comunicação', verCom(), (v) => trocarCamada('com', v)), verCom() ? [h('div', null, h('span', { class: 'leg-com aberto' }), 'Aberto'), h('div', null, h('span', { class: 'leg-com resolvido' }), 'Resolvido pela coordenação')] : null] : null);
@@ -4344,6 +4352,14 @@
   const COR_SEM_ACESSO = '#5D4037'; // marrom pontilhado: face de quadra onde a equipe não entra
   const rotFace = (s) => (s.cond === 'sem_acesso' ? 'Sem acesso' : (s.situacao || 'A levantar') + (s.cond === 'irregular' ? ' · calçada irregular' : ''));
   const COR_FC = { 'A levantar': '#78909C', 'Em levantamento': '#F2A900', Levantada: '#2E7D32', 'Levantada, sem árvores': '#6B85A3' }; // cinza-azulado tracejado: longe do teal das equipes
+  // quadra fechada para quem está olhando: em validação (todos, menos a coordenação), da Neofloresta (parceiro), de outra pessoa (parceiro)
+  const COR_MARCA = { Validação: '#5D4037', Neofloresta: '#00546E' };
+  function motivoBloqueio(s) {
+    s = s || {}; if (ehCoord()) return '';
+    if (s.marca === 'Validação') return 'Quadra em validação. Ninguém coleta nela por enquanto.';
+    if (modoQuadra()) { if (s.marca === 'Neofloresta') return 'Quadra da Neofloresta.'; if (s.equipe && s.equipe !== minhaEquipe()) return 'Quadra reservada para ' + s.equipe + '.'; }
+    return '';
+  }
   const COR_QD = { 'A levantar': '#9AA9B0', 'Em levantamento': '#F2A900', Levantada: '#2E7D32' };
   const minhaEquipe = () => (S.projeto && S.projeto.equipe) || (S.sessao && S.sessao.usuario && S.sessao.usuario.equipe) || '';
   async function carregarQuadras() {
@@ -4385,6 +4401,7 @@
         f.__pend = true; m.faces.set(i.numero, f); continue;
       }
       const q = m.get(i.numero) || { numero: i.numero, situacao: 'A levantar', equipe: '' };
+      if (i.marca !== undefined) { q.marca = i.marca; q.__pend = true; m.set(i.numero, q); continue; }
       if (i.situacao) q.situacao = i.situacao; if (i.equipe != null) q.equipe = i.equipe; else if (!q.equipe && perfil() === 'coletor') q.equipe = minhaEquipe();
       q.__pend = true; m.set(i.numero, q);
     }

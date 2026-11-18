@@ -800,3 +800,6 @@ html { touch-action: pan-x pan-y; } /* sem zoom de pinça na página (o mapa tem
 .ped-lista { display:flex; flex-direction:column; gap:.75rem; max-height:60vh; overflow:auto; }
 .ped-lin { display:flex; flex-direction:column; gap:.3rem; padding:.6rem 0; border-bottom:1px solid rgba(0,0,0,.12); }
 .ped-lin .linha-btn { display:flex; gap:.5rem; flex-wrap:wrap; }
+
+/* 2.15: marcas de quadra e cadeado */
+.aviso-bloq { display:block; padding:.5rem .6rem; border-radius:.5rem; background:rgba(55,71,79,.12); font-weight:600; }
