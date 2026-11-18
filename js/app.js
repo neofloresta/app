@@ -832,16 +832,17 @@
     dados: null,
     chave: () => 'reservas:' + (S.projeto ? S.projeto.id : '') + ':' + (S.sessao ? S.sessao.u : ''),
     ativo: () => !Api.demo && !!S.projeto && !!S.sessao && (modoQuadra() || ehCoord()),
-    async cache() { if (!this.dados && this.ativo()) { try { this.dados = (await Store.get(this.chave())) || null; } catch (e) { /* sem cache */ } } return this.dados; },
+    async cache() { if (this.dados && this.dono !== this.chave()) this.dados = null; if (!this.dados && this.ativo()) { this.dono = this.chave(); try { this.dados = (await Store.get(this.chave())) || null; } catch (e) { /* sem cache */ } } return this.dados; },
     // devolve true quando algum pedido mudou de situação desde a última leitura
     async carregar() {
       if (!this.ativo() || !navigator.onLine || S.expirada) return false;
       try {
         const antes = JSON.stringify(((this.dados || {}).pedidos || []).map((x) => x.id + x.situacao)); const r = await Api.b.reservaListar(S.projeto.id); this.lido = Date.now(); if (!r) return false;
-        this.dados = r; await Store.set(this.chave(), r).catch(() => {}); return antes !== JSON.stringify(r.pedidos.map((x) => x.id + x.situacao));
+        this.dados = r; this.dono = this.chave(); await Store.set(this.chave(), r).catch(() => {}); return antes !== JSON.stringify(r.pedidos.map((x) => x.id + x.situacao));
       } catch (e) { return false; }
     },
-    aguardando() { return ((this.dados || {}).pedidos || []).filter((x) => x.situacao === 'Aguardando'); },
+    limpar() { this.dados = null; this.lido = 0; },
+    aguardando() { return (((this.dono === this.chave() ? this.dados : null) || {}).pedidos || []).filter((x) => x.situacao === 'Aguardando'); },
     pedido(quadra) { return this.aguardando().find((x) => x.quadra === String(quadra) && (ehCoord() || String(x.login).toLowerCase() === String(S.sessao.u).toLowerCase())); },
   };
   // avisos do coletor parceiro: pedidos esperando, quadra liberada ou pedido recusado (some quando ele toca em Ok)
@@ -1015,7 +1016,7 @@
             else await Api.b.comSalvar(x.projeto, { id: x.id, texto: x.texto, latitude: x.latitude, longitude: x.longitude, quando: x.quando });
             feitos.set(x.id, x.v); mudou = true;
           } catch (e) {
-            if (e.semRede || /desconhecida/i.test(e.message || '')) continue; // sem internet ou servidor antigo: fica na fila
+            if (e.semRede || e.rede || e.sessao || /desconhecida|Servidor respondeu|trava|tempo/i.test(e.message || '')) continue; // sem internet, sessão expirada, servidor com erro ou antigo: fica na fila
             feitos.set(x.id, x.v); toast('Ponto de comunicação não enviado: ' + (e.message || 'erro'), 7000, null, true); mudou = true;
           }
         }
@@ -2023,7 +2024,7 @@
     const btCidade = h('button', { class: 'mapa-bt', onclick: () => verCidade(), 'aria-label': 'Ver a cidade', title: 'Ver a cidade' }, ico('cidade'), h('span', { class: 'so-leitor' }, 'Ver a cidade'));
     const btSel = h('button', { class: 'mapa-bt pilula oculto', onclick: () => iniciarSelecao(), 'aria-label': 'Selecionar quadras ou faces' }, ico('selecionar'), 'Selecionar');
     const btCom = Com.veem() ? h('button', { class: 'mapa-bt grande', onclick: () => novoCom(), 'aria-label': 'Ponto de comunicação', title: 'Ponto de comunicação' }, ico('balao'), h('span', { class: 'so-leitor' }, 'Ponto de comunicação')) : null;
-    const btPed = ehCoord() && !Api.demo ? h('button', { class: 'mapa-bt pilula', onclick: () => abrirPedidos(), 'aria-label': 'Pedidos de reserva de quadra', title: 'Pedidos de reserva de quadra' }, ico('selecionar'), 'Pedidos', h('span', { class: 'selo-ped oculto' })) : null;
+    const btPed = ehCoord() && !Api.demo && !servidorMenos(2.14) ? h('button', { class: 'mapa-bt pilula', onclick: () => abrirPedidos(), 'aria-label': 'Pedidos de reserva de quadra', title: 'Pedidos de reserva de quadra' }, ico('selecionar'), 'Pedidos', h('span', { class: 'selo-ped oculto' })) : null;
     const pintarBtPed = () => { if (!btPed) return; const n = Reservas.aguardando().length; const sl = btPed.querySelector('.selo-ped'); sl.textContent = n; sl.classList.toggle('oculto', !n); };
     const bts = h('div', { class: 'mapa-bts' }, btPed, btSel, btCidade, btCom, btEu);
     const fab = campo ? h('button', { class: 'btn bt-principal', id: 'bt-principal' }, '...') : null; // "Começar o turno" ou "Nova árvore" (pintarDia)
@@ -2234,7 +2235,7 @@
     }
     // coletor parceiro: pedir (ou cancelar o pedido de) uma quadra ainda sem reserva
     function blocoPedido(q) {
-      const sq = qdSit.get(q.n) || {}; if (!(perfil() === 'coletor' && !sq.equipe && modoQuadra())) return null;
+      const sq = qdSit.get(q.n) || {}; if (!(perfil() === 'coletor' && !sq.equipe && modoQuadra()) || servidorMenos(2.14)) return null;
       return Reservas.pedido(q.n)
         ? [h('small', { class: 'dica' }, 'Pedido enviado. Aguarde a coordenação.'), h('button', { class: 'btn sec peq', onclick: () => cancelarPedido(q) }, 'Cancelar o pedido')]
         : [h('small', { class: 'dica' }, 'Quadra sem reserva.'), h('button', { class: 'btn peq', onclick: () => pedirQuadra(q) }, 'Pedir esta quadra')];
@@ -4338,6 +4339,7 @@
   const fmtKm = (m) => (m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km';
   const fmtM = (m) => (m >= 1000 ? fmtKm(m) : fmtN(Math.round(m)) + ' m');
   // funções que dependem do servidor novo: avisa em vez de gravar pela metade
+  const servidorMenos = (min) => { const v = parseFloat(S.sessao && S.sessao.versaoScript); return !Api.demo && v > 0 && v < min; }; // sem aviso
   const servidorAntigo = (min) => { const v = parseFloat(S.sessao && S.sessao.versaoScript); if (Api.demo || !(v > 0) || v >= min) return false; toast(`Esta função precisa do servidor ${String(min)}. Avise a coordenação para atualizar.`, 6000); return true; };
   const COR_SEM_ACESSO = '#5D4037'; // marrom pontilhado: face de quadra onde a equipe não entra
   const rotFace = (s) => (s.cond === 'sem_acesso' ? 'Sem acesso' : (s.situacao || 'A levantar') + (s.cond === 'irregular' ? ' · calçada irregular' : ''));

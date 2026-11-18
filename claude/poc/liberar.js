@@ -42,6 +42,7 @@ const suites = [
   ['formulário de Divinópolis (categorias, CAP, risco, ajuda)', 'node bf5.js'],
   ['2.13 nas telas: comunicação, mapa ao vivo, setores, dados da câmera', 'node b213.js'],
   ['2.13 passeio completo como coordenador (23 telas, balões, exportação, celular)', 'node b213c.js'],
+  ['servidor 2.14: correções do verificador (quadra em levantamento, reserva direta, cancelados)', 'node b214r.js'],
   ['2.14 nas telas: pedido de reserva pelo coletor parceiro e aprovação da coordenação', 'node b214.js'],
   ['rendimento por equipe e filtro de dia no mapa', 'node brend.js'],
   ['GPS parado, códigos em dois celulares, toque no ponto', 'node b9.js'],

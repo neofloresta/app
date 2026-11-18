@@ -968,6 +968,15 @@ function abaPed(projetoId) {
   return garantirCab(sh, COLS_PED);
 }
 const reservasAtivas = (quadras, equipe) => quadras.filter((q) => q.equipe && q.equipe === equipe && !q.fechada_em).length;
+// quadra sem equipe mas com trabalho: face começada, quadra levantada/fechada. Não entra em pedido (a coordenação dá direto)
+function quadraComTrabalho(q, n, faces) { if (q && (q.fechada_em || (q.situacao && q.situacao !== 'A levantar'))) return true; return faces.some((f) => String(f.quadra) === String(n) && f.situacao && f.situacao !== 'A levantar'); }
+// a coordenação deu a quadra a uma equipe pelo mapa: os pedidos esperando por ela caem como recusados
+function derrubarPedidos(projetoId, nums, equipe) {
+  try {
+    const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); const sh = ss.getSheetByName('PedidosReserva'); if (!sh || sh.getLastRow() < 2) return;
+    const agora = new Date().toISOString(); lerOS(sh).filter((o) => o.situacao === 'Aguardando' && nums.indexOf(String(o.quadra)) >= 0).forEach((o) => { const dono = o.equipe === equipe; Object.assign(o, { situacao: dono ? 'Aprovado' : 'Recusado', decidido_por: 'sistema', decidido_em: agora, motivo: dono ? '' : 'Quadra reservada para outra pessoa.' }); gravarSetor(sh, o); });
+  } catch (e) { /* o pedido segue esperando e a coordenação decide */ }
+}
 function pedirReserva(projetoId, lista, usr) {
   if (!timeParceiroDo(usr)) throw new Error('Só o time parceiro pede reserva de quadra.');
   if (!usr.equipe) throw new Error('Seu acesso não tem equipe. Avise a coordenação.');
@@ -978,7 +987,7 @@ function pedirReserva(projetoId, lista, usr) {
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
     const quadras = lerSitQuadras(projetoId); const por = {}; quadras.forEach((q) => { por[q.numero] = q; });
-    const sh = abaPed(projetoId); const todos = sh.getLastRow() < 2 ? [] : lerOS(sh);
+    const sh = abaPed(projetoId); const todos = sh.getLastRow() < 2 ? [] : lerOS(sh); let facesTodas = null;
     const meus = todos.filter((o) => String(o.login).toLowerCase() === String(usr.login).toLowerCase() && o.situacao === 'Aguardando');
     let ocupadas = reservasAtivas(quadras, usr.equipe) + meus.length;
     const criados = []; const recusadas = []; const agora = new Date().toISOString();
@@ -986,6 +995,7 @@ function pedirReserva(projetoId, lista, usr) {
       if (!idx.nums.has(n)) { recusadas.push({ numero: n, motivo: 'Quadra não existe na camada.' }); return; }
       const q = por[n] || {};
       if (q.equipe) { recusadas.push({ numero: n, motivo: q.equipe === usr.equipe ? 'Esta quadra já é sua.' : 'Quadra já reservada para outra pessoa.' }); return; }
+      if (!facesTodas) facesTodas = lerSitFaces(projetoId); if (quadraComTrabalho(q, n, facesTodas)) { recusadas.push({ numero: n, motivo: 'Esta quadra já está em levantamento. Fale com a coordenação.' }); return; }
       if (meus.some((o) => o.quadra === n)) { recusadas.push({ numero: n, motivo: 'Você já pediu esta quadra. Aguarde a coordenação.' }); return; }
       if (ocupadas >= MAX_RESERVAS) { recusadas.push({ numero: n, motivo: 'Limite de ' + MAX_RESERVAS + ' quadras reservadas ou pedidas ao mesmo tempo. Feche uma quadra antes de pedir outra.' }); return; }
       const o = { id: 'R' + Utilities.getUuid().replace(/-/g, '').slice(0, 14), quadra: n, login: usr.login, nome: String(usr.nome || usr.login).slice(0, 60), equipe: String(usr.equipe).slice(0, 60), criado_em: agora, situacao: 'Aguardando', decidido_por: '', decidido_em: '', motivo: '' };
@@ -1000,7 +1010,7 @@ function listarReservas(projetoId, usr) {
   const sh = abaPed(projetoId); const todos = sh.getLastRow() < 2 ? [] : lerOS(sh);
   const corte = new Date(Date.now() - 14 * 864e5).toISOString();
   const pub = (o) => ({ id: o.id, quadra: String(o.quadra), login: o.login, nome: o.nome, equipe: o.equipe, criado_em: o.criado_em, situacao: o.situacao, decidido_por: o.decidido_por, decidido_em: o.decidido_em, motivo: o.motivo });
-  const itens = todos.filter((o) => (coord || String(o.login).toLowerCase() === String(usr.login).toLowerCase()) && (o.situacao === 'Aguardando' || String(o.decidido_em || o.criado_em) >= corte)).map(pub).sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)));
+  const itens = todos.filter((o) => (coord || String(o.login).toLowerCase() === String(usr.login).toLowerCase()) && (o.situacao === 'Aguardando' || (!(coord && o.situacao === 'Cancelado') && String(o.decidido_em || o.criado_em) >= corte))).map(pub).sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)));
   const ativas = coord ? null : reservasAtivas(lerSitQuadras(projetoId), usr.equipe);
   return { pedidos: itens, max: MAX_RESERVAS, ativas: ativas };
 }
@@ -1016,7 +1026,9 @@ function decidirReserva(projetoId, id, decisao, motivo, usr) {
     const agora = new Date().toISOString(); const quem = String(usr.nome || usr.login).slice(0, 60);
     if (dec === 'Recusado') { Object.assign(o, { situacao: 'Recusado', decidido_por: quem, decidido_em: agora, motivo: mt }); gravarSetor(sh, o); auditar(usr.login, 'reserva_recusar', o.quadra, o.nome); return { id: o.id, situacao: 'Recusado' }; }
     const quadras = lerSitQuadras(projetoId); const q = quadras.find((x) => x.numero === String(o.quadra)) || {};
+    if (q.equipe && q.equipe === o.equipe) { Object.assign(o, { situacao: 'Aprovado', decidido_por: quem, decidido_em: agora, motivo: mt }); gravarSetor(sh, o); return { id: o.id, situacao: 'Aprovado' }; }
     if (q.equipe) { Object.assign(o, { situacao: 'Recusado', decidido_por: 'sistema', decidido_em: agora, motivo: 'Quadra já reservada para ' + q.equipe + '.' }); gravarSetor(sh, o); return { id: o.id, situacao: 'Recusado', motivo: o.motivo }; }
+    if (quadraComTrabalho(q, o.quadra, lerSitFaces(projetoId))) { Object.assign(o, { situacao: 'Recusado', decidido_por: 'sistema', decidido_em: agora, motivo: 'Quadra já está em levantamento por outra equipe.' }); gravarSetor(sh, o); return { id: o.id, situacao: 'Recusado', motivo: o.motivo }; }
     if (reservasAtivas(quadras, o.equipe) >= MAX_RESERVAS) throw new Error(o.nome + ' já tem ' + MAX_RESERVAS + ' quadras reservadas. Ela precisa fechar uma antes.');
     const r = marcarQuadrasSemTrava(projetoId, [{ tipo: 'quadra', numero: String(o.quadra), equipe: o.equipe }], usr, true, idx.nums, idx.faces);
     if (r.recusadas.length) throw new Error(r.recusadas[0].motivo);
@@ -1930,6 +1942,7 @@ function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums, facesIdx) {
     if (mudou.length) {
       const linhas = todas.map((q) => cab.map((c) => seguro(q[c] == null ? '' : String(q[c]))));
       const rg = sh.getRange(2, 1, linhas.length, cab.length); rg.setNumberFormat('@'); rg.setValues(linhas);
+      if (coord) { const porEq = {}; itens.forEach((it) => { if (it.equipe && mudou.indexOf(String(it.numero)) >= 0) (porEq[it.equipe] = porEq[it.equipe] || []).push(String(it.numero)); }); Object.keys(porEq).forEach((eq) => derrubarPedidos(projetoId, porEq[eq], eq)); }
       auditar(usr.login, 'quadras_marcar', projetoId, mudou.length + ' quadra(s): ' + mudou.slice(0, 20).join(', '));
     }
     return { alteradas: mudou.length, recusadas };

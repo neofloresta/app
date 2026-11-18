@@ -50,8 +50,8 @@ const falha = async (fn) => { try { await fn(); return ''; } catch (e) { return 
   // 8. aprovar já com 5 reservadas (coordenação deu quadras direto): não passa; quadra reservada direto cai como recusada
   await p('reserva_pedir', { quadras: [N[14]] }, U.maria); await p('quadras_marcar', { itens: N.slice(9, 14).map((n) => ({ tipo: 'quadra', numero: n, equipe: 'MARIA' })) }, U.rev); const pm5 = (await p('reserva_listar', {}, U.rev)).pedidos.find((x) => x.login === 'maria' && x.quadra === N[14]);
   const lim = await falha(() => p('reserva_decidir', { id: pm5.id, decisao: 'Aprovado' }, U.rev));
-  await p('quadras_marcar', { itens: [{ tipo: 'quadra', numero: N[3], equipe: 'MARIA' }] }, U.rev); const ped3 = (await p('reserva_listar', {}, U.rev)).pedidos.find((x) => x.login === 'jose' && x.quadra === N[3]); const jaRes = await p('reserva_decidir', { id: ped3.id, decisao: 'Aprovado' }, U.rev);
-  ok('T.8', /já tem 5/.test(lim) && jaRes.situacao === 'Recusado' && /já reservada/.test(jaRes.motivo), `com 5 reservadas: "${lim}"; quadra dada direto a outra pessoa: ${jaRes.situacao} ("${jaRes.motivo}")`);
+  await p('quadras_marcar', { itens: [{ tipo: 'quadra', numero: N[3], equipe: 'MARIA' }] }, U.rev); const ped3 = (await p('reserva_listar', {}, U.rev)).pedidos.find((x) => x.login === 'jose' && x.quadra === N[3]); const jaRes = ped3; // desde a 2.14 o pedido já cai sozinho quando a coordenação dá a quadra a outra pessoa
+  ok('T.8', /já tem 5/.test(lim) && jaRes.situacao === 'Recusado' && /reservada para outra pessoa/.test(jaRes.motivo), `com 5 reservadas: "${lim}"; quadra dada direto a outra pessoa: ${jaRes.situacao} ("${jaRes.motivo}")`);
   // 9. quadra fechada deixa de contar no limite (a pessoa pode pedir outra)
   const rest = (await p('reserva_listar', {}, U.maria)); ok('T.9', rest.max === 5 && rest.ativas >= 5, `limite ${rest.max}; a Maria tem ${rest.ativas} reservadas`);
   const falhou = Object.entries(R).filter(([, v]) => !v.passou); console.log(`\n${Object.keys(R).length - falhou.length}/${Object.keys(R).length} passaram`); process.exit(falhou.length ? 1 : 0);
