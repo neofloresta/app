@@ -1,9 +1,10 @@
 {
- "versao": "2.12.0",
+ "versao": "2.13.0",
  "data": "2026-11-17",
  "notas": [
-  "Quadra sem acesso: a equipe marca com a foto da entrada",
-  "Calçada irregular: cadastro rápido, com avaliação de risco nível 1",
-  "Fitossanidade (boa, regular ou ruim) no lugar de praga e doença aparente"
+  "Ponto de comunicação no mapa: a equipe avisa a coordenação com um balão e um texto",
+  "O mapa se atualiza sozinho a cada 30 segundos: os pontos da outra dupla aparecem",
+  "Duas duplas da Neofloresta podem levantar a mesma face ao mesmo tempo",
+  "Setores Norte, Sul, Leste e Oeste no mapa (só para se orientar)"
  ]
 }

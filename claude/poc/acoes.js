@@ -1,6 +1,6 @@
 // Ações de tela reutilizadas pelos testes
 const path = require('path');
-const FOTO = path.join(__dirname, 'foto.jpg');
+const FOTO = process.env.FOTO_ARQ || path.join(__dirname, 'foto.jpg');
 const campo = (p, nome) => p.locator(`[data-campo="${nome}"]`);
 async function aba(p, nome) { await p.click('.prog-topo'); await p.click(`.folha .menu-it:has-text("${nome}")`); await p.waitForTimeout(120); }
 // passear pelas etapas sem a trava (como no treino, antes de preencher): para testes que só olham o que aparece

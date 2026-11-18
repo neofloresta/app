@@ -11,7 +11,7 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.12';
+const VERSAO_SCRIPT = '2.13';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id', 'indicacao'];
 const COLS_TIMES = ['id', 'nome', 'tipo', 'projeto', 'ativo', 'criado_em'];
 const TIPOS_TIME = ['Próprio', 'Parceiro'];
@@ -30,11 +30,11 @@ const ACOES_TIME = ['sessao', 'sair', 'aceitar_termo', 'trocar_senha', 'formular
 // auxiliar: entra só para ver o painel de produtividade e remuneração dele
 const ACOES_AUX = ['sessao', 'sair', 'aceitar_termo', 'trocar_senha', 'formulario', 'producao_minha'];
 // coordenação vendo as telas de outro perfil: só consultas, nada é gravado
-const ACOES_COMO = ['sessao', 'formulario', 'estilo', 'mapa', 'painel', 'foto_ver', 'listar', 'situacao_meus', 'producao_minha', 'producao_time', 'pessoas_listar', 'conferir', 'setores_camada', 'setores_situacao', 'quadras_camada', 'quadras_situacao', 'os_listar', 'trajetos'];
+const ACOES_COMO = ['sessao', 'formulario', 'estilo', 'mapa', 'painel', 'foto_ver', 'listar', 'situacao_meus', 'producao_minha', 'producao_time', 'pessoas_listar', 'conferir', 'setores_camada', 'setores_situacao', 'quadras_camada', 'quadras_situacao', 'os_listar', 'trajetos', 'com_listar', 'mapa_novos'];
 // Colunas que só o servidor escreve (validação). Um envio do aparelho nunca as apaga.
 const COLS_SISTEMA = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'numero_unico', 'servidor_em', 'pagamento'];
 // Colunas internas que o perfil cliente não recebe
-const COLS_INTERNAS = ['usuario', 'validacao_obs', 'servidor_em'];
+const COLS_INTERNAS = ['usuario', 'validacao_obs', 'servidor_em', 'sensores_foto']; // sensores_foto: inclinação e câmera de cada foto, só para a coordenação (estimador de altura)
 // quem estava na dupla: fica com a Neofloresta, o cliente não recebe
 const COLS_DUPLA = ['avaliador', 'avaliador_id', 'avaliador_registro', 'avaliador_vinculo', 'auxiliar', 'auxiliar_id', 'auxiliar_vinculo', 'fora_do_setor'];
 const SESSAO_DIAS = 30;
@@ -43,7 +43,7 @@ const BLOQUEIO_MIN = 15;
 const FUSO = 'America/Sao_Paulo';
 const ITERACOES = 1000;
 const SENHA_MIN = 8;
-const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar', 'setores_importar', 'setores_atribuir', 'auditoria_sortear', 'auditoria_conferir', 'medicao_fechar', 'chuva_registrar'];
+const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar', 'setores_importar', 'setores_atribuir', 'auditoria_sortear', 'auditoria_conferir', 'medicao_fechar', 'chuva_registrar', 'com_salvar', 'com_resolver', 'com_apagar'];
 // texto que começaria uma fórmula na planilha vira texto puro
 function seguro(v) { v = v == null ? '' : String(v); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
 function hashToken(t) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'sessao|' + t, Utilities.Charset.UTF_8)); }
@@ -80,7 +80,7 @@ function configurar() {
 function doGet() { BASE_ABERTA = null; TABS = {}; return json({ ok: true, app: 'Neofloresta Inventário', versao: VERSAO_SCRIPT, configurado: !!PROPS.getProperty('BASE_ID') }); }
 
 function doPost(e) {
-  BASE_ABERTA = null; TABS = {};
+  BASE_ABERTA = null; TABS = {}; EQ_PARC = null;
   let d = {};
   try {
     d = JSON.parse(e.postData.contents);
@@ -123,6 +123,11 @@ function doPost(e) {
       case 'listar': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, listarPagina(d.projeto, d.de, usr.integracao ? Math.min(+d.n || 5000, 5000) : d.n, usr)));
       case 'reservar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, reservar(d.projeto, d.prefixo, d.campo, d.qtd, d.minimo)));
       case 'mapa': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, colunas(d.projeto, d.campos || [], usr)));
+      case 'mapa_novos': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, colunas(d.projeto, d.campos || [], usr, String(d.desde || ''))));
+      case 'com_listar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, listarComunicacao(d.projeto, String(d.desde || ''))));
+      case 'com_salvar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarComunicacao(d.projeto, d.com || {}, usr)));
+      case 'com_resolver': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, resolverComunicacao(d.projeto, d.id, d.resposta, d.situacao, usr)));
+      case 'com_apagar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, apagarComunicacao(d.projeto, d.id, usr)));
       case 'painel': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, painel(d.projeto, usr)));
       case 'foto_ver': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, verFoto(d.projeto, d.id, usr)));
       case 'situacao_meus': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, itens: situacaoMeus(d.projeto, usr) });
@@ -377,6 +382,9 @@ function equipesInfo(usr) {
   return out;
 }
 // time de parceiro (empresa júnior, por exemplo): a parte do time sai do valor do registro e o avaliador diz, no começo do turno, se está sozinho ou com auxiliar
+let EQ_PARC = null;
+// nomes das equipes cujos usuários são de time parceiro (minúsculas); lido uma vez por chamada
+function equipesParceiras() { if (EQ_PARC) return EQ_PARC; const m = {}; try { tabela('Usuarios').forEach((u) => { const e = String(u.equipe || '').trim().toLowerCase(); if (e && timeParceiroDo(u)) m[e] = 1; }); } catch (e) { /* sem usuários */ } EQ_PARC = m; return m; }
 function timeParceiroDo(u) { const t = String(u.indicacao || '').trim(); return !!t && tiposDosTimes()(t) === 'parceiro'; }
 function auxiliarDoTurno(id, usr, projetoId) {
   if (!id) return ''; const pe = tabela('Pessoas').find((x) => x.id === String(id));
@@ -622,11 +630,11 @@ function salvarRegistro(projetoId, linha, usr) {
         if (v === 'Devolvido') linha.validacao = 'Corrigido';
       }
       const valores = cab.map((c) => (c in linha ? celula(linha[c]) : celula(atual[c])));
-      gravarLinha(sh, r, valores);
+      gravarLinha(sh, r, valores); marcarMudanca(projetoId);
       return { atualizado: true, validacao: linha.validacao || atual.validacao || '' };
     }
     linha.validacao = 'Pendente'; linha.numero_unico = proximoNumero(projetoId, sh, cab);
-    gravarLinha(sh, sh.getLastRow() + 1, cab.map((c) => celula(linha[c])));
+    gravarLinha(sh, sh.getLastRow() + 1, cab.map((c) => celula(linha[c]))); marcarMudanca(projetoId);
     return { novo: true };
   } finally { lock.releaseLock(); }
 }
@@ -716,23 +724,37 @@ function paraCliente(projetoId, linhas) {
   return linhas.filter((l) => l.validacao !== 'Descartado' && (todos || l.validacao === 'Validado')).map((l) => { oc.forEach((c) => delete l[c]); return l; });
 }
 // Só algumas colunas de todas as linhas, em lista compacta (mapa e sequência do código)
-function colunas(projetoId, campos, usr) {
+// desde (ISO do servidor): só as linhas gravadas depois (mapa ao vivo). Sem desde, todas as linhas.
+// O carimbo "rg:" no cache diz quando entrou o último registro: sem novidade, a resposta sai sem abrir a planilha.
+function marcarMudanca(projetoId) { try { CacheService.getScriptCache().put('rg:' + projetoId, new Date().toISOString(), 21600); } catch (e) { /* sem cache: as consultas leem a planilha */ } }
+function colunas(projetoId, campos, usr, desde) {
+  const agora = new Date(Date.now() - 15000).toISOString(); // 15 s de folga: um envio que ainda estava gravando entra na próxima consulta
+  if (desde) { let st = null; try { st = CacheService.getScriptCache().get('rg:' + projetoId); } catch (e) { st = null; } if (st && st <= desde) return { cab: campos, linhas: [], agora: agora }; }
   const sh = planilha(projetoId); const total = sh.getLastRow() - 1;
-  if (total < 1) return { cab: campos, linhas: [] };
+  if (total < 1) return { cab: campos, linhas: [], agora: agora };
   const cliente = usr && usr.perfil === 'cliente'; const coletor = usr && usr.perfil === 'coletor';
   const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   const pedir = (cliente ? campos.slice(0, 30).concat(['validacao']) : campos.slice(0, 30));
   const ocC = cliente ? ocultasCliente(projetoId) : [];
   const proibida = (c) => (cliente && ocC.indexOf(c) >= 0) || (coletor && (COLS_INTERNAS.indexOf(c) >= 0 || COLS_SISTEMA.indexOf(c) >= 0 || COLS_DUPLA.indexOf(c) >= 0)) || (usr && usr.perfil === 'revisor' && c === 'pagamento');
-  const cols = pedir.map((c, k) => { const i = cab.indexOf(c); return i < 0 || (proibida(c) && !(cliente && k === pedir.length - 1)) ? null : sh.getRange(2, i + 1, total, 1).getValues(); });
+  let ini = 2, n = total; let quando = null; // quando: carimbo de gravação de cada linha lida (só no modo incremental)
+  if (desde) {
+    const is = cab.indexOf('servidor_em'); if (is < 0) return { cab: campos, linhas: [], agora: agora };
+    const carimbos = sh.getRange(2, is + 1, total, 1).getValues().map((x) => (x[0] instanceof Date ? x[0].toISOString() : String(x[0] || '')));
+    let a = -1, b = -1; carimbos.forEach((c, i) => { if (c > desde) { if (a < 0) a = i; b = i; } });
+    if (a < 0) return { cab: campos, linhas: [], agora: agora };
+    ini = 2 + a; n = b - a + 1; quando = carimbos.slice(a, b + 1);
+  }
+  const cols = pedir.map((c, k) => { const i = cab.indexOf(c); return i < 0 || (proibida(c) && !(cliente && k === pedir.length - 1)) ? null : sh.getRange(ini, i + 1, n, 1).getValues(); });
   const todos = cliente && clienteVeTodos(projetoId);
   const linhas = [];
-  for (let r = 0; r < total; r++) {
+  for (let r = 0; r < n; r++) {
+    if (quando && !(quando[r] > desde)) continue;
     const l = cols.map((c) => { if (!c) return ''; const x = c[r][0]; return x instanceof Date ? x.toISOString() : typeof x === 'string' ? x.replace(/^'/, '') : x; });
     if (cliente) { const v = l.pop(); if (v === 'Descartado' || (!todos && v !== 'Validado')) continue; }
     linhas.push(l);
   }
-  return { cab: campos, linhas: linhas };
+  return { cab: campos, linhas: linhas, agora: agora };
 }
 function linhaObj(cab, l) { const o = {}; cab.forEach((c, i) => { if (c !== '') o[c] = l[i] instanceof Date ? l[i].toISOString() : typeof l[i] === 'string' ? l[i].replace(/^'/, '') : l[i]; }); return o; }
 
@@ -848,10 +870,88 @@ function importar(projetoId, linhas, usr) {
       rg.setNumberFormats(novos.map((l) => l.map((v) => (typeof v === 'number' ? '0.##########' : '@'))));
       rg.setValues(novos);
     }
+    if (novos.length) marcarMudanca(projetoId);
     return { inseridos: novos.length, ignorados: linhas.length - novos.length };
   } finally { lock.releaseLock(); }
 }
 
+
+
+// ---------- Pontos de comunicação: aviso solto no mapa (texto e posição), sem foto e sem pagamento ----------
+// Todo coletor e a coordenação veem. Cliente e parceiro não. A coordenação responde (Resolvido) ou apaga; o coletor edita ou apaga o que é dele enquanto aberto.
+const COLS_COM = ['id', 'texto', 'latitude', 'longitude', 'login', 'nome', 'equipe', 'criado_em', 'situacao', 'resposta', 'respondido_por', 'respondido_em', 'atualizado_em'];
+const SITUACOES_COM = ['Aberto', 'Resolvido', 'Apagado'];
+function abaCom(projetoId) {
+  const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('Comunicacao');
+  if (!sh) { sh = ss.insertSheet('Comunicacao'); sh.appendRow(COLS_COM); sh.setFrozenRows(1); }
+  return garantirCab(sh, COLS_COM);
+}
+const marcaCom = (projetoId) => { try { CacheService.getScriptCache().put('cm:' + projetoId, new Date().toISOString(), 21600); } catch (e) { /* sem cache */ } };
+function publicoCom(o) { return { id: o.id, texto: o.texto, latitude: +o.latitude, longitude: +o.longitude, nome: o.nome, equipe: o.equipe, login: o.login, criado_em: o.criado_em, situacao: o.situacao, resposta: o.resposta, respondido_por: o.respondido_por, respondido_em: o.respondido_em, atualizado_em: o.atualizado_em }; }
+// desde (ISO do servidor): só o que mudou depois, inclusive o apagado (para o aparelho tirar do mapa). Sem desde: todos os que existem.
+function listarComunicacao(projetoId, desde) {
+  const agora = new Date(Date.now() - 15000).toISOString();
+  if (desde) { let st = null; try { st = CacheService.getScriptCache().get('cm:' + projetoId); } catch (e) { st = null; } if (st && st <= desde) return { itens: [], agora: agora }; }
+  const sh = abaCom(projetoId); const todos = sh.getLastRow() < 2 ? [] : lerOS(sh);
+  const itens = todos.filter((o) => (desde ? String(o.atualizado_em) > desde : o.situacao !== 'Apagado')).map(publicoCom);
+  return { itens: itens, agora: agora };
+}
+function salvarComunicacao(projetoId, c, usr) {
+  const texto = String(c.texto == null ? '' : c.texto).replace(/[\t\r]+/g, ' ').trim();
+  if (!texto) throw new Error('Escreva o texto do ponto.');
+  if (texto.length > 500) throw new Error('O texto passa de 500 caracteres.');
+  const lat = Number(c.latitude), lon = Number(c.longitude);
+  if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) throw new Error('Posição do ponto inválida.');
+  const id = c.id ? String(c.id) : '';
+  if (id && !/^[0-9a-zA-Z-]{8,60}$/.test(id)) throw new Error('Identificador inválido.');
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = abaCom(projetoId); const todos = sh.getLastRow() < 2 ? [] : lerOS(sh);
+    const existente = id ? todos.find((o) => o.id === id) : null;
+    const agora = new Date().toISOString();
+    if (existente) {
+      const dono = String(existente.login).toLowerCase() === String(usr.login).toLowerCase(); const coord = usr.perfil === 'admin' || usr.perfil === 'revisor';
+      if (!dono && !coord) throw new Error('Este ponto é de outra pessoa.');
+      if (existente.situacao === 'Apagado') throw new Error('Este ponto foi apagado.');
+      if (existente.situacao === 'Resolvido' && !coord) throw new Error('Ponto já resolvido pela coordenação.');
+      existente.texto = texto; existente.latitude = lat; existente.longitude = lon;
+      gravarSetor(sh, Object.assign(existente, { atualizado_em: agora })); marcaCom(projetoId);
+      return { id: existente.id, atualizado: true };
+    }
+    const nid = id || 'C' + Utilities.getUuid().replace(/-/g, '').slice(0, 14);
+    const q = c.quando ? new Date(c.quando) : null; const criado = q && !isNaN(q) && q <= new Date(Date.now() + 6e5) && q >= new Date(Date.now() - 7 * 864e5) ? q.toISOString() : agora; // criado sem internet: vale a hora do aparelho
+    const o = { id: nid, texto: texto, latitude: lat, longitude: lon, login: usr.login, nome: String(usr.nome || usr.login).slice(0, 60), equipe: String(usr.equipe || '').slice(0, 60), criado_em: criado, situacao: 'Aberto', resposta: '', respondido_por: '', respondido_em: '', atualizado_em: agora };
+    gravarSetor(sh, o); marcaCom(projetoId);
+    return { id: nid, novo: true };
+  } finally { lock.releaseLock(); }
+}
+function resolverComunicacao(projetoId, id, resposta, situacao, usr) {
+  const sit = String(situacao || 'Resolvido'); if (sit !== 'Resolvido' && sit !== 'Aberto') throw new Error('Situação inválida.');
+  const txt = String(resposta == null ? '' : resposta).replace(/[\t\r]+/g, ' ').trim(); if (txt.length > 500) throw new Error('A resposta passa de 500 caracteres.');
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = abaCom(projetoId); const o = sh.getLastRow() < 2 ? null : lerOS(sh).find((x) => x.id === String(id));
+    if (!o || o.situacao === 'Apagado') throw new Error('Ponto não encontrado.');
+    o.situacao = sit; o.resposta = sit === 'Resolvido' ? txt : ''; o.respondido_por = sit === 'Resolvido' ? String(usr.nome || usr.login).slice(0, 60) : ''; o.respondido_em = sit === 'Resolvido' ? new Date().toISOString() : '';
+    gravarSetor(sh, Object.assign(o, { atualizado_em: new Date().toISOString() })); marcaCom(projetoId);
+    auditar(usr.login, 'com_resolver', String(id), sit);
+    return { id: o.id, situacao: sit };
+  } finally { lock.releaseLock(); }
+}
+function apagarComunicacao(projetoId, id, usr) {
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = abaCom(projetoId); const o = sh.getLastRow() < 2 ? null : lerOS(sh).find((x) => x.id === String(id));
+    if (!o) throw new Error('Ponto não encontrado.');
+    if (o.situacao === 'Apagado') return { id: o.id, apagado: true };
+    const dono = String(o.login).toLowerCase() === String(usr.login).toLowerCase(); const coord = usr.perfil === 'admin' || usr.perfil === 'revisor';
+    if (!coord && !dono) throw new Error('Este ponto é de outra pessoa.');
+    if (!coord && o.situacao === 'Resolvido') throw new Error('Ponto já resolvido pela coordenação.');
+    o.situacao = 'Apagado'; gravarSetor(sh, Object.assign(o, { atualizado_em: new Date().toISOString() })); marcaCom(projetoId);
+    auditar(usr.login, 'com_apagar', String(id), '');
+    return { id: o.id, apagado: true };
+  } finally { lock.releaseLock(); }
+}
 
 // ---------- Ordens de serviço ----------
 // Aba "Ordens" na planilha do projeto. Fluxo: Solicitada (pedido do cliente ou da equipe) > Aberta > Em execução > Concluída; ou Cancelada.
@@ -1643,7 +1743,10 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     if (soReservada && qi.equipe !== usr.equipe) { if (!it.auto) recusadas.push({ numero: id, motivo: 'Quadra não reservada para a sua equipe. Peça a reserva à coordenação.' }); return; } // time parceiro só mexe em face de quadra reservada para ele
     if (!coord) {
       if (it.equipe != null && it.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Só a coordenação escolhe a equipe.' }); return; }
-      if (f.equipe && f.equipe !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Face da ' + f.equipe + '.' }); return; }
+      // duas duplas da Neofloresta podem trabalhar na mesma face: a primeira marcação concluída vale e a segunda dupla não é recusada (parceiro continua preso à própria face)
+      const duplaPropria = f.equipe && f.equipe !== usr.equipe && !timeParceiroDo(usr) && !equipesParceiras()[String(f.equipe).trim().toLowerCase()];
+      if (f.equipe && f.equipe !== usr.equipe && !duplaPropria) { recusadas.push({ numero: id, motivo: 'Face da ' + f.equipe + '.' }); return; }
+      if (duplaPropria && (FACE_FEITA.indexOf(f.situacao) >= 0 || it.situacao === 'A levantar')) return; // face já concluída pela outra dupla: nada muda e não há recusa
       // face ainda sem equipe numa quadra de outra equipe: só a coordenação passa a face para outra equipe
       if (!f.equipe && eqQuadra[qn] && eqQuadra[qn] !== usr.equipe) { recusadas.push({ numero: id, motivo: 'Quadra da ' + eqQuadra[qn] + '.' }); return; }
       if (!f.equipe && ((it.situacao != null && it.situacao !== 'A levantar') || it.cond)) { f.equipe = usr.equipe; f.atribuida = 'nao'; }

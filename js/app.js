@@ -1,6 +1,6 @@
 // Neofloresta Inventário: app de campo do Inventário da Arborização Urbana, da Neofloresta
 (() => {
-  const VERSAO = '2.12.0';
+  const VERSAO = '2.13.0';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -63,7 +63,7 @@
     sino: '<path d="M6 8a6 6 0 0112 0c0 6 3 7 3 8H3c0-1 3-2 3-8zM10 20a2 2 0 004 0"/>',
     pessoas: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3.2 2.5-5.5 5.5-5.5s5.5 2.3 5.5 5.5"/><circle cx="16.5" cy="9" r="2.6"/><path d="M15.5 13.8c2.9-.4 5 1.8 5 4.7"/>',
     alvo: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
-    cidade: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', selecionar: '<path d="M5 5h4M15 5h4M5 19h4M15 19h4M5 5v4M19 5v4M5 15v4M19 15v4"/><path d="M10 12l2 2 3-4"/>', fechar: '<path d="M6 6l12 12M18 6L6 18"/>',
+    cidade: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', balao: '<path d="M5 4h14a2 2 0 012 2v9a2 2 0 01-2 2h-6l-4 4v-4H5a2 2 0 01-2-2V6a2 2 0 012-2z"/><path d="M8 9h8M8 12.5h5"/>', camadas: '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>', selecionar: '<path d="M5 5h4M15 5h4M5 19h4M15 19h4M5 5v4M19 5v4M5 15v4M19 15v4"/><path d="M10 12l2 2 3-4"/>', fechar: '<path d="M6 6l12 12M18 6L6 18"/>',
     ajuda: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>', voltar: '<path d="M15 5l-7 7 7 7"/>', mapa: '<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>',
     busca: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>', camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', mais: '<path d="M12 5v14M5 12h14"/>',
@@ -359,7 +359,7 @@
     if (!navigator.onLine) { if (!silencioso) toast('Sem internet. Os dados ficam guardados e serão enviados depois.'); return atualizarSync(); }
     S.sincronizando = true; // marcado antes de qualquer espera: nunca roda duas vezes ao mesmo tempo
     try { const tp = await Store.get('termoPend:' + S.sessao.u); if (tp) { await Api.b.aceitarTermo(tp); await Store.del('termoPend:' + S.sessao.u); } } catch (e) { /* tenta no próximo envio */ }
-    try { await enviarPendentes(silencioso); if (!S.expirada) await enviarFilaOS(silencioso); if (!S.expirada) await enviarFilaQd(silencioso); if (!S.expirada) await Turno.enviar(); if (!S.expirada) await enviarChuvas(); } finally { S.sincronizando = false; await atualizarSync(); }
+    try { await enviarPendentes(silencioso); if (!S.expirada) await enviarFilaOS(silencioso); if (!S.expirada) await enviarFilaQd(silencioso); if (!S.expirada) await Turno.enviar(); if (!S.expirada) await enviarChuvas(); if (!S.expirada) await Com.enviar().catch(() => {}); } finally { S.sincronizando = false; await atualizarSync(); }
     garantirFaixa();
     if (S.expirada) return;
     await atualizarSituacao();
@@ -950,6 +950,45 @@
     if (!ok) return undefined; const p = aux.find((x) => x.id === sel.value); return { id: p.id, nome: p.nome, vinculo: p.vinculo };
   }
   // parada por chuva: hora, foto e observação. Fica guardada no aparelho e sai quando houver internet.
+  // ---------- Pontos de comunicação: aviso solto no mapa (texto até 500 caracteres, sem foto, fora do pagamento) ----------
+  // Fila no aparelho: o ponto nasce na hora no mapa e vai ao servidor quando houver internet. Coletores e coordenação veem; cliente e parceiro não.
+  const Com = {
+    veem: () => ['admin', 'revisor', 'coletor'].includes(perfil()),
+    chave: () => 'com:' + (S.sessao ? S.sessao.u : '') + ':' + (S.projeto ? S.projeto.id : ''),
+    novoId() { const a = new Uint8Array(8); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach((_, i) => { a[i] = Math.floor(Math.random() * 256); }); return 'C' + [...a].map((b) => b.toString(16).padStart(2, '0')).join(''); },
+    async fila() { return (await Store.get(this.chave())) || []; },
+    // junta a alteração com o que já espera na fila: apagar um ponto que ainda nem foi enviado some da fila
+    async empilhar(it) {
+      const f = await this.fila(); const i = f.findIndex((x) => x.id === it.id); const v = Date.now() + Math.random();
+      if (i >= 0) {
+        const ant = f[i];
+        if (it.acao === 'apagar' && ant.novo) f.splice(i, 1);
+        else f[i] = Object.assign({}, ant, it, { novo: ant.novo, quando: ant.novo ? ant.quando : it.quando, v });
+      } else f.push(Object.assign({}, it, { v }));
+      await Store.set(this.chave(), f); return f;
+    },
+    async enviar() {
+      if (!S.sessao || !S.projeto || !this.veem() || !navigator.onLine || this.enviando) return false;
+      const f = await this.fila(); if (!f.length) return false; this.enviando = true; const feitos = new Map(); let mudou = false;
+      try {
+        for (const x of f) {
+          try {
+            if (x.acao === 'apagar') await Api.b.comApagar(x.projeto, x.id);
+            else await Api.b.comSalvar(x.projeto, { id: x.id, texto: x.texto, latitude: x.latitude, longitude: x.longitude, quando: x.quando });
+            feitos.set(x.id, x.v); mudou = true;
+          } catch (e) {
+            if (e.semRede || /desconhecida/i.test(e.message || '')) continue; // sem internet ou servidor antigo: fica na fila
+            feitos.set(x.id, x.v); toast('Ponto de comunicação não enviado: ' + (e.message || 'erro'), 7000, null, true); mudou = true;
+          }
+        }
+      } finally {
+        this.enviando = false;
+        const atual = await this.fila(); await Store.set(this.chave(), atual.filter((x) => feitos.get(x.id) !== x.v));
+      }
+      return mudou;
+    },
+  };
+
   const chuvaChave = () => 'chuva:' + S.sessao.u;
   async function paradaChuva(obs0) {
     if (somenteVer()) return;
@@ -1730,7 +1769,7 @@
           const v = await modal(c.rotulo, u ? ampliavel(h('img', { src: u, alt: c.rotulo }), 'foto') : h('p', null, 'Foto já enviada ao servidor.'),
             [{ texto: 'Remover', classe: 'perigo', valor: 'rm' }, { texto: 'Galeria', classe: 'sec', valor: 'gal' }, { texto: 'Tirar outra', valor: 'cam' }]);
           if (v === 'cam') cam.click(); else if (v === 'gal') gal.click();
-          else if (v === 'rm' && await confirmar('Remover foto', 'Remover esta foto do registro?', 'Remover', 'perigo')) { delete r.fotos[c.nome]; mudar(c, r.valores[c.nome]); desenhar(); }
+          else if (v === 'rm' && await confirmar('Remover foto', 'Remover esta foto do registro?', 'Remover', 'perigo')) { delete r.fotos[c.nome]; if (r.sensores) delete r.sensores[c.nome]; mudar(c, r.valores[c.nome]); desenhar(); }
         };
         wrap.replaceChildren(
           f ? h('button', { class: 'tile cheia', onclick: opcoes, style: u ? `background-image:url(${u})` : '' }, u ? null : ico('check'))
@@ -1748,13 +1787,14 @@
       async function receber(inp) {
         const arq = inp.files && inp.files[0]; if (!arq) return;
         try {
-          const blob = await reduzir(arq, 0, 0.92); // qualidade original
+          const exif = await lerExif(arq); const blob = await reduzir(arq, 0, 0.92); // qualidade original
           const chave = r.uuid + ':' + c.nome + ':' + Date.now();
           await Store.salvarFoto(chave, blob);
           const antiga = r.fotos[c.nome]; const daBase = r.__baseFotos && (JSON.parse(r.__baseFotos)[c.nome] || {}).chave === (antiga && antiga.chave);
           if (antiga && !antiga.enviado && !daBase) Store.apagarFoto(antiga.chave);
           const prefixo = S.projeto.prefixo || S.projeto.id;
           r.fotos[c.nome] = { nome: `DCIM/${prefixo}_${carimbo()}_${r.uuid.replace(/-/g, '').slice(0, 6)}.jpg`, chave, enviado: false, url: '' };
+          r.sensores = r.sensores || {}; r.sensores[c.nome] = Object.assign({ em: agoraISO(), fonte: inp === gal ? 'galeria' : 'camera' }, exif || {}); // escondido: só a coordenação recebe
           mudar(c, r.valores[c.nome]); desenhar();
         } catch (e) { toast('Não foi possível ler a foto: ' + e.message); }
       }
@@ -1944,7 +1984,8 @@
     const btEu = h('button', { class: 'mapa-bt grande', onclick: () => centrar(), 'aria-label': 'Minha posição', title: 'Minha posição' }, ico('alvo'), h('span', { class: 'so-leitor' }, 'Minha posição'));
     const btCidade = h('button', { class: 'mapa-bt', onclick: () => verCidade(), 'aria-label': 'Ver a cidade', title: 'Ver a cidade' }, ico('cidade'), h('span', { class: 'so-leitor' }, 'Ver a cidade'));
     const btSel = h('button', { class: 'mapa-bt pilula oculto', onclick: () => iniciarSelecao(), 'aria-label': 'Selecionar quadras ou faces' }, ico('selecionar'), 'Selecionar');
-    const bts = h('div', { class: 'mapa-bts' }, btSel, btCidade, btEu);
+    const btCom = Com.veem() ? h('button', { class: 'mapa-bt grande', onclick: () => novoCom(), 'aria-label': 'Ponto de comunicação', title: 'Ponto de comunicação' }, ico('balao'), h('span', { class: 'so-leitor' }, 'Ponto de comunicação')) : null;
+    const bts = h('div', { class: 'mapa-bts' }, btSel, btCidade, btCom, btEu);
     const fab = campo ? h('button', { class: 'btn bt-principal', id: 'bt-principal' }, '...') : null; // "Começar o turno" ou "Nova árvore" (pintarDia)
     // faixa embaixo do mapa: o que antes ficava na tela inicial (envio, cadastro não terminado, turno, avisos, encerrar face, meus registros)
     // tela de coleta limpa: só a etiqueta do dia, a do GPS e o cadastro não terminado; os avisos ficam atrás do sino
@@ -1986,6 +2027,10 @@
       if (!cam || !document.body.contains(div)) return; const meus = new Set((await Setores.situacao()).filter((x) => x.equipe && x.equipe === minhaEquipe()).map((x) => x.numero));
       for (const st of cam.setores) { const meu = meus.has(st.n); L.polygon(st.a.map((an) => { const o = []; for (let i = 0; i < an.length; i += 2) o.push([an[i + 1], an[i]]); return o; }), { renderer: render, interactive: false, fill: false, color: meu ? '#00546E' : '#7A8C92', weight: meu ? 3 : 1.2, dashArray: meu ? null : '6 5', opacity: meu ? 0.9 : 0.6 }).addTo(stCamada); }
     }).catch(() => {});
+    // setores Norte, Sul, Leste e Oeste: só visual (não ligam a nenhuma quadra), abaixo das quadras e dos pontos
+    const setCamada = L.layerGroup().addTo(mapa); const setRotulos = L.layerGroup().addTo(mapa);
+    const comCamada = L.layerGroup().addTo(mapa); const comItens = new Map(); let comDesde = '', comFila = [], setDados = null, comNovo = null;
+    const veCom = Com.veem(); const verSet = () => S.verSet !== false, verCom = () => S.verCom !== false;
     const qdCamada = L.layerGroup().addTo(mapa); const rotulos = L.layerGroup().addTo(mapa);
     const corQd = (q) => { const s = qdSit.get(q.n) || {}; if (selQd.value === 'eq') return s.equipe ? corEq(s.equipe) : '#9AA9B0'; return COR_QD[s.situacao || 'A levantar']; };
     const qdLayers = new Map();
@@ -2085,7 +2130,7 @@
       requestAnimationFrame(() => { if (!folha) return; const alt = folha.getBoundingClientRect().height; const tam = mapa.getSize(); const pt = mapa.latLngToContainerPoint(ll); const lim = tam.y - alt - 30; if (pt.y > lim || pt.y < 30) mapa.panBy([0, pt.y - Math.max(60, lim / 2)], { animate: true }); });
     }
     const fichaAberta = () => !!folha;
-    mapa.on('click', (e) => { if (fichaAberta()) return fecharFicha(); if (!selecao) tocarMapa(e.latlng, null); });
+    mapa.on('click', (e) => { if (comNovo) return; if (fichaAberta()) return fecharFicha(); if (!selecao) tocarMapa(e.latlng, null); });
     // distância (em pixels na tela) do toque até cada face perto dele
     function facesPerto(ll) {
       if (!qdDados || !selQd.value || mapa.getZoom() < ZOOM_FACES) return [];
@@ -2302,9 +2347,153 @@
       // em tela pequena a legenda começa recolhida (um botão): aberta, ela tapava boa parte do mapa
       if (S.legAberta == null) S.legAberta = mapa.getSize().y >= 520;
       leg.onAdd = () => h('div', { class: 'mapa-leg' + (S.legAberta ? '' : ' recolhida') }, h('button', { class: 'leg-bt', onclick: (e) => { L.DomEvent.stop(e); S.legAberta = !S.legAberta; e.target.closest('.mapa-leg').classList.toggle('recolhida', !S.legAberta); e.target.textContent = S.legAberta ? 'Legenda ▾' : 'Legenda ▸'; } }, S.legAberta ? 'Legenda ▾' : 'Legenda ▸'), itens.map(([t, c]) => h('div', null, h('span', { style: `background:${c}` }), t)), itQd.length ? [h('b', { class: 'leg-tit' }, 'Quadras'), itQd.map(([t, c]) => h('div', null, h('span', { class: 'leg-qd', style: `background:${c}` }), t))] : null,
-        itFc.length ? [h('b', { class: 'leg-tit' }, 'Faces'), itFc.map(([t, c]) => h('div', null, h('span', { class: 'leg-fc', style: `background:${c}` }), t))] : null);
+        itFc.length ? [h('b', { class: 'leg-tit' }, 'Faces'), itFc.map(([t, c]) => h('div', null, h('span', { class: 'leg-fc', style: `background:${c}` }), t))] : null,
+        setDados || veCom ? h('b', { class: 'leg-tit' }, 'Camadas') : null,
+        setDados ? [chaveCamada('Setores Norte, Sul, Leste e Oeste', verSet(), (v) => trocarCamada('set', v)), verSet() ? h('div', { class: 'leg-setores' }, setDados.setores.map((st) => h('span', null, h('i', { style: `background:${st.cor}` }), st.n))) : null] : null,
+        veCom ? [chaveCamada('Pontos de comunicação', verCom(), (v) => trocarCamada('com', v)), verCom() ? [h('div', null, h('span', { class: 'leg-com aberto' }), 'Aberto'), h('div', null, h('span', { class: 'leg-com resolvido' }), 'Resolvido pela coordenação')] : null] : null);
       leg.addTo(mapa); if (mapa._popup && mapa.hasLayer(mapa._popup)) leg.getContainer().classList.add('oculto');
     }
+    // ---- setores N/S/L/O e pontos de comunicação ----
+    function chaveCamada(txt, ligada, fn) {
+      const i = h('input', { type: 'checkbox', checked: !!ligada, onchange: (e) => fn(e.target.checked) });
+      const l = h('label', { class: 'leg-chave' }, i, txt); L.DomEvent.disableClickPropagation(l); return l;
+    }
+    function trocarCamada(qual, v) {
+      if (qual === 'set') S.verSet = v; else S.verCom = v;
+      Store.set('verCamadas', { set: verSet(), com: verCom() }).catch(() => {});
+      desenharSet(); desenharCom(); legenda();
+    }
+    function desenharSet() {
+      setCamada.clearLayers(); setRotulos.clearLayers(); if (!setDados || !verSet()) return;
+      for (const st of setDados.setores) {
+        for (const an of st.a) { const o = []; for (let i = 0; i < an.length; i += 2) o.push([an[i + 1], an[i]]); L.polygon(o, { renderer: render, interactive: false, color: st.cor, weight: 2.5, opacity: 0.85, dashArray: '8 7', fillColor: st.cor, fillOpacity: 0.05 }).addTo(setCamada).bringToBack(); }
+        if (st.rot) L.marker([st.rot[1], st.rot[0]], { interactive: false, keyboard: false, icon: L.divIcon({ className: 'set-rot', html: `<span style="color:${st.cor}">${st.n}</span>`, iconSize: [120, 28], iconAnchor: [60, 14] }) }).addTo(setRotulos);
+      }
+      pintarRotSet();
+    }
+    function pintarRotSet() { const ver = mapa.getZoom() <= 16; if (ver && !mapa.hasLayer(setRotulos)) mapa.addLayer(setRotulos); else if (!ver && mapa.hasLayer(setRotulos)) mapa.removeLayer(setRotulos); }
+    mapa.on('zoomend', pintarRotSet);
+    async function carregarSetores() {
+      if (setDados === null) { try { const r = await fetch(`camadas/${(S.projeto && S.projeto.formulario) || 'divinopolis-inventario'}-setores.json`); setDados = r.ok ? await r.json() : false; } catch (e) { setDados = false; } }
+      if (!document.body.contains(div)) return; desenharSet(); legenda();
+    }
+    const icCom = (o) => L.divIcon({ className: 'com-pino ' + (o.situacao === 'Resolvido' ? 'resolvido' : 'aberto') + (o.pendente ? ' pendente' : '') + (o.novo ? ' novo' : ''), iconSize: [34, 38], iconAnchor: [17, 36],
+      html: '<svg viewBox="0 0 34 38" width="34" height="38" aria-hidden="true"><path class="cp-corpo" d="M7 2h20a5 5 0 015 5v14a5 5 0 01-5 5h-6l-4 9-4-9H7a5 5 0 01-5-5V7a5 5 0 015-5z"/>' + (o.situacao === 'Resolvido' ? '<path class="cp-traco" d="M10 14l5 5 9-10"/>' : '<path class="cp-traco" d="M9 10h16M9 15h16M9 20h9"/>') + '</svg>' });
+    const comEhMeu = (o) => String(o.login || '').toLowerCase() === String(S.sessao.u || '').toLowerCase();
+    // o que o mapa mostra: o que veio do servidor com o que ainda espera na fila deste aparelho por cima
+    function comVisiveis() {
+      const m = new Map(comItens);
+      for (const x of comFila) {
+        if (x.acao === 'apagar') { m.delete(x.id); continue; }
+        const base = m.get(x.id) || { login: S.sessao.u, nome: S.sessao.usuario.nome, equipe: minhaEquipe(), criado_em: x.quando, situacao: 'Aberto', resposta: '' };
+        m.set(x.id, Object.assign({}, base, { id: x.id, texto: x.texto, latitude: x.latitude, longitude: x.longitude, pendente: true }));
+      }
+      return [...m.values()].filter((o) => o.situacao !== 'Apagado' && isFinite(+o.latitude) && isFinite(+o.longitude));
+    }
+    function desenharCom() {
+      comCamada.clearLayers(); if (!veCom || !verCom()) return;
+      for (const o of comVisiveis()) {
+        const m = L.marker([+o.latitude, +o.longitude], { icon: icCom(o), zIndexOffset: 500, keyboard: true, title: (o.situacao === 'Resolvido' ? 'Comunicação resolvida: ' : 'Comunicação: ') + String(o.texto).slice(0, 60), bubblingMouseEvents: false });
+        m.on('click', (e) => { L.DomEvent.stopPropagation(e); fichaCom(o); }); m.addTo(comCamada);
+      }
+    }
+    const btnCom = (txt, fn, classe) => h('button', { class: 'btn peq ' + (classe || ''), onclick: fn }, txt);
+    function fichaCom(o) {
+      const coord = ehCoord(), meu = comEhMeu(o), resolvido = o.situacao === 'Resolvido';
+      const bots = [];
+      if (coord && !o.pendente) { bots.push(resolvido ? btnCom('Reabrir', () => reabrirCom(o)) : btnCom('Resolver com resposta', () => resolverCom(o))); }
+      if ((coord || (meu && !resolvido))) { bots.push(btnCom('Editar', () => editarCom(o), 'sec'), btnCom('Apagar', () => apagarCom(o), 'sec')); }
+      const pop = h('div', { class: 'ficha-com' }, h('div', { class: 'fc-tit' }, ico('balao'), resolvido ? 'Comunicação resolvida' : 'Comunicação'),
+        h('p', { class: 'fc-texto' }, o.texto),
+        h('div', { class: 'dica' }, [o.nome || o.login, o.equipe, dataAno(o.criado_em)].filter(Boolean).join(' · ') + (o.pendente ? ' · aguardando envio' : '')),
+        resolvido ? h('div', { class: 'fc-resp' }, h('b', null, 'Resposta da coordenação'), h('p', null, o.resposta || 'Resolvido.'), h('div', { class: 'dica' }, [o.respondido_por, dataAno(o.respondido_em)].filter(Boolean).join(' · '))) : null,
+        bots.length ? h('div', { class: 'linha-btn' }, bots) : null);
+      abrirFicha(pop, L.latLng(+o.latitude, +o.longitude));
+    }
+    const campoTexto = (valor, dica) => {
+      const ta = h('textarea', { class: 'entrada', rows: 4, maxlength: 500, placeholder: dica || 'Descreva o aviso', 'aria-label': 'Texto do ponto' }); ta.value = valor || '';
+      const ct = h('div', { class: 'dica', style: 'text-align:right' }); const at = () => { ct.textContent = ta.value.length + ' / 500'; }; ta.addEventListener('input', at); at(); return { ta, ct };
+    };
+    async function aposCom() { comFila = await Com.fila(); desenharCom(); Com.enviar().then(() => tickCom()).catch(() => {}); }
+    async function editarCom(o) {
+      const { ta, ct } = campoTexto(o.texto);
+      const ok = await modal('Editar o texto', h('div', null, ta, ct), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar', valor: true }]);
+      const t = ta.value.trim(); if (!ok) return; if (!t) return toast('Escreva o texto do ponto.', 3500, null, true);
+      mapa.closePopup(); await Com.empilhar({ acao: 'salvar', id: o.id, texto: t, latitude: +o.latitude, longitude: +o.longitude, quando: o.criado_em, projeto: S.projeto.id }); await aposCom();
+    }
+    async function apagarCom(o) {
+      if (!(await confirmar('Apagar este ponto?', 'O balão some do mapa para todo mundo.', 'Apagar', 'perigo'))) return;
+      mapa.closePopup(); await Com.empilhar({ acao: 'apagar', id: o.id, projeto: S.projeto.id }); await aposCom();
+    }
+    async function resolverCom(o) {
+      const { ta, ct } = campoTexto('', 'Resposta para a equipe (aparece ao tocar no balão)');
+      const ok = await modal('Resolver com resposta', h('div', null, h('p', { class: 'dica' }, o.texto), ta, ct), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Resolver', valor: true }]);
+      if (!ok) return;
+      try { await Api.b.comResolver(S.projeto.id, o.id, ta.value.trim(), 'Resolvido'); mapa.closePopup(); await tickCom(); toast('Ponto resolvido.'); } catch (e) { toast(e.semRede ? 'Sem internet. Resolver precisa de internet.' : (e.message || 'Não foi possível resolver.'), 5000, null, true); }
+    }
+    async function reabrirCom(o) {
+      try { await Api.b.comResolver(S.projeto.id, o.id, '', 'Aberto'); mapa.closePopup(); await tickCom(); toast('Ponto reaberto.'); } catch (e) { toast(e.semRede ? 'Sem internet. Reabrir precisa de internet.' : (e.message || 'Não foi possível reabrir.'), 5000, null, true); }
+    }
+    // novo ponto: nasce onde a pessoa está (GPS), pode ser arrastado; a coordenação sem GPS começa no centro do mapa
+    function novoCom() {
+      if (comNovo) return;
+      if (!S.pos && !ehCoord()) { ligarGps(); return toast('GPS ainda sem sinal. Espere o GPS para marcar o ponto onde você está.', 4000); }
+      mapa.closePopup(); const ll = S.pos ? L.latLng(S.pos.lat, S.pos.lon) : mapa.getCenter();
+      const mk = L.marker(ll, { icon: icCom({ situacao: 'Aberto', novo: true }), draggable: true, zIndexOffset: 1000, keyboard: false, title: 'Arraste para mover o ponto' }).addTo(mapa);
+      const { ta, ct } = campoTexto('', 'Descreva o que você quer avisar');
+      const fechar = () => { mk.remove(); painel.remove(); telaM.classList.remove('com-folha'); comNovo = null; };
+      const salvar = h('button', { class: 'btn', onclick: async () => {
+        const t = ta.value.trim(); if (!t) { toast('Escreva o texto do ponto.', 3500, null, true); return ta.focus(); }
+        const p = mk.getLatLng(); const it = { acao: 'salvar', id: Com.novoId(), texto: t, latitude: +p.lat.toFixed(7), longitude: +p.lng.toFixed(7), quando: agoraISO(), novo: true, projeto: S.projeto.id };
+        fechar(); await Com.empilhar(it); await aposCom(); toast(navigator.onLine ? 'Ponto salvo.' : 'Ponto salvo. Vai ao servidor quando houver internet.', 4000);
+      } }, 'Salvar ponto');
+      const painel = h('div', { class: 'mapa-folha com-novo', role: 'dialog' }, h('div', { class: 'fc-tit' }, ico('balao'), 'Novo ponto de comunicação'),
+        h('p', { class: 'dica' }, S.pos ? 'O balão está na sua posição. Arraste para mexer.' : 'Arraste o balão até o lugar.'), ta, ct,
+        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: fechar }, 'Cancelar'), salvar));
+      comNovo = { fechar }; telaM.append(painel); telaM.classList.add('com-folha'); mapa.panTo(ll); setTimeout(() => ta.focus(), 300);
+    }
+    // lê do servidor o que mudou nos pontos de comunicação; guarda no aparelho para abrir já com eles (e sem internet)
+    let tickandoCom = false;
+    async function tickCom() {
+      if (!veCom || tickandoCom || !document.body.contains(div)) return; tickandoCom = true;
+      try {
+        await Com.enviar().catch(() => {});
+        if (navigator.onLine) {
+          const r = await Api.b.comListar(S.projeto.id, comDesde);
+          if (r) {
+            if (!comDesde) comItens.clear();
+            for (const o of r.itens) { if (o.situacao === 'Apagado') comItens.delete(o.id); else comItens.set(o.id, o); }
+            if (r.agora) comDesde = r.agora; Store.set('comcache:' + S.projeto.id, { itens: [...comItens.values()] }).catch(() => {});
+          }
+        }
+        comFila = await Com.fila(); if (document.body.contains(div)) desenharCom();
+      } catch (e) { /* sem rede: fica o que já está no mapa */ } finally { tickandoCom = false; }
+    }
+    // mapa ao vivo: a cada 30 s traz só os pontos novos ou alterados (da outra dupla, por exemplo) e os avisos de comunicação
+    const vivo = { campos: null, add: null, desde: '', sujo: false, rodando: false };
+    async function tickVivo() {
+      if (!document.body.contains(div)) { clearInterval(tmVivo); document.removeEventListener('visibilitychange', aoVoltar); return; }
+      if (document.hidden || !navigator.onLine || vivo.rodando) return; vivo.rodando = true;
+      try {
+        if (vivo.campos && vivo.desde && !Api.demo) {
+          const r = await Api.b.mapaNovos(S.projeto.id, vivo.campos, vivo.desde);
+          if (r && r.linhas) {
+            if (r.linhas.length) { const uids = new Set(r.linhas.map((l) => l[0])); for (let i = pts.length - 1; i >= 0; i--) if (!pts[i].local && uids.has(pts[i].uid)) { vistos.delete(pts[i].uid); pts.splice(i, 1); } vivo.add(r.linhas); vivo.sujo = true; }
+            if (r.agora) vivo.desde = r.agora;
+          }
+        }
+        if (vivo.sujo && !fichaAberta() && !selecao && !comNovo) { vivo.sujo = false; preencherEquipes(); desenhar(false); }
+        await tickCom();
+      } catch (e) { /* tenta no próximo ciclo */ } finally { vivo.rodando = false; }
+    }
+    const aoVoltar = () => { if (!document.hidden) tickVivo(); };
+    const tmVivo = setInterval(tickVivo, 30000); document.addEventListener('visibilitychange', aoVoltar);
+    (async () => {
+      try { const vc = await Store.get('verCamadas'); if (vc) { S.verSet = vc.set; S.verCom = vc.com; } } catch (e) { /* padrão: tudo ligado */ }
+      if (perfil() !== 'cliente') carregarSetores();
+      if (veCom) { try { const c = await Store.get('comcache:' + S.projeto.id); if (c && c.itens) for (const o of c.itens) comItens.set(o.id, o); } catch (e) { /* sem cache */ } comFila = await Com.fila(); desenharCom(); tickCom(); }
+    })();
+    Object.assign(window.__app, { tickMapa: tickVivo, mapaInfo: () => ({ pts: pts.length, com: comVisiveis().length, comPend: comFila.length, set: setCamada.getLayers().length, rot: setRotulos.getLayers().length }) }); // usados pelos testes
     mapa.on('popupopen', () => { if (leg) leg.getContainer().classList.add('oculto'); });
     mapa.on('popupclose', () => { if (leg) leg.getContainer().classList.remove('oculto'); });
     let tBusca = null;
@@ -2359,7 +2548,7 @@
         // sem internet: fica com os pontos guardados no aparelho e avisa de quando são
         const usouGuardados = !!(antes && antes.campos === campos.join('|'));
         if (!navigator.onLine) { faixaOff.textContent = usouGuardados ? (antes.em ? `Sem internet. Pontos guardados no aparelho em ${dataAno(antes.em)}.` : 'Sem internet. Pontos guardados no aparelho.') : 'Sem internet. Só os seus cadastros deste aparelho aparecem.'; faixaOff.classList.remove('oculto'); throw Object.assign(new Error('sem internet'), { semRede: true }); } // sai só do bloco: o GPS do mapa continua ligando abaixo
-        const m = await Api.b.mapa(S.projeto.id, campos);
+        const m = await Api.b.mapa(S.projeto.id, campos); vivo.campos = campos; vivo.add = addLinhas; vivo.desde = m.agora || '';
         Store.set(kc, { campos: campos.join('|'), linhas: m.linhas, em: agoraISO() });
         if (!document.body.contains(div)) return;
         const usouAntes = antes && antes.campos === campos.join('|');
@@ -4302,7 +4491,7 @@
       const dia = new Date().toISOString().slice(0, 10); const base = `${p.id}_${dia}${filtro === 'validados' ? '_validados' : ''}`;
       const ordem = ['numero_unico', ...form.campos.flatMap((c) => (c.tipo === 'photo' ? [c.nome, c.nome + ' link'] : [c.nome])), 'cap_equivalente_cm', 'dap_equivalente_cm', 'area_copa_m2', 'latitude', 'longitude', 'precisao_gps_m', 'endereco_aprox', 'bairro_aprox', 'quadra', 'equipe', 'usuario', 'criado_em', 'concluido_em', 'atualizado_em', 'validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'historico', 'uuid'];
       const todas = [...new Set(linhas.flatMap((l) => Object.keys(l)))].filter((c) => !c.startsWith('__'));
-      const cols = [...ordem.filter((c) => todas.includes(c)), ...todas.filter((c) => !ordem.includes(c) && !['projeto', 'servidor_em'].includes(c))];
+      const cols = [...ordem.filter((c) => todas.includes(c)), ...todas.filter((c) => !ordem.includes(c) && !['projeto', 'servidor_em', 'sensores_foto'].includes(c))]; // sensores_foto (dados da câmera) fica só na planilha do servidor: não vai para a entrega ao cliente
       // planilhas com rótulos legíveis e opções por extenso
       const rot = (c) => { const k = form.campos.find((x) => x.nome === c); return k && k.rotulo !== c ? `${k.rotulo}` : c; };
       const legivel = (l) => { const o = {}; for (const c of cols) { const k = form.campos.find((x) => x.nome === c); let v = l[c]; if (k && k.tipo === 'choice') v = rotuloOpcao(k, v); else if (k && k.tipo === 'bool') v = v == null || v === '' ? '' : v === 1 || v === '1' || v === true ? 'Sim' : 'Não'; else if ((k && (k.tipo === 'datetime' || k.tipo === 'date')) || /_em$/.test(c)) { const d = v ? new Date(v) : null; if (d && !isNaN(d)) v = d.toLocaleString('pt-BR', k && k.tipo === 'date' ? { dateStyle: 'short' } : { dateStyle: 'short', timeStyle: 'short' }); } o[c] = v; } return o; };
@@ -4619,6 +4808,29 @@
   }
 
   // ---------- Fotos ----------
+  // Dados da câmera lidos do arquivo original (antes de reduzir a foto): ficam escondidos no registro, só para a coordenação.
+  // Base do estimador de altura: distância focal, tamanho da imagem e modelo do celular. Nunca aparecem para quem coleta.
+  async function lerExif(arq) {
+    try {
+      const b = new DataView(await arq.slice(0, 262144).arrayBuffer()); if (b.getUint16(0) !== 0xFFD8) return null;
+      let o = 2; let tiff = -1;
+      while (o + 4 < b.byteLength) { const m = b.getUint16(o); const len = b.getUint16(o + 2); if (m === 0xFFE1 && b.getUint32(o + 4) === 0x45786966) { tiff = o + 10; break; } if ((m & 0xFF00) !== 0xFF00 || m === 0xFFDA) break; o += 2 + len; }
+      if (tiff < 0) return null;
+      const le = b.getUint16(tiff) === 0x4949; const u16 = (x) => b.getUint16(x, le), u32 = (x) => b.getUint32(x, le);
+      const tam = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8 };
+      const ler = (e) => { const t = u16(e + 2), n = u32(e + 4); const bytes = (tam[t] || 1) * n; const pos = bytes > 4 ? tiff + u32(e + 8) : e + 8; if (pos + bytes > b.byteLength) return null;
+        if (t === 2) { let x = ''; for (let i = 0; i < n - 1 && i < 60; i++) x += String.fromCharCode(b.getUint8(pos + i)); return x.trim(); }
+        if (t === 3) return u16(pos); if (t === 4) return u32(pos); if (t === 5) { const d = u32(pos + 4); return d ? Math.round((u32(pos) / d) * 1000) / 1000 : null; } return null; };
+      const ifd = (ini, out) => { const n = u16(ini); for (let i = 0; i < n && i < 80; i++) { const e = ini + 2 + i * 12; if (e + 12 > b.byteLength) break; out[u16(e)] = { e, v: null }; } return out; };
+      const i0 = ifd(tiff + u32(tiff + 4), {}); const R = {};
+      const val = (t, x) => (x[t] ? ler(x[t].e) : null);
+      R.marca = val(0x010F, i0); R.modelo = val(0x0110, i0); R.orientacao = val(0x0112, i0);
+      if (i0[0x8769]) { const ex = ifd(tiff + ler(i0[0x8769].e), {});
+        R.focal_mm = val(0x920A, ex); R.focal_35mm = val(0xA405, ex); R.abertura = val(0x829D, ex); R.iso = val(0x8827, ex); R.exposicao_s = val(0x829A, ex); R.zoom_digital = val(0xA404, ex); R.dist_assunto_m = val(0x9206, ex); R.exif_larg = val(0xA002, ex); R.exif_alt = val(0xA003, ex); }
+      Object.keys(R).forEach((k) => { if (R[k] == null || R[k] === '') delete R[k]; });
+      return Object.keys(R).length ? R : null;
+    } catch (e) { return null; }
+  }
   async function reduzir(arq, max, q) {
     if (!max && arq.type === 'image/jpeg') return arq; // qualidade original: nem abre a imagem
     let bmp;

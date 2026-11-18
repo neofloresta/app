@@ -16,6 +16,7 @@ const Api = (() => {
     };
     // altura medida pelo celular: distância e ângulos vão junto só se a altura do registro ainda é a medida (se foi corrigida à mão, não)
     if (r.alturaMed) { const ca = form.campos.find((c) => c.tipo === 'number' && /altura total/i.test(c.nome)); if (ca && Math.abs(+(r.valores || {})[ca.nome] - r.alturaMed.altura) < 0.05) Object.assign(l, { altura_dist_m: r.alturaMed.dist, altura_ang_base: r.alturaMed.base, altura_ang_topo: r.alturaMed.topo }); }
+    if (r.sensores) { const sx = {}; for (const [k, v] of Object.entries(r.sensores)) if (r.fotos && r.fotos[k]) sx[k] = v; if (Object.keys(sx).length) l.sensores_foto = JSON.stringify(sx); } // dados da câmera de cada foto: só a coordenação recebe
     for (const c of form.campos) {
       if (c.tipo === 'photo') { const f = (r.fotos || {})[c.nome]; l[c.nome] = f ? f.nome : ''; l[c.nome + ' link'] = f && f.url ? f.url : ''; }
       else { let v = (r.valores || {})[c.nome]; if (c.tipo === 'bool') v = v == null ? '' : v ? 1 : 0; l[c.nome] = v ?? ''; }
@@ -26,7 +27,7 @@ const Api = (() => {
   function paraMapa(linhas, campos) { return { cab: campos, linhas: linhas.map((l) => campos.map((c) => l[c] ?? '')) }; }
   // listas da coordenação: a resposta vale por 1 minuto (trocar de aba fica instantâneo); qualquer gravação limpa
   const MEMO_LEITURA = ['usuarios_listar', 'projetos_listar', 'formularios_listar', 'pessoas_listar', 'times_listar'];
-  const LEITURAS = ['conferir', 'trajetos', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', 'pessoas_listar', 'setores_camada', 'setores_situacao', 'producao', 'producao_minha', 'producao_time', 'dias_listar', ...MEMO_LEITURA];
+  const LEITURAS = ['conferir', 'trajetos', 'com_listar', 'mapa_novos', 'sessao', 'formulario', 'estilo', 'listar', 'mapa', 'painel', 'foto_ver', 'situacao_meus', 'os_listar', 'chaves_listar', 'backup_listar', 'auditoria_listar', 'quadras_camada', 'quadras_situacao', 'faces_situacao', 'pessoas_listar', 'setores_camada', 'setores_situacao', 'producao', 'producao_minha', 'producao_time', 'dias_listar', ...MEMO_LEITURA];
   let memo = new Map(); let comoLogin = null; // coordenação vendo as telas de outro usuário (o servidor só aceita consultas)
   async function chamar(acao, dados, semCred) {
     if (LEITURAS.indexOf(acao) < 0) memo = new Map();
@@ -120,6 +121,18 @@ const Api = (() => {
     async formulariosListar() { const b = await this.base(); return Object.values(b.formularios).map((f) => ({ id: f.id, nome: f.nome, campos: f.campos.length, versao: f.versao || '' })); },
     async quadrasCamada() { return { semCamada: true }; },
     async quadrasSituacao() { return { quadras: [], faces: [] }; },
+    async mapaNovos() { return null; },
+    // pontos de comunicação na demonstração: guardados no aparelho
+    async comListar() { const l = (await Store.get('demo:com')) || []; return { itens: l, agora: new Date().toISOString() }; },
+    async comSalvar(projeto, c) {
+      const l = (await Store.get('demo:com')) || []; const agora = new Date().toISOString(); const t = String(c.texto || '').trim(); if (!t) throw new Error('Escreva o texto do ponto.'); if (t.length > 500) throw new Error('O texto passa de 500 caracteres.');
+      const o = c.id && l.find((x) => x.id === c.id);
+      if (o) { Object.assign(o, { texto: t, latitude: +c.latitude, longitude: +c.longitude, atualizado_em: agora }); await Store.set('demo:com', l); return { id: o.id, atualizado: true }; }
+      const n = { id: c.id || 'C' + Date.now().toString(36), texto: t, latitude: +c.latitude, longitude: +c.longitude, login: cred && cred.u, nome: 'Demonstração', equipe: 'Equipe 1', criado_em: agora, situacao: 'Aberto', resposta: '', respondido_por: '', respondido_em: '', atualizado_em: agora };
+      l.push(n); await Store.set('demo:com', l); return { id: n.id, novo: true };
+    },
+    async comResolver(projeto, id, resposta, situacao) { const l = (await Store.get('demo:com')) || []; const o = l.find((x) => x.id === id); if (!o) throw new Error('Ponto não encontrado.'); o.situacao = situacao === 'Aberto' ? 'Aberto' : 'Resolvido'; o.resposta = o.situacao === 'Resolvido' ? String(resposta || '') : ''; o.respondido_por = o.situacao === 'Resolvido' ? 'Coordenação' : ''; await Store.set('demo:com', l); return { id, situacao: o.situacao }; },
+    async comApagar(projeto, id) { const l = (await Store.get('demo:com')) || []; const o = l.find((x) => x.id === id); if (o) o.situacao = 'Apagado'; await Store.set('demo:com', l); return { id, apagado: true }; },
     async conferir() { return null; },
     async trajetoSalvar() { return { ok: true }; }, async trajetos() { return []; },
     async pessoasListar() { return (await this.base()).pessoas || []; },
@@ -186,11 +199,18 @@ const Api = (() => {
     async listar(projeto) { return (await chamar('listar', { projeto })).linhas; },
     // só as colunas pedidas, em lista compacta (mapa e sequência do código). Servidor antigo: cai no listar completo.
     async mapa(projeto, campos) {
-      try { const j = await chamar('mapa', { projeto, campos }); return { cab: j.cab, linhas: j.linhas }; } catch (e) {
+      try { const j = await chamar('mapa', { projeto, campos }); return { cab: j.cab, linhas: j.linhas, agora: j.agora || '' }; } catch (e) {
         if (!/desconhecida/i.test(e.message)) throw e;
         return paraMapa(await this.listar(projeto), campos);
       }
     },
+    // mapa ao vivo: só as linhas gravadas depois de "desde" (carimbo do servidor). Servidor antigo: devolve null e o app não atualiza sozinho
+    async mapaNovos(projeto, campos, desde) { try { const j = await chamar('mapa_novos', { projeto, campos, desde }); return { linhas: j.linhas, agora: j.agora }; } catch (e) { if (/desconhecida/i.test(e.message)) return null; throw e; } },
+    // pontos de comunicação (aviso solto no mapa). Servidor antigo: lista vazia
+    async comListar(projeto, desde) { try { const j = await chamar('com_listar', { projeto, desde: desde || '' }); return { itens: j.itens || [], agora: j.agora }; } catch (e) { if (/desconhecida/i.test(e.message)) return null; throw e; } },
+    async comSalvar(projeto, com) { return chamar('com_salvar', { projeto, com }); },
+    async comResolver(projeto, id, resposta, situacao) { return chamar('com_resolver', { projeto, id, resposta, situacao }); },
+    async comApagar(projeto, id) { return chamar('com_apagar', { projeto, id }); },
     // em páginas, para não estourar a resposta do Google em projetos grandes
     async listarTudo(projeto, progresso) {
       const N = 4000; let out = [];

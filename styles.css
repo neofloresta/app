@@ -761,3 +761,35 @@ html { touch-action: pan-x pan-y; } /* sem zoom de pinça na página (o mapa tem
 .campo-nota { margin: 8px 2px 0; font-size: 14px; color: var(--suave); }
 .faixa-rapido { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: #FFF4E0; border: 1px solid #E7A774; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; color: #5A3A12; font-size: 15px; }
 .face-cond { display: block; margin-top: 4px; }
+
+/* ---- 2.13: pontos de comunicação e setores Norte, Sul, Leste e Oeste ---- */
+.com-pino { background: none; border: 0; }
+.com-pino svg { display: block; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
+.com-pino .cp-corpo { fill: #6A1B9A; stroke: #fff; stroke-width: 2; }
+.com-pino .cp-traco { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.com-pino.resolvido .cp-corpo { fill: #00796B; }
+.com-pino.pendente .cp-corpo { stroke-dasharray: 4 3; }
+.com-pino.novo svg { animation: com-pula .9s ease-in-out infinite alternate; }
+@keyframes com-pula { to { transform: translateY(-5px); } }
+@media (prefers-reduced-motion: reduce) { .com-pino.novo svg { animation: none; } }
+.ficha-com { display: flex; flex-direction: column; gap: 8px; min-width: 220px; padding-top: 4px; }
+.ficha-com .fc-tit, .mapa-folha.com-novo .fc-tit { display: flex; align-items: center; gap: 8px; font-weight: 700; color: #6A1B9A; }
+.ficha-com .fc-tit svg, .mapa-folha.com-novo .fc-tit svg { width: 22px; height: 22px; }
+.ficha-com .fc-texto { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; line-height: 1.4; }
+.ficha-com .fc-resp { border-left: 4px solid #00796B; background: #E8F5F2; border-radius: 6px; padding: 8px 10px; }
+.ficha-com .fc-resp p { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ficha-com .linha-btn { flex-wrap: wrap; }
+.ficha-com .btn { min-height: 44px; }
+.mapa-folha.com-novo { display: flex; flex-direction: column; gap: 8px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); max-height: 70vh; }
+.mapa-folha.com-novo textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; resize: vertical; min-height: 96px; }
+.mapa-folha.com-novo .btn { min-height: 48px; }
+.mapa-leg .leg-com { width: 14px; height: 12px; border-radius: 4px; }
+.mapa-leg .leg-com.aberto { background: #6A1B9A; }
+.mapa-leg .leg-com.resolvido { background: #00796B; }
+.mapa-leg .leg-chave { display: flex; align-items: center; gap: 6px; margin: 4px 0 2px; cursor: pointer; min-height: 24px; }
+.mapa-leg .leg-chave input { width: 18px; height: 18px; margin: 0; }
+.mapa-leg .leg-setores { display: flex; flex-wrap: wrap; gap: 2px 10px; margin: 2px 0 4px 24px; }
+.mapa-leg .leg-setores span { width: auto; height: auto; border-radius: 0; margin: 0; display: inline-flex; align-items: center; gap: 4px; }
+.mapa-leg .leg-setores i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; }
+.set-rot { background: none; border: 0; pointer-events: none; text-align: center; }
+.set-rot span { font-weight: 900; font-size: 18px; letter-spacing: .08em; text-transform: uppercase; opacity: .8; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 6px #fff; }

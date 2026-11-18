@@ -1,0 +1,97 @@
+// 2.13 (servidor): ponto de comunicação, mapa incremental, duas duplas da Neofloresta na mesma face, coluna de sensores da foto
+const L = require('./lib'); const fs = require('fs'); const vm = require('vm');
+const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
+const PJ = 'divinopolis';
+const ctx = { TextDecoder, console }; vm.createContext(ctx); vm.runInContext(fs.readFileSync(L.APP + '/js/quadras.js', 'utf8') + ';this.Quadras=Quadras;', ctx); const Q = ctx.Quadras;
+const falha = async (fn) => { try { await fn(); return ''; } catch (e) { return String(e.message); } };
+(async () => {
+  await L.subir(); await L.configurar();
+  const vTermo = (fs.readFileSync(L.APP + '/js/app.js', 'utf8').match(/TERMO_VERSAO = '([^']+)'/) || [])[1];
+  await L.post('time_salvar', { time: { nome: 'Neofloresta', tipo: 'Próprio' } }); await L.post('time_salvar', { time: { nome: 'Gap', tipo: 'Parceiro' } });
+  const novo = async (login, senha, perfil, equipe, extra = {}) => { await L.post('usuario_salvar', { usuario_dados: Object.assign({ login, senha, nome: login, perfil, projeto: PJ, equipe, codigo: login.slice(0, 3).toUpperCase() }, extra) }); await L.post('aceitar_termo', { versao: vTermo }, login, senha); };
+  await novo('rev1', 'revisor01', 'revisor', ''); await novo('cli1', 'cliente01', 'cliente', ''); await novo('gap-1', 'gapgap001', 'coletor', 'Equipe Gap', { indicacao: 'Gap' }); await novo('time-gap', 'timegap01', 'time', '', { indicacao: 'Gap' });
+  await L.post('usuario_salvar', { usuario_dados: { login: 'div-1', indicacao: 'Neofloresta' } }); await L.post('usuario_salvar', { usuario_dados: { login: 'div-2', indicacao: 'Neofloresta' } });
+  const D1 = ['div-1', 'equipe01'], D2 = ['div-2', 'equipe02'], REV = ['rev1', 'revisor01'], CLI = ['cli1', 'cliente01'], GAP = ['gap-1', 'gapgap001'], TIME = ['time-gap', 'timegap01'], ADM = ['admin', undefined];
+  const p = (acao, dados, [u, s]) => L.post(acao, Object.assign({ projeto: PJ }, dados), u, s);
+  // ---------- 1. ponto de comunicação ----------
+  const c1 = await p('com_salvar', { com: { texto: 'Árvore com ninho de marimbondo na calçada', latitude: -20.1436, longitude: -44.8908 } }, D1);
+  const l1 = (await p('com_listar', {}, D2)).itens; const l1r = (await p('com_listar', {}, REV)).itens;
+  const vc = await falha(() => p('com_listar', {}, CLI)); const vt = await falha(() => L.post('com_listar', { projeto: PJ }, TIME[0], TIME[1]));
+  ok('S.1', !!c1.id && l1.length === 1 && l1[0].texto.startsWith('Árvore com ninho') && l1[0].situacao === 'Aberto' && l1[0].nome === 'Equipe 1' && l1r.length === 1 && /não tem acesso/.test(vc) && /não tem acesso/.test(vt), `coletor 2 e coordenação veem; cliente: "${vc}"; parceiro: "${vt}"`);
+  const e1 = await falha(() => p('com_salvar', { com: { texto: '   ', latitude: -20.1, longitude: -44.8 } }, D1));
+  const e2 = await falha(() => p('com_salvar', { com: { texto: 'x'.repeat(501), latitude: -20.1, longitude: -44.8 } }, D1));
+  const e3 = await falha(() => p('com_salvar', { com: { texto: 'ok', latitude: 'abc', longitude: -44.8 } }, D1));
+  const e4 = await falha(() => p('com_salvar', { com: { texto: 'ok', latitude: 0, longitude: 0 } }, D1));
+  const m500 = await p('com_salvar', { com: { texto: 'y'.repeat(500), latitude: -20.1437, longitude: -44.8909 } }, D1);
+  const e5 = await falha(() => p('com_salvar', { com: { texto: 'ok', latitude: -20.1, longitude: -44.8 } }, CLI));
+  ok('S.2', /Escreva/.test(e1) && /500/.test(e2) && /inválida/.test(e3) && /inválida/.test(e4) && !!m500.id && /não tem acesso/.test(e5), `vazio: "${e1}"; 501: "${e2}"; posição: "${e3}"/"${e4}"; 500 passa; cliente grava: "${e5}"`);
+  // edição e apagar
+  const ed = await p('com_salvar', { com: { id: c1.id, texto: 'Ninho de marimbondo (editado)', latitude: -20.1436, longitude: -44.8908 } }, D1);
+  const ed2 = await falha(() => p('com_salvar', { com: { id: c1.id, texto: 'invasor', latitude: -20.1, longitude: -44.8 } }, D2));
+  const ap2 = await falha(() => p('com_apagar', { id: c1.id }, D2));
+  const edR = await p('com_salvar', { com: { id: c1.id, texto: 'Ninho de marimbondo (coordenação ajustou)', latitude: -20.1436, longitude: -44.8908 } }, REV);
+  const t = (await p('com_listar', {}, D1)).itens.find((x) => x.id === c1.id);
+  ok('S.3', ed.atualizado && /outra pessoa/.test(ed2) && /outra pessoa/.test(ap2) && edR.atualizado && /coordenação ajustou/.test(t.texto), `dono edita; outro coletor: "${ed2}" / "${ap2}"; coordenação edita`);
+  // resolver
+  const rc = await falha(() => p('com_resolver', { id: c1.id, resposta: 'x' }, D1));
+  const rs = await p('com_resolver', { id: c1.id, resposta: 'Chamamos a defesa civil, ninho retirado.', situacao: 'Resolvido' }, REV);
+  const t2 = (await p('com_listar', {}, D2)).itens.find((x) => x.id === c1.id);
+  const edDep = await falha(() => p('com_salvar', { com: { id: c1.id, texto: 'tentando mudar', latitude: -20.1, longitude: -44.8 } }, D1));
+  const apDep = await falha(() => p('com_apagar', { id: c1.id }, D1));
+  ok('S.4', /não tem acesso/.test(rc) && rs.situacao === 'Resolvido' && t2.situacao === 'Resolvido' && /defesa civil/.test(t2.resposta) && /resolvido/.test(edDep) && /resolvido/.test(apDep), `coletor não resolve ("${rc}"); resolvido com resposta aparece para todos; depois de resolvido o coletor não edita nem apaga`);
+  const rst = await p('com_resolver', { id: c1.id, situacao: 'Aberto' }, REV); const t3 = (await p('com_listar', {}, D2)).itens.find((x) => x.id === c1.id);
+  const resp = await falha(() => p('com_resolver', { id: c1.id, resposta: 'z'.repeat(501) }, REV));
+  ok('S.5', rst.situacao === 'Aberto' && t3.situacao === 'Aberto' && !t3.resposta && /500/.test(resp), 'coordenação reabre (a resposta some) e a resposta passa de 500 é recusada');
+  // incremental e apagar
+  const vazio = await p('com_listar', { desde: new Date(Date.now() + 60000).toISOString() }, D2);
+  await new Promise((r) => setTimeout(r, 30)); const antes = new Date(Date.now() - 60000).toISOString();
+  const ap = await p('com_apagar', { id: m500.id }, REV); const inc = await p('com_listar', { desde: antes }, D2); const cheia = (await p('com_listar', {}, D2)).itens;
+  ok('S.6', vazio.itens.length === 0 && ap.apagado && inc.itens.some((x) => x.id === m500.id && x.situacao === 'Apagado') && !cheia.some((x) => x.id === m500.id), `sem novidade sai vazio; o apagado aparece como "Apagado" na consulta incremental e some da lista completa (${cheia.length} ponto)`);
+  const dono = await p('com_salvar', { com: { texto: 'ponto para apagar pelo dono', latitude: -20.15, longitude: -44.89 } }, D2); const apd = await p('com_apagar', { id: dono.id }, D2); const apd2 = await p('com_apagar', { id: dono.id }, D2);
+  ok('S.7', apd.apagado && apd2.apagado, 'dono apaga o próprio ponto aberto (repetir o pedido não dá erro)');
+  const off = await p('com_salvar', { com: { id: 'off-12345678', texto: 'criado sem internet', latitude: -20.16, longitude: -44.9, quando: new Date(Date.now() - 3600000).toISOString() } }, D1); const off2 = await p('com_salvar', { com: { id: 'off-12345678', texto: 'criado sem internet', latitude: -20.16, longitude: -44.9 } }, D1);
+  const offl = (await p('com_listar', {}, D1)).itens.filter((x) => x.id === 'off-12345678');
+  ok('S.8', off.novo && off2.atualizado && offl.length === 1 && new Date(offl[0].criado_em) < new Date(Date.now() - 3000000), 'reenvio da fila (mesmo identificador) não duplica; vale a hora do aparelho');
+  const form = await p('com_salvar', { com: { texto: '=HYPERLINK("http://x","clique")', latitude: -20.17, longitude: -44.9 } }, D1); const fl = (await p('com_listar', {}, D1)).itens.find((x) => x.id === form.id);
+  ok('S.9', fl && fl.texto === '=HYPERLINK("http://x","clique")', 'texto que parece fórmula volta como texto puro');
+  // ---------- 2. mapa incremental ----------
+  const cab = ['uuid', 'projeto', 'equipe', 'usuario', 'criado_em', 'atualizado_em', 'latitude', 'longitude'];
+  const reg = (n, sens) => Object.assign({ uuid: 'mi-' + n, projeto: PJ, equipe: 'Equipe 1', criado_em: new Date().toISOString(), atualizado_em: new Date().toISOString(), latitude: -20.14 - n / 1e4, longitude: -44.89, 'Foto 1': 'x.jpg', sensores_foto: sens || '' }, {});
+  const campos = ['uuid', 'latitude', 'longitude', 'equipe', 'usuario', 'sensores_foto'];
+  const m0 = await p('mapa_novos', { campos }, D2); const desde0 = m0.agora;
+  await new Promise((r) => setTimeout(r, 40));
+  await p('registro', { linha: reg(1, '{"foto1":{"beta":87.2,"gamma":1.1}}') }, D1);
+  const m1 = await p('mapa_novos', { campos, desde: new Date(Date.now() - 60000).toISOString() }, D2);
+  const m2 = await p('mapa_novos', { campos, desde: new Date(Date.now() + 60000).toISOString() }, D2);
+  const cli = await falha(() => p('mapa_novos', { campos, desde: desde0 }, CLI)); const tim = await falha(() => L.post('mapa_novos', { projeto: PJ, campos }, TIME[0], TIME[1]));
+  const lin1 = m1.linhas.find((l) => l[0] === 'mi-1');
+  ok('S.10', !!lin1 && lin1[1] < -20.14 && lin1[4] === '' && lin1[5] === '' && m2.linhas.length === 0 && /não tem acesso/.test(cli) && /não tem acesso/.test(tim), `registro novo chega no mapa de outra dupla; usuário e sensores não vão para o coletor; sem novidade vem vazio; cliente: "${cli}"`);
+  await p('registro', { linha: reg(2) }, D2); await p('registro', { linha: reg(3) }, D1);
+  const m3 = await p('mapa_novos', { campos, desde: m1.agora }, D1); const idsM3 = m3.linhas.map((l) => l[0]);
+  const completo = await p('mapa', { campos: ['uuid'] }, D1);
+  ok('S.11', idsM3.includes('mi-2') && idsM3.includes('mi-3') && completo.linhas.length >= 3, `a consulta seguinte (desde o "agora" anterior) traz os novos (${idsM3.join(', ')}) e a consulta completa continua igual (${completo.linhas.length} linhas)`);
+  const m4 = await p('mapa_novos', { campos, desde: m3.agora }, D1);
+  ok('S.12', m4.linhas.length === 0 || m4.linhas.every((l) => idsM3.includes(l[0])), 'a folga de 15 s só repete o que já veio (o aparelho junta por identificador)');
+  const rv = await p('mapa_novos', { campos: ['uuid', 'sensores_foto'], desde: new Date(Date.now() - 600000).toISOString() }, REV);
+  ok('S.13', rv.linhas.some((l) => l[0] === 'mi-1' && /beta/.test(l[1])), 'a coordenação recebe os sensores da foto (base do estimador de altura)');
+  const lista = (await L.post('listar', { projeto: PJ, n: 5000 }, REV[0], REV[1])).linhas; const lc = (await L.post('listar', { projeto: PJ, n: 5000 }, CLI[0], CLI[1])).linhas;
+  ok('S.14', lista.some((x) => x.uuid === 'mi-1' && /beta/.test(x.sensores_foto || '')) && lc.every((x) => !('sensores_foto' in x)), 'coordenação vê a coluna sensores_foto no listar; cliente nunca');
+  // ---------- 3. duas duplas da Neofloresta na mesma face ----------
+  const lido = await Q.lerArquivo('q.geojson', fs.readFileSync(__dirname + '/fixtures/quadras_divinopolis_faces.geojson')); const cam = Q.compactar(lido.feicoes, 'quadra', ['ruas']);
+  const qd = cam.quadras.find((x) => x.f && x.f.length >= 2); const viz = cam.quadras.filter((x) => Math.abs(x.b[0] - qd.b[0]) < 0.004 && Math.abs(x.b[1] - qd.b[1]) < 0.004);
+  await L.post('quadras_importar', { projeto: PJ, camada: JSON.stringify(Object.assign({}, cam, { total: viz.length, quadras: viz })) });
+  const fA = qd.n + '-' + qd.f[0].i, fB = qd.n + '-' + qd.f[1].i;
+  const sit = async () => { const m = {}; (await L.post('quadras_situacao', { projeto: PJ, faces: true })).faces.forEach((f) => { m[f.numero] = f; }); return m; };
+  const marca = (qs, situacao, who) => p('quadras_marcar', { itens: [{ tipo: 'face', numero: qs, situacao }] }, who);
+  const r1 = await marca(fA, 'Levantada', D1); let F = await sit();
+  ok('S.15', r1.recusadas.length === 0 && F[fA].situacao === 'Levantada' && F[fA].equipe === 'Equipe 1', `a dupla 1 conclui a face ${fA}: ${F[fA].situacao}, ${F[fA].equipe}`);
+  const r2 = await marca(fA, 'Levantada', D2); const r3 = await marca(fA, 'A levantar', D2); F = await sit();
+  ok('S.16', r2.recusadas.length === 0 && r3.recusadas.length === 0 && F[fA].situacao === 'Levantada' && F[fA].equipe === 'Equipe 1' && String(F[fA].marcada_por).toLowerCase() === 'div-1', `a dupla 2 não é recusada e a face não muda (${F[fA].situacao}, ${F[fA].equipe}, por ${F[fA].marcada_por})`);
+  const r4 = await marca(fB, 'Em levantamento', D1); const r5 = await marca(fB, 'Levantada', D2); F = await sit();
+  ok('S.17', r4.recusadas.length === 0 && r5.recusadas.length === 0 && F[fB].situacao === 'Levantada' && F[fB].equipe === 'Equipe 1', `face só em levantamento: a dupla 2 pode concluí-la (${F[fB].situacao}, equipe ${F[fB].equipe})`);
+  const r6 = await marca(fA, 'Em levantamento', GAP); F = await sit();
+  ok('S.18', r6.recusadas.length === 1 && F[fA].situacao === 'Levantada' && F[fA].equipe === 'Equipe 1', `parceiro continua barrado na face de outra equipe: "${(r6.recusadas[0] || {}).motivo}"`);
+  const r7 = await marca(fA, 'A levantar', REV); F = await sit();
+  ok('S.19', r7.recusadas.length === 0 && F[fA].situacao === 'A levantar', 'a coordenação continua podendo reabrir a face');
+  const falhou = Object.entries(R).filter(([, v]) => !v.passou); console.log(`\n${Object.keys(R).length - falhou.length}/${Object.keys(R).length} passaram`); process.exit(falhou.length ? 1 : 0);
+})().catch((e) => { console.error('ERRO', e); process.exit(2); });
