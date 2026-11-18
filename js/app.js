@@ -1,6 +1,6 @@
 // Neofloresta Inventário: app de campo do Inventário da Arborização Urbana, da Neofloresta
 (() => {
-  const VERSAO = '2.16.1';
+  const VERSAO = '2.16.2';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -40,6 +40,13 @@
       return tot;
     };
     return lista.map((e) => [e, pontua(e)]).filter((x) => x[1] >= 0).sort((a, b) => a[1] - b[1] || a[0].cientifico.localeCompare(b[0].cientifico)).map((x) => x[0]);
+  }
+  // lista de espécies do servidor + a do formulário pronto: entram as que faltam, e o nome popular completa o que estava vazio ou só ganha mais nomes (ex.: "licuri" vira "licuri, jerivá")
+  function mesclarEspecies(atuais, novas) {
+    const nv = new Map(novas.map((e) => [norm(e.cientifico), e])); const tem = new Set(atuais.map((e) => norm(e.cientifico)));
+    const lista = atuais.map((e) => { const n = nv.get(norm(e.cientifico)); const pa = String(e.popular || '').trim(), pn = n ? String(n.popular || '').trim() : '';
+      return n && pn && (!pa || (pn !== pa && norm(pn).includes(norm(pa)))) ? Object.assign({}, e, { popular: pn }) : e; });
+    return [...lista, ...novas.filter((e) => !tem.has(norm(e.cientifico)))];
   }
   function dataCurta(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).replace(',', ''); }
   function dataAno(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }); }
@@ -3171,7 +3178,7 @@
     async function exemplo() {
       try { for (const arq of ['divinopolis-inventario', 'seade-risco']) { const f = await (await fetch(`forms/${arq}.json`, { cache: 'no-store' })).json(); const q = await fetch(`forms/${arq}.qml`).then((r) => (r.ok ? r.text() : null)).catch(() => null);
         // a lista de espécies ajustada pela coordenação no servidor é mantida (entram só as que faltam)
-        if (forms.some((x) => x.id === f.id)) { const atual = await Api.b.formulario(f.id).catch(() => null); if (atual && (atual.versao || 0) > (f.versao || 0)) continue; if (atual && (atual.especies || []).length) { const tem = new Set(atual.especies.map((e) => norm(e.cientifico))); f.especies = [...atual.especies, ...(f.especies || []).filter((e) => !tem.has(norm(e.cientifico)))]; } }
+        if (forms.some((x) => x.id === f.id)) { const atual = await Api.b.formulario(f.id).catch(() => null); if (atual && (atual.versao || 0) > (f.versao || 0)) continue; if (atual && (atual.especies || []).length) f.especies = mesclarEspecies(atual.especies, f.especies || []); }
         await Api.b.formularioSalvar(f, q); } toast('Formulários instalados.'); if (S.form) S.form = await carregarForm(S.form.id, false, true); telaAdmin('formularios'); } catch (e) { toast(e.message, 5000); }
     }
     async function editar(id) { const form = await Api.b.formulario(id); S.revisao = { form: JSON.parse(JSON.stringify(form)), qml: null, novo: false }; ir('#admin/revisao'); }

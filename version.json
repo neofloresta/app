@@ -1,7 +1,8 @@
 {
- "versao": "2.16.1",
+ "versao": "2.16.2",
  "data": "2026-11-18",
  "notas": [
+  "Atualizar formulários prontos agora completa os nomes populares da lista de espécies que já estava no servidor",
   "Lista de espécies ampliada para 516 espécies (busca por nome científico ou popular)",
   "Sem acesso por face ou por quadra: foto e motivo da lista (condomínio ou área particular, relevo, obra ou interdição, outro)",
   "Nova categoria Agrupamento (cerca-viva e calçada sem uso): quantidade estimada, CAP de 3 indivíduos e altura média",
