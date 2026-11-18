@@ -34,5 +34,15 @@ const PJ = 'divinopolis'; const ctx = { TextDecoder, console }; vm.createContext
   ok('W.7', !(S3[N[4]] || {}).marca, `parceiro tentando se dar a marca: "${(S3[N[4]] || {}).marca || ''}"`);
   await p('quadras_marcar', { itens: [{ tipo: 'quadra', numero: N[1], marca: '' }] }, 'admin', undefined); const rl = await p('reserva_pedir', { quadras: [N[1]] }, ...M);
   ok('W.8', rl.criados.length === 1, `depois de tirar a marca o parceiro pode pedir: ${JSON.stringify(rl.criados.length)}`);
+  // correções do verificador: reenvio de registro que já existe, marca e equipe juntas, parceiro em quadra Neofloresta, zero à esquerda
+  await p('quadras_marcar', { itens: [{ tipo: 'quadra', numero: N[5], marca: 'Validação' }] }, 'admin', undefined);
+  const z = await neg(reg('dddd0000-0000-4000-8000-00000000000a', '0' + N[5], E));
+  const mj = await p('quadras_marcar', { itens: [{ tipo: 'quadra', numero: N[7], marca: 'Neofloresta', equipe: 'EQ1' }] }, 'admin', undefined); const pj = await p('quadras_marcar', { itens: [{ tipo: 'quadra', numero: N[3], marca: 'Neofloresta' }] }, 'admin', undefined);
+  const rpar = await p('quadras_marcar', { itens: [{ tipo: 'quadra', numero: N[3], equipe: 'MARIA' }] }, 'admin', undefined);
+  ok('W.9', /validação/.test(z) && /não os dois/.test((mj.recusadas[0] || {}).motivo) && /Tire a marca/.test((rpar.recusadas[0] || {}).motivo), `zero à esquerda: "${z}"; marca e equipe juntas: "${(mj.recusadas[0] || {}).motivo}"; parceiro em quadra Neofloresta: "${(rpar.recusadas[0] || {}).motivo}"`);
+  // reenvio: registro já gravado antes da marca continua aceitando o envio da foto
+  const uu = 'dddd0000-0000-4000-8000-00000000000b'; await reg(uu, N[6], E).catch(() => {}); await p('quadras_marcar', { itens: [{ tipo: 'quadra', numero: N[6], marca: 'Validação' }] }, 'admin', undefined);
+  const reenv = await neg(reg(uu, N[6], E).then(() => 'aceito'));
+  ok('W.10', reenv === 'aceito', `reenvio de registro que já existe em quadra que entrou em validação: ${reenv}`);
   const f = Object.values(R).filter((x) => !x.passou).length; console.log(f ? f + ' FALHA(S)' : 'TUDO OK'); process.exit(f ? 1 : 0);
 })().catch((e) => { console.error('ERRO', e); process.exit(2); });

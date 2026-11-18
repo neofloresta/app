@@ -599,7 +599,6 @@ function salvarRegistro(projetoId, linha, usr) {
   if (linha.atualizado_em && new Date(linha.atualizado_em) > new Date(Date.now() + 10 * 60000)) throw new Error('Data do aparelho adiantada. Acerte a data e a hora do celular e envie de novo.');
   if (usr.perfil === 'coletor') { linha.usuario = usr.login; if (linha.criado_em && new Date(linha.criado_em) > new Date(Date.now() + 10 * 60000)) throw new Error('Data do aparelho adiantada. Acerte a data e a hora do celular e envie de novo.'); if (usr.avaliador_id || usr.auxiliar_id || 'avaliador_id' in linha || 'auxiliar_id' in linha) { let aux = usr.auxiliar_id || ''; if (usr.avaliador_id && !usr.auxiliar_id && 'auxiliar_id' in linha && timeParceiroDo(usr)) aux = auxiliarDoTurno(linha.auxiliar_id, usr, projetoId); linha.avaliador_id = usr.avaliador_id || ''; linha.auxiliar_id = aux; } } // a dupla é a do acesso, definida pela coordenação
   conferirDupla(linha, projetoId);
-  if (usr.perfil === 'coletor' && 'quadra' in linha && String(linha.quadra || '').trim()) { const iv = infoQuadras(projetoId); if (iv && iv.faces) { const qv = lerSitQuadras(projetoId).find((x) => x.numero === String(linha.quadra).trim()); if (qv && qv.marca === 'Validação') throw new Error('A quadra ' + String(linha.quadra).trim() + ' está em validação. Ninguém coleta nela por enquanto.'); } }
   if (usr.perfil === 'coletor' && timeParceiroDo(usr) && 'quadra' in linha && String(linha.quadra || '').trim()) { // time parceiro: a quadra informada precisa ser da equipe e estar aberta
     const iq = infoQuadras(projetoId);
     if (iq && iq.faces) { const qn = String(linha.quadra).trim(); const q = lerSitQuadras(projetoId).find((x) => x.numero === qn);
@@ -615,6 +614,10 @@ function salvarRegistro(projetoId, linha, usr) {
     linha.usuario = linha.usuario || usr.login;
     const iu = cab.indexOf('uuid') + 1;
     const achado = sh.getLastRow() > 1 ? sh.getRange(2, iu, sh.getLastRow() - 1, 1).createTextFinder(linha.uuid).matchEntireCell(true).findNext() : null;
+    if (!achado && usr.perfil === 'coletor') { // registro novo em quadra em validação: ninguém coleta (reenvio e correção de registro que já existe seguem normais)
+      const qn = String(linha.quadra == null ? '' : linha.quadra).trim().replace(/^0+(?=\d)/, '');
+      if (qn) { const qv = lerSitQuadras(projetoId).find((x) => String(x.numero).replace(/^0+(?=\d)/, '') === qn); if (qv && qv.marca === 'Validação') throw new Error('A quadra ' + qn + ' está em validação. Ninguém coleta nela por enquanto.'); }
+    }
     linha.servidor_em = new Date().toISOString();
     if (achado) {
       const r = achado.getRow();
@@ -1911,6 +1914,7 @@ function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums, facesIdx) {
       if (!nums.has(n)) { recusadas.push({ numero: n, motivo: 'Quadra não existe na camada.' }); return; }
       const q0 = por[n]; const q = Object.assign({}, q0 || { numero: n, situacao: 'A levantar', equipe: '' }); // cópia: item recusado não muda nada
       if (it.situacao != null && SITUACOES_QUADRA.indexOf(it.situacao) < 0) { recusadas.push({ numero: n, motivo: 'Situação inválida.' }); return; }
+      if (coord && it.marca !== undefined && (it.equipe != null || it.situacao != null || it.fechar)) { recusadas.push({ numero: n, motivo: 'Marque a quadra ou defina a equipe, não os dois juntos.' }); return; }
       if (coord && it.marca !== undefined) { // coordenação: marca a quadra como da Neofloresta, em validação, ou tira a marca
         const mk = String(it.marca || ''); if (MARCAS_QUADRA.indexOf(mk) < 0) { recusadas.push({ numero: n, motivo: 'Marca inválida.' }); return; }
         if (mk && q.equipe) { recusadas.push({ numero: n, motivo: 'Quadra já reservada para ' + q.equipe + '. Libere a equipe antes de marcar.' }); return; }
@@ -1929,6 +1933,7 @@ function marcarQuadrasSemTrava(projetoId, itens, usr, coord, nums, facesIdx) {
         q.historico = [q.historico, carimboHist(usr, it.situacao.toLowerCase() + ' (' + it.sistema + ')', q.marcada_em)].filter(Boolean).join(' | ').slice(-5000);
         q.atualizado_em = q.marcada_em; if (q0) Object.assign(q0, q); else { por[n] = q; todas.push(q); } mudou.push(n); return;
       }
+      if (coord && it.equipe && q.marca === 'Neofloresta' && equipesParceiras()[String(it.equipe).trim().toLowerCase()]) { recusadas.push({ numero: n, motivo: 'Quadra da Neofloresta. Tire a marca antes de reservar para parceiro.' }); return; }
       if (!it.sistema && q.marca === 'Validação' && !(coord && it.equipe == null && it.situacao == null && it.obs != null)) { if (!it.auto) recusadas.push({ numero: n, motivo: 'Quadra em validação. ' + (coord ? 'Tire a marca antes de reservar.' : 'Ninguém coleta nela por enquanto.') }); return; }
       if (!coord && q.marca === 'Neofloresta' && soReservada) { if (!it.auto) recusadas.push({ numero: n, motivo: 'Quadra da Neofloresta.' }); return; }
       if (!coord) {
