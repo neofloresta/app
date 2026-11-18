@@ -12,7 +12,7 @@ const op = (l) => l.map((t) => ({ v: t, t }));
 const aba = (n) => f.abas.find((a) => a.nome === n);
 // ---------- sai a calçada irregular ----------
 const SAI = ['Risco nivel 1', 'Nivel da avaliacao'];
-f.campos = f.campos.filter((c) => !SAI.includes(c.nome));
+for (const c of f.campos) if (SAI.includes(c.nome)) { c.legado = true; c.rotulo = c.rotulo + ' (formulário anterior)'; delete c.nivelAuto; delete c.oculto; c.tipo = c.tipo === 'hidden' ? 'text' : c.tipo; } // fica na base para os registros rápidos antigos
 for (const a of f.abas) { a.campos = a.campos.filter((x) => !SAI.includes(x.campo)); delete a.nomeRapido; }
 f.regras = f.regras.filter((r) => !SAI.includes(r.campo));
 for (const r of f.regras) for (const k of Object.keys(r.por || {})) for (const n of SAI) delete r.por[k][n];

@@ -3810,7 +3810,7 @@
           ehCoord() ? ['Devolvidos para correção no período', fmtN(dev.length)] : null, ehCoord() ? ['Apagados no período (lixeira)', fmtN(desc.length)] : null,
           ['Validados acumulados até o fim do período', fmtN(acum) + (p.meta ? ` (${fmtP(acum / p.meta)} da meta de ${fmtN(p.meta)})` : '')]].filter(Boolean)),
         perfil() === 'cliente' ? null : h('h2', null, '2. Validados por equipe'),
-        perfil() === 'cliente' ? null : tab(['Equipe', 'Indivíduos', 'Pontos sem árvore', 'Total'], [...equipes.map((e) => { const x = val.filter((l) => (l.equipe || '-') === e); return [e, fmtN(x.filter(ehInd).length), fmtN(x.filter((l) => !ehInd(l)).length), fmtN(x.length)]; }), ['Total', fmtN(val.filter(ehInd).length), fmtN(val.filter((l) => !ehInd(l)).length), fmtN(val.length)]]),
+        perfil() === 'cliente' ? null : tab(['Equipe', 'Indivíduos', 'Pontos sem árvore', 'Total'], [...equipes.map((e) => { const x = val.filter((l) => (l.equipe || '-') === e); return [e, fmtN(x.filter(ehInd).length), fmtN(x.filter((l) => !ehInd(l) && !ehAg(l)).length), fmtN(x.length)]; }), ['Total', fmtN(val.filter(ehInd).length), fmtN(val.filter((l) => !ehInd(l) && !ehAg(l)).length), fmtN(val.length)]]),
         h('h2', null, perfil() === 'cliente' ? '2. Registros validados no período' : '3. Registros validados no período'),
         val.length ? tab(['Nº', 'Código', 'Categoria', 'Espécie', ...(perfil() === 'cliente' ? [] : ['Equipe']), 'Validado em'], val.sort((a, b) => (+a.numero_unico || 0) - (+b.numero_unico || 0)).map((l) => [String(l.numero_unico || ''), (cc && l[cc.nome]) || '', cat ? rotuloOpcao(cat, l[cat.nome]).replace(/\s*\(.*\)/, '') : '', h('i', null, (ce && l[ce.nome]) || ''), ...(perfil() === 'cliente' ? [] : [l.equipe || '']), dataBR(l.validado_em)])) : h('p', null, 'Nenhum registro validado neste período.'),
         h('div', { id: 'med-os' }),
@@ -4462,7 +4462,7 @@
     const cat = S.form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome)));
     const op = cat && cat.opcoes.find((o) => /cal[cç]ada/i.test(o.t));
     if (!op) return toast('O formulário deste projeto não tem a categoria calçada sem árvores.', 5000);
-    const id = q.n + '-' + f.i; const rasc = (await Store.registros(S.projeto.id)).find((r) => r.faceId === id && r.status === 'rascunho');
+    const id = q.n + '-' + f.i; const rasc = (await Store.registros(S.projeto.id)).find((r) => r.faceId === id && !r.semAcesso && r.status === 'rascunho');
     if (rasc) { toast('Continuando o cadastro desta face que ficou guardado.', 3000); S.aba = 0; S.tentou = false; return ir('#form/' + rasc.uuid); }
     const loc = S.form.campos.find((c) => c.tipo === 'choice' && /local do registro/i.test(norm(c.nome))); const opL = loc && loc.opcoes.find((o) => /cal[cç]ada|via p/i.test(o.t));
     await novoRegistro({ faceId: q.n + '-' + f.i, faceRua: f.r, faceTxt: `face ${f.i} da quadra ${q.n} (${f.r})`, cat: [cat.nome, op.v], extra: opL ? { [loc.nome]: opL.v } : {} });
@@ -4479,6 +4479,7 @@
     const cat = S.form.campos.find((c) => c.tipo === 'choice' && /categoria/i.test(norm(c.nome))); const op = cat && cat.opcoes.find((o) => /sem acesso/i.test(o.t));
     if (!op) return toast('O formulário deste projeto ainda não tem a opção sem acesso. Peça à coordenação para atualizar os formulários.', 6000);
     if (servidorAntigo(2.16)) return;
+    const mc = S.form.campos.find((c) => /^motivo sem acesso$/i.test(c.nome)); if (!mc || mc.tipo !== 'choice') return toast('O formulário deste projeto ainda é o antigo. Peça à coordenação para atualizar os formulários (Coordenação, Formulários).', 6000);
     const id = q.n + '-' + f.i;
     const regs = (await Store.registros(S.projeto.id)).filter((r) => r.status !== 'rascunho' && !r.faceId && r.face === id);
     if (regs.length) return modal('Esta face já tem árvore', h('p', null, `A face ${f.i} já tem árvore cadastrada. Encerre a face (Marcar como levantada). Sem acesso é para a face em que a equipe não consegue entrar.`), [{ texto: 'Entendi', valor: true }]);
@@ -4499,7 +4500,7 @@
     // face com árvore já cadastrada não vira "sem acesso": a equipe encerra essa face antes
     const regs = (await Store.registros(S.projeto.id)).filter((r) => r.status !== 'rascunho' && !r.faceId && r.face); const comArv = faltam.filter((f) => regs.some((r) => r.face === q.n + '-' + f.i));
     if (comArv.length) return modal('Encerre antes as faces com árvores', h('p', null, `${comArv.length === 1 ? 'A face ' + comArv[0].i + ' já tem' : 'As faces ' + comArv.map((f) => f.i).join(', ') + ' já têm'} árvore cadastrada. Encerre ${comArv.length === 1 ? 'essa face' : 'essas faces'} (Marcar como levantada) e depois marque a quadra como sem acesso: só as faces que faltarem entram.`), [{ texto: 'Entendi', valor: true }]);
-    const rasc = (await Store.registros(S.projeto.id)).find((r) => r.semAcesso && r.semAcesso.quadra === q.n && r.status === 'rascunho');
+    const rasc = (await Store.registros(S.projeto.id)).find((r) => r.semAcesso && !r.semAcesso.soFace && r.semAcesso.quadra === q.n && r.status === 'rascunho');
     if (rasc) { toast('Continuando o cadastro desta quadra que ficou guardado.', 3000); S.aba = 0; S.tentou = false; return ir('#form/' + rasc.uuid); }
     const ok = await modal('Quadra sem acesso', h('div', null, h('p', null, `A equipe não consegue entrar na quadra ${q.n}? Tire a foto da entrada (portaria, portão ou cerca) e escolha o motivo.`),
       h('p', { class: 'dica' }, `${pl(faltam.length, 'face fica marcada', 'faces ficam marcadas')} como sem acesso e a quadra é fechada. O auditor confere a foto.`)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Continuar', valor: true }]);
@@ -4578,7 +4579,7 @@
       [...linhas].filter((l) => !(+l.numero_unico)).sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)) || String(a.uuid).localeCompare(String(b.uuid))).forEach((l) => { l.numero_unico = ++maxN; });
       linhas.sort((a, b) => (+a.numero_unico) - (+b.numero_unico));
       const cDap = form.campos.find((c) => c.tipo === 'multinumber' && /dap|cap/i.test(c.nome)); const ehCap = cDap && /cap/i.test(cDap.nome);
-      if (cDap) linhas.forEach((l) => { const v = Indicadores.valorNum(l[cDap.nome], true); l.dap_equivalente_cm = v == null ? '' : Math.round((ehCap ? v / Math.PI : v) * 10) / 10; if (ehCap) l.cap_equivalente_cm = v == null ? '' : Math.round(v * 10) / 10; });
+      if (cDap) linhas.forEach((l) => { const v = Indicadores.valorNum(l[cDap.nome], true); const ag = String(l[(form.campos.find((c) => /categoria/i.test(norm(c.nome))) || {}).nome]) === '7'; const v2 = ag && v != null ? (Indicadores.valorNum(l[cDap.nome], false) != null && String(l[cDap.nome]).includes(';') ? String(l[cDap.nome]).split(';').map((x) => paraNum(x)).filter((x) => x != null).reduce((a, b, _, A) => a + b / A.length, 0) : v) : v; l.dap_equivalente_cm = v2 == null ? '' : Math.round((ehCap ? v2 / Math.PI : v2) * 10) / 10; if (ehCap) l.cap_equivalente_cm = v2 == null ? '' : Math.round(v2 * 10) / 10; });
       let camQd = null; // número da quadra de cada ponto, quando o projeto tem camada de quadras
       try { const qj = await Api.b.quadrasCamada(p.id); if (qj && qj.camada) { camQd = JSON.parse(qj.camada); const ix = Quadras.indice(camQd.quadras); linhas.forEach((l) => { const q = l.longitude !== '' && isFinite(+l.longitude) && +l.longitude ? ix.achar(+l.longitude, +l.latitude) : null; l.quadra = q ? q.n : ''; }); } } catch (e) { /* sem camada */ }
       if (form.campos.some((c) => /area de copa/i.test(c.nome))) linhas.forEach((l) => { const m = paraNum(l['Area de copa medida (m2)']), cl = paraNum(l['Area de copa (m2)']); l.area_copa_m2 = m != null ? m : cl != null ? cl : ''; });

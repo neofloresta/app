@@ -835,6 +835,41 @@
    "ajuda": "Calculado pelo app depois das três respostas acima: probabilidade de falha com a de impacto dá a probabilidade; com as consequências dá o risco (matriz da ISA)."
   },
   {
+   "armazenar": "text",
+   "nome": "Risco nivel 1",
+   "rotulo": "Risco (formulário anterior)",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Baixo",
+     "t": "Baixo"
+    },
+    {
+     "v": "Médio",
+     "t": "Médio"
+    },
+    {
+     "v": "Alto",
+     "t": "Alto"
+    },
+    {
+     "v": "Severo",
+     "t": "Severo"
+    }
+   ],
+   "nota": "Avaliação de risco nível 1 (ABNT NBR 16246-3): visual, sem a matriz.",
+   "ajuda": "Avaliação de risco nível 1 (ABNT NBR 16246-3): julgamento visual, sem a matriz de probabilidade e consequências. Usada no cadastro rápido das faces com calçada irregular.",
+   "legado": true
+  },
+  {
+   "armazenar": "text",
+   "nome": "Nivel da avaliacao",
+   "rotulo": "Nível da avaliação de risco (formulário anterior)",
+   "tipo": "text",
+   "ajuda": "Preenchido pelo app (ABNT NBR 16246-3): 1 no cadastro rápido das faces com calçada irregular; 2 no cadastro completo.",
+   "legado": true
+  },
+  {
    "armazenar": "bool",
    "nome": "Manejo remoção do indivíduo",
    "rotulo": "Remoção do indivíduo",

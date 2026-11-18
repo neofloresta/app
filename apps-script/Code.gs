@@ -726,7 +726,7 @@ function clienteVeTodos(projetoId) { return String(projeto(projetoId).cliente_ve
 // colunas que o cliente não recebe: dados internos das equipes (quem coletou, histórico com logins)
 function ocultasCliente(projetoId) {
   let auto = []; try { auto = lerFormulario(projeto(projetoId).formulario).campos.filter((c) => c.auto === 'coletor').map((c) => c.nome); } catch (e) { /* sem formulário */ }
-  return COLS_INTERNAS.concat(['equipe', 'validado_por', 'historico', 'validacao_hist', 'pagamento', 'ponto_ajustado', 'ponto_dist_m', 'altura_dist_m', 'altura_ang_base', 'altura_ang_topo', 'Motivo sem acesso'], COLS_DUPLA, auto);
+  return COLS_INTERNAS.concat(['equipe', 'validado_por', 'historico', 'validacao_hist', 'pagamento', 'ponto_ajustado', 'ponto_dist_m', 'altura_dist_m', 'altura_ang_base', 'altura_ang_topo', 'Motivo sem acesso', 'Motivo sem acesso (outro)'], COLS_DUPLA, auto);
 }
 function paraCliente(projetoId, linhas) {
   const todos = clienteVeTodos(projetoId); const oc = ocultasCliente(projetoId);
@@ -1830,6 +1830,7 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     if (cut < 1 || !Array.isArray(idx.faces[qn]) || idx.faces[qn].indexOf(letra) < 0) { recusadas.push({ numero: id, motivo: 'Face não existe na camada.' }); return; }
     const f0 = por[id]; const f = Object.assign({}, f0 || { numero: id, quadra: qn, situacao: 'A levantar', equipe: '' }); // cópia: item recusado não muda nada
     if (it.situacao != null && SITUACOES_FACE.indexOf(it.situacao) < 0) { recusadas.push({ numero: id, motivo: 'Situação inválida.' }); return; }
+    if (it.cond === 'irregular') delete it.cond; // item guardado no aparelho antes da 2.16: a calçada irregular acabou
     if (it.cond != null) { if (typeof it.cond !== 'string' || CONDS_FACE.indexOf(it.cond) < 0) { recusadas.push({ numero: id, motivo: 'Condição da face inválida.' }); return; } }
     if (it.cond === 'sem_acesso' && it.situacao !== 'Levantada, sem árvores') { recusadas.push({ numero: id, motivo: 'Face sem acesso precisa do cadastro com a foto da entrada.' }); return; }
     if (it.situacao === 'Levantada, sem árvores') {
@@ -1873,7 +1874,7 @@ function marcarFacesSemTrava(projetoId, itens, usr, coord, idx) {
     if (it.cond != null) { // condição da calçada (sem acesso), com o motivo escrito pela equipe
       const c = String(it.cond); const mt = c ? String(it.motivo == null ? (f.cond === c ? f.cond_motivo || '' : '') : it.motivo).slice(0, 200) : '';
       if (c !== (f.cond || '') || mt !== (f.cond_motivo || '')) { f.cond = c; f.cond_motivo = mt; txt.push((c === 'sem_acesso' ? 'sem acesso' : 'calçada sem restrição') + (mt ? ' (' + mt + ')' : '')); }
-    } else if (f.cond === 'sem_acesso' && it.situacao != null && it.situacao !== 'Levantada, sem árvores') { f.cond = ''; f.cond_motivo = ''; txt.push('deixou de ser sem acesso'); } // face reaberta
+    } else if (f.cond === 'sem_acesso' && it.situacao != null && (it.situacao !== 'Levantada, sem árvores' || (f0 && f0.registro && it.registro && String(it.registro).slice(0, 60) !== String(f0.registro)))) { f.cond = ''; f.cond_motivo = ''; txt.push('deixou de ser sem acesso'); } // face reaberta
     if (coord && it.equipe != null) txt.push('equipe ' + (f.equipe || 'nenhuma'));
     if (it.obs != null) f.obs = String(it.obs).slice(0, 300);
     if (!txt.length && it.obs == null) return;
