@@ -122,6 +122,7 @@ const Api = (() => {
     async quadrasCamada() { return { semCamada: true }; },
     async quadrasSituacao() { return { quadras: [], faces: [] }; },
     async mapaNovos() { return null; },
+    async reservaListar() { return null; }, async reservaPedir() { throw new Error('Na demonstração a reserva é feita pela coordenação.'); }, async reservaDecidir() { return null; }, async reservaCancelar() { return null; },
     // pontos de comunicação na demonstração: guardados no aparelho
     async comListar() { const l = (await Store.get('demo:com')) || []; return { itens: l, agora: new Date().toISOString() }; },
     async comSalvar(projeto, c) {
@@ -209,6 +210,11 @@ const Api = (() => {
     // pontos de comunicação (aviso solto no mapa). Servidor antigo: lista vazia
     async comListar(projeto, desde) { try { const j = await chamar('com_listar', { projeto, desde: desde || '' }); return { itens: j.itens || [], agora: j.agora }; } catch (e) { if (/desconhecida/i.test(e.message)) return null; throw e; } },
     async comSalvar(projeto, com) { return chamar('com_salvar', { projeto, com }); },
+    // pedidos de reserva de quadra (time parceiro). Servidor antigo: null
+    async reservaListar(projeto) { try { const j = await chamar('reserva_listar', { projeto }); return { pedidos: j.pedidos || [], max: j.max || 5, ativas: j.ativas }; } catch (e) { if (/desconhecida/i.test(e.message)) return null; throw e; } },
+    async reservaPedir(projeto, quadras) { return chamar('reserva_pedir', { projeto, quadras }); },
+    async reservaDecidir(projeto, id, decisao, motivo) { return chamar('reserva_decidir', { projeto, id, decisao, motivo }); },
+    async reservaCancelar(projeto, id) { return chamar('reserva_cancelar', { projeto, id }); },
     async comResolver(projeto, id, resposta, situacao) { return chamar('com_resolver', { projeto, id, resposta, situacao }); },
     async comApagar(projeto, id) { return chamar('com_apagar', { projeto, id }); },
     // em páginas, para não estourar a resposta do Google em projetos grandes

@@ -1,6 +1,6 @@
 // Neofloresta Inventário: app de campo do Inventário da Arborização Urbana, da Neofloresta
 (() => {
-  const VERSAO = '2.13.0';
+  const VERSAO = '2.14.0';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -825,6 +825,44 @@
       el.replaceChildren(...av.slice(0, 2).map((x) => h('div', { class: 'faixa-cont faixa-gps', role: 'status' }, h('b', null, 'Reserva de quadra'), h('span', null, x[1]))));
     } catch (e) { /* sem quadras */ }
   }
+
+  // ---------- Pedidos de reserva de quadra (time parceiro) ----------
+  // O coletor parceiro pede a quadra pelo mapa; a coordenação aprova na ordem de chegada. Cada pessoa é uma equipe e pode ter até 5 quadras.
+  const Reservas = {
+    dados: null,
+    chave: () => 'reservas:' + (S.projeto ? S.projeto.id : '') + ':' + (S.sessao ? S.sessao.u : ''),
+    ativo: () => !Api.demo && !!S.projeto && !!S.sessao && (modoQuadra() || ehCoord()),
+    async cache() { if (!this.dados && this.ativo()) { try { this.dados = (await Store.get(this.chave())) || null; } catch (e) { /* sem cache */ } } return this.dados; },
+    // devolve true quando algum pedido mudou de situação desde a última leitura
+    async carregar() {
+      if (!this.ativo() || !navigator.onLine || S.expirada) return false;
+      try {
+        const antes = JSON.stringify(((this.dados || {}).pedidos || []).map((x) => x.id + x.situacao)); const r = await Api.b.reservaListar(S.projeto.id); this.lido = Date.now(); if (!r) return false;
+        this.dados = r; await Store.set(this.chave(), r).catch(() => {}); return antes !== JSON.stringify(r.pedidos.map((x) => x.id + x.situacao));
+      } catch (e) { return false; }
+    },
+    aguardando() { return ((this.dados || {}).pedidos || []).filter((x) => x.situacao === 'Aguardando'); },
+    pedido(quadra) { return this.aguardando().find((x) => x.quadra === String(quadra) && (ehCoord() || String(x.login).toLowerCase() === String(S.sessao.u).toLowerCase())); },
+  };
+  // avisos do coletor parceiro: pedidos esperando, quadra liberada ou pedido recusado (some quando ele toca em Ok)
+  async function pintarAvisoPedidos(semRede) {
+    const el = document.getElementById('aviso-pedidos'); if (!el || !modoQuadra()) return;
+    const ck = 'reservasVistas:' + S.sessao.u;
+    const pinta = async () => {
+      const d = Reservas.dados; if (!d || !document.body.contains(el)) return el.replaceChildren();
+      const vistas = new Set((await Store.get(ck)) || []); const ag = Reservas.aguardando(); const out = [];
+      if (ag.length) out.push(h('div', { class: 'faixa-cont faixa-gps', role: 'status' }, h('b', null, 'Pedido de quadra'), h('span', null, `Aguardando a coordenação: quadra ${ag.map((x) => x.quadra).join(', ')}.`)));
+      for (const x of d.pedidos.filter((y) => (y.situacao === 'Aprovado' || y.situacao === 'Recusado') && !vistas.has(y.id + y.situacao))) {
+        out.push(h('div', { class: 'faixa-cont faixa-gps', role: 'status' }, h('b', null, x.situacao === 'Aprovado' ? 'Quadra liberada' : 'Pedido recusado'),
+          h('span', null, x.situacao === 'Aprovado' ? `A quadra ${x.quadra} é sua. Você tem 5 dias para começar.` : `Quadra ${x.quadra}: ${x.motivo || 'recusado pela coordenação'}.`),
+          h('button', { class: 'btn peq sec', onclick: async () => { vistas.add(x.id + x.situacao); try { await Store.set(ck, [...vistas]); } catch (e) { /* sem guardar */ } pinta(); } }, 'Ok')));
+      }
+      el.replaceChildren(...out);
+    };
+    await Reservas.cache(); await pinta();
+    if (!semRede && navigator.onLine && Date.now() - (Reservas.lido || 0) > 5000) { await Reservas.carregar(); await pinta(); }
+  }
+
 
   // ---------- Turno e trajeto ----------
   // com o trajeto liberado pela coordenação, a equipe toca em "Começar turno": o app guarda o caminho enquanto está aberto
@@ -1985,11 +2023,13 @@
     const btCidade = h('button', { class: 'mapa-bt', onclick: () => verCidade(), 'aria-label': 'Ver a cidade', title: 'Ver a cidade' }, ico('cidade'), h('span', { class: 'so-leitor' }, 'Ver a cidade'));
     const btSel = h('button', { class: 'mapa-bt pilula oculto', onclick: () => iniciarSelecao(), 'aria-label': 'Selecionar quadras ou faces' }, ico('selecionar'), 'Selecionar');
     const btCom = Com.veem() ? h('button', { class: 'mapa-bt grande', onclick: () => novoCom(), 'aria-label': 'Ponto de comunicação', title: 'Ponto de comunicação' }, ico('balao'), h('span', { class: 'so-leitor' }, 'Ponto de comunicação')) : null;
-    const bts = h('div', { class: 'mapa-bts' }, btSel, btCidade, btCom, btEu);
+    const btPed = ehCoord() && !Api.demo ? h('button', { class: 'mapa-bt pilula', onclick: () => abrirPedidos(), 'aria-label': 'Pedidos de reserva de quadra', title: 'Pedidos de reserva de quadra' }, ico('selecionar'), 'Pedidos', h('span', { class: 'selo-ped oculto' })) : null;
+    const pintarBtPed = () => { if (!btPed) return; const n = Reservas.aguardando().length; const sl = btPed.querySelector('.selo-ped'); sl.textContent = n; sl.classList.toggle('oculto', !n); };
+    const bts = h('div', { class: 'mapa-bts' }, btPed, btSel, btCidade, btCom, btEu);
     const fab = campo ? h('button', { class: 'btn bt-principal', id: 'bt-principal' }, '...') : null; // "Começar o turno" ou "Nova árvore" (pintarDia)
     // faixa embaixo do mapa: o que antes ficava na tela inicial (envio, cadastro não terminado, turno, avisos, encerrar face, meus registros)
     // tela de coleta limpa: só a etiqueta do dia, a do GPS e o cadastro não terminado; os avisos ficam atrás do sino
-    const avisos = campo ? h('div', { class: 'avisos-lista' }, h('div', { id: 'aviso-versao' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-reserva' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'devolvidos' }), h('div', { id: 'os-equipe' })) : null;
+    const avisos = campo ? h('div', { class: 'avisos-lista' }, h('div', { id: 'aviso-versao' }), h('div', { id: 'aviso-gps' }), h('div', { id: 'aviso-reserva' }), h('div', { id: 'aviso-pedidos' }), h('div', { id: 'aviso-espaco' }), h('div', { id: 'devolvidos' }), h('div', { id: 'os-equipe' })) : null;
     const seloSino = h('span', { class: 'selo-sino oculto' });
     // os avisos são pintados num canto escondido e vão para a janela só quando a dupla toca no sino
     const guardaAvisos = campo ? h('div', { class: 'oculto' }, avisos) : null;
@@ -2004,7 +2044,7 @@
     const telaM = h('div', { class: 'tela-mapa' + (campo ? ' modo-campo' : '') }, topoM, S.expirada && campo ? h('div', { class: 'aviso' }, 'Sua sessão expirou. ', h('button', { class: 'btn peq', onclick: reentrar }, 'Entrar de novo')) : null, barra, div, bts, fab, base, barraSel, guardaAvisos);
     if (campo) barra.classList.add('oculto');
     $app.replaceChildren(telaM);
-    if (campo) { Dupla.carregar(); atualizarSync(); listarRegistros(); pintarOSEquipe(); pintarAvisoVersao(); pintarAvisoGps(); pintarAvisoReserva(); pintarEspaco(); pintarDia(); pintarGpsPill();
+    if (campo) { Dupla.carregar(); atualizarSync(); listarRegistros(); pintarOSEquipe(); pintarAvisoVersao(); pintarAvisoGps(); pintarAvisoReserva(); pintarAvisoPedidos(); pintarEspaco(); pintarDia(); pintarGpsPill();
       const ouvP = (p) => { if (!document.body.contains(telaM)) return Gps.ouvintes.delete(ouvP); pintarGpsPill(p); }; Gps.ouvintes.add(ouvP); const tmP = setInterval(() => { if (!document.body.contains(telaM)) return clearInterval(tmP); pintarGpsPill(); }, 10000); }
     // um único desenho (canvas) para quadras, pontos e "minha posição": com dois, o de cima engolia o toque
     const render = L.canvas({ padding: 0.3, tolerance: 8 });
@@ -2163,6 +2203,42 @@
       if (direta) return clicarFace(direta.q, direta.f, ll);
       if (qd) clicarQuadra(qd, ll);
     }
+    async function pedirQuadra(q) {
+      if (!navigator.onLine) return toast('Sem internet. O pedido precisa de internet para chegar à coordenação.', 5000, null, true);
+      try {
+        const r = await Api.b.reservaPedir(S.projeto.id, [q.n]); mapa.closePopup();
+        if (r.recusadas && r.recusadas.length) return toast(r.recusadas[0].motivo, 6000, null, true);
+        toast('Pedido enviado. A coordenação vai responder.', 4000); await Reservas.carregar(); pintarAvisoPedidos();
+      } catch (e) { toast(e.message || 'Não foi possível pedir a quadra.', 6000, null, true); }
+    }
+    async function cancelarPedido(q) {
+      const x = Reservas.pedido(q.n); if (!x) return;
+      try { await Api.b.reservaCancelar(S.projeto.id, x.id); mapa.closePopup(); toast('Pedido cancelado.'); await Reservas.carregar(); pintarAvisoPedidos(); } catch (e) { toast(e.message || 'Não foi possível cancelar.', 5000, null, true); }
+    }
+    // coordenação: pedidos esperando, na ordem de chegada
+    async function abrirPedidos() {
+      document.querySelectorAll('.veu').forEach((v) => v.remove()); mapa.closePopup();
+      await Reservas.carregar(); pintarBtPed(); const ag = Reservas.aguardando();
+      const porQuadra = {}; ag.forEach((x) => { porQuadra[x.quadra] = (porQuadra[x.quadra] || 0) + 1; });
+      const refaz = async () => { qdSit = await carregarSitQd(true); desenhar(false); await abrirPedidos(); };
+      const decidir = async (x, dec) => {
+        let motivo = '';
+        if (dec === 'Recusado') { const ta = h('input', { class: 'entrada', placeholder: 'Motivo (opcional)', maxlength: 200 }); const ok = await modal('Recusar o pedido', h('div', null, h('p', null, `${x.nome}, quadra ${x.quadra}`), ta), [{ texto: 'Voltar', classe: 'sec', valor: false }, { texto: 'Recusar', valor: true }]); if (!ok) return abrirPedidos(); motivo = ta.value.trim(); }
+        try { const r = await Api.b.reservaDecidir(S.projeto.id, x.id, dec, motivo); toast(r.situacao === 'Aprovado' ? `Quadra ${x.quadra} reservada para ${x.nome}.` : r.motivo || 'Pedido recusado.', 5000); } catch (e) { toast(e.message || 'Não foi possível decidir.', 6000, null, true); }
+        await Reservas.carregar(); await refaz();
+      };
+      const linha = (x) => h('div', { class: 'ped-lin' }, h('b', null, `${x.nome} pediu a quadra ${x.quadra}`), h('small', null, dataAno(x.criado_em) + (porQuadra[x.quadra] > 1 ? ` · ${porQuadra[x.quadra]} pedidos para esta quadra` : '')),
+        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec peq', onclick: () => { document.querySelectorAll('.veu').forEach((v) => v.remove()); const q = qdDados && qdDados.quadras.find((y) => y.n === x.quadra); if (q) { mapa.fitBounds(L.latLngBounds([q.b[1], q.b[0]], [q.b[3], q.b[2]]), { maxZoom: 18 }); } } }, 'Ver no mapa'),
+          h('button', { class: 'btn sec peq', onclick: () => decidir(x, 'Recusado') }, 'Recusar'), h('button', { class: 'btn peq', onclick: () => decidir(x, 'Aprovado') }, 'Aprovar')));
+      await modal('Pedidos de reserva', h('div', { class: 'ped-lista' }, ag.length ? [h('p', { class: 'dica' }, 'Na ordem de chegada. Ao aprovar, os outros pedidos da mesma quadra caem como recusados.'), ag.map(linha)] : h('p', { class: 'dica' }, 'Nenhum pedido esperando.')), [{ texto: 'Fechar', classe: 'sec', valor: true }]);
+    }
+    // coletor parceiro: pedir (ou cancelar o pedido de) uma quadra ainda sem reserva
+    function blocoPedido(q) {
+      const sq = qdSit.get(q.n) || {}; if (!(perfil() === 'coletor' && !sq.equipe && modoQuadra())) return null;
+      return Reservas.pedido(q.n)
+        ? [h('small', { class: 'dica' }, 'Pedido enviado. Aguarde a coordenação.'), h('button', { class: 'btn sec peq', onclick: () => cancelarPedido(q) }, 'Cancelar o pedido')]
+        : [h('small', { class: 'dica' }, 'Quadra sem reserva.'), h('button', { class: 'btn peq', onclick: () => pedirQuadra(q) }, 'Pedir esta quadra')];
+    }
     function clicarQuadra(q, ll) {
       if (selecao) { if (selTipo !== 'qd') return toast('Toque nas linhas das faces para escolher.'); if (selecao.has(q.n)) selecao.delete(q.n); else selecao.add(q.n); pintarSelecao(); restilizar([q.n]); return; }
       const s = qdSit.get(q.n) || { situacao: 'A levantar', equipe: '' }; const st = s.situacao || 'A levantar';
@@ -2177,7 +2253,7 @@
         q.f ? h('small', null, `Faces: ${fFeitas} de ${q.f.length} levantadas.` + (mapa.getZoom() < ZOOM_FACES ? '' : ' Toque na linha de uma face para marcar.')) : null,
         q.f && mapa.getZoom() < ZOOM_FACES ? h('button', { class: 'btn sec peq', onclick: () => { fecharFicha(); mapa.setView(Quadras.centro(q), 18); } }, 'Aproximar para marcar faces') : null,
         perfil() === 'coletor' && !s.equipe && !modoQuadra() ? h('button', { class: 'btn peq', onclick: () => marcar([{ numero: q.n, situacao: st === 'A levantar' ? 'Em levantamento' : st }]) }, 'Assumir esta quadra para a minha equipe') : null,
-        perfil() === 'coletor' && !s.equipe && modoQuadra() ? h('small', { class: 'dica' }, 'Quadra sem reserva. Peça a reserva à coordenação.') : null,
+        blocoPedido(q),
         s.fechada_em ? h('small', null, h('b', null, 'Quadra fechada'), ' em ' + dataAno(s.fechada_em)) : null,
         s.reservada_em && !s.fechada_em && perfil() !== 'cliente' ? h('small', { class: 'dica' }, 'Reservada em ' + dataAno(s.reservada_em)) : null,
         q.f && !s.fechada_em && s.equipe && (ehCoord() || (perfil() === 'coletor' && s.equipe === minhaEquipe())) ? h('button', { class: 'btn peq acao', onclick: () => fecharQuadra(q, s, marcar) }, ico('check'), 'Fechar quadra') : null,
@@ -2241,6 +2317,7 @@
         pode && !FACE_FEITA.includes(st) ? h('button', { class: 'btn cheio acao', onclick: async () => { let fotoBlob = null; if (exigeFotoFace()) { if (somenteVer()) return; fotoBlob = await pedirFotoFace(`Face ${f.i} da quadra ${q.n} (${f.r}).`); if (!fotoBlob) return; } marcar([Object.assign({ numero: id, situacao: 'Levantada' }, fotoBlob ? { fotoBlob } : {})]); } }, ico('check'), 'Marcar como levantada') : null,
         pode && st === 'A levantar' ? h('button', { class: 'btn sec cheio acao', onclick: () => marcar([{ numero: id, situacao: 'Em levantamento' }]) }, 'Em levantamento') : null,
         pode ? h('button', { class: 'btn sec cheio acao', onclick: () => { mapa.closePopup(); iniciarCalcadaFace(q, f); } }, ico('camera'), st === 'Levantada, sem árvores' ? 'Refazer o cadastro da calçada sem árvores' : 'Sem árvores (só a foto)') : null,
+        blocoPedido(q),
         mais.length ? h('details', { class: 'qd-mais' }, h('summary', null, 'Mais opções'), mais) : null);
       fcAberta = id; restilizar([id]);
       abrirFicha(pop, ll, () => { fcAberta = null; restilizar([id]); });
@@ -2278,6 +2355,7 @@
         else verCidade();
         const nova = await carregarSitQd(false); if (!document.body.contains(div)) return;
         qdSit = nova; for (const s of qdSit.values()) if (s.equipe) corEq(s.equipe); preencherEquipes(); desenhar(false);
+        if (Reservas.ativo()) { await Reservas.cache(); pintarBtPed(); await Reservas.carregar(); pintarBtPed(); desenhar(false); }
       } catch (e) { /* sem quadras */ }
     };
     const camada = L.layerGroup().addTo(mapa); trajCamada.addTo(mapa);
@@ -2484,6 +2562,7 @@
         }
         if (vivo.sujo && !fichaAberta() && !selecao && !comNovo) { vivo.sujo = false; preencherEquipes(); desenhar(false); }
         await tickCom();
+        if (Reservas.ativo()) { const mudou = await Reservas.carregar(); pintarBtPed(); if (mudou) { pintarAvisoPedidos(); if (!fichaAberta() && !selecao && !comNovo) { qdSit = await carregarSitQd(true); desenhar(false); } } }
       } catch (e) { /* tenta no próximo ciclo */ } finally { vivo.rodando = false; }
     }
     const aoVoltar = () => { if (!document.hidden) tickVivo(); };

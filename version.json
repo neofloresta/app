@@ -1,7 +1,8 @@
 {
- "versao": "2.13.0",
+ "versao": "2.14.0",
  "data": "2026-11-17",
  "notas": [
+  "Coletor parceiro pede a reserva de uma quadra pelo mapa (até 5 por pessoa); a coordenação aprova na ordem de chegada",
   "Ponto de comunicação no mapa: a equipe avisa a coordenação com um balão e um texto",
   "O mapa se atualiza sozinho a cada 30 segundos: os pontos da outra dupla aparecem",
   "Duas duplas da Neofloresta podem levantar a mesma face ao mesmo tempo",

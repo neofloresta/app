@@ -11,7 +11,7 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.13';
+const VERSAO_SCRIPT = '2.14';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id', 'indicacao'];
 const COLS_TIMES = ['id', 'nome', 'tipo', 'projeto', 'ativo', 'criado_em'];
 const TIPOS_TIME = ['Próprio', 'Parceiro'];
@@ -30,7 +30,7 @@ const ACOES_TIME = ['sessao', 'sair', 'aceitar_termo', 'trocar_senha', 'formular
 // auxiliar: entra só para ver o painel de produtividade e remuneração dele
 const ACOES_AUX = ['sessao', 'sair', 'aceitar_termo', 'trocar_senha', 'formulario', 'producao_minha'];
 // coordenação vendo as telas de outro perfil: só consultas, nada é gravado
-const ACOES_COMO = ['sessao', 'formulario', 'estilo', 'mapa', 'painel', 'foto_ver', 'listar', 'situacao_meus', 'producao_minha', 'producao_time', 'pessoas_listar', 'conferir', 'setores_camada', 'setores_situacao', 'quadras_camada', 'quadras_situacao', 'os_listar', 'trajetos', 'com_listar', 'mapa_novos'];
+const ACOES_COMO = ['sessao', 'formulario', 'estilo', 'mapa', 'painel', 'foto_ver', 'listar', 'situacao_meus', 'producao_minha', 'producao_time', 'pessoas_listar', 'conferir', 'setores_camada', 'setores_situacao', 'quadras_camada', 'quadras_situacao', 'os_listar', 'trajetos', 'com_listar', 'mapa_novos', 'reserva_listar'];
 // Colunas que só o servidor escreve (validação). Um envio do aparelho nunca as apaga.
 const COLS_SISTEMA = ['validacao', 'validacao_obs', 'validado_por', 'validado_em', 'validacao_hist', 'numero_unico', 'servidor_em', 'pagamento'];
 // Colunas internas que o perfil cliente não recebe
@@ -43,7 +43,7 @@ const BLOQUEIO_MIN = 15;
 const FUSO = 'America/Sao_Paulo';
 const ITERACOES = 1000;
 const SENHA_MIN = 8;
-const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar', 'setores_importar', 'setores_atribuir', 'auditoria_sortear', 'auditoria_conferir', 'medicao_fechar', 'chuva_registrar', 'com_salvar', 'com_resolver', 'com_apagar'];
+const ACOES_ESCRITA = ['registro', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar', 'setores_importar', 'setores_atribuir', 'auditoria_sortear', 'auditoria_conferir', 'medicao_fechar', 'chuva_registrar', 'com_salvar', 'com_resolver', 'com_apagar', 'reserva_pedir', 'reserva_decidir', 'reserva_cancelar'];
 // texto que começaria uma fórmula na planilha vira texto puro
 function seguro(v) { v = v == null ? '' : String(v); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
 function hashToken(t) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'sessao|' + t, Utilities.Charset.UTF_8)); }
@@ -127,6 +127,10 @@ function doPost(e) {
       case 'com_listar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, listarComunicacao(d.projeto, String(d.desde || ''))));
       case 'com_salvar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarComunicacao(d.projeto, d.com || {}, usr)));
       case 'com_resolver': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, resolverComunicacao(d.projeto, d.id, d.resposta, d.situacao, usr)));
+      case 'reserva_pedir': pode('coletor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, pedirReserva(d.projeto, d.quadras, usr)));
+      case 'reserva_listar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, listarReservas(d.projeto, usr)));
+      case 'reserva_decidir': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, decidirReserva(d.projeto, d.id, d.decisao, d.motivo, usr)));
+      case 'reserva_cancelar': pode('coletor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, cancelarReserva(d.projeto, d.id, usr)));
       case 'com_apagar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, apagarComunicacao(d.projeto, d.id, usr)));
       case 'painel': pode('revisor', 'cliente'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, painel(d.projeto, usr)));
       case 'foto_ver': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, verFoto(d.projeto, d.id, usr)));
@@ -950,6 +954,87 @@ function apagarComunicacao(projetoId, id, usr) {
     o.situacao = 'Apagado'; gravarSetor(sh, Object.assign(o, { atualizado_em: new Date().toISOString() })); marcaCom(projetoId);
     auditar(usr.login, 'com_apagar', String(id), '');
     return { id: o.id, apagado: true };
+  } finally { lock.releaseLock(); }
+}
+
+// ---------- Pedidos de reserva de quadra (time parceiro) ----------
+// O coletor parceiro pede a quadra; a coordenação aprova na ordem de chegada. Aprovado um pedido, os outros da mesma quadra caem como recusados.
+// Cada coletor parceiro é uma equipe própria; no máximo 5 quadras reservadas (não fechadas) ao mesmo tempo, contando os pedidos aguardando.
+const COLS_PED = ['id', 'quadra', 'login', 'nome', 'equipe', 'criado_em', 'situacao', 'decidido_por', 'decidido_em', 'motivo'];
+const MAX_RESERVAS = 5;
+function abaPed(projetoId) {
+  const ss = SpreadsheetApp.openById(projeto(projetoId).planilha_id); let sh = ss.getSheetByName('PedidosReserva');
+  if (!sh) { sh = ss.insertSheet('PedidosReserva'); sh.appendRow(COLS_PED); sh.setFrozenRows(1); }
+  return garantirCab(sh, COLS_PED);
+}
+const reservasAtivas = (quadras, equipe) => quadras.filter((q) => q.equipe && q.equipe === equipe && !q.fechada_em).length;
+function pedirReserva(projetoId, lista, usr) {
+  if (!timeParceiroDo(usr)) throw new Error('Só o time parceiro pede reserva de quadra.');
+  if (!usr.equipe) throw new Error('Seu acesso não tem equipe. Avise a coordenação.');
+  const nums = Array.isArray(lista) ? lista.map((x) => String(x == null ? '' : x).slice(0, 40)).filter(Boolean) : [];
+  if (!nums.length) throw new Error('Nenhuma quadra informada.');
+  if (nums.length > MAX_RESERVAS) throw new Error('No máximo ' + MAX_RESERVAS + ' quadras por vez.');
+  const idx = indiceCamada(projetoId);
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const quadras = lerSitQuadras(projetoId); const por = {}; quadras.forEach((q) => { por[q.numero] = q; });
+    const sh = abaPed(projetoId); const todos = sh.getLastRow() < 2 ? [] : lerOS(sh);
+    const meus = todos.filter((o) => String(o.login).toLowerCase() === String(usr.login).toLowerCase() && o.situacao === 'Aguardando');
+    let ocupadas = reservasAtivas(quadras, usr.equipe) + meus.length;
+    const criados = []; const recusadas = []; const agora = new Date().toISOString();
+    nums.filter((n, i) => nums.indexOf(n) === i).forEach((n) => {
+      if (!idx.nums.has(n)) { recusadas.push({ numero: n, motivo: 'Quadra não existe na camada.' }); return; }
+      const q = por[n] || {};
+      if (q.equipe) { recusadas.push({ numero: n, motivo: q.equipe === usr.equipe ? 'Esta quadra já é sua.' : 'Quadra já reservada para outra pessoa.' }); return; }
+      if (meus.some((o) => o.quadra === n)) { recusadas.push({ numero: n, motivo: 'Você já pediu esta quadra. Aguarde a coordenação.' }); return; }
+      if (ocupadas >= MAX_RESERVAS) { recusadas.push({ numero: n, motivo: 'Limite de ' + MAX_RESERVAS + ' quadras reservadas ou pedidas ao mesmo tempo. Feche uma quadra antes de pedir outra.' }); return; }
+      const o = { id: 'R' + Utilities.getUuid().replace(/-/g, '').slice(0, 14), quadra: n, login: usr.login, nome: String(usr.nome || usr.login).slice(0, 60), equipe: String(usr.equipe).slice(0, 60), criado_em: agora, situacao: 'Aguardando', decidido_por: '', decidido_em: '', motivo: '' };
+      gravarSetor(sh, o); ocupadas++; criados.push(n);
+    });
+    if (criados.length) auditar(usr.login, 'reserva_pedir', criados.join(','), '');
+    return { criados: criados, recusadas: recusadas };
+  } finally { lock.releaseLock(); }
+}
+function listarReservas(projetoId, usr) {
+  const coord = usr.perfil === 'admin' || usr.perfil === 'revisor';
+  const sh = abaPed(projetoId); const todos = sh.getLastRow() < 2 ? [] : lerOS(sh);
+  const corte = new Date(Date.now() - 14 * 864e5).toISOString();
+  const pub = (o) => ({ id: o.id, quadra: String(o.quadra), login: o.login, nome: o.nome, equipe: o.equipe, criado_em: o.criado_em, situacao: o.situacao, decidido_por: o.decidido_por, decidido_em: o.decidido_em, motivo: o.motivo });
+  const itens = todos.filter((o) => (coord || String(o.login).toLowerCase() === String(usr.login).toLowerCase()) && (o.situacao === 'Aguardando' || String(o.decidido_em || o.criado_em) >= corte)).map(pub).sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)));
+  const ativas = coord ? null : reservasAtivas(lerSitQuadras(projetoId), usr.equipe);
+  return { pedidos: itens, max: MAX_RESERVAS, ativas: ativas };
+}
+function decidirReserva(projetoId, id, decisao, motivo, usr) {
+  const dec = String(decisao || ''); if (dec !== 'Aprovado' && dec !== 'Recusado') throw new Error('Decisão inválida.');
+  const mt = String(motivo == null ? '' : motivo).replace(/[\t\r]+/g, ' ').trim().slice(0, 200);
+  const idx = indiceCamada(projetoId);
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = abaPed(projetoId); const todos = sh.getLastRow() < 2 ? [] : lerOS(sh); const o = todos.find((x) => x.id === String(id));
+    if (!o) throw new Error('Pedido não encontrado.');
+    if (o.situacao !== 'Aguardando') throw new Error('Este pedido já foi ' + String(o.situacao).toLowerCase() + '.');
+    const agora = new Date().toISOString(); const quem = String(usr.nome || usr.login).slice(0, 60);
+    if (dec === 'Recusado') { Object.assign(o, { situacao: 'Recusado', decidido_por: quem, decidido_em: agora, motivo: mt }); gravarSetor(sh, o); auditar(usr.login, 'reserva_recusar', o.quadra, o.nome); return { id: o.id, situacao: 'Recusado' }; }
+    const quadras = lerSitQuadras(projetoId); const q = quadras.find((x) => x.numero === String(o.quadra)) || {};
+    if (q.equipe) { Object.assign(o, { situacao: 'Recusado', decidido_por: 'sistema', decidido_em: agora, motivo: 'Quadra já reservada para ' + q.equipe + '.' }); gravarSetor(sh, o); return { id: o.id, situacao: 'Recusado', motivo: o.motivo }; }
+    if (reservasAtivas(quadras, o.equipe) >= MAX_RESERVAS) throw new Error(o.nome + ' já tem ' + MAX_RESERVAS + ' quadras reservadas. Ela precisa fechar uma antes.');
+    const r = marcarQuadrasSemTrava(projetoId, [{ tipo: 'quadra', numero: String(o.quadra), equipe: o.equipe }], usr, true, idx.nums, idx.faces);
+    if (r.recusadas.length) throw new Error(r.recusadas[0].motivo);
+    Object.assign(o, { situacao: 'Aprovado', decidido_por: quem, decidido_em: agora, motivo: mt }); gravarSetor(sh, o);
+    todos.filter((x) => x.id !== o.id && String(x.quadra) === String(o.quadra) && x.situacao === 'Aguardando').forEach((x) => { Object.assign(x, { situacao: 'Recusado', decidido_por: 'sistema', decidido_em: agora, motivo: 'Quadra reservada para outra pessoa.' }); gravarSetor(sh, x); });
+    auditar(usr.login, 'reserva_aprovar', o.quadra, o.nome);
+    return { id: o.id, situacao: 'Aprovado' };
+  } finally { lock.releaseLock(); }
+}
+function cancelarReserva(projetoId, id, usr) {
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = abaPed(projetoId); const o = sh.getLastRow() < 2 ? null : lerOS(sh).find((x) => x.id === String(id));
+    if (!o) throw new Error('Pedido não encontrado.');
+    if (String(o.login).toLowerCase() !== String(usr.login).toLowerCase()) throw new Error('Este pedido é de outra pessoa.');
+    if (o.situacao !== 'Aguardando') throw new Error('Este pedido já foi ' + String(o.situacao).toLowerCase() + '.');
+    Object.assign(o, { situacao: 'Cancelado', decidido_por: String(usr.nome || usr.login).slice(0, 60), decidido_em: new Date().toISOString(), motivo: '' }); gravarSetor(sh, o);
+    return { id: o.id, situacao: 'Cancelado' };
   } finally { lock.releaseLock(); }
 }
 

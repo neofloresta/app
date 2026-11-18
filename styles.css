@@ -793,3 +793,10 @@ html { touch-action: pan-x pan-y; } /* sem zoom de pinça na página (o mapa tem
 .mapa-leg .leg-setores i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; }
 .set-rot { background: none; border: 0; pointer-events: none; text-align: center; }
 .set-rot span { font-weight: 900; font-size: 18px; letter-spacing: .08em; text-transform: uppercase; opacity: .8; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 6px #fff; }
+
+/* 2.14: pedidos de reserva de quadra */
+.selo-ped { display:inline-block; min-width:1.3em; margin-left:.4em; padding:0 .4em; border-radius:1em; background:#c0392b; color:#fff; font-size:.75em; font-weight:700; text-align:center; line-height:1.5; }
+.selo-ped.oculto { display:none; }
+.ped-lista { display:flex; flex-direction:column; gap:.75rem; max-height:60vh; overflow:auto; }
+.ped-lin { display:flex; flex-direction:column; gap:.3rem; padding:.6rem 0; border-bottom:1px solid rgba(0,0,0,.12); }
+.ped-lin .linha-btn { display:flex; gap:.5rem; flex-wrap:wrap; }
