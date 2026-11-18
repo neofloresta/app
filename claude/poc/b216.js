@@ -43,7 +43,7 @@ const tocar = async (p, lat, lon, z = 19) => { const xy = await p.evaluate(([a, 
   // 2. a lista de motivos
   const form = await L.post('formulario', { id: 'divinopolis-inventario' }).catch(() => null);
   const fj = JSON.parse(fs.readFileSync(L.APP + '/forms/divinopolis-inventario.json', 'utf8')); const mot = fj.campos.find((c) => c.nome === 'Motivo sem acesso');
-  ok('J.2', JSON.stringify(mot.opcoes.map((o) => o.t)) === JSON.stringify(['Condomínio ou área particular', 'Relevo', 'Obra ou interdição', 'Outro']) && fj.campos.filter((c) => /^(Risco nivel 1|Nivel da avaliacao)$/.test(c.nome)).every((c) => c.legado) && !JSON.stringify(fj.abas).includes('Risco nivel 1') && !JSON.stringify(fj.regras).includes('Nivel da avaliacao') && fj.versao === 10, `motivos: ${mot.opcoes.map((o) => o.t).join(' | ')}; risco nível 1 só na base (legado); versão do formulário ${fj.versao}`);
+  ok('J.2', JSON.stringify(mot.opcoes.map((o) => o.t)) === JSON.stringify(['Condomínio ou área particular', 'Relevo', 'Obra ou interdição', 'Outro']) && fj.campos.filter((c) => /^(Risco nivel 1|Nivel da avaliacao)$/.test(c.nome)).every((c) => c.legado) && !JSON.stringify(fj.abas).includes('Risco nivel 1') && !JSON.stringify(fj.regras).includes('Nivel da avaliacao') && fj.versao >= 10, `motivos: ${mot.opcoes.map((o) => o.t).join(' | ')}; risco nível 1 só na base (legado); versão do formulário ${fj.versao}`);
   // 3. agrupamento pelo app: um registro, com a quantidade estimada, CAP e altura médios
   await p.goto(L.WEB + '#'); await p.waitForSelector('button.nova'); await p.waitForTimeout(800);
   await E.ctx.setGeolocation({ latitude: auto.la + 0.00004, longitude: auto.lo + 0.00004, accuracy: 4 }); await p.waitForTimeout(500);

@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 10,
+ "versao": 11,
  "campos": [
   {
    "armazenar": "text",
@@ -1353,7 +1353,75 @@
    "popular": "espécie não identificada em campo"
   },
   {
+   "cientifico": "Abelia grandiflora",
+   "popular": "abélia"
+  },
+  {
+   "cientifico": "Acacia auriculiformis",
+   "popular": "acácia-auriculada"
+  },
+  {
+   "cientifico": "Acacia mangium",
+   "popular": "acácia-mangium"
+  },
+  {
+   "cientifico": "Acacia podalyriifolia",
+   "popular": "acácia"
+  },
+  {
+   "cientifico": "Acalypha wilkesiana",
+   "popular": "acalifa"
+  },
+  {
+   "cientifico": "Acer palmatum",
+   "popular": "acer-palmato"
+  },
+  {
+   "cientifico": "Acer platanifolium",
+   "popular": "acer-platanóide"
+  },
+  {
+   "cientifico": "Acnistus arborescens",
+   "popular": "fruta-do-sabiá"
+  },
+  {
    "cientifico": "Acrocomia aculeata",
+   "popular": "macaúba"
+  },
+  {
+   "cientifico": "Adenanthera pavonina",
+   "popular": "tento-carolina"
+  },
+  {
+   "cientifico": "Adonidia merrillii",
+   "popular": "palmeira-de-manila"
+  },
+  {
+   "cientifico": "Aegiphila integrifolia",
+   "popular": "papagaio"
+  },
+  {
+   "cientifico": "Aegiphila verticillata",
+   "popular": "tamanqueiro"
+  },
+  {
+   "cientifico": "Aiphanes horrida",
+   "popular": "corozo"
+  },
+  {
+   "cientifico": "Albizia lebbeck",
+   "popular": "cássia-pau-preto"
+  },
+  {
+   "cientifico": "Albizia niopoides",
+   "popular": "farinha-seca"
+  },
+  {
+   "cientifico": "Albizia polycephala",
+   "popular": "espinheira-de-cerca"
+  },
+  {
+   "cientifico": "Albizia sp.",
    "popular": ""
   },
   {
@@ -1361,40 +1429,376 @@
    "popular": ""
   },
   {
+   "cientifico": "Allamanda cathartica",
+   "popular": "alamanda"
+  },
+  {
+   "cientifico": "Allamanda laevis",
+   "popular": "dedal-de-dama"
+  },
+  {
    "cientifico": "Allophylus edulis",
    "popular": ""
   },
   {
-   "cientifico": "Archontophoenix cunninghamiana",
+   "cientifico": "Aloysia virgata",
+   "popular": "lixa"
+  },
+  {
+   "cientifico": "Anacardium occidentale",
+   "popular": "cajuzeiro"
+  },
+  {
+   "cientifico": "Anadenanthera colubrina",
+   "popular": "angico-branco"
+  },
+  {
+   "cientifico": "Anadenanthera colubrina var. cebil",
+   "popular": "angico-espinho"
+  },
+  {
+   "cientifico": "Anadenanthera peregrina",
+   "popular": "angico-vermelho"
+  },
+  {
+   "cientifico": "Anadenanthera peregrina var. falcata",
+   "popular": "angico-do-campo"
+  },
+  {
+   "cientifico": "Andira sp.",
    "popular": ""
   },
   {
+   "cientifico": "Annona mucosa",
+   "popular": "araticunzeiro"
+  },
+  {
+   "cientifico": "Annona muricata",
+   "popular": "gravioleira"
+  },
+  {
+   "cientifico": "Annona sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Annona squamosa",
+   "popular": "pinha"
+  },
+  {
+   "cientifico": "Annona sylvatica",
+   "popular": "embira"
+  },
+  {
+   "cientifico": "Apeiba tibourbou",
+   "popular": "pente-de-macaco"
+  },
+  {
+   "cientifico": "Araucaria angustifolia",
+   "popular": "araucária"
+  },
+  {
+   "cientifico": "Araucaria heterophylla",
+   "popular": "pinheiro-de-norfolk"
+  },
+  {
+   "cientifico": "Archontophoenix cunninghamiana",
+   "popular": "palmeira-australiana"
+  },
+  {
+   "cientifico": "Ardisia sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Areca triandra",
+   "popular": "areca-triandra"
+  },
+  {
+   "cientifico": "Artocarpus altilis",
+   "popular": "fruta-pão"
+  },
+  {
    "cientifico": "Artocarpus heterophyllus",
+   "popular": "jaqueira"
+  },
+  {
+   "cientifico": "Aspidosperma cylindrocarpon",
+   "popular": "peroba-poca"
+  },
+  {
+   "cientifico": "Aspidosperma parvifolium",
+   "popular": "guatambu"
+  },
+  {
+   "cientifico": "Aspidosperma sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Astronium fraxinifolium",
+   "popular": "gonçalo-alves"
+  },
+  {
+   "cientifico": "Averrhoa carambola",
+   "popular": "caramboleira"
+  },
+  {
+   "cientifico": "Azadirachta indica",
+   "popular": "nim-indiano"
+  },
+  {
+   "cientifico": "Baccharis dracunculifolia",
+   "popular": "alecrim-do-campo"
+  },
+  {
+   "cientifico": "Bauhinia blakeana",
+   "popular": "bauhinia-blakeana"
+  },
+  {
+   "cientifico": "Bauhinia forficata",
+   "popular": "bauhinia-forficata"
+  },
+  {
+   "cientifico": "Bauhinia longifolia",
+   "popular": "miroró"
+  },
+  {
+   "cientifico": "Bauhinia purpurea",
+   "popular": "bauhinia-purpurea"
+  },
+  {
+   "cientifico": "Bauhinia sp.",
    "popular": ""
   },
   {
    "cientifico": "Bauhinia variegata",
-   "popular": ""
+   "popular": "pata-de-vaca"
+  },
+  {
+   "cientifico": "Beaucarnea recurvata",
+   "popular": "pata-de-elefante"
+  },
+  {
+   "cientifico": "Bismarckia nobilis",
+   "popular": "palmeira-azul"
+  },
+  {
+   "cientifico": "Bixa orellana",
+   "popular": "urucum"
+  },
+  {
+   "cientifico": "Bombax ceiba",
+   "popular": "paineira-vermelha"
+  },
+  {
+   "cientifico": "Bougainvillea glabra",
+   "popular": "bouganvílea"
   },
   {
    "cientifico": "Bougainvillea spectabilis",
    "popular": ""
   },
   {
+   "cientifico": "Bowdichia virgilioides",
+   "popular": "sucupira-preta"
+  },
+  {
+   "cientifico": "Brasiliopuntia brasiliensis",
+   "popular": "urumbeba"
+  },
+  {
+   "cientifico": "Brosimum gaudichaudii",
+   "popular": "mama-cadela"
+  },
+  {
+   "cientifico": "Brugmansia suaveolens",
+   "popular": "trombeta"
+  },
+  {
    "cientifico": "Brunfelsia uniflora",
+   "popular": "manacá"
+  },
+  {
+   "cientifico": "Bunchosia glandulifera",
+   "popular": "bunchosia"
+  },
+  {
+   "cientifico": "Butia capitata",
+   "popular": "palmeira-butia"
+  },
+  {
+   "cientifico": "Buxus sp.",
    "popular": ""
   },
   {
+   "cientifico": "Byrsonima verbascifolia",
+   "popular": "murici-amarelo"
+  },
+  {
+   "cientifico": "Cabralea canjerana",
+   "popular": "canjerana"
+  },
+  {
+   "cientifico": "Caesalpinia pulcherrima",
+   "popular": "flamboyant-mirim"
+  },
+  {
+   "cientifico": "Cajanus cajan",
+   "popular": "feijão-guandu"
+  },
+  {
+   "cientifico": "Calliandra tweediei",
+   "popular": "flor-do-cerrado"
+  },
+  {
+   "cientifico": "Callicarpa reevesii",
+   "popular": "calicarpa"
+  },
+  {
+   "cientifico": "Callistemon salignus",
+   "popular": "escova-de-garrafa-branca"
+  },
+  {
+   "cientifico": "Callistemon viminalis",
+   "popular": "escovade-garrafa"
+  },
+  {
+   "cientifico": "Calycophyllum multiflorum",
+   "popular": "pau-mulato"
+  },
+  {
+   "cientifico": "Camellia japonica",
+   "popular": "camélia"
+  },
+  {
+   "cientifico": "Campomanesia guazumifolia",
+   "popular": "guavirova"
+  },
+  {
+   "cientifico": "Carica papaya",
+   "popular": "mamoeiro"
+  },
+  {
+   "cientifico": "Cariniana estrellensis",
+   "popular": "jequitibá-rosa"
+  },
+  {
+   "cientifico": "Cariniana legalis",
+   "popular": "jequitibá"
+  },
+  {
+   "cientifico": "Caryocar brasiliense",
+   "popular": "pequizeiro"
+  },
+  {
+   "cientifico": "Caryota mitis",
+   "popular": "cariota"
+  },
+  {
+   "cientifico": "Caryota urens",
+   "popular": "palmeira-rabo-de-peixe"
+  },
+  {
+   "cientifico": "Casearia arborea",
+   "popular": "guacatonga"
+  },
+  {
    "cientifico": "Casearia sylvestris",
+   "popular": "carvalinho"
+  },
+  {
+   "cientifico": "Cassia ferruginea",
+   "popular": "canafístula"
+  },
+  {
+   "cientifico": "Cassia fistula",
+   "popular": "cássia"
+  },
+  {
+   "cientifico": "Cassia grandis",
+   "popular": "cássia rosa"
+  },
+  {
+   "cientifico": "Cassia javanica",
+   "popular": "cássia javanica"
+  },
+  {
+   "cientifico": "Cassia silvestris",
+   "popular": "cássia silvestre"
+  },
+  {
+   "cientifico": "Casuarina equisetifolia",
+   "popular": "casuarina"
+  },
+  {
+   "cientifico": "Cavanillesia sp.",
    "popular": ""
+  },
+  {
+   "cientifico": "Cavanillesia umbellata",
+   "popular": "imbaré"
+  },
+  {
+   "cientifico": "Cecropia pachystachya",
+   "popular": "embaúba"
+  },
+  {
+   "cientifico": "Cedrela fissilis",
+   "popular": "cedro-rosa"
+  },
+  {
+   "cientifico": "Ceiba speciosa",
+   "popular": "paineira"
+  },
+  {
+   "cientifico": "Celtis iguanaea",
+   "popular": "esporão-de-galo"
   },
   {
    "cientifico": "Cenostigma pluviosum",
    "popular": ""
   },
   {
+   "cientifico": "Centrolobium tomentosum",
+   "popular": "araribá"
+  },
+  {
+   "cientifico": "Cereus hildmannianus",
+   "popular": "cacto-do-peru"
+  },
+  {
+   "cientifico": "Cereus jamacaru",
+   "popular": "mandacaru"
+  },
+  {
+   "cientifico": "Cestrum corymbosum",
+   "popular": "coerana-amarela"
+  },
+  {
+   "cientifico": "Cestrum nocturnum",
+   "popular": "dama-da-noite"
+  },
+  {
+   "cientifico": "Chamaedorea seifrizii",
+   "popular": "palmeirinha-bambu"
+  },
+  {
+   "cientifico": "Chloroleucon tortum",
+   "popular": "jurema"
+  },
+  {
+   "cientifico": "Cinnamomum burmannii",
+   "popular": "canela-de-cheiro"
+  },
+  {
+   "cientifico": "Cinnamomum verum",
+   "popular": "canela"
+  },
+  {
    "cientifico": "Citharexylum myrianthum",
-   "popular": ""
+   "popular": "pau-viola"
+  },
+  {
+   "cientifico": "Citrus limon",
+   "popular": "citrus"
   },
   {
    "cientifico": "Citrus reticulata",
@@ -1402,54 +1806,478 @@
   },
   {
    "cientifico": "Citrus sinensis",
-   "popular": ""
+   "popular": "laranjeira"
+  },
+  {
+   "cientifico": "Clerodendrum quadriloculare",
+   "popular": "cotonete"
+  },
+  {
+   "cientifico": "Clitoria fairchildiana",
+   "popular": "sombreiro"
+  },
+  {
+   "cientifico": "Clusia fluminensis",
+   "popular": "clusia"
+  },
+  {
+   "cientifico": "Clusia rosea",
+   "popular": "clusia-rosa"
+  },
+  {
+   "cientifico": "Coccoloba uvifera",
+   "popular": "uva-da-praia"
+  },
+  {
+   "cientifico": "Cochlospermum vitifolium",
+   "popular": "algodão-amarelo"
+  },
+  {
+   "cientifico": "Cocos nucifera",
+   "popular": "coqueiro"
+  },
+  {
+   "cientifico": "Codiaeum variegatum",
+   "popular": "croton"
   },
   {
    "cientifico": "Coffea arabica",
-   "popular": ""
+   "popular": "cafeeiro"
+  },
+  {
+   "cientifico": "Copaifera langsdorffii",
+   "popular": "copaíba"
+  },
+  {
+   "cientifico": "Cordia africana",
+   "popular": "laranjinha-pegajosa"
   },
   {
    "cientifico": "Cordia ecalyculata",
    "popular": ""
   },
   {
-   "cientifico": "Dypsis lutescens",
+   "cientifico": "Cordia sellowiana",
+   "popular": "louro-mole"
+  },
+  {
+   "cientifico": "Cordia sp.",
    "popular": ""
+  },
+  {
+   "cientifico": "Cordia superba",
+   "popular": "babosa-branca"
+  },
+  {
+   "cientifico": "Cordia trichotoma",
+   "popular": "louro-pardo"
+  },
+  {
+   "cientifico": "Cordyline australis",
+   "popular": "cordiline"
+  },
+  {
+   "cientifico": "Cordyline fruticosa",
+   "popular": "dracena-vermelha"
+  },
+  {
+   "cientifico": "Couroupita guianensis",
+   "popular": "abricó-de-macaco"
+  },
+  {
+   "cientifico": "Crescentia cujete",
+   "popular": "coité"
+  },
+  {
+   "cientifico": "Crotalaria longirostrata",
+   "popular": "crotalaria sp"
+  },
+  {
+   "cientifico": "Crotalaria micans",
+   "popular": "chocalho"
+  },
+  {
+   "cientifico": "Croton urucurana",
+   "popular": "sangra-d’água"
+  },
+  {
+   "cientifico": "Cryptomeria japonica",
+   "popular": "criptomeria"
+  },
+  {
+   "cientifico": "Cupania vernalis",
+   "popular": "camboatá-vermelho"
+  },
+  {
+   "cientifico": "Cupressus sempervirens",
+   "popular": "cipreste"
+  },
+  {
+   "cientifico": "Cybistax antisyphilitica",
+   "popular": "ipê-verde"
+  },
+  {
+   "cientifico": "Cycas revoluta",
+   "popular": "cica"
+  },
+  {
+   "cientifico": "Cycas thouarsii",
+   "popular": "palmeira-cica"
+  },
+  {
+   "cientifico": "Dalbergia miscolobium",
+   "popular": "caviuna"
+  },
+  {
+   "cientifico": "Dalbergia nigra",
+   "popular": "jacarandá-da-bahia"
+  },
+  {
+   "cientifico": "Dalbergia villosa",
+   "popular": "dalbergia-vilosa"
+  },
+  {
+   "cientifico": "Deguelia costata",
+   "popular": "pau-carrapato"
+  },
+  {
+   "cientifico": "Delonix regia",
+   "popular": "flamboyant"
+  },
+  {
+   "cientifico": "Dillenia indica",
+   "popular": "árvore-do-dinheiro"
+  },
+  {
+   "cientifico": "Dilodendron bipinnatum",
+   "popular": "maria-pobre"
+  },
+  {
+   "cientifico": "Dimorphandra mollis",
+   "popular": "faveira-do-campo"
+  },
+  {
+   "cientifico": "Diospyros kaki",
+   "popular": "caquizeiro"
+  },
+  {
+   "cientifico": "Diospyros lasiocalyx",
+   "popular": "marmelada-brava"
+  },
+  {
+   "cientifico": "Diospyros sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Dombeya wallichii",
+   "popular": "astrapéia"
+  },
+  {
+   "cientifico": "Dracaena arborea",
+   "popular": "dracena-arbórea"
+  },
+  {
+   "cientifico": "Dracaena braunii",
+   "popular": "dracena-fita"
+  },
+  {
+   "cientifico": "Dracaena fragrans",
+   "popular": "dracena"
+  },
+  {
+   "cientifico": "Dracaena reflexa",
+   "popular": "dracena-reflexa"
+  },
+  {
+   "cientifico": "Dracaena reflexa var. angustifolia",
+   "popular": "dracena-marginata"
+  },
+  {
+   "cientifico": "Duranta erecta",
+   "popular": "violeteira"
+  },
+  {
+   "cientifico": "Dypsis decaryi",
+   "popular": "palmeira-triangular"
+  },
+  {
+   "cientifico": "Dypsis lutescens",
+   "popular": "areca"
+  },
+  {
+   "cientifico": "Endlicheria paniculata",
+   "popular": "canela-frade"
+  },
+  {
+   "cientifico": "Enterolobium contortisiliquum",
+   "popular": "tamboril"
+  },
+  {
+   "cientifico": "Enterolobium gummiferum",
+   "popular": "tamboril-do-cerrado"
+  },
+  {
+   "cientifico": "Eremanthus erythropappus",
+   "popular": "candeia-cheirosa"
   },
   {
    "cientifico": "Eriobotrya japonica",
-   "popular": ""
+   "popular": "ameixeira"
+  },
+  {
+   "cientifico": "Erythrina crista-galli",
+   "popular": "eritrina-crista-de-galo"
+  },
+  {
+   "cientifico": "Erythrina falcata",
+   "popular": "eritrina-laranja"
+  },
+  {
+   "cientifico": "Erythrina speciosa",
+   "popular": "eritrina-candelabro"
+  },
+  {
+   "cientifico": "Erythrina variegata",
+   "popular": "eritrina"
+  },
+  {
+   "cientifico": "Erythrina velutina",
+   "popular": "suinan"
   },
   {
    "cientifico": "Erythrina verna",
+   "popular": "mulungu"
+  },
+  {
+   "cientifico": "Erythroxylum argentinum",
+   "popular": "cocão"
+  },
+  {
+   "cientifico": "Erythroxylum deciduum",
+   "popular": "fruta-de-pomba"
+  },
+  {
+   "cientifico": "Erythroxylum sp.",
    "popular": ""
+  },
+  {
+   "cientifico": "Eucalyptus cinerea",
+   "popular": "eucalipto-prateado"
   },
   {
    "cientifico": "Eucalyptus sp.",
    "popular": ""
   },
   {
-   "cientifico": "Eugenia uniflora",
+   "cientifico": "Eucalyptus torelliana",
+   "popular": "eucalipto-cadaga"
+  },
+  {
+   "cientifico": "Eugenia brasiliensis",
+   "popular": "grumixameira"
+  },
+  {
+   "cientifico": "Eugenia dysenterica",
+   "popular": "cagaiteira"
+  },
+  {
+   "cientifico": "Eugenia florida",
+   "popular": "araçazeiro"
+  },
+  {
+   "cientifico": "Eugenia involucrata",
+   "popular": "cerejeira-do-mato"
+  },
+  {
+   "cientifico": "Eugenia jambos",
+   "popular": "jambo-amarelo"
+  },
+  {
+   "cientifico": "Eugenia malaccensis",
+   "popular": "jambo-vermelho"
+  },
+  {
+   "cientifico": "Eugenia sp.",
    "popular": ""
+  },
+  {
+   "cientifico": "Eugenia sprengelii",
+   "popular": "murta"
+  },
+  {
+   "cientifico": "Eugenia uniflora",
+   "popular": "pitangueira"
+  },
+  {
+   "cientifico": "Euphorbia cotinifolia",
+   "popular": "roxinha"
+  },
+  {
+   "cientifico": "Euphorbia leucocephala",
+   "popular": "flor-de-neve"
+  },
+  {
+   "cientifico": "Euphorbia milii",
+   "popular": "coroa-de-cristo"
+  },
+  {
+   "cientifico": "Euphorbia pulcherrima",
+   "popular": "bico-de-papagaio"
+  },
+  {
+   "cientifico": "Euphorbia tirucalli",
+   "popular": "aveló"
+  },
+  {
+   "cientifico": "Euphorbia trigona",
+   "popular": "cactos-candelabro"
+  },
+  {
+   "cientifico": "Euterpe edulis",
+   "popular": "palmiteiro-jussara"
+  },
+  {
+   "cientifico": "Faramea hyacinthina",
+   "popular": "marmelada-de-cachorro"
+  },
+  {
+   "cientifico": "Ficus americana",
+   "popular": "ficus-americana"
+  },
+  {
+   "cientifico": "Ficus aspera",
+   "popular": "ficus-aspera"
   },
   {
    "cientifico": "Ficus benjamina",
+   "popular": "ficus-benjamim"
+  },
+  {
+   "cientifico": "Ficus carica",
+   "popular": "figueira-doce"
+  },
+  {
+   "cientifico": "Ficus elastica",
+   "popular": "árvore-da-borracha"
+  },
+  {
+   "cientifico": "Ficus enormis",
+   "popular": "figueira-da-pedra"
+  },
+  {
+   "cientifico": "Ficus gardneriana",
+   "popular": "figueira-de-gardner"
+  },
+  {
+   "cientifico": "Ficus gomelleira",
+   "popular": "gameleira"
+  },
+  {
+   "cientifico": "Ficus guaranitica",
+   "popular": "figueira-branca"
+  },
+  {
+   "cientifico": "Ficus insipida",
+   "popular": "mata-pau"
+  },
+  {
+   "cientifico": "Ficus leprieurii",
+   "popular": "figueira-triangular"
+  },
+  {
+   "cientifico": "Ficus lutea",
+   "popular": "figueira-de-folhas-gigantes"
+  },
+  {
+   "cientifico": "Ficus lyrata",
+   "popular": "figueira-lira."
+  },
+  {
+   "cientifico": "Ficus microcarpa",
+   "popular": "figueira-lacerdinha"
+  },
+  {
+   "cientifico": "Ficus pertusa",
+   "popular": "apuí"
+  },
+  {
+   "cientifico": "Ficus sp.",
    "popular": ""
+  },
+  {
+   "cientifico": "Filicium decipiens",
+   "popular": "filicius"
+  },
+  {
+   "cientifico": "Furcraea foetida",
+   "popular": "piteira"
+  },
+  {
+   "cientifico": "Gardenia jasminoides",
+   "popular": "escada"
+  },
+  {
+   "cientifico": "Genipa americana",
+   "popular": "jenipapeiro"
+  },
+  {
+   "cientifico": "Gleditsia triacanthos",
+   "popular": "espinheiro-da-virgínia"
+  },
+  {
+   "cientifico": "Gmelina arborea",
+   "popular": "gamelina"
+  },
+  {
+   "cientifico": "Gossypium hirsutum",
+   "popular": "algodão"
+  },
+  {
+   "cientifico": "Graptophyllum pictum",
+   "popular": "planta-caricata"
+  },
+  {
+   "cientifico": "Grevillea banksii",
+   "popular": "grevilha-anã"
+  },
+  {
+   "cientifico": "Grevillea robusta",
+   "popular": "grevilha-robusta"
+  },
+  {
+   "cientifico": "Guapira opposita",
+   "popular": "tapacirica"
+  },
+  {
+   "cientifico": "Guazuma ulmifolia",
+   "popular": "mutamba"
+  },
+  {
+   "cientifico": "Gymnanthemum amygdalinum",
+   "popular": "boudo-de-árvore"
   },
   {
    "cientifico": "Handroanthus chrysotrichus",
-   "popular": ""
+   "popular": "ipê-tabaco"
   },
   {
    "cientifico": "Handroanthus heptaphyllus",
-   "popular": ""
+   "popular": "ipê-rosa"
   },
   {
    "cientifico": "Handroanthus impetiginosus",
-   "popular": ""
+   "popular": "ipê-roxo"
+  },
+  {
+   "cientifico": "Handroanthus ochraceus",
+   "popular": "ipê-do-cerrado"
   },
   {
    "cientifico": "Handroanthus serratifolius",
+   "popular": "ipê-amarelo"
+  },
+  {
+   "cientifico": "Handroanthus sp.",
    "popular": ""
   },
   {
@@ -1457,48 +2285,428 @@
    "popular": ""
   },
   {
+   "cientifico": "Heptapleurum arboricola",
+   "popular": "cheflera"
+  },
+  {
+   "cientifico": "Heteropterys byrsonimifolia",
+   "popular": "murici-macho"
+  },
+  {
+   "cientifico": "Hibiscus mutabilis",
+   "popular": "rosa-louca"
+  },
+  {
    "cientifico": "Hibiscus rosa-sinensis",
    "popular": ""
   },
   {
-   "cientifico": "Jacaranda mimosifolia",
+   "cientifico": "Hibiscus sp.",
    "popular": ""
+  },
+  {
+   "cientifico": "Holocalyx balansae",
+   "popular": "alecrim-de-campinas"
+  },
+  {
+   "cientifico": "Hovenia dulcis",
+   "popular": "pau-doce"
+  },
+  {
+   "cientifico": "Hura crepitans",
+   "popular": "assacu"
+  },
+  {
+   "cientifico": "Hymenaea courbaril",
+   "popular": "jatobazeiro"
+  },
+  {
+   "cientifico": "Hymenaea stigonocarpa",
+   "popular": "jatobazeiro-do-cerrado"
+  },
+  {
+   "cientifico": "Hyophorbe verschaffeltii",
+   "popular": "palmeira-fuso"
+  },
+  {
+   "cientifico": "Hyptidendron canum",
+   "popular": "hortelã-do-campo"
+  },
+  {
+   "cientifico": "Ilex aquifolium",
+   "popular": "azevinho"
+  },
+  {
+   "cientifico": "Ilex cerasifolia",
+   "popular": "congonha"
+  },
+  {
+   "cientifico": "Inga edulis",
+   "popular": "ingazeiro"
+  },
+  {
+   "cientifico": "Inga laurina",
+   "popular": "ingazeiro-branco"
+  },
+  {
+   "cientifico": "Inga marginata",
+   "popular": "ingazinho"
+  },
+  {
+   "cientifico": "Inga vulpina",
+   "popular": "ingazeiro-rosa"
+  },
+  {
+   "cientifico": "Ipomoea alba",
+   "popular": "boa-noite"
+  },
+  {
+   "cientifico": "Ixora chinensis",
+   "popular": "ixora-chinesa"
+  },
+  {
+   "cientifico": "Ixora coccinea",
+   "popular": "ixora-coral"
+  },
+  {
+   "cientifico": "Jacaranda cuspidifolia",
+   "popular": "jacarandá-de-minas"
+  },
+  {
+   "cientifico": "Jacaranda mimosifolia",
+   "popular": "jacarandá-mimoso"
   },
   {
    "cientifico": "Jacaratia spinosa",
    "popular": ""
   },
   {
+   "cientifico": "Jasminum mesnyi",
+   "popular": "jasmim-primulino"
+  },
+  {
+   "cientifico": "Jasminum polyanthum",
+   "popular": "jasmim-dos-poetas"
+  },
+  {
+   "cientifico": "Jatropha curcas",
+   "popular": "pinhão-manso"
+  },
+  {
+   "cientifico": "Jatropha gossypiifolia",
+   "popular": "pinhão-roxo"
+  },
+  {
+   "cientifico": "Joannesia princeps",
+   "popular": "cotieira"
+  },
+  {
+   "cientifico": "Juniperus chinensis",
+   "popular": "kaizuka"
+  },
+  {
+   "cientifico": "Justicia carnea",
+   "popular": "jacobina-vermelha"
+  },
+  {
+   "cientifico": "Khaya ivorensis",
+   "popular": "mogno-africano"
+  },
+  {
+   "cientifico": "Kielmeyera coriacea",
+   "popular": "pau-santo"
+  },
+  {
+   "cientifico": "Kigelia pinnata",
+   "popular": "árvore-da-salsicha"
+  },
+  {
+   "cientifico": "Koelreuteria bipinnata",
+   "popular": "coleoteria"
+  },
+  {
+   "cientifico": "Labramia bojeri",
+   "popular": "abricó"
+  },
+  {
+   "cientifico": "Lafoensia glyptocarpa",
+   "popular": "mirindiba"
+  },
+  {
    "cientifico": "Lafoensia pacari",
-   "popular": ""
+   "popular": "dedaleiro"
   },
   {
    "cientifico": "Lagerstroemia indica",
-   "popular": ""
+   "popular": "reseda"
+  },
+  {
+   "cientifico": "Lagerstroemia speciosa",
+   "popular": "escumilha-africana"
+  },
+  {
+   "cientifico": "Lantana camara",
+   "popular": "camara"
+  },
+  {
+   "cientifico": "Lecythis pisonis",
+   "popular": "sapucaia"
+  },
+  {
+   "cientifico": "Leea guineensis",
+   "popular": "léia"
+  },
+  {
+   "cientifico": "Leea rubra",
+   "popular": "léia-rubra"
+  },
+  {
+   "cientifico": "Leptolobium dasycarpum",
+   "popular": "unha-danta"
+  },
+  {
+   "cientifico": "Leptolobium elegans",
+   "popular": "chapadinha-amendoim"
+  },
+  {
+   "cientifico": "Leucaena leucocephala",
+   "popular": "leucena"
   },
   {
    "cientifico": "Leucochloron incuriale",
-   "popular": ""
+   "popular": "chico-pires"
+  },
+  {
+   "cientifico": "Libidibia leiostachya",
+   "popular": "pau-ferro"
+  },
+  {
+   "cientifico": "Ligustrum japonicum",
+   "popular": "alfeneiro-do-japão"
   },
   {
    "cientifico": "Ligustrum lucidum",
+   "popular": "alfeneiro"
+  },
+  {
+   "cientifico": "Ligustrum sinense",
+   "popular": "ligustrinho"
+  },
+  {
+   "cientifico": "Liquidambar styraciflua",
+   "popular": "liquidambar"
+  },
+  {
+   "cientifico": "Litchi chinensis",
+   "popular": "lichieira"
+  },
+  {
+   "cientifico": "Lithraea molleoides",
+   "popular": "aroeira-brava"
+  },
+  {
+   "cientifico": "Livistona chinensis",
+   "popular": "palmeira-leque"
+  },
+  {
+   "cientifico": "Luehea divaricata",
+   "popular": "açoita-cavalo"
+  },
+  {
+   "cientifico": "Luehea grandiflora",
+   "popular": "açoita-cavalo-graúdo"
+  },
+  {
+   "cientifico": "Mabea fistulifera",
+   "popular": "canudo-de-pito"
+  },
+  {
+   "cientifico": "Macadamia integrifolia",
+   "popular": "macadamia"
+  },
+  {
+   "cientifico": "Machaerium aculeatum",
+   "popular": "sete-capote"
+  },
+  {
+   "cientifico": "Machaerium acutifolium",
+   "popular": "pau-muxiba"
+  },
+  {
+   "cientifico": "Machaerium hirtum",
+   "popular": "adoufo"
+  },
+  {
+   "cientifico": "Machaerium nyctitans",
+   "popular": "jacarandá-com-espinho"
+  },
+  {
+   "cientifico": "Machaerium opacum",
+   "popular": "jacarandá-do-cerrado"
+  },
+  {
+   "cientifico": "Machaerium sp.",
    "popular": ""
+  },
+  {
+   "cientifico": "Machaerium stipitatum",
+   "popular": "jacarandá"
   },
   {
    "cientifico": "Machaerium villosum",
-   "popular": ""
+   "popular": "jacarandá-paulista"
+  },
+  {
+   "cientifico": "Maclura tinctoria",
+   "popular": "amora branca"
+  },
+  {
+   "cientifico": "Magnolia champaca",
+   "popular": "magnólia"
+  },
+  {
+   "cientifico": "Magnolia grandiflora",
+   "popular": "magnólia-branca"
+  },
+  {
+   "cientifico": "Malpighia glabra",
+   "popular": "aceroleira"
+  },
+  {
+   "cientifico": "Malus domestica",
+   "popular": "macieira"
+  },
+  {
+   "cientifico": "Malvaviscus arboreus",
+   "popular": "malvavisco"
   },
   {
    "cientifico": "Mangifera indica",
-   "popular": ""
+   "popular": "mangueira"
   },
   {
    "cientifico": "Matayba elaeagnoides",
    "popular": ""
   },
   {
+   "cientifico": "Mauritiella aculeata",
+   "popular": "buritirana"
+  },
+  {
+   "cientifico": "Melaleuca armillaris",
+   "popular": "melaleuquinha"
+  },
+  {
+   "cientifico": "Melaleuca leucadendra",
+   "popular": "melaleuca"
+  },
+  {
+   "cientifico": "Melia azedarach",
+   "popular": "cinamomo"
+  },
+  {
+   "cientifico": "Miconia sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Mimosa bimucronata",
+   "popular": "mimosa"
+  },
+  {
+   "cientifico": "Mimosa caesalpiniifolia",
+   "popular": "sansão do campo"
+  },
+  {
+   "cientifico": "Mimosa laticifera",
+   "popular": "mimosa-laticifera"
+  },
+  {
+   "cientifico": "Mimosa pudica",
+   "popular": "mimosinha"
+  },
+  {
+   "cientifico": "Mimosa scabrella",
+   "popular": "bracatinga"
+  },
+  {
+   "cientifico": "Mimusops coriacea",
+   "popular": "abiu-da-praia"
+  },
+  {
+   "cientifico": "Monstera deliciosa",
+   "popular": "costela-de-adão"
+  },
+  {
+   "cientifico": "Montanoa bipinnatifida",
+   "popular": "margarida-arbórea"
+  },
+  {
+   "cientifico": "Moquilea tomentosa",
+   "popular": "oiti"
+  },
+  {
+   "cientifico": "Morinda citrifolia",
+   "popular": "noni"
+  },
+  {
+   "cientifico": "Moringa oleifera",
+   "popular": "moringa"
+  },
+  {
+   "cientifico": "Morus nigra",
+   "popular": "amoreira"
+  },
+  {
+   "cientifico": "Muntingia calabura",
+   "popular": "calabura"
+  },
+  {
+   "cientifico": "Murraya paniculata",
+   "popular": "murta"
+  },
+  {
+   "cientifico": "Musa sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Mussaenda erythrophylla",
+   "popular": "mussaenda-rosa"
+  },
+  {
+   "cientifico": "Myracrodruon urundeuva",
+   "popular": "aroeira"
+  },
+  {
+   "cientifico": "Myrcia amazonica",
+   "popular": "ingabaú"
+  },
+  {
+   "cientifico": "Myrcia tomentosa",
+   "popular": "araçazinho"
+  },
+  {
+   "cientifico": "Myrciaria glazioviana",
+   "popular": "cabeludinha"
+  },
+  {
+   "cientifico": "Myrciaria trunciflora",
+   "popular": "jaboticabeira"
+  },
+  {
+   "cientifico": "Myrocarpus frondosus",
+   "popular": "pau-de-bálsamo"
+  },
+  {
+   "cientifico": "Myroxylon peruiferum",
+   "popular": "bálsamo"
+  },
+  {
    "cientifico": "Myrsine coriacea",
    "popular": ""
+  },
+  {
+   "cientifico": "Nandina domestica",
+   "popular": "nandina"
   },
   {
    "cientifico": "Nectandra barbellata",
@@ -1509,8 +2717,32 @@
    "popular": ""
   },
   {
+   "cientifico": "Nectandra nitidula",
+   "popular": "canela-do mato"
+  },
+  {
+   "cientifico": "Nerium oleander",
+   "popular": "espirradeira"
+  },
+  {
+   "cientifico": "Nopalea cochenillifera",
+   "popular": "palma-cacto"
+  },
+  {
+   "cientifico": "Ochna serrulata",
+   "popular": "ocna"
+  },
+  {
+   "cientifico": "Ochroma pyramidale",
+   "popular": "pau-de-balsa"
+  },
+  {
    "cientifico": "Ocotea cf. aciphylla",
    "popular": ""
+  },
+  {
+   "cientifico": "Ocotea odorifera",
+   "popular": "canela-sassafraz"
   },
   {
    "cientifico": "Ocotea puberula",
@@ -1521,16 +2753,112 @@
    "popular": ""
   },
   {
+   "cientifico": "Ormosia arborea",
+   "popular": "olho-de-cabra"
+  },
+  {
+   "cientifico": "Ouratea castaneifolia",
+   "popular": "ouratea"
+  },
+  {
+   "cientifico": "Pachira aquatica",
+   "popular": "munguba"
+  },
+  {
+   "cientifico": "Pachira glabra",
+   "popular": "cacau-selvagem"
+  },
+  {
+   "cientifico": "Pandanus baptistii",
+   "popular": "pandanus"
+  },
+  {
+   "cientifico": "Parapiptadenia rigida",
+   "popular": "falso-angico"
+  },
+  {
+   "cientifico": "Parkinsonia aculeata",
+   "popular": "turco"
+  },
+  {
+   "cientifico": "Paubrasilia echinata",
+   "popular": "pau-brasil"
+  },
+  {
+   "cientifico": "Peltophorum dubium",
+   "popular": "faveiro"
+  },
+  {
+   "cientifico": "Pereskia aculeata",
+   "popular": "ora-pro-nóbis"
+  },
+  {
    "cientifico": "Persea americana",
+   "popular": "abacateiro"
+  },
+  {
+   "cientifico": "Persea sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Petrea volubilis",
+   "popular": "viuvinha"
+  },
+  {
+   "cientifico": "Peumus boldus",
+   "popular": "boldo"
+  },
+  {
+   "cientifico": "Phoenix canariesis",
+   "popular": "tamareira"
+  },
+  {
+   "cientifico": "Phoenix roebelenii",
+   "popular": "palmeira-fênix"
+  },
+  {
+   "cientifico": "Pimenta dioica",
+   "popular": "pimenta"
+  },
+  {
+   "cientifico": "Pinus sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Piper sp.",
    "popular": ""
   },
   {
    "cientifico": "Piptadenia gonoacantha",
-   "popular": ""
+   "popular": "pau-jacaré"
+  },
+  {
+   "cientifico": "Piptocarpha macropoda",
+   "popular": "pau-de-fumo"
+  },
+  {
+   "cientifico": "Pithecellobium dulce",
+   "popular": "guamuchil"
+  },
+  {
+   "cientifico": "Pittosporum tobira",
+   "popular": "pau de incenso"
+  },
+  {
+   "cientifico": "Platanus hispanica",
+   "popular": "plátano"
+  },
+  {
+   "cientifico": "Platycyamus regnellii",
+   "popular": "pau-pereira"
+  },
+  {
+   "cientifico": "Platypodium elegans",
+   "popular": "jacarandá-branco"
   },
   {
    "cientifico": "Plerandra elegantissima",
-   "popular": ""
+   "popular": "falsa-aralia"
   },
   {
    "cientifico": "Pleroma granulosum",
@@ -1545,44 +2873,544 @@
    "popular": ""
   },
   {
+   "cientifico": "Plumeria alba",
+   "popular": "jasmim-manga-branco"
+  },
+  {
    "cientifico": "Plumeria rubra",
-   "popular": ""
+   "popular": "pluméria"
+  },
+  {
+   "cientifico": "Podocarpus lambertii",
+   "popular": "podocarpus"
+  },
+  {
+   "cientifico": "Podranea ricasoliana",
+   "popular": "sete-léguas"
+  },
+  {
+   "cientifico": "Poecilanthe parviflora",
+   "popular": "coração-de-nego"
+  },
+  {
+   "cientifico": "Poincianella pluviosa",
+   "popular": "sibipiruna"
+  },
+  {
+   "cientifico": "Polyscias fruticosa",
+   "popular": "árvore-da-felicidade"
+  },
+  {
+   "cientifico": "Polyscias guilfoylei",
+   "popular": "arália"
+  },
+  {
+   "cientifico": "Populus sp.",
+   "popular": "populus"
+  },
+  {
+   "cientifico": "Pouteria ramiflora",
+   "popular": "grão-de-galo"
+  },
+  {
+   "cientifico": "Prunus campanulata",
+   "popular": "cerejeira"
   },
   {
    "cientifico": "Prunus myrtifolia",
    "popular": ""
   },
   {
-   "cientifico": "Psidium guajava",
+   "cientifico": "Prunus persica",
+   "popular": "pessegueiro"
+  },
+  {
+   "cientifico": "Prunus serrulata",
+   "popular": "cerejeira-doce"
+  },
+  {
+   "cientifico": "Prunus sp.",
    "popular": ""
+  },
+  {
+   "cientifico": "Pseudobombax ellipticum",
+   "popular": "embiruçu-vermelho"
+  },
+  {
+   "cientifico": "Pseudobombax grandiflorum",
+   "popular": "embiruçu"
+  },
+  {
+   "cientifico": "Pseudobombax longiflorum",
+   "popular": "imbiruçu"
+  },
+  {
+   "cientifico": "Pseudobombax sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Pseudobombax tomentosum",
+   "popular": "embiruçu-tomentoso"
+  },
+  {
+   "cientifico": "Psidium cattleyanum",
+   "popular": "araçá-rosa"
+  },
+  {
+   "cientifico": "Psidium guajava",
+   "popular": "goiabeira"
   },
   {
    "cientifico": "Psidium guineense",
    "popular": ""
   },
   {
+   "cientifico": "Psidium myrtoides",
+   "popular": "cerejinha"
+  },
+  {
+   "cientifico": "Psidium sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Pterocarpus violaceus",
+   "popular": "aldrago"
+  },
+  {
+   "cientifico": "Pterogyne nitens",
+   "popular": "amendoim-bravo"
+  },
+  {
+   "cientifico": "Pterygota brasiliensis",
+   "popular": "pau-rei"
+  },
+  {
+   "cientifico": "Ptychosperma elegans",
+   "popular": "palmeira-solitária"
+  },
+  {
+   "cientifico": "Punica granatum",
+   "popular": "romanzeira"
+  },
+  {
+   "cientifico": "Pyracantha coccinea",
+   "popular": "piracanta"
+  },
+  {
+   "cientifico": "Qualea grandiflora",
+   "popular": "pau-terra"
+  },
+  {
+   "cientifico": "Qualea multiflora",
+   "popular": "pau-terrão"
+  },
+  {
+   "cientifico": "Qualea parviflora",
+   "popular": "pau-terrinha"
+  },
+  {
+   "cientifico": "Randia sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Rapanea guianensis",
+   "popular": "capororoca"
+  },
+  {
+   "cientifico": "Ravenala madagascariensis",
+   "popular": "ravenala"
+  },
+  {
+   "cientifico": "Rhapis excelsa",
+   "popular": "ráfis"
+  },
+  {
+   "cientifico": "Rhododendron indicum var. simsii",
+   "popular": "azaléia"
+  },
+  {
+   "cientifico": "Ricinus communis",
+   "popular": "mamona"
+  },
+  {
+   "cientifico": "Rosa sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Roystonea oleracea",
+   "popular": "palmeira-imperial"
+  },
+  {
+   "cientifico": "Roystonea regia",
+   "popular": "palmeira-real"
+  },
+  {
+   "cientifico": "Salix babylonica",
+   "popular": "chorão"
+  },
+  {
+   "cientifico": "Salix chilensis",
+   "popular": "salgueira"
+  },
+  {
+   "cientifico": "Salix nigra",
+   "popular": "chorão-ereto"
+  },
+  {
+   "cientifico": "Salix viminalis",
+   "popular": "álamo"
+  },
+  {
+   "cientifico": "Samanea inopinata",
+   "popular": "sete-cascas"
+  },
+  {
+   "cientifico": "Sanchezia oblonga",
+   "popular": "sanchezia"
+  },
+  {
+   "cientifico": "Sapindus saponaria",
+   "popular": "saponaria"
+  },
+  {
    "cientifico": "Sapium glandulosum",
    "popular": ""
+  },
+  {
+   "cientifico": "Schefflera morototoni",
+   "popular": "cheflera"
+  },
+  {
+   "cientifico": "Schinus molle",
+   "popular": "aroeirinha"
   },
   {
    "cientifico": "Schinus terebinthifolia",
    "popular": ""
   },
   {
+   "cientifico": "Schinus terebinthifolius",
+   "popular": "aroeira salsa"
+  },
+  {
    "cientifico": "Schizolobium parahyba",
+   "popular": "guapuruvu"
+  },
+  {
+   "cientifico": "Senna bicapsularis",
+   "popular": "cando-de-pito"
+  },
+  {
+   "cientifico": "Senna macranthera",
+   "popular": "fedegoso"
+  },
+  {
+   "cientifico": "Senna multijuga",
+   "popular": "aleluia"
+  },
+  {
+   "cientifico": "Senna pendula",
+   "popular": "aleluinha"
+  },
+  {
+   "cientifico": "Senna polyphylla",
+   "popular": "cássia-dourada"
+  },
+  {
+   "cientifico": "Senna siamea",
+   "popular": "cássia-amarela"
+  },
+  {
+   "cientifico": "Senna sp.",
    "popular": ""
+  },
+  {
+   "cientifico": "Senna spectabilis",
+   "popular": "cássia-do-nordeste"
+  },
+  {
+   "cientifico": "Sesbania virgata",
+   "popular": "feijão-do-mato"
+  },
+  {
+   "cientifico": "Simarouba versicolor",
+   "popular": "pau-paraíba"
+  },
+  {
+   "cientifico": "Siphoneugena sp.",
+   "popular": "araçado-mato"
+  },
+  {
+   "cientifico": "Solanum betaceum",
+   "popular": "tomate-de-árvore"
+  },
+  {
+   "cientifico": "Solanum granulosoleprosum",
+   "popular": "gravitinga"
+  },
+  {
+   "cientifico": "Solanum lycocarpum",
+   "popular": "lobeira"
+  },
+  {
+   "cientifico": "Solanum paniculatum",
+   "popular": "jurubeba"
+  },
+  {
+   "cientifico": "Solanum sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Spachea lactescens",
+   "popular": "lofantera"
+  },
+  {
+   "cientifico": "Sparattosperma leucanthum",
+   "popular": "caroba-branca"
+  },
+  {
+   "cientifico": "Spartium junceum",
+   "popular": "giesta"
+  },
+  {
+   "cientifico": "Spathodea campanulata",
+   "popular": "espatódea"
+  },
+  {
+   "cientifico": "Spondias mombin",
+   "popular": "cajazeira"
+  },
+  {
+   "cientifico": "Spondias purpurea",
+   "popular": "serigueleira"
+  },
+  {
+   "cientifico": "Sterculia striata",
+   "popular": "chicha"
+  },
+  {
+   "cientifico": "Stifftia chrysantha",
+   "popular": "esponja-de-ouro"
+  },
+  {
+   "cientifico": "Stryphnodendron adstringens",
+   "popular": "barbatimão"
+  },
+  {
+   "cientifico": "Styrax camporum",
+   "popular": "benjoeiro-do-campo"
+  },
+  {
+   "cientifico": "Styrax ferrugineus",
+   "popular": "benjoeiro"
+  },
+  {
+   "cientifico": "Swietenia macrophylla",
+   "popular": "mogno"
+  },
+  {
+   "cientifico": "Syagrus coronata",
+   "popular": "dicuri"
+  },
+  {
+   "cientifico": "Syagrus oleracea",
+   "popular": "gariroba"
+  },
+  {
+   "cientifico": "Syagrus romanzoffiana",
+   "popular": "licuri"
+  },
+  {
+   "cientifico": "Syagrus sp.",
+   "popular": "syagrus"
+  },
+  {
+   "cientifico": "Syzygium jambolanum",
+   "popular": "jamelão"
+  },
+  {
+   "cientifico": "Syzygium samarangense",
+   "popular": "samaragense"
+  },
+  {
+   "cientifico": "Tabebuia rosea",
+   "popular": "ipê-rosa"
   },
   {
    "cientifico": "Tabebuia roseoalba",
+   "popular": "ipê-branco"
+  },
+  {
+   "cientifico": "Tabebuia sp.",
    "popular": ""
   },
   {
-   "cientifico": "Tipuana tipu",
+   "cientifico": "Tabernaemontana divaricata",
+   "popular": "divaricata"
+  },
+  {
+   "cientifico": "Tachigali rugosa",
+   "popular": "carvoeiro"
+  },
+  {
+   "cientifico": "Talipariti pernambucense",
+   "popular": "algodoeiro"
+  },
+  {
+   "cientifico": "Talipariti tiliaceus",
+   "popular": "algodoeiro-da-praia"
+  },
+  {
+   "cientifico": "Tamarindus indica",
+   "popular": "tamarindeiro"
+  },
+  {
+   "cientifico": "Tara spinosa",
+   "popular": "falso-pau-brasil"
+  },
+  {
+   "cientifico": "Tecoma stans",
+   "popular": "ipê-mirim"
+  },
+  {
+   "cientifico": "Tectona grandis",
+   "popular": "teca"
+  },
+  {
+   "cientifico": "Terminalia argentea",
+   "popular": "capitão-do-campo"
+  },
+  {
+   "cientifico": "Terminalia catappa",
+   "popular": "castanheira"
+  },
+  {
+   "cientifico": "Terminalia glabrescens",
+   "popular": "capitão"
+  },
+  {
+   "cientifico": "Terminalia ivorensis",
+   "popular": "terminalia"
+  },
+  {
+   "cientifico": "Theobroma cacao",
+   "popular": "cacaueiro"
+  },
+  {
+   "cientifico": "Thespesia populnea",
+   "popular": "tespesia"
+  },
+  {
+   "cientifico": "Thevetia peruviana",
+   "popular": "chapéu-napoleão"
+  },
+  {
+   "cientifico": "Thuja sp.",
    "popular": ""
+  },
+  {
+   "cientifico": "Tibouchina candolleana",
+   "popular": "tibouchina"
+  },
+  {
+   "cientifico": "Tibouchina granulosa",
+   "popular": "quaresmeira"
+  },
+  {
+   "cientifico": "Tibouchina mutabilis",
+   "popular": "manacá-da-serra"
+  },
+  {
+   "cientifico": "Tibouchina urvilleana",
+   "popular": "flor-azul"
+  },
+  {
+   "cientifico": "Tipuana tipu",
+   "popular": "tipuana"
+  },
+  {
+   "cientifico": "Toona ciliata",
+   "popular": "touna"
+  },
+  {
+   "cientifico": "Trachycarpus fortunei",
+   "popular": "palmeira-moinho-de-vento"
+  },
+  {
+   "cientifico": "Trema micranthum",
+   "popular": "crindiúva"
+  },
+  {
+   "cientifico": "Trembleya parviflora",
+   "popular": "trembleia"
+  },
+  {
+   "cientifico": "Trichilia cathartica",
+   "popular": "marinheiro"
   },
   {
    "cientifico": "Trichilia havanensis",
    "popular": ""
+  },
+  {
+   "cientifico": "Trichilia sp.",
+   "popular": ""
+  },
+  {
+   "cientifico": "Triplaris americana",
+   "popular": "pau-formiga"
+  },
+  {
+   "cientifico": "Triplaris caracasana",
+   "popular": "caracasana"
+  },
+  {
+   "cientifico": "Triplaris gardneriana",
+   "popular": "pau-jau"
+  },
+  {
+   "cientifico": "Trithrinax brasiliensis",
+   "popular": "caranda"
+  },
+  {
+   "cientifico": "Vachellia farnesiana",
+   "popular": "esponja-amarela"
+  },
+  {
+   "cientifico": "Vassobia breviflora",
+   "popular": "espora-de-galo"
+  },
+  {
+   "cientifico": "Vernonia polyanthes",
+   "popular": "assa-peixe"
+  },
+  {
+   "cientifico": "Vitex polygama",
+   "popular": "cinco-folhas"
+  },
+  {
+   "cientifico": "Vochysia tucanorum",
+   "popular": "pau-de-tucano"
+  },
+  {
+   "cientifico": "Washingtonia filifera",
+   "popular": "palmeira-de-saia-da-califórnia"
+  },
+  {
+   "cientifico": "Wodyetia bifurcata",
+   "popular": "palmeira-rabo-raposa"
+  },
+  {
+   "cientifico": "Yucca gigantea",
+   "popular": "yuca"
+  },
+  {
+   "cientifico": "Zanthoxylum riedelianum",
+   "popular": "mamica-de-porca"
+  },
+  {
+   "cientifico": "Zeyheria tuberculosa",
+   "popular": "saco-de-carneiro"
   }
  ],
  "regras": [
