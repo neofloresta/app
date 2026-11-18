@@ -18,6 +18,7 @@ for k, e in novas.items():
         if not atual[k].get('popular'): atual[k]['popular'] = e['popular']
     else:
         atual[k] = e
+atual['syagrus romanzoffiana']['popular'] = 'licuri, jerivá'  # pedido do Ciro em 18/11/2026
 nid = atual.pop('não identificada', None)
 resto = sorted(atual.values(), key=lambda e: e['cientifico'].lower())
 f['especies'] = ([nid] if nid else []) + resto
