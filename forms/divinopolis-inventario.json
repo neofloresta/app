@@ -307,7 +307,7 @@
      "t": "Maior que 3 m²"
     }
    ],
-   "ajuda": "Área de solo sem pavimento em volta do tronco (o canteiro). Estime pela largura e pelo comprimento."
+   "ajuda": "Área de solo sem pavimento em volta do tronco (o canteiro). Estime pela largura e pelo comprimento. No limite, fique com a faixa de baixo: exatos 2 m² entram em \"1 a 2 m²\" e exatos 3 m² em \"2 a 3 m²\"."
   },
   {
    "armazenar": "text",
@@ -886,7 +886,7 @@
      "t": "Copa e galhos"
     }
    ],
-   "ajuda": "A parte da árvore com mais chance de falhar (ISA). É ela que define a probabilidade de falha, logo abaixo."
+   "ajuda": "A parte da árvore com mais chance de falhar (ISA). É ela que define a probabilidade de falha, mais abaixo. Em árvore sem defeito aparente, marque a parte que falharia primeiro."
   },
   {
    "armazenar": "text",
@@ -907,7 +907,7 @@
      "t": "Significativa"
     }
    ],
-   "ajuda": "Força que age sobre a parte com defeito: o peso da copa ou dos galhos e a exposição ao vento (ISA)."
+   "ajuda": "Força que age sobre a parte com defeito: o peso da copa ou dos galhos e a exposição ao vento (ISA). Em árvore sem defeito aparente, avalie a carga sobre a parte marcada acima."
   },
   {
    "armazenar": "text",
@@ -1033,7 +1033,7 @@
     }
    ],
    "expr": "CASE\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+2' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+3' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+4' THEN 'Severo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+2' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+3' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+4' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+2' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+3' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+4' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+2' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+3' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+4' THEN 'Baixo'\r\nEND",
-   "ajuda": "Calculado pelo app depois das três respostas acima: probabilidade de falha com a de impacto dá a probabilidade; com as consequências dá o risco (matriz da ISA)."
+   "ajuda": "Calculado pelo app com três respostas: a probabilidade de falha com a de impacto dá a probabilidade; com as consequências dá o risco (matriz da ISA). Alvo, zona, ocupação, proteção, defeito e carga não entram na conta: servem para embasar as três respostas."
   },
   {
    "armazenar": "text",

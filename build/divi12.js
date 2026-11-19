@@ -20,7 +20,7 @@ const poe = (c, etapa, ref, depois, grupo) => {
 const escolha = (nome, rotulo, ops, ajuda) => ({ armazenar: 'text', nome, rotulo, tipo: 'choice', opcoes: op(ops), ajuda });
 const marca = (nome, rotulo, ajuda) => ({ armazenar: 'bool', nome, rotulo, tipo: 'bool', ajuda });
 // ---------- Meio ----------
-const livre = escolha('Area livre (m2)', 'Área livre (m²)', ['Menor que 1 m²', '1 a 2 m²', '2 a 3 m²', 'Maior que 3 m²'], 'Área de solo sem pavimento em volta do tronco (o canteiro). Estime pela largura e pelo comprimento.');
+const livre = escolha('Area livre (m2)', 'Área livre (m²)', ['Menor que 1 m²', '1 a 2 m²', '2 a 3 m²', 'Maior que 3 m²'], 'Área de solo sem pavimento em volta do tronco (o canteiro). Estime pela largura e pelo comprimento. No limite, fique com a faixa de baixo: exatos 2 m² entram em "1 a 2 m²" e exatos 3 m² em "2 a 3 m²".');
 const posicao = escolha('Posicao da arvore na calcada', 'Posição da árvore na calçada', ['Até 1 m do meio-fio', 'Faixa de circulação', 'Junto ao muro ou divisa'], 'Onde o tronco está na largura da calçada: perto do meio-fio, no meio (onde as pessoas passam) ou encostado no muro ou na divisa do lote.');
 poe(livre, 'Meio', 'Conflitos no raio de 2 m', false);
 poe(posicao, 'Meio', 'Conflitos no raio de 2 m', false);
@@ -35,8 +35,8 @@ const risco = [
   escolha('Zona do alvo', 'Zona do alvo', ['Projeção da copa', '1 vez a altura', '1,5 vez a altura'], 'Área que a árvore, ou a parte dela com defeito, pode atingir se cair (ISA). Projeção da copa: o alvo está embaixo da copa. 1 vez a altura: o alvo está ao alcance da queda da árvore inteira. 1,5 vez a altura: para indivíduos maiores, porque os estilhaços de uma eventual queda vão além da altura da árvore.'),
   escolha('Taxa de ocupacao', 'Taxa de ocupação', ['Raro', 'Ocasional', 'Frequente', 'Constante'], 'Quanto tempo o alvo fica na zona do alvo (ISA). Raro: quase nunca há alvo ali. Ocasional: presente poucas vezes ou por pouco tempo. Frequente: presente em boa parte do dia ou da semana. Constante: sempre presente.'),
   escolha('Fator de protecao', 'Fator de proteção', ['Ausente', 'Presente'], 'Algo entre a árvore e o alvo que segura ou desvia a queda: outra árvore, um muro, uma edificação (ISA). Quando existe, a chance de atingir o alvo é menor.'),
-  escolha('Principal defeito da arvore', 'Principal defeito da árvore', ['Raízes e colo', 'Tronco', 'Copa e galhos'], 'A parte da árvore com mais chance de falhar (ISA). É ela que define a probabilidade de falha, logo abaixo.'),
-  escolha('Carga sobre o defeito', 'Carga sobre o defeito', ['Pequena', 'Média', 'Significativa'], 'Força que age sobre a parte com defeito: o peso da copa ou dos galhos e a exposição ao vento (ISA).'),
+  escolha('Principal defeito da arvore', 'Principal defeito da árvore', ['Raízes e colo', 'Tronco', 'Copa e galhos'], 'A parte da árvore com mais chance de falhar (ISA). É ela que define a probabilidade de falha, mais abaixo. Em árvore sem defeito aparente, marque a parte que falharia primeiro.'),
+  escolha('Carga sobre o defeito', 'Carga sobre o defeito', ['Pequena', 'Média', 'Significativa'], 'Força que age sobre a parte com defeito: o peso da copa ou dos galhos e a exposição ao vento (ISA). Em árvore sem defeito aparente, avalie a carga sobre a parte marcada acima.'),
 ];
 for (const c of risco) poe(c, 'Risco', 'Probabilidade de falha', false);
 // ---------- regras: onde a etapa já some, os campos novos somem; onde é obrigatória, são obrigatórios ----------
@@ -49,6 +49,7 @@ for (const r of f.regras) for (const k of Object.keys(r.por || {})) { const P = 
   if (P['Marquise ou toldo'] === 'obrig') for (const n of MEIO) P[n] = 'obrig';
   if (P['Probabilidade de falha'] === 'obrig') for (const n of RIS) P[n] = 'obrig';
 }
+campo('Risco').ajuda = 'Calculado pelo app com três respostas: a probabilidade de falha com a de impacto dá a probabilidade; com as consequências dá o risco (matriz da ISA). Alvo, zona, ocupação, proteção, defeito e carga não entram na conta: servem para embasar as três respostas.';
 // no canteiro central não existe posição na calçada (regra depois da de categoria, então vale por último)
 f.regras.push({ campo: 'Local do registro', por: { 'Canteiro central': { [posicao.nome]: 'oculto' } } });
 const naTela = f.abas.flatMap((a) => a.campos.map((x) => x.campo));

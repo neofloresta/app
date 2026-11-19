@@ -1594,7 +1594,7 @@
       const v = r.valores[c.nome];
       const ehRisco = /^risco/i.test(c.nome);
       el.className = 'calc' + (v == null || v === '' ? ' vazio' : '') + (ehRisco ? ' resultado' : '') + (/risco/i.test(c.nome) && v ? ' risco-' + v : '');
-      el.textContent = v == null || v === '' ? (ehRisco ? 'Responda as três perguntas acima' : 'Calculado automaticamente') : typeof v === 'number' ? numBR(v) : Q2F.bonito(v);
+      el.textContent = v == null || v === '' ? (ehRisco ? 'Responda falha, impacto e consequências, acima' : 'Calculado automaticamente') : typeof v === 'number' ? numBR(v) : Q2F.bonito(v);
     }
 
     function render() {
