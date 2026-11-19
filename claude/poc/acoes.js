@@ -31,7 +31,7 @@ async function novosRisco(p) { // formulário 13: os campos do alvo ficam na eta
   if (tem) await aba(p, 'Risco');
   for (const [n, v] of [['Principal defeito da arvore', 'Tronco'], ['Carga sobre o defeito', 'Pequena']]) if (await campo(p, n).count()) await op(p, n, v);
 }
-async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, altura = 6.5, morta = false, manejoNenhum = true, categoria = 'Árvore', qtde = null } = {}) {
+async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, altura = 6.5, morta = false, manejoNenhum = true, categoria = 'Árvore', qtde = null, fiacao = null, paralelo = 'Não' } = {}) {
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(200);
   await op(p, 'Local do registro', 'Via pública'); await op(p, 'Categoria', categoria);
   const sitId = await campo(p, 'Situacao').count(); if (sitId) { await op(p, 'Situacao', morta ? 'Morta' : 'Viva'); await p.waitForTimeout(150); } // formulário 14: situação e fitossanidade na Identificação
@@ -42,7 +42,7 @@ async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, al
     await campo(p, 'CAP (cm)').locator('input').first().fill('102'); await num(p, 'Altura total (m)', altura);
     for (const k of [1, 2, 3, 4]) if (await campo(p, `Raio de copa ${k} (m)`).count()) await num(p, `Raio de copa ${k} (m)`, 2 + k / 2);
     if (await campo(p, 'Area de copa medida (m2)').count()) await num(p, 'Area de copa medida (m2)', 18);
-    await aba(p, 'Meio'); await novosMeio(p); await op(p, 'Conflitos no raio de 2 m', 'Ausente'); await p.locator('.chip[data-campo="Fiação ausente"]').click(); await op(p, 'Marquise ou toldo', 'Ausente');
+    await aba(p, 'Meio'); await novosMeio(p); await op(p, 'Conflitos no raio de 2 m', 'Ausente'); await p.locator(`.chip[data-campo="${fiacao || 'Fiação ausente'}"]`).click(); if (fiacao && await campo(p, 'Tronco paralelo a fiacao eletrica').count()) await op(p, 'Tronco paralelo a fiacao eletrica', paralelo); await op(p, 'Marquise ou toldo', 'Ausente');
     await p.locator('.chip[data-campo="Tráfego sem interferência"]').click();
     await aba(p, 'Copa'); await op(p, 'Qualidade da copa', 'Normal'); await op(p, 'Galhos secos ou podres', 'Ausente');
     for (const n of ['Podas ausente', 'Pragas na copa ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();

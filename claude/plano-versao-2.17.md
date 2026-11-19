@@ -14,7 +14,7 @@ Tudo abaixo foi decidido pelo Ciro em conversa, ponto a ponto, em 19/11/2026. A 
 
 | Item | O que muda |
 |---|---|
-| 6 | Fitossanidade (Boa, Regular, Ruim) sai da etapa Raízes e vai para a etapa Identificação, depois da foto geral |
+| 6 | Fitossanidade (Boa, Regular, Ruim) sai da etapa Raízes e vai para a etapa Identificação, depois da foto geral. A situação (viva ou morta) também vai para a Identificação, antes dela |
 | 7 | "Tronco paralelo à fiação elétrica aérea?" vira pergunta própria (Não ou Sim, obrigatória), na etapa Meio, depois da fiação. Some quando a fiação é "Ausente" |
 | 18 | Calçada sem árvores só com a foto. Conferido: o formulário já não tinha campo de largura, nada a mudar |
 
@@ -46,7 +46,7 @@ Tudo abaixo foi decidido pelo Ciro em conversa, ponto a ponto, em 19/11/2026. A 
 | Item | O que muda |
 |---|---|
 | 13 | Nada em branco nos campos do inventário. Número que não se aplica grava "NA"; escolha que não se aplica grava "Não se aplica"; caixa de marcar escondida grava 0; tronco paralelo com fiação ausente grava "Não". Ficam vazios só fotos extras e observações. Colunas de controle (validado por, pagamento, datas) seguem sendo preenchidas quando o fato acontece |
-| 14 | Colunas de formulário antigo saem do formulário e da planilha (DAP, Fungo, Cupim, Broca, Doença aparente, Praga aparente, Risco nível 1, Nível da avaliação, Principal alvo e as demais marcadas como antigas). Antes de apagar, converter "Principal alvo" para as caixas de alvo nos registros feitos no formulário 12 |
+| 14 | Colunas de formulário antigo saem do formulário e da planilha (DAP, Fungo, Cupim, Broca, Doença aparente, Praga aparente, Risco nível 1, Nível da avaliação, Principal alvo e as demais marcadas como antigas). Antes de apagar, converter "Principal alvo" para as caixas de alvo nos registros feitos no formulário 12, e a caixa antiga "Tronco paralelo à fiação" marcada para "Sim" na pergunta nova (formulários 12 e 13) |
 | 24 | Categoria, probabilidade de falha, probabilidade de impacto e consequências aparecem como palavra na planilha. O app continua usando os códigos por dentro; a troca é só na gravação e na leitura da planilha, e a leitura aceita os dois jeitos. Confirmar antes que toda gravação e leitura passam por um ponto só |
 | Ajuste dos dados | Função "ajustar registros antigos", rodada uma vez pelo Ciro no Apps Script: aplica 13, 14 e 24 aos registros já coletados. Mostrar ao Ciro o que muda antes de rodar |
 

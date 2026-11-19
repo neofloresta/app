@@ -16,8 +16,8 @@ Etapas por parte da árvore, na ordem da tela (cadastro completo, avaliação de
 
 | Etapa | Variáveis |
 |---|---|
-| Identificação | Local do registro, categoria, foto geral (o indivíduo inteiro) e fitossanidade (Boa, Regular, Ruim), nota da árvore inteira. Obrigatórios |
-| Indivíduo | Situação, espécie (com "Não tenho certeza da espécie"), CAP, altura total, copa (2 raios, 4 raios ou área, conforme o time). Obrigatórios |
+| Identificação | Local do registro, categoria, situação (viva ou morta), foto geral (o indivíduo inteiro) e fitossanidade (Boa, Regular, Ruim), nota da árvore inteira, só para a viva. Obrigatórios |
+| Indivíduo | Espécie (com "Não tenho certeza da espécie"), CAP, altura total, copa (2 raios, 4 raios ou área, conforme o time). Obrigatórios |
 | Meio | Área livre, posição da árvore na calçada, conflitos no raio de 2 m, fiação aérea, tronco paralelo à fiação elétrica aérea (Não ou Sim; não aparece com fiação ausente), marquise ou toldo, interferência no tráfego |
 | Copa | Qualidade da copa; galhos secos ou podres (Ausente, 0-25%, 25-50%, 50-75%, acima de 75%); podas (danos por podas, poda drástica); pragas na copa (fungo, cupim, broca, erva-de-passarinho) |
 | Tronco | Danos no tronco (lesões, codominância); ocos e cavidades; pragas no tronco (fungo, cupim, broca) |
@@ -67,7 +67,8 @@ Vieram do modelo antigo do QGIS (inv_eneas). Só o formulário mudou: o risco co
 
 ## Formulário 14 (19/11/2026, à noite, com a coleta em campo)
 
-- **Fitossanidade** saiu da etapa Raízes e foi para a Identificação, logo depois da foto geral. Como a situação (viva ou morta) vem na etapa seguinte, a nota aparece também para a árvore morta; ao marcar "Morta" ela some e o valor é descartado.
+- **Fitossanidade** saiu da etapa Raízes e foi para a Identificação, logo depois da foto geral.
+- **Situação (viva ou morta)** saiu da etapa Indivíduo e foi para a Identificação, logo depois da categoria, para a fitossanidade só aparecer na árvore viva (pedido do Ciro). A árvore morta fica com uma etapa só: situação e foto.
 - **Tronco paralelo à fiação elétrica aérea?** virou pergunta própria (Não ou Sim, obrigatória), na etapa Meio, depois do grupo da fiação. Com "Fiação ausente" marcada, a pergunta não aparece e hoje fica vazia na planilha (a 2.17 passa a gravar "Não"). A caixa de marcar dos formulários 12 e 13 ficou só na base.
 - A rede elétrica continua entre os alvos na zona.
 - Calçada sem árvores: o formulário já não tinha campo de largura (só a foto); nada a mudar.

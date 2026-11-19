@@ -45,6 +45,11 @@ const naTela = (p) => p.evaluate(() => [...document.querySelectorAll('main [data
   // 6. chega ao servidor com as colunas novas
   await p.waitForTimeout(4000); const lista = await L.post('listar', { projeto: 'divinopolis' }).catch((e) => ({ erro: String(e) })); const txt = JSON.stringify(lista);
   ok('M.6', /1 a 2 m²/.test(txt) && /Projeção da copa/.test(txt), `no servidor: área livre ${/1 a 2 m²/.test(txt)}, zona do alvo ${/Projeção da copa/.test(txt)}${lista.erro ? ' (' + lista.erro + ')' : ''}`);
+  // 9. com fiação marcada, a resposta do tronco paralelo é gravada e chega ao servidor; com fiação ausente (registro do item 5) fica vazia. A exigência está no item 8 (asterisco) e na trava de etapas
+  const f9 = await A.arvoreCompleta(p, { fiacao: 'Fiação baixa isolada', paralelo: 'Sim' });
+  await p.waitForSelector('button.nova'); await p.waitForTimeout(4000); const rs9 = await p.evaluate(async () => Store.todosRegistros()); const r9 = rs9.find((x) => x.valores && x.valores['Fiação baixa isolada'] === true); const l9 = JSON.stringify(await L.post('listar', { projeto: 'divinopolis' }).catch((e) => ({ erro: String(e) })));
+  const noServ = l9.includes('"' + PAR + '":"Sim"');
+  ok('M.9', f9.length === 0 && r9 && r9.valores[PAR] === 'Sim' && !r9.valores['Tronco paralelo à fiação'] && noServ && r && (r.valores[PAR] == null || r.valores[PAR] === ''), `pendências: ${f9.join(', ') || 'nenhuma'}; gravado "${r9 && r9.valores[PAR]}"; no servidor: ${noServ}; com fiação ausente fica "${r && r.valores[PAR]}"`);
   ok('M.7', !p.erros.length, p.erros.length ? p.erros.join(' | ') : 'sem erros de JavaScript');
   const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);
 })().catch((e) => { console.error('ERRO', e); process.exit(1); });
