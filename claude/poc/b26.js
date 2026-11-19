@@ -40,7 +40,7 @@ const toast = (p) => p.evaluate(() => [...document.querySelectorAll('.toast')].m
   ok('T.3', livre === 1 && noMeio === 0 && /Complete .* antes de seguir. Falta:/.test(msg), `sem preencher foi até Meio (${livre}); depois de marcar Categoria ficou travado com "${msg}"`);
 
   // 3. espécie por semelhança, texto livre e "Sem ID"
-  await A.op(p, 'Local do registro', 'Via pública'); await A.foto(p, 'Foto 1'); await A.aba(p, 'Indivíduo'); await A.sit(p, 'Viva');
+  await A.op(p, 'Local do registro', 'Via pública'); await A.foto(p, 'Foto 1'); if (await A.campo(p, 'Fitossanidade').count()) await A.op(p, 'Fitossanidade', 'Boa'); await A.aba(p, 'Indivíduo'); await A.sit(p, 'Viva');
   const inp = A.campo(p, 'Especie').locator('input').first(); await inp.click(); await inp.pressSequentially('handroantus', { delay: 60 }); await p.waitForTimeout(250);
   const sugs = await p.locator('[data-campo="Especie"] .esp-lista button').allInnerTexts(); const foco = await p.evaluate(() => document.activeElement === document.querySelector('[data-campo="Especie"] input'));
   ok('T.4', sugs.some((s) => /Handroanthus/.test(s)) && foco, `"handroantus" (com erro) sugere: ${sugs.slice(0, 3).join(' / ')}; teclado continua aberto=${foco}`);

@@ -44,7 +44,7 @@ const regs = async (p) => p.evaluate(async () => (await Store.todosRegistros()))
 
   // 1.5 critério de inclusão 2 m
   // com a trava de etapas, a altura abaixo de 2 m já impede de seguir para a próxima etapa
-  await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Local do registro', 'Via pública'); await A.op(p, 'Categoria', 'Árvore'); await A.foto(p, 'Foto 1');
+  await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Local do registro', 'Via pública'); await A.op(p, 'Categoria', 'Árvore'); await A.foto(p, 'Foto 1'); if (await A.campo(p, 'Fitossanidade').count()) await A.op(p, 'Fitossanidade', 'Boa');
   await A.aba(p, 'Indivíduo'); await A.sit(p, 'Viva'); await A.campo(p, 'Especie').locator('input').first().fill('Moquilea tomentosa'); await A.campo(p, 'CAP (cm)').locator('input').first().fill('80'); await A.num(p, 'Altura total (m)', 1.2); await p.waitForTimeout(300);
   await A.concluir(p); f = await A.faltas(p); rs = await regs(p);
   const baixa = rs.find((x) => x.valores['Altura total (m)'] === 1.2);

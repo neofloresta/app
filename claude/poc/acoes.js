@@ -8,8 +8,13 @@ async function abaLivre(p, nome) { await p.evaluate(() => { if (window.__app.S.r
 async function op(p, nomeCampo, texto) { await campo(p, nomeCampo).locator(`.op:has-text("${texto}")`).first().click(); }
 // viva ou morta: no formulário 14 a pergunta está na Identificação; nos anteriores, na etapa Indivíduo. Termina na etapa Indivíduo quando ela existe
 async function sit(p, v) {
-  if (!(await campo(p, 'Situacao').count())) { await abaLivre(p, 'Identificação'); await op(p, 'Situacao', v); await p.waitForTimeout(400); if (await p.locator('.folha button:has-text("Trocar")').count()) { await p.click('.folha button:has-text("Trocar")'); await p.waitForTimeout(300); } await p.click('.prog-topo'); const tem = await p.locator('.folha .menu-it:has-text("Indivíduo")').count(); if (tem) await p.click('.folha .menu-it:has-text("Indivíduo")'); else await p.evaluate(() => document.querySelectorAll('.veu').forEach((x) => x.remove())); await p.waitForTimeout(120); return; }
-  await op(p, 'Situacao', v);
+  if (!(await campo(p, 'Situacao').count())) await abaLivre(p, 'Identificação');
+  await op(p, 'Situacao', v); await p.waitForTimeout(400);
+  if (await p.locator('.folha button:has-text("Trocar")').count()) { await p.click('.folha button:has-text("Trocar")'); await p.waitForTimeout(300); }
+  if (!(await campo(p, 'Categoria').count())) return; // formulário antigo: já está na etapa Indivíduo
+  await p.evaluate(() => { if (window.__app.S.reg) window.__app.S.reg.mexido = false; }); await p.click('.prog-topo');
+  if (await p.locator('.folha .menu-it:has-text("Indivíduo")').count()) await p.click('.folha .menu-it:has-text("Indivíduo")'); else await p.evaluate(() => document.querySelectorAll('.veu').forEach((x) => x.remove()));
+  await p.waitForTimeout(120);
 }
 async function chip(p, rotulo) { await p.locator(`.chip:text-is("${rotulo}")`).first().click(); }
 async function num(p, nomeCampo, v) { await campo(p, nomeCampo).locator('input').first().fill(String(v)); }
@@ -29,8 +34,9 @@ async function novosRisco(p) { // formulário 13: os campos do alvo ficam na eta
 async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, altura = 6.5, morta = false, manejoNenhum = true, categoria = 'Árvore', qtde = null } = {}) {
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(200);
   await op(p, 'Local do registro', 'Via pública'); await op(p, 'Categoria', categoria);
-  await foto(p, 'Foto 1'); const fitoId = !morta && await campo(p, 'Fitossanidade').count(); if (fitoId) await op(p, 'Fitossanidade', 'Boa'); // formulário 14: fitossanidade na Identificação
-  await aba(p, 'Indivíduo'); await sit(p, morta ? 'Morta' : 'Viva');
+  const sitId = await campo(p, 'Situacao').count(); if (sitId) { await op(p, 'Situacao', morta ? 'Morta' : 'Viva'); await p.waitForTimeout(150); } // formulário 14: situação e fitossanidade na Identificação
+  await foto(p, 'Foto 1'); const fitoId = !morta && await campo(p, 'Fitossanidade').count(); if (fitoId) await op(p, 'Fitossanidade', 'Boa');
+  if (!(morta && sitId)) await aba(p, 'Indivíduo'); if (!sitId) await op(p, 'Situacao', morta ? 'Morta' : 'Viva');
   if (!morta) {
     await campo(p, 'Especie').locator('input').first().fill(especie); await p.waitForTimeout(80); if (qtde) await num(p, 'Qtde estimada de individuos', qtde);
     await campo(p, 'CAP (cm)').locator('input').first().fill('102'); await num(p, 'Altura total (m)', altura);
