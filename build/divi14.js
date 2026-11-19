@@ -2,6 +2,7 @@
 // node build/divi14.js
 // Mudanças da 14 (só formulário; o cálculo do risco não muda):
 //  - Fitossanidade (Boa, Regular, Ruim) sai da etapa Raízes e vai para a Identificação, depois da foto geral
+//  - Situação (viva ou morta) sai da etapa Indivíduo e vai para a Identificação, depois da categoria, para a fitossanidade só aparecer na árvore viva
 //  - "Tronco paralelo à fiação elétrica aérea?" vira pergunta própria (Não ou Sim), fora do grupo da fiação;
 //    não aparece quando a fiação é "Ausente". A caixa de marcar antiga fica só na base, para os registros dos formulários 12 e 13
 // A rede elétrica continua entre os alvos na zona. A largura da calçada já não existia no formulário (calçada sem árvores pede só a foto).
@@ -16,6 +17,9 @@ campo('Fitossanidade');
 aba('Raízes').campos = aba('Raízes').campos.filter((x) => x.campo !== 'Fitossanidade');
 const I = aba('Identificação').campos; const iFoto = I.findIndex((x) => x.campo === 'Foto 1'); if (iFoto < 0) throw new Error('Foto 1 não está na Identificação');
 I.splice(iFoto + 1, 0, { campo: 'Fitossanidade' });
+// ---------- Situação (viva ou morta) vem antes da fitossanidade: sai da etapa Indivíduo e fica logo depois da categoria ----------
+campo('Situacao'); aba('Indivíduo').campos = aba('Indivíduo').campos.filter((x) => x.campo !== 'Situacao');
+const iCat = I.findIndex((x) => x.campo === 'Categoria'); if (iCat < 0) throw new Error('Categoria não está na Identificação'); I.splice(iCat + 1, 0, { campo: 'Situacao' });
 // ---------- Tronco paralelo: pergunta própria ----------
 const ANT = 'Tronco paralelo à fiação'; const NOVO = 'Tronco paralelo a fiacao eletrica';
 const ant = campo(ANT); ant.legado = true; ant.rotulo = 'Tronco paralelo à fiação (formulário anterior)';

@@ -6,6 +6,11 @@ async function aba(p, nome) { await p.click('.prog-topo'); await p.click(`.folha
 // passear pelas etapas sem a trava (como no treino, antes de preencher): para testes que só olham o que aparece
 async function abaLivre(p, nome) { await p.evaluate(() => { if (window.__app.S.reg) window.__app.S.reg.mexido = false; }); await aba(p, nome); }
 async function op(p, nomeCampo, texto) { await campo(p, nomeCampo).locator(`.op:has-text("${texto}")`).first().click(); }
+// viva ou morta: no formulário 14 a pergunta está na Identificação; nos anteriores, na etapa Indivíduo. Termina na etapa Indivíduo quando ela existe
+async function sit(p, v) {
+  if (!(await campo(p, 'Situacao').count())) { await abaLivre(p, 'Identificação'); await op(p, 'Situacao', v); await p.waitForTimeout(400); if (await p.locator('.folha button:has-text("Trocar")').count()) { await p.click('.folha button:has-text("Trocar")'); await p.waitForTimeout(300); } await p.click('.prog-topo'); const tem = await p.locator('.folha .menu-it:has-text("Indivíduo")').count(); if (tem) await p.click('.folha .menu-it:has-text("Indivíduo")'); else await p.evaluate(() => document.querySelectorAll('.veu').forEach((x) => x.remove())); await p.waitForTimeout(120); return; }
+  await op(p, 'Situacao', v);
+}
 async function chip(p, rotulo) { await p.locator(`.chip:text-is("${rotulo}")`).first().click(); }
 async function num(p, nomeCampo, v) { await campo(p, nomeCampo).locator('input').first().fill(String(v)); }
 async function concluir(p) { await p.click('.prog-topo'); await p.click('.folha >> text=Concluir registro'); await p.waitForTimeout(350); }
@@ -25,7 +30,7 @@ async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, al
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(200);
   await op(p, 'Local do registro', 'Via pública'); await op(p, 'Categoria', categoria);
   await foto(p, 'Foto 1'); const fitoId = !morta && await campo(p, 'Fitossanidade').count(); if (fitoId) await op(p, 'Fitossanidade', 'Boa'); // formulário 14: fitossanidade na Identificação
-  await aba(p, 'Indivíduo'); await op(p, 'Situacao', morta ? 'Morta' : 'Viva');
+  await aba(p, 'Indivíduo'); await sit(p, morta ? 'Morta' : 'Viva');
   if (!morta) {
     await campo(p, 'Especie').locator('input').first().fill(especie); await p.waitForTimeout(80); if (qtde) await num(p, 'Qtde estimada de individuos', qtde);
     await campo(p, 'CAP (cm)').locator('input').first().fill('102'); await num(p, 'Altura total (m)', altura);
@@ -50,4 +55,4 @@ async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, al
   return faltas(p);
 }
 async function excluir(p) { await p.click('.prog-topo'); await p.click('.folha .link-perigo'); await p.waitForTimeout(200); await p.locator('.folha button.perigo').last().click(); await p.waitForTimeout(400); }
-module.exports = { abaLivre, excluir, campo, aba, op, chip, num, concluir, faltas, foto, arvoreCompleta, novosMeio, novosRisco, FOTO };
+module.exports = { sit, abaLivre, excluir, campo, aba, op, chip, num, concluir, faltas, foto, arvoreCompleta, novosMeio, novosRisco, FOTO };

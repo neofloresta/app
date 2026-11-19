@@ -12,7 +12,7 @@ const visiveis = async (p) => { await p.evaluate(() => { if (window.__app.S.reg)
   let f = await A.arvoreCompleta(p, { manejoNenhum: false }); let rs = await regs(p); let r = rs.find((x) => x.status !== 'rascunho');
   ok('F.1', f.length === 0 && r && r.valores['Manejo nenhum'] === true && r.valores.Risco === 'Baixo' && r.valores['Area de copa (m2)'] > 0, `concluiu; manejo vazio virou "Nenhum" depois da confirmação; risco calculado ${r && r.valores.Risco}; área de copa ${r && r.valores['Area de copa (m2)']}`);
   // 2. risco severo pela matriz
-  await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Árvore'); await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva'); await p.evaluate(() => { window.__app.S.reg.mexido = false; }); await A.abaLivre(p, 'Risco');
+  await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Árvore'); await A.abaLivre(p, 'Indivíduo'); await A.sit(p, 'Viva'); await p.evaluate(() => { window.__app.S.reg.mexido = false; }); await A.abaLivre(p, 'Risco');
   await A.op(p, 'Probabilidade de falha', 'Iminente'); await A.op(p, 'Probabilidade de impacto', 'Alto'); await A.op(p, 'Consequencias', 'Severa'); await p.waitForTimeout(300);
   const risco = await A.campo(p, 'Risco').innerText();
   ok('F.2', /Severo/.test(risco), `iminente + alto + severa = "${risco.replace(/\s+/g, ' ')}"`);
@@ -22,7 +22,7 @@ const visiveis = async (p) => { await p.evaluate(() => { if (window.__app.S.reg)
   await A.concluir(p); f = await A.faltas(p);
   ok('F.3', fotosId === 4 && ['face de cima', 'face de baixo', 'filotaxia', 'tronco'].every((t) => f.some((x) => x.toLowerCase().includes(t))), `${fotosId} fotos de identificação aparecem e são cobradas: ${f.filter((x) => /Foto/.test(x)).join(', ')}`);
   // 4. morta: só ponto e foto geral
-  await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Morta'); await p.waitForTimeout(600); if (await p.locator('.folha button:has-text("Trocar")').count()) await p.click('.folha button:has-text("Trocar")'); await p.waitForTimeout(400);
+  await A.abaLivre(p, 'Indivíduo'); await A.sit(p, 'Morta'); await p.waitForTimeout(600); if (await p.locator('.folha button:has-text("Trocar")').count()) await p.click('.folha button:has-text("Trocar")'); await p.waitForTimeout(400);
   const visM = await visiveis(p);
   await A.abaLivre(p, 'Identificação'); await A.op(p, 'Local do registro', 'Via pública'); await A.foto(p, 'Foto 1'); await A.concluir(p); f = await A.faltas(p);
   if (await p.locator('.folha >> text=Salvar sem GPS').count()) await p.click('.folha >> text=Salvar sem GPS');
@@ -40,7 +40,7 @@ const visiveis = async (p) => { await p.evaluate(() => { if (window.__app.S.reg)
   const cats = await A.campo(p, 'Categoria').innerText();
   ok('F.6', !/novo plantio/i.test(cats), `categorias: ${cats.replace(/\n+/g, ' / ')}`);
   // 7. arbusto com 4 caules pede confirmação
-  await A.op(p, 'Categoria', 'Arbusto'); await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva');
+  await A.op(p, 'Categoria', 'Arbusto'); await A.abaLivre(p, 'Indivíduo'); await A.sit(p, 'Viva');
   await A.campo(p, 'CAP (cm)').locator('input').first().fill('15'); for (let i = 0; i < 2; i++) { await A.campo(p, 'CAP (cm)').locator('button:has-text("caule")').click(); await A.campo(p, 'CAP (cm)').locator('input').last().fill(String(12 + i)); }
   const botaoVisivel = await A.campo(p, 'CAP (cm)').locator('button:has-text("+ caule"):visible').count(); const nCaules = await A.campo(p, 'CAP (cm)').locator('input').count();
   ok('F.7', nCaules === 3 && botaoVisivel === 0, `${nCaules} caules medidos e o botão "+ caule" sumiu`);
@@ -53,7 +53,7 @@ const visiveis = async (p) => { await p.evaluate(() => { if (window.__app.S.reg)
   // 9. preferência de copa: área direto
   // desde a 2.6 quem define é a coordenação, no cadastro do usuário
   await L.post('usuario_salvar', { usuario_dados: { login: 'div-1', modo_copa: 'area' } }); await p.goto(L.WEB + '#inicio'); await p.reload(); await p.waitForSelector('button.nova'); await p.waitForTimeout(2500); await p.reload(); await p.waitForSelector('button.nova');
-  await p.goto(L.WEB + '#inicio'); await p.waitForSelector('button.nova'); await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Árvore'); await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva');
+  await p.goto(L.WEB + '#inicio'); await p.waitForSelector('button.nova'); await p.click('button.nova'); await p.waitForSelector('.prog'); await A.op(p, 'Categoria', 'Árvore'); await A.abaLivre(p, 'Indivíduo'); await A.sit(p, 'Viva');
   const temArea = await A.campo(p, 'Area de copa medida (m2)').count(); const temRaio = await A.campo(p, 'Raio de copa 1 (m)').count();
   ok('F.9', temArea === 1 && temRaio === 0, `com a preferência "área direto": campo de área ${temArea}, raios ${temRaio}`);
   // 11. CAP com letra ou vírgula dobrada bloqueia

@@ -6,7 +6,7 @@ const limpo = (t) => String(t || '').replace(/\s+/g, ' ').trim(); const chipC = 
 async function ate7(p, { podas, raizes, fito, parar }) {
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(200);
   await A.op(p, 'Local do registro', 'Via pública'); await A.op(p, 'Categoria', 'Árvore'); await A.foto(p, 'Foto 1');
-  await A.aba(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva');
+  await A.aba(p, 'Indivíduo'); await A.sit(p, 'Viva');
   await A.campo(p, 'Especie').locator('input').first().fill('Moquilea tomentosa'); await p.waitForTimeout(80);
   await A.campo(p, 'CAP (cm)').locator('input').first().fill('102'); await A.num(p, 'Altura total (m)', 6.5);
   for (const k of [1, 2, 3, 4]) if (await A.campo(p, `Raio de copa ${k} (m)`).count()) await A.num(p, `Raio de copa ${k} (m)`, 2 + k / 2);

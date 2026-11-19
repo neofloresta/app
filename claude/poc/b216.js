@@ -49,7 +49,7 @@ const tocar = async (p, lat, lon, z = 19) => { const xy = await p.evaluate(([a, 
   await E.ctx.setGeolocation({ latitude: auto.la + 0.00004, longitude: auto.lo + 0.00004, accuracy: 4 }); await p.waitForTimeout(500);
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(400); for (const t of ['Não, é outra', 'É outra árvore', 'Cadastrar mesmo assim']) if (await p.locator(`.folha button:has-text("${t}")`).count()) { await p.click(`.folha button:has-text("${t}")`); await p.waitForTimeout(300); }
   await A.op(p, 'Local do registro', 'Via pública'); const opcs = (await A.campo(p, 'Categoria').locator('.op').allInnerTexts()).map(limpo); await A.op(p, 'Categoria', 'Agrupamento'); await A.foto(p, 'Foto 1'); await A.op(p, 'Fitossanidade', 'Boa');
-  await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva'); const qtdeOk = await A.campo(p, 'Qtde estimada de individuos').count(); const ajudaCap = await A.campo(p, 'CAP (cm)').count();
+  await A.abaLivre(p, 'Indivíduo'); await A.sit(p, 'Viva'); const qtdeOk = await A.campo(p, 'Qtde estimada de individuos').count(); const ajudaCap = await A.campo(p, 'CAP (cm)').count();
   await p.click('.prog-topo'); const falta0 = limpo(await p.locator('.folha').innerText()); await p.evaluate(() => document.querySelectorAll('.veu').forEach((v) => v.remove()));
   await p.evaluate(() => { window.__app.S.reg.mexido = true; });
   await p.waitForTimeout(100);

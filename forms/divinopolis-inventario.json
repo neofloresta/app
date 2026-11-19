@@ -1265,6 +1265,9 @@
      "campo": "Categoria"
     },
     {
+     "campo": "Situacao"
+    },
+    {
      "campo": "Foto 1"
     },
     {
@@ -1281,9 +1284,6 @@
   {
    "nome": "Indivíduo",
    "campos": [
-    {
-     "campo": "Situacao"
-    },
     {
      "campo": "Especie"
     },
