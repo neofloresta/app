@@ -1,6 +1,6 @@
 # Plano de ajustes alinhado com o Ciro em 19/11/2026
 
-Tudo abaixo foi decidido pelo Ciro em conversa, ponto a ponto, em 19/11/2026. A intenção dele é que esta seja a última mudança estrutural. Situação: plano aguardando o "pode fazer". Nada foi implementado ainda, fora o que está marcado como feito.
+Tudo abaixo foi decidido pelo Ciro em conversa, ponto a ponto, em 19/11/2026. A intenção dele é que esta seja a última mudança estrutural. Situação: o Ciro deu o "pode fazer" em 19/11/2026. Entrega 1 feita (formulário 14, app 2.16.5); entrega 2 em andamento.
 
 ## Já feito em 19/11/2026
 
@@ -8,7 +8,7 @@ Tudo abaixo foi decidido pelo Ciro em conversa, ponto a ponto, em 19/11/2026. A 
 - Planilha de Divinópolis zerada dos testes pelo Ciro. Depois disso entraram 13 registros válidos das equipes Neo-1 e Neo-2 (quadra 2833), feitos nos formulários 12 e 13.
 - Projeto "Treinamento Gap" (identificador treinamento-gap) criado pelo Ciro, com a camada de quadras copiada de Divinópolis (5.414 quadras, 22.042 faces), time "Treinamento" (parceiro), pessoas "Treinamento Gap" (avaliadora) e "Auxiliar Treinamento", usuários treino e treino-aux. Serve para o treinamento da Gap de 20/11 (até 6 celulares) e para o teste de carga.
 - Conector Google Planilhas ligado na conta do Ciro.
-- Um formulário 14 que tirava "Rede elétrica" dos alvos foi montado por engano (leitura errada de uma mensagem) e NÃO foi publicado. Está no commit b30ce46 do ramo de trabalho e precisa ser desfeito antes da entrega 1. A rede elétrica continua nos alvos.
+- Um formulário 14 que tirava "Rede elétrica" dos alvos foi montado por engano (leitura errada de uma mensagem) e NÃO foi publicado. Foi desfeito: o formulário 14 de verdade (`build/divi14.js`) parte do 13 e mantém a rede elétrica nos alvos.
 
 ## Entrega 1: formulário 14 (só formulário)
 
@@ -16,7 +16,7 @@ Tudo abaixo foi decidido pelo Ciro em conversa, ponto a ponto, em 19/11/2026. A 
 |---|---|
 | 6 | Fitossanidade (Boa, Regular, Ruim) sai da etapa Raízes e vai para a etapa Identificação, depois da foto geral |
 | 7 | "Tronco paralelo à fiação elétrica aérea?" vira pergunta própria (Não ou Sim, obrigatória), na etapa Meio, depois da fiação. Some quando a fiação é "Ausente" |
-| 18 | Sai o campo de largura da calçada na categoria calçada sem árvores. Fica só a foto |
+| 18 | Calçada sem árvores só com a foto. Conferido: o formulário já não tinha campo de largura, nada a mudar |
 
 ## Entrega 2: versão 2.17 do app e do servidor (o Ciro cola o Code.gs novo)
 

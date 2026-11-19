@@ -24,7 +24,7 @@ async function novosRisco(p) { // formulário 13: os campos do alvo ficam na eta
 async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, altura = 6.5, morta = false, manejoNenhum = true, categoria = 'Árvore', qtde = null } = {}) {
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(200);
   await op(p, 'Local do registro', 'Via pública'); await op(p, 'Categoria', categoria);
-  await foto(p, 'Foto 1');
+  await foto(p, 'Foto 1'); const fitoId = !morta && await campo(p, 'Fitossanidade').count(); if (fitoId) await op(p, 'Fitossanidade', 'Boa'); // formulário 14: fitossanidade na Identificação
   await aba(p, 'Indivíduo'); await op(p, 'Situacao', morta ? 'Morta' : 'Viva');
   if (!morta) {
     await campo(p, 'Especie').locator('input').first().fill(especie); await p.waitForTimeout(80); if (qtde) await num(p, 'Qtde estimada de individuos', qtde);
@@ -38,7 +38,7 @@ async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, al
     await aba(p, 'Tronco'); for (const n of ['Danos ausente', 'Pragas no tronco ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();
     await op(p, 'Ocos e cavidades', 'Ausente');
     await aba(p, 'Raízes'); for (const n of ['Raízes ausente', 'Pragas nas raízes ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();
-    await op(p, 'Fitossanidade', 'Boa');
+    if (!fitoId) await op(p, 'Fitossanidade', 'Boa');
     await aba(p, 'Risco'); await novosRisco(p); await op(p, 'Probabilidade de falha', 'Improvável'); await campo(p, 'Probabilidade de impacto').locator('.op').nth(1).click(); await op(p, 'Consequencias', 'Menor');
     await aba(p, 'Manejo'); if (manejoNenhum) await p.locator('.chip[data-campo="Manejo nenhum"]').click();
     if (fotos > 1) { await aba(p, 'Fotos e observações'); await foto(p, 'Foto 2'); if (fotos > 2) await foto(p, 'Foto 3'); }

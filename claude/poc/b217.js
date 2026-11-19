@@ -1,9 +1,9 @@
-// 2.16.3 e 2.16.4: formulários 12 e 13 (área livre, posição na calçada, tronco paralelo à fiação, colo soterrado, raiz na via e ficha de alvo e defeito da ISA)
+// 2.16.3 a 2.16.5: formulários 12, 13 e 14 (área livre, posição na calçada, colo soterrado, raiz na via, ficha de alvo e defeito da ISA, fitossanidade na Identificação e tronco paralelo à fiação como pergunta própria)
 const { chromium } = require('playwright'); const L = require('./lib'); const A = require('./acoes'); const fs = require('fs');
 const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
-const ALVOS = ['Alvo pessoas', 'Alvo veículos estacionados', 'Alvo veículos em movimento', 'Alvo edificação', 'Alvo outros'];
+const ALVOS = ['Alvo pessoas', 'Alvo veículos estacionados', 'Alvo veículos em movimento', 'Alvo edificação', 'Alvo rede elétrica ou de serviços', 'Alvo outros'];
 const NOVOS = ['Area livre (m2)', 'Posicao da arvore na calcada', 'Zona do alvo', 'Taxa de ocupacao', 'Fator de protecao', 'Principal defeito da arvore', 'Carga sobre o defeito'];
-const MARCAR = ['Tronco paralelo à fiação', 'Colo soterrado', 'Afloramento da raiz na via'];
+const PAR = 'Tronco paralelo a fiacao eletrica'; const MARCAR = [PAR, 'Colo soterrado', 'Afloramento da raiz na via'];
 const naTela = (p) => p.evaluate(() => [...document.querySelectorAll('main [data-campo]')].map((c) => c.dataset.campo));
 (async () => {
   await L.subir(); await L.configurar();
@@ -12,7 +12,7 @@ const naTela = (p) => p.evaluate(() => [...document.querySelectorAll('main [data
   const form = JSON.parse(fs.readFileSync(L.APP + '/forms/divinopolis-inventario.json', 'utf8'));
   // 1. o arquivo: versão 12, campos novos com ajuda, e o risco calculado continua com as mesmas três perguntas
   const c = (n) => form.campos.find((x) => x.nome === n); const semAjuda = NOVOS.concat(MARCAR).filter((n) => !c(n) || !c(n).ajuda);
-  ok('M.1', form.versao === 14 && !form.campos.some((x) => /rede elétrica/i.test(x.nome)) && c('Principal alvo').legado && form.gruposObrig.includes('Alvos na zona') && c('Taxa de ocupacao').opcoes.every((o) => /\(.+\)$/.test(o.t) && !/\(/.test(o.v)) && !semAjuda.length && /estilhaços/.test(JSON.stringify(c('Zona do alvo').opcoes)) && /funil/.test(c('Colo soterrado').ajuda) && !form.campos.some((x) => /bifurca|Largura da cal|Inclina|Casca|Rachadura/i.test(x.nome)), `formulário ${form.versao}; sem ajuda: ${semAjuda.join(', ') || 'nenhum'}`);
+  ok('M.1', form.versao === 14 && c('Alvo rede elétrica ou de serviços') && !c('Alvo rede elétrica ou de serviços').legado && c('Tronco paralelo à fiação').legado && c(PAR).tipo === 'choice' && c('Principal alvo').legado && form.gruposObrig.includes('Alvos na zona') && c('Taxa de ocupacao').opcoes.every((o) => /\(.+\)$/.test(o.t) && !/\(/.test(o.v)) && !semAjuda.length && /estilhaços/.test(JSON.stringify(c('Zona do alvo').opcoes)) && /funil/.test(c('Colo soterrado').ajuda) && !form.campos.some((x) => /bifurca|Largura da cal|Inclina|Casca|Rachadura/i.test(x.nome)), `formulário ${form.versao}; sem ajuda: ${semAjuda.join(', ') || 'nenhum'}`);
   // 2. árvore na calçada: sem os campos novos não conclui; são todos pedidos
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(300);
   await A.op(p, 'Local do registro', 'Via pública'); await A.op(p, 'Categoria', 'Árvore'); await A.abaLivre(p, 'Meio'); const meio = await naTela(p);
@@ -29,9 +29,18 @@ const naTela = (p) => p.evaluate(() => [...document.querySelectorAll('main [data
   await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Morta'); await p.waitForTimeout(300); const etapas = await p.evaluate(() => [...document.querySelectorAll('.prog [data-aba], .prog button')].map((x) => x.textContent.trim())); const faltamM = await A.faltas(p);
   ok('M.4', !faltamM.some((x) => NOVOS.some((n) => x.includes(c(n).rotulo))), `morta: pendências ${faltamM.join(', ') || 'nenhuma'}; etapas ${etapas.join('/')}`);
   await A.excluir(p).catch(() => {}); await p.waitForSelector('button.nova'); await p.waitForTimeout(400);
+  // 8. formulário 14: fitossanidade na Identificação, logo depois da foto geral; tronco paralelo é pergunta própria e some com a fiação ausente
+  await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(300); await A.op(p, 'Local do registro', 'Via pública'); await A.op(p, 'Categoria', 'Árvore'); await p.waitForTimeout(200);
+  const ident = await naTela(p); const obI = await obrigNaTela(); await A.abaLivre(p, 'Raízes'); const raiz14 = await naTela(p);
+  await A.abaLivre(p, 'Meio'); const meio14 = await naTela(p); const obM = await obrigNaTela(); const ops = (await A.campo(p, PAR).locator('.op').allInnerTexts()).map((t) => t.trim());
+  await p.locator('.chip[data-campo="Fiação baixa isolada"]').click(); await p.waitForTimeout(150); const comFio = (await naTela(p)).includes(PAR); await A.op(p, PAR, 'Sim');
+  await p.locator('.chip[data-campo="Fiação ausente"]').click(); await p.waitForTimeout(200); const semFio = (await naTela(p)).includes(PAR);
+  ok('M.8', ident.indexOf('Fitossanidade') === ident.indexOf('Foto 1') + 1 && obI.includes('Fitossanidade') && !raiz14.includes('Fitossanidade') && meio14.includes(PAR) && !meio14.includes('Tronco paralelo à fiação') && meio14.indexOf(PAR) === meio14.indexOf('Marquise ou toldo') - 1 && meio14.indexOf(PAR) === meio14.indexOf('Fiação serviços gerais') + 1 && obM.includes(PAR) && ops.join('/') === 'Não/Sim' && comFio && !semFio,
+    `Identificação: ${ident.join(', ')}; fitossanidade pedida: ${obI.includes('Fitossanidade')}; Meio: ${meio14.join(', ')}; opções: ${ops.join('/')}; com fio aparece: ${comFio}; com fiação ausente aparece: ${semFio}`);
+  await A.excluir(p).catch(() => {}); await p.waitForSelector('button.nova'); await p.waitForTimeout(400);
   // 5. cadastro completo grava os campos novos e o risco sai da mesma matriz
   const f = await A.arvoreCompleta(p); const rs = await p.evaluate(async () => Store.todosRegistros()); const r = rs.find((x) => x.status !== 'rascunho'); const v = (r && r.valores) || {};
-  ok('M.5', f.length === 0 && v['Area livre (m2)'] === '1 a 2 m²' && v['Posicao da arvore na calcada'] === 'Até 1 m do meio-fio' && v['Zona do alvo'] === 'Projeção da copa' && v['Fator de protecao'] === 'Ausente' && v['Principal defeito da arvore'] === 'Tronco' && v['Carga sobre o defeito'] === 'Pequena' && v['Alvo pessoas'] === true && !v['Principal alvo'] && v['Taxa de ocupacao'] === 'Ocasional' && v.Risco === 'Baixo',
+  ok('M.5', f.length === 0 && v.Fitossanidade === 'Boa' && !v[PAR] && v['Area livre (m2)'] === '1 a 2 m²' && v['Posicao da arvore na calcada'] === 'Até 1 m do meio-fio' && v['Zona do alvo'] === 'Projeção da copa' && v['Fator de protecao'] === 'Ausente' && v['Principal defeito da arvore'] === 'Tronco' && v['Carga sobre o defeito'] === 'Pequena' && v['Alvo pessoas'] === true && !v['Principal alvo'] && v['Taxa de ocupacao'] === 'Ocasional' && v.Risco === 'Baixo',
     `pendências: ${f.join(', ') || 'nenhuma'}; área livre "${v['Area livre (m2)']}", posição "${v['Posicao da arvore na calcada']}", zona "${v['Zona do alvo']}", defeito "${v['Principal defeito da arvore']}", risco ${v.Risco}`);
   // 6. chega ao servidor com as colunas novas
   await p.waitForTimeout(4000); const lista = await L.post('listar', { projeto: 'divinopolis' }).catch((e) => ({ erro: String(e) })); const txt = JSON.stringify(lista);

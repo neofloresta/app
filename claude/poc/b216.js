@@ -48,7 +48,7 @@ const tocar = async (p, lat, lon, z = 19) => { const xy = await p.evaluate(([a, 
   await p.goto(L.WEB + '#'); await p.waitForSelector('button.nova'); await p.waitForTimeout(800);
   await E.ctx.setGeolocation({ latitude: auto.la + 0.00004, longitude: auto.lo + 0.00004, accuracy: 4 }); await p.waitForTimeout(500);
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(400); for (const t of ['Não, é outra', 'É outra árvore', 'Cadastrar mesmo assim']) if (await p.locator(`.folha button:has-text("${t}")`).count()) { await p.click(`.folha button:has-text("${t}")`); await p.waitForTimeout(300); }
-  await A.op(p, 'Local do registro', 'Via pública'); const opcs = (await A.campo(p, 'Categoria').locator('.op').allInnerTexts()).map(limpo); await A.op(p, 'Categoria', 'Agrupamento'); await A.foto(p, 'Foto 1');
+  await A.op(p, 'Local do registro', 'Via pública'); const opcs = (await A.campo(p, 'Categoria').locator('.op').allInnerTexts()).map(limpo); await A.op(p, 'Categoria', 'Agrupamento'); await A.foto(p, 'Foto 1'); await A.op(p, 'Fitossanidade', 'Boa');
   await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva'); const qtdeOk = await A.campo(p, 'Qtde estimada de individuos').count(); const ajudaCap = await A.campo(p, 'CAP (cm)').count();
   await p.click('.prog-topo'); const falta0 = limpo(await p.locator('.folha').innerText()); await p.evaluate(() => document.querySelectorAll('.veu').forEach((v) => v.remove()));
   await p.evaluate(() => { window.__app.S.reg.mexido = true; });
@@ -61,7 +61,7 @@ const tocar = async (p, lat, lon, z = 19) => { const xy = await p.evaluate(([a, 
   await A.aba(p, 'Meio'); await A.novosMeio(p); await A.op(p, 'Conflitos no raio de 2 m', 'Ausente'); await p.locator('.chip[data-campo="Fiação ausente"]').click(); await A.op(p, 'Marquise ou toldo', 'Ausente'); await p.locator('.chip[data-campo="Tráfego sem interferência"]').click();
   await A.aba(p, 'Copa'); await A.op(p, 'Qualidade da copa', 'Normal'); await A.op(p, 'Galhos secos ou podres', 'Ausente'); for (const n of ['Podas ausente', 'Pragas na copa ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();
   await A.aba(p, 'Tronco'); for (const n of ['Danos ausente', 'Pragas no tronco ausente']) await p.locator(`.chip[data-campo="${n}"]`).click(); await A.op(p, 'Ocos e cavidades', 'Ausente');
-  await A.aba(p, 'Raízes'); for (const n of ['Raízes ausente', 'Pragas nas raízes ausente']) await p.locator(`.chip[data-campo="${n}"]`).click(); await A.op(p, 'Fitossanidade', 'Boa');
+  await A.aba(p, 'Raízes'); for (const n of ['Raízes ausente', 'Pragas nas raízes ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();
   await A.aba(p, 'Risco'); await A.novosRisco(p); await A.op(p, 'Probabilidade de falha', 'Improvável'); await A.campo(p, 'Probabilidade de impacto').locator('.op').nth(1).click(); await A.op(p, 'Consequencias', 'Menor');
   await A.aba(p, 'Manejo'); await p.locator('.chip[data-campo="Manejo nenhum"]').click(); await A.aba(p, 'Fotos e observações'); await A.foto(p, 'Foto 2'); await A.foto(p, 'Foto 3');
   await A.concluir(p); for (const t of ['Sim, nenhum', 'Está certo', 'Salvar sem GPS']) if (await p.locator(`.folha >> text=${t}`).count()) { await p.click(`.folha button:has-text("${t}")`); await p.waitForTimeout(300); }

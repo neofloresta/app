@@ -28,7 +28,7 @@ const foco = (p) => p.evaluate(() => { const a = document.activeElement; const c
   const tem = (l, re) => l.some((x) => re.test(x));
   ok('Z.3', tem(copa, /^Qualidade da copa/) && tem(copa, /^Galhos secos ou podres.*Ausente\/0-25%\/25-50%\/50-75%\/acima de 75%/) && tem(copa, /^Podas: Ausente\/Danos por podas\/Poda drástica$/) && tem(copa, /^Pragas e doenças na copa: Ausente\/Fungo\/Cupim\/Broca\/Erva-de-passarinho$/)
     && tem(tronco, /^Danos no tronco: Ausente\/Lesões no tronco\/Codominância de troncos$/) && tem(tronco, /^Ocos e cavidades/) && tem(tronco, /^Pragas no tronco: Ausente\/Fungo\/Cupim\/Broca$/)
-    && tem(raiz, /^Raízes: Ausente\/Poda de raiz\/Afloramento da raiz no canteiro\/Afloramento da raiz na calçada\/Afloramento da raiz na via\/Colo soterrado$/) && tem(raiz, /^Pragas nas raízes: Ausente\/Fungo\/Cupim$/) && tem(raiz, /^Fitossanidade.*Boa\/Regular\/Ruim/) && copa.length === 4 && tronco.length === 3 && raiz.length === 3,
+    && tem(raiz, /^Raízes: Ausente\/Poda de raiz\/Afloramento da raiz no canteiro\/Afloramento da raiz na calçada\/Afloramento da raiz na via\/Colo soterrado$/) && tem(raiz, /^Pragas nas raízes: Ausente\/Fungo\/Cupim$/) && !tem(raiz, /^Fitossanidade/) && copa.length === 4 && tronco.length === 3 && raiz.length === 2,
     `Copa: ${copa.join(' | ')} || Tronco: ${tronco.join(' | ')} || Raízes: ${raiz.join(' | ')}`);
   // 4. risco calculado é o último da etapa e as fotos vão de 2 a 5, sem descrição
   await A.abaLivre(p, 'Risco'); const ordemR = await p.evaluate(() => [...document.querySelectorAll('main .campo[data-campo]')].map((c) => c.dataset.campo)); const antesR = limpo(await A.campo(p, 'Risco').locator('.calc').innerText());

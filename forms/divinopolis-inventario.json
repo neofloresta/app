@@ -398,9 +398,27 @@
   {
    "armazenar": "bool",
    "nome": "Tronco paralelo à fiação",
-   "rotulo": "Tronco paralelo à fiação",
+   "rotulo": "Tronco paralelo à fiação (formulário anterior)",
    "tipo": "bool",
-   "ajuda": "O tronco ou um galho principal sobe junto da rede, na mesma direção dos fios."
+   "ajuda": "O tronco ou um galho principal sobe junto da rede, na mesma direção dos fios.",
+   "legado": true
+  },
+  {
+   "armazenar": "text",
+   "nome": "Tronco paralelo a fiacao eletrica",
+   "rotulo": "Tronco paralelo à fiação elétrica aérea?",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Não",
+     "t": "Não"
+    },
+    {
+     "v": "Sim",
+     "t": "Sim"
+    }
+   ],
+   "ajuda": "O tronco ou um galho principal sobe junto da rede, na mesma direção dos fios. Sem fiação aérea, a pergunta não aparece."
   },
   {
    "armazenar": "bool",
@@ -835,10 +853,17 @@
   },
   {
    "armazenar": "bool",
+   "nome": "Alvo rede elétrica ou de serviços",
+   "rotulo": "Rede elétrica ou de serviços",
+   "tipo": "bool",
+   "ajuda": "Fios, poste, transformador."
+  },
+  {
+   "armazenar": "bool",
    "nome": "Alvo outros",
    "rotulo": "Outros",
    "tipo": "bool",
-   "ajuda": "Mobiliário urbano, banca, ponto de táxi. A rede elétrica não entra aqui: ela é registrada na etapa Meio, em fiação aérea."
+   "ajuda": "Mobiliário urbano, banca, ponto de táxi."
   },
   {
    "armazenar": "text",
@@ -1243,6 +1268,9 @@
      "campo": "Foto 1"
     },
     {
+     "campo": "Fitossanidade"
+    },
+    {
      "campo": "Motivo sem acesso"
     },
     {
@@ -1343,12 +1371,11 @@
      "grupo": "Fiação aérea"
     },
     {
-     "campo": "Tronco paralelo à fiação",
+     "campo": "Fiação ausente",
      "grupo": "Fiação aérea"
     },
     {
-     "campo": "Fiação ausente",
-     "grupo": "Fiação aérea"
+     "campo": "Tronco paralelo a fiacao eletrica"
     },
     {
      "campo": "Marquise ou toldo"
@@ -1484,9 +1511,6 @@
     {
      "campo": "Cupim nas raízes",
      "grupo": "Pragas nas raízes"
-    },
-    {
-     "campo": "Fitossanidade"
     }
    ]
   },
@@ -1507,6 +1531,10 @@
     },
     {
      "campo": "Alvo edificação",
+     "grupo": "Alvos na zona"
+    },
+    {
+     "campo": "Alvo rede elétrica ou de serviços",
      "grupo": "Alvos na zona"
     },
     {
@@ -3733,7 +3761,8 @@
      "Taxa de ocupacao": "obrig",
      "Fator de protecao": "obrig",
      "Principal defeito da arvore": "obrig",
-     "Carga sobre o defeito": "obrig"
+     "Carga sobre o defeito": "obrig",
+     "Tronco paralelo a fiacao eletrica": "obrig"
     },
     "2": {
      "Situacao": "obrig",
@@ -3755,7 +3784,8 @@
      "Taxa de ocupacao": "obrig",
      "Fator de protecao": "obrig",
      "Principal defeito da arvore": "obrig",
-     "Carga sobre o defeito": "obrig"
+     "Carga sobre o defeito": "obrig",
+     "Tronco paralelo a fiacao eletrica": "obrig"
     },
     "3": {
      "Situacao": "obrig",
@@ -3777,7 +3807,8 @@
      "Taxa de ocupacao": "obrig",
      "Fator de protecao": "obrig",
      "Principal defeito da arvore": "obrig",
-     "Carga sobre o defeito": "obrig"
+     "Carga sobre o defeito": "obrig",
+     "Tronco paralelo a fiacao eletrica": "obrig"
     },
     "5": {
      "Situacao": "oculto",
@@ -3866,7 +3897,6 @@
      "Fitossanidade": "oculto",
      "Area livre (m2)": "oculto",
      "Posicao da arvore na calcada": "oculto",
-     "Tronco paralelo à fiação": "oculto",
      "Colo soterrado": "oculto",
      "Afloramento da raiz na via": "oculto",
      "Zona do alvo": "oculto",
@@ -3878,7 +3908,9 @@
      "Alvo veículos estacionados": "oculto",
      "Alvo veículos em movimento": "oculto",
      "Alvo edificação": "oculto",
-     "Alvo outros": "oculto"
+     "Alvo rede elétrica ou de serviços": "oculto",
+     "Alvo outros": "oculto",
+     "Tronco paralelo a fiacao eletrica": "oculto"
     },
     "6": {
      "Local do registro": "oculto",
@@ -3970,7 +4002,6 @@
      "Motivo sem acesso": "obrig",
      "Area livre (m2)": "oculto",
      "Posicao da arvore na calcada": "oculto",
-     "Tronco paralelo à fiação": "oculto",
      "Colo soterrado": "oculto",
      "Afloramento da raiz na via": "oculto",
      "Zona do alvo": "oculto",
@@ -3982,7 +4013,9 @@
      "Alvo veículos estacionados": "oculto",
      "Alvo veículos em movimento": "oculto",
      "Alvo edificação": "oculto",
-     "Alvo outros": "oculto"
+     "Alvo rede elétrica ou de serviços": "oculto",
+     "Alvo outros": "oculto",
+     "Tronco paralelo a fiacao eletrica": "oculto"
     },
     "7": {
      "Situacao": "obrig",
@@ -4005,7 +4038,8 @@
      "Taxa de ocupacao": "obrig",
      "Fator de protecao": "obrig",
      "Principal defeito da arvore": "obrig",
-     "Carga sobre o defeito": "obrig"
+     "Carga sobre o defeito": "obrig",
+     "Tronco paralelo a fiacao eletrica": "obrig"
     }
    }
   },
@@ -4149,7 +4183,6 @@
      "Fitossanidade": "oculto",
      "Area livre (m2)": "oculto",
      "Posicao da arvore na calcada": "oculto",
-     "Tronco paralelo à fiação": "oculto",
      "Colo soterrado": "oculto",
      "Afloramento da raiz na via": "oculto",
      "Zona do alvo": "oculto",
@@ -4161,7 +4194,9 @@
      "Alvo veículos estacionados": "oculto",
      "Alvo veículos em movimento": "oculto",
      "Alvo edificação": "oculto",
-     "Alvo outros": "oculto"
+     "Alvo rede elétrica ou de serviços": "oculto",
+     "Alvo outros": "oculto",
+     "Tronco paralelo a fiacao eletrica": "oculto"
     }
    }
   },
@@ -4178,6 +4213,14 @@
    "por": {
     "Canteiro central": {
      "Posicao da arvore na calcada": "oculto"
+    }
+   }
+  },
+  {
+   "campo": "Fiação ausente",
+   "por": {
+    "true": {
+     "Tronco paralelo a fiacao eletrica": "oculto"
     }
    }
   }
