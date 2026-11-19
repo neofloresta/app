@@ -1,6 +1,6 @@
-# Formulário de Divinópolis: decisões (versão 9 do formulário, app 2.12.0)
+# Formulário de Divinópolis: decisões (versão 12 do formulário, app 2.16.3)
 
-Decidido pelo Ciro em 07/11/2026, revisto em 15/11/2026 (etapas por parte da árvore) e em 17/11/2026 (fitossanidade, cadastro rápido e quadra sem acesso).
+Decidido pelo Ciro em 07/11/2026, revisto em 15/11/2026 (etapas por parte da árvore), em 17/11/2026 (fitossanidade e quadra sem acesso), em 18/11/2026 (sai a calçada irregular, sem acesso por face e agrupamento) e em 19/11/2026 (área livre, posição na calçada, colo soterrado, alvo e defeito da ISA).
 
 ## Regra geral
 
@@ -8,7 +8,7 @@ Cada categoria mostra só as classes de variáveis que valem para ela. O que nã
 
 ## Categorias
 
-Árvore, arbusto e palmeira (altura a partir de 2 m) e calçada sem árvores. Não há local de novo plantio em Divinópolis.
+Árvore, arbusto, palmeira e agrupamento (altura a partir de 2 m), calçada sem árvores e sem acesso. Não há local de novo plantio nem praças em Divinópolis. "Sem acesso" não aparece na escolha de categoria do cadastro comum: o app abre esse cadastro pela ficha da face ou da quadra no mapa.
 
 ## Árvore, arbusto e palmeira vivos (mesmas regras)
 
@@ -18,40 +18,71 @@ Etapas por parte da árvore, na ordem da tela (cadastro completo, avaliação de
 |---|---|
 | Identificação | Local do registro, categoria, foto geral (o indivíduo inteiro). Obrigatórios |
 | Indivíduo | Situação, espécie (com "Não tenho certeza da espécie"), CAP, altura total, copa (2 raios, 4 raios ou área, conforme o time). Obrigatórios |
-| Meio | Conflitos no raio de 2 m, fiação aérea, marquise ou toldo, interferência no tráfego |
+| Meio | Área livre, posição da árvore na calçada, conflitos no raio de 2 m, fiação aérea (com tronco paralelo à fiação), marquise ou toldo, interferência no tráfego |
 | Copa | Qualidade da copa; galhos secos ou podres (Ausente, 0-25%, 25-50%, 50-75%, acima de 75%); podas (danos por podas, poda drástica); pragas na copa (fungo, cupim, broca, erva-de-passarinho) |
 | Tronco | Danos no tronco (lesões, codominância); ocos e cavidades; pragas no tronco (fungo, cupim, broca) |
-| Raízes | Raízes (poda de raiz, afloramento no canteiro, afloramento na calçada); pragas nas raízes (fungo, cupim); fitossanidade (Boa, Regular, Ruim), nota da árvore inteira |
-| Risco | Probabilidade de falha, probabilidade de impacto, consequências; o risco calculado aparece no fim da etapa |
+| Raízes | Raízes (poda de raiz, afloramento no canteiro, na calçada e na via, colo soterrado); pragas nas raízes (fungo, cupim); fitossanidade (Boa, Regular, Ruim), nota da árvore inteira |
+| Risco | Principal alvo, zona do alvo, taxa de ocupação, fator de proteção, principal defeito da árvore, carga sobre o defeito; depois probabilidade de falha, probabilidade de impacto e consequências; o risco calculado aparece no fim da etapa |
 | Manejo | Ao menos uma opção. Se nada for marcado, o app pergunta se confirma "Nenhum" e segue |
 | Fotos e observações | Fotos 2 a 5, sem descrição, e observações. Opcionais |
 
 - Em todo grupo de marcar é obrigatório marcar ao menos uma opção ou "Ausente".
 - **Regra de alteração**: a divisão das variáveis por etapa só muda com a lista completa aprovada pelo Ciro antes.
 - **Campos do formulário anterior** (até a versão 7): fungo, cupim e broca gerais, "fitossanidade ausente" e "galhos secos, podres ou com risco de queda" (de marcar) saíram da tela. Continuam na base e nas exportações para os registros antigos, e aparecem na ficha desses registros em "Formulário anterior".
-- Histórico: até a versão 7 as etapas eram Identificação, Indivíduo, Meio, Podas e danos, Fitossanidade, Risco, Manejo, Fotos. O formulário 8 foi gerado por `build/divi8.js` a partir do 7, e o 9 por `build/divi9.js` a partir do 8. "Doença aparente" e "Praga aparente" também ficaram só na base, para registros antigos.
+- Histórico: até a versão 7 as etapas eram Identificação, Indivíduo, Meio, Podas e danos, Fitossanidade, Risco, Manejo, Fotos. O formulário 8 foi gerado por `build/divi8.js` a partir do 7, o 9 por `build/divi9.js`, o 10 por `build/divi10.js`, o 11 por `build/especies11.py` (lista de 516 espécies) e o 12 por `build/divi12.js`. "Doença aparente" e "Praga aparente" também ficaram só na base, para registros antigos.
 - **CAP** (circunferência a 1,30 m, com fita), em centímetros. Com mais de um caule, os três mais representativos (os maiores), no máximo 3. Vale para árvore, arbusto e palmeira (ex.: areca). As exportações trazem o CAP equivalente e o DAP calculado (CAP dividido por pi).
 - **Copa**: cada usuário escolhe em "Minhas preferências" se mede 4 raios (o app calcula a área) ou a área direto, com trena a laser.
 - **Risco**: matriz da ISA, a mesma do formulário da SEADE (falha com impacto dá a probabilidade; com consequências dá o risco: Baixo, Médio, Alto ou Severo), com as cores do mapa e do estilo do QGIS.
 - **Espécie não identificada**: obrigatórias as 4 fotos de identificação, com orientação de como fotografar: folha (face de cima), folha (face de baixo), ramo com a filotaxia, detalhe do tronco.
 
+## Campos do formulário 12 (19/11/2026)
+
+Vieram do modelo antigo do QGIS (inv_eneas). Só o formulário mudou: o risco continua saindo da mesma matriz, e os campos novos não entram no cálculo. Valem para árvore, arbusto, palmeira e agrupamento. Todos obrigatórios (os de marcar entram no grupo, que exige uma opção ou "Ausente").
+
+| Campo | Etapa | Opções |
+|---|---|---|
+| Área livre (m²) | Meio | Menor que 1 m², 1 a 2 m², 2 a 3 m², Maior que 3 m² |
+| Posição da árvore na calçada | Meio | Até 1 m do meio-fio, Faixa de circulação, Junto ao muro ou divisa. Não aparece no canteiro central |
+| Tronco paralelo à fiação | Meio, grupo Fiação aérea | de marcar |
+| Colo soterrado | Raízes, grupo Raízes | de marcar |
+| Afloramento da raiz na via | Raízes, grupo Raízes | de marcar |
+| Principal alvo | Risco | Pessoas, Carros estacionados, Circulantes da via, Edificação, Outros |
+| Zona do alvo | Risco | Projeção da copa, 1 vez a altura, 1,5 vez a altura |
+| Taxa de ocupação | Risco | Raro, Ocasional, Frequente, Constante |
+| Fator de proteção | Risco | Ausente, Presente |
+| Principal defeito da árvore | Risco | Raízes e colo, Tronco, Copa e galhos |
+| Carga sobre o defeito | Risco | Pequena, Média, Significativa |
+
+- **Zona do alvo** (definição do Ciro): 1,5 vez a altura vale para indivíduos maiores, por causa dos estilhaços em uma eventual queda.
+- **Colo soterrado** (definição do Ciro): não dá para ver a forma de funil do colo, que é sempre um pouco mais largo que o resto do tronco.
+- Os textos de ajuda dos campos de alvo e defeito seguem os conceitos da ficha da ISA.
+- **Ficaram de fora, por decisão do Ciro**: altura da bifurcação, largura da calçada (na árvore), desequilíbrio da copa, galhos epicórmicos, inclinação, casca, rachadura, restrição da área de risco, condições de preocupação e a opção "Praças".
+
 ## Fitossanidade (formulário 9)
 
 Nota da árvore inteira, no lugar de "Doença aparente" e "Praga aparente". Boa: sem sinais de praga ou doença. Regular: sinais leves ou localizados, sem comprometer a árvore. Ruim: ataque intenso ou generalizado, com comprometimento visível. "Qualidade da copa" e as pragas por parte continuam.
 
-## Cadastro rápido: face com calçada irregular (formulário 9)
+## Agrupamento (formulário 10)
 
-A equipe marca a face no mapa como "Calçada irregular" (relevo, piso, obstrução), com o motivo em texto livre. Toda árvore dessa face abre no cadastro rápido, sem perguntar de novo; a tela avisa e tem o botão "Fazer o completo" para a árvore que não for dessa calçada.
+Muitos indivíduos juntos: cerca-viva, ou calçada sem uso com 50 a 60 indivíduos de leucena, por exemplo. É um registro só, com um ponto, e vale as mesmas regras da árvore, com estas diferenças:
 
-- Campos: local do registro, categoria, ponto, foto geral, situação, espécie (com as fotos de identificação quando não identificada), CAP, altura, fitossanidade e risco.
-- Risco: um campo só (Baixo, Médio, Alto, Severo), com a nota "Avaliação de risco nível 1 (ABNT NBR 16246-3): visual, sem a matriz". Ninguém escreve nada.
-- A coluna "Nivel da avaliacao" é preenchida pelo app: 1 no cadastro rápido, 2 no completo. O risco do nível 1 fica na coluna "Risco nivel 1", separada do risco calculado pela matriz (nível 2). No mapa as duas usam as mesmas cores; no painel e no relatório são contadas à parte.
-- Pagamento árvore a árvore, igual ao cadastro completo.
-- Face irregular sem nenhuma árvore: "Sem árvores (só a foto)", como qualquer face. O app separa sozinho "calçada irregular com árvores" e "sem árvores".
+- **Quantidade estimada de indivíduos**: campo novo, obrigatório, por contagem visual.
+- **CAP**: de 3 indivíduos escolhidos por média visual (um por linha, no máximo 3).
+- **Altura**: altura média do agrupamento.
+- **Espécie**: uma só para o grupo todo.
+- Todas as demais variáveis seguem, avaliadas pela média visual do grupo. O risco é avaliado uma vez, para o agrupamento todo (matriz de nível 2).
+- Pagamento: vale 1 registro, como uma árvore, depois do auditor.
+- Painel e relatório: os agrupamentos aparecem à parte ("N agrupamentos, com cerca de X indivíduos, por estimativa visual") e não somam nos indivíduos medidos.
 
-## Quadra sem acesso (formulário 9)
+## Sem acesso: face ou quadra (formulário 10)
 
-Quadra onde a equipe não entra (condomínio fechado, área particular). A equipe marca pela ficha da quadra no mapa: um cadastro só, com a foto da entrada (obrigatória) e o motivo em texto livre. As faces que faltavam ficam marcadas como sem acesso e a quadra é fechada. O cadastro passa pelo auditor (ele confere a foto) e conta uma vez por face para o pagamento: quadra de 4 faces vale 4 registros de face. A categoria "Sem acesso" não aparece na escolha de categoria do cadastro comum.
+Onde a equipe não entra (condomínio fechado, área particular, relevo, obra). Cadastro só com **foto** (obrigatória) e **motivo** escolhido na lista: Condomínio ou área particular, Relevo, Obra ou interdição, Outro (pede o texto). Sem ponto e sem quantidade de árvores. O auditor confere a foto.
+
+- **Face**: pela ficha da face, "Sem acesso (foto e motivo)". Só aquela face fica marcada. Se a face já tem árvore cadastrada, o app pede para encerrá-la antes.
+- **Quadra**: pela ficha da quadra. As faces que faltavam ficam marcadas e a quadra é fechada.
+- Pagamento: cada face sem acesso vale 1 registro de face, depois do auditor (quadra de 4 faces vale 4).
+
+A calçada irregular e o cadastro rápido (risco nível 1) foram retirados na versão 10 do formulário e na 2.16.0 do app.
 
 ## Mortos (árvore, arbusto ou palmeira)
 
@@ -59,7 +90,7 @@ Só o ponto (coordenada) e a foto geral. Nada mais aparece.
 
 ## Calçada sem árvores
 
-Ponto, foto da calçada inteira no sentido do comprimento e largura da calçada (m), obrigatória.
+Ponto, foto da calçada inteira no sentido do comprimento e largura da calçada (m), opcional desde a 2.6 (só a foto é obrigatória).
 
 ## Unidades e valores fora do comum
 
@@ -72,3 +103,4 @@ CAP em centímetros; todo o resto em metros (m² para área). Fora destes limite
 | Raio de copa | 0,1 m | 20 m |
 | Área de copa medida | 1 m² | 1.200 m² |
 | Largura da calçada | 0,5 m | 10 m |
+| Quantidade estimada (agrupamento) | 2 | 500 (aviso) |
