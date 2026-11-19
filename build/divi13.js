@@ -38,7 +38,7 @@ f.campos.splice(f.campos.indexOf(pa) + 1, 0, ...ALVOS);
 // ---------- etapa "Alvo", antes da "Risco" ----------
 const DA_ALVO = ['Zona do alvo', 'Taxa de ocupacao', 'Fator de protecao'];
 aba('Risco').campos = aba('Risco').campos.filter((x) => !DA_ALVO.includes(x.campo));
-f.abas.splice(f.abas.indexOf(aba('Risco')), 0, { nome: 'Alvo', campos: [{ campo: 'Zona do alvo' }].concat(ALVOS.map((c) => ({ campo: c.nome, grupo: G })), [{ campo: 'Taxa de ocupacao' }, { campo: 'Fator de protecao' }]) });
+f.abas.splice(f.abas.indexOf(aba('Risco')), 0, { nome: 'Alvo', campos: ALVOS.map((c) => ({ campo: c.nome, grupo: G })).concat([{ campo: 'Zona do alvo' }, { campo: 'Taxa de ocupacao' }, { campo: 'Fator de protecao' }]) });
 f.gruposObrig.push(G);
 // ---------- regras: onde o alvo some, os alvos de marcar somem; "Principal alvo" não é mais pedido ----------
 for (const r of f.regras) for (const k of Object.keys(r.por || {})) { const P = r.por[k];

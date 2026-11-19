@@ -1501,9 +1501,6 @@
    "nome": "Alvo",
    "campos": [
     {
-     "campo": "Zona do alvo"
-    },
-    {
      "campo": "Alvo pessoas",
      "grupo": "Alvos na zona"
     },
@@ -1526,6 +1523,9 @@
     {
      "campo": "Alvo outros",
      "grupo": "Alvos na zona"
+    },
+    {
+     "campo": "Zona do alvo"
     },
     {
      "campo": "Taxa de ocupacao"
