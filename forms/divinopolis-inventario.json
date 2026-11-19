@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 13,
+ "versao": 14,
  "campos": [
   {
    "armazenar": "text",
@@ -835,17 +835,10 @@
   },
   {
    "armazenar": "bool",
-   "nome": "Alvo rede elétrica ou de serviços",
-   "rotulo": "Rede elétrica ou de serviços",
-   "tipo": "bool",
-   "ajuda": "Fios, poste, transformador."
-  },
-  {
-   "armazenar": "bool",
    "nome": "Alvo outros",
    "rotulo": "Outros",
    "tipo": "bool",
-   "ajuda": "Mobiliário urbano, banca, ponto de táxi."
+   "ajuda": "Mobiliário urbano, banca, ponto de táxi. A rede elétrica não entra aqui: ela é registrada na etapa Meio, em fiação aérea."
   },
   {
    "armazenar": "text",
@@ -1514,10 +1507,6 @@
     },
     {
      "campo": "Alvo edificação",
-     "grupo": "Alvos na zona"
-    },
-    {
-     "campo": "Alvo rede elétrica ou de serviços",
      "grupo": "Alvos na zona"
     },
     {
@@ -3889,7 +3878,6 @@
      "Alvo veículos estacionados": "oculto",
      "Alvo veículos em movimento": "oculto",
      "Alvo edificação": "oculto",
-     "Alvo rede elétrica ou de serviços": "oculto",
      "Alvo outros": "oculto"
     },
     "6": {
@@ -3994,7 +3982,6 @@
      "Alvo veículos estacionados": "oculto",
      "Alvo veículos em movimento": "oculto",
      "Alvo edificação": "oculto",
-     "Alvo rede elétrica ou de serviços": "oculto",
      "Alvo outros": "oculto"
     },
     "7": {
@@ -4174,7 +4161,6 @@
      "Alvo veículos estacionados": "oculto",
      "Alvo veículos em movimento": "oculto",
      "Alvo edificação": "oculto",
-     "Alvo rede elétrica ou de serviços": "oculto",
      "Alvo outros": "oculto"
     }
    }

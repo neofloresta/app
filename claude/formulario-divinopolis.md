@@ -1,4 +1,4 @@
-# Formulário de Divinópolis: decisões (versão 13 do formulário, app 2.16.4)
+# Formulário de Divinópolis: decisões (versão 14 do formulário, app 2.16.5)
 
 Decidido pelo Ciro em 07/11/2026, revisto em 15/11/2026 (etapas por parte da árvore), em 17/11/2026 (fitossanidade e quadra sem acesso), em 18/11/2026 (sai a calçada irregular, sem acesso por face e agrupamento) e em 19/11/2026 (área livre, posição na calçada, colo soterrado, alvo e defeito da ISA).
 
@@ -58,10 +58,10 @@ Vieram do modelo antigo do QGIS (inv_eneas). Só o formulário mudou: o risco co
 - Os textos de ajuda dos campos de alvo e defeito seguem os conceitos da ficha da ISA.
 - **Ficaram de fora, por decisão do Ciro**: altura da bifurcação, largura da calçada (na árvore), desequilíbrio da copa, galhos epicórmicos, inclinação, casca, rachadura, restrição da área de risco, condições de preocupação e a opção "Praças".
 
-## Formulário 13 (19/11/2026, depois de ver o 12 na tela)
+## Formulários 13 e 14 (19/11/2026, depois de ver o 12 na tela)
 
 - **Etapa Alvo** separada da etapa Risco (são 10 etapas). Defeito e carga ficam na Risco, porque embasam a probabilidade de falha.
-- **Alvos na zona**: no lugar de "Principal alvo" (era difícil eleger um só), grupo de marcar com todos os alvos que existem, ao menos um obrigatório: Pessoas, Veículos estacionados, Veículos em movimento, Edificação, Rede elétrica ou de serviços, Outros. Com mais de um alvo, taxa de ocupação e fator de proteção são respondidos pelo mais exposto.
+- **Alvos na zona**: no lugar de "Principal alvo" (era difícil eleger um só), grupo de marcar com todos os alvos que existem, ao menos um obrigatório: Pessoas, Veículos estacionados, Veículos em movimento, Edificação, Outros. A rede elétrica não é alvo aqui: já é registrada na etapa Meio, em fiação aérea (formulário 14, `build/divi14.js`). Com mais de um alvo, taxa de ocupação e fator de proteção são respondidos pelo mais exposto.
 - **Explicação dentro de cada opção** (como em probabilidade de falha) em zona do alvo, taxa de ocupação, fator de proteção, principal defeito e carga sobre o defeito. O valor gravado continua o curto ("Raro", "Presente"); a ficha e o Excel legível mostram o texto com a explicação.
 - "Principal alvo" ficou só na base, como campo de formulário anterior.
 

@@ -1,7 +1,7 @@
 // 2.16.3 e 2.16.4: formulários 12 e 13 (área livre, posição na calçada, tronco paralelo à fiação, colo soterrado, raiz na via e ficha de alvo e defeito da ISA)
 const { chromium } = require('playwright'); const L = require('./lib'); const A = require('./acoes'); const fs = require('fs');
 const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
-const ALVOS = ['Alvo pessoas', 'Alvo veículos estacionados', 'Alvo veículos em movimento', 'Alvo edificação', 'Alvo rede elétrica ou de serviços', 'Alvo outros'];
+const ALVOS = ['Alvo pessoas', 'Alvo veículos estacionados', 'Alvo veículos em movimento', 'Alvo edificação', 'Alvo outros'];
 const NOVOS = ['Area livre (m2)', 'Posicao da arvore na calcada', 'Zona do alvo', 'Taxa de ocupacao', 'Fator de protecao', 'Principal defeito da arvore', 'Carga sobre o defeito'];
 const MARCAR = ['Tronco paralelo à fiação', 'Colo soterrado', 'Afloramento da raiz na via'];
 const naTela = (p) => p.evaluate(() => [...document.querySelectorAll('main [data-campo]')].map((c) => c.dataset.campo));
@@ -12,7 +12,7 @@ const naTela = (p) => p.evaluate(() => [...document.querySelectorAll('main [data
   const form = JSON.parse(fs.readFileSync(L.APP + '/forms/divinopolis-inventario.json', 'utf8'));
   // 1. o arquivo: versão 12, campos novos com ajuda, e o risco calculado continua com as mesmas três perguntas
   const c = (n) => form.campos.find((x) => x.nome === n); const semAjuda = NOVOS.concat(MARCAR).filter((n) => !c(n) || !c(n).ajuda);
-  ok('M.1', form.versao === 13 && c('Principal alvo').legado && form.gruposObrig.includes('Alvos na zona') && c('Taxa de ocupacao').opcoes.every((o) => /\(.+\)$/.test(o.t) && !/\(/.test(o.v)) && !semAjuda.length && /estilhaços/.test(JSON.stringify(c('Zona do alvo').opcoes)) && /funil/.test(c('Colo soterrado').ajuda) && !form.campos.some((x) => /bifurca|Largura da cal|Inclina|Casca|Rachadura/i.test(x.nome)), `formulário ${form.versao}; sem ajuda: ${semAjuda.join(', ') || 'nenhum'}`);
+  ok('M.1', form.versao === 14 && !form.campos.some((x) => /rede elétrica/i.test(x.nome)) && c('Principal alvo').legado && form.gruposObrig.includes('Alvos na zona') && c('Taxa de ocupacao').opcoes.every((o) => /\(.+\)$/.test(o.t) && !/\(/.test(o.v)) && !semAjuda.length && /estilhaços/.test(JSON.stringify(c('Zona do alvo').opcoes)) && /funil/.test(c('Colo soterrado').ajuda) && !form.campos.some((x) => /bifurca|Largura da cal|Inclina|Casca|Rachadura/i.test(x.nome)), `formulário ${form.versao}; sem ajuda: ${semAjuda.join(', ') || 'nenhum'}`);
   // 2. árvore na calçada: sem os campos novos não conclui; são todos pedidos
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(300);
   await A.op(p, 'Local do registro', 'Via pública'); await A.op(p, 'Categoria', 'Árvore'); await A.abaLivre(p, 'Meio'); const meio = await naTela(p);
