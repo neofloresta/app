@@ -14,7 +14,13 @@ async function foto(p, nomeCampo) { await campo(p, nomeCampo).locator('input[cap
 // Árvore completa da categoria 1 com 3 fotos
 // formulário 12: campos novos do Meio e do Risco (só marca se o formulário tiver)
 async function novosMeio(p) { for (const [n, v] of [['Area livre (m2)', '1 a 2'], ['Posicao da arvore na calcada', 'Até 1 m']]) if (await campo(p, n).count()) await op(p, n, v); }
-async function novosRisco(p) { for (const [n, v] of [['Principal alvo', 'Pessoas'], ['Zona do alvo', 'Projeção'], ['Taxa de ocupacao', 'Ocasional'], ['Fator de protecao', 'Ausente'], ['Principal defeito da arvore', 'Tronco'], ['Carga sobre o defeito', 'Pequena']]) if (await campo(p, n).count()) await op(p, n, v); }
+async function novosRisco(p) { // formulário 13: os campos do alvo ficam na etapa "Alvo", antes da "Risco"
+  await p.click('.prog-topo'); const tem = await p.locator('.folha .menu-it:has-text("Alvo")').count(); await p.click(`.folha .menu-it:has-text("${tem ? 'Alvo' : 'Risco'}")`); await p.waitForTimeout(120);
+  if (await p.locator('.chip[data-campo="Alvo pessoas"]').count()) await p.locator('.chip[data-campo="Alvo pessoas"]').click();
+  for (const [n, v] of [['Principal alvo', 'Pessoas'], ['Zona do alvo', 'Projeção'], ['Taxa de ocupacao', 'Ocasional'], ['Fator de protecao', 'Ausente']]) if (await campo(p, n).count()) await op(p, n, v);
+  if (tem) await aba(p, 'Risco');
+  for (const [n, v] of [['Principal defeito da arvore', 'Tronco'], ['Carga sobre o defeito', 'Pequena']]) if (await campo(p, n).count()) await op(p, n, v);
+}
 async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, altura = 6.5, morta = false, manejoNenhum = true, categoria = 'Árvore', qtde = null } = {}) {
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(200);
   await op(p, 'Local do registro', 'Via pública'); await op(p, 'Categoria', categoria);

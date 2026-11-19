@@ -71,7 +71,7 @@ const reg = (n, usr) => ({ uuid: 'cd-' + n, projeto: PJ, equipe: usr === 'div-1'
   ok('K.7b', naPlanilha && !/sensores_foto|iPhone 13/.test(csvTxt) && /uuid|Codigo|latitude/i.test(csvTxt), `planilha do servidor guarda os dados da câmera: ${naPlanilha}; CSV exportado (${csvTxt.length} caracteres) contém "sensores_foto" ou o modelo: ${/sensores_foto|iPhone 13/.test(csvTxt)}`);
   // 8. a tela de formulários mostra a versão do servidor e do formulário (para saber se o servidor 2.16 foi instalado)
   await p.goto(L.WEB + '#sobre'); await p.waitForTimeout(2200); const tf = limpo(await p.locator('body').innerText()); await p.screenshot({ path: 'b213c-sobre.png' });
-  ok('K.8', /versão 2\.16\.3 · servidor 2\.16/.test(tf), `tela Sobre: "${tf.slice(0, 260)}"`);
+  ok('K.8', /versão 2\.16\.4 · servidor 2\.16/.test(tf), `tela Sobre: "${tf.slice(0, 260)}"`);
   // 9. o celular do coordenador: mapa em tela pequena sem botão cortado
   const EM = await L.celular(b, {}); const m = EM.p; await L.logar(m, 'admin', L.senha()); await m.goto(L.WEB + '#mapa'); await m.waitForFunction(() => window.__app && window.__app.mapaInfo, null, { timeout: 25000 }); await m.waitForTimeout(2500);
   const bt = await m.locator('button[aria-label="Ponto de comunicação"]').boundingBox(); const vp = m.viewportSize(); await m.screenshot({ path: 'b213c-celular.png' });

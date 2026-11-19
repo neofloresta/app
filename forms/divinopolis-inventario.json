@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 12,
+ "versao": 13,
  "campos": [
   {
    "armazenar": "text",
@@ -778,7 +778,7 @@
   {
    "armazenar": "text",
    "nome": "Principal alvo",
-   "rotulo": "Principal alvo",
+   "rotulo": "Principal alvo (formulário anterior)",
    "tipo": "choice",
    "opcoes": [
     {
@@ -802,7 +802,50 @@
      "t": "Outros"
     }
    ],
-   "ajuda": "Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque o mais importante dentro da zona do alvo."
+   "ajuda": "Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque o mais importante dentro da zona do alvo.",
+   "legado": true
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Alvo pessoas",
+   "rotulo": "Pessoas",
+   "tipo": "bool",
+   "ajuda": "Pedestres, moradores, ponto de ônibus. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Alvo veículos estacionados",
+   "rotulo": "Veículos estacionados",
+   "tipo": "bool",
+   "ajuda": "Vaga ou garagem sob a árvore. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Alvo veículos em movimento",
+   "rotulo": "Veículos em movimento",
+   "tipo": "bool",
+   "ajuda": "Trânsito da via. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Alvo edificação",
+   "rotulo": "Edificação",
+   "tipo": "bool",
+   "ajuda": "Casa, comércio, muro. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Alvo rede elétrica ou de serviços",
+   "rotulo": "Rede elétrica ou de serviços",
+   "tipo": "bool",
+   "ajuda": "Fios, poste, transformador. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Alvo outros",
+   "rotulo": "Outros",
+   "tipo": "bool",
+   "ajuda": "Mobiliário urbano, banca, ponto de táxi. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
   },
   {
    "armazenar": "text",
@@ -812,18 +855,18 @@
    "opcoes": [
     {
      "v": "Projeção da copa",
-     "t": "Projeção da copa"
+     "t": "Projeção da copa (o alvo está embaixo da copa)"
     },
     {
      "v": "1 vez a altura",
-     "t": "1 vez a altura"
+     "t": "1 vez a altura (o alvo está ao alcance da queda da árvore inteira)"
     },
     {
      "v": "1,5 vez a altura",
-     "t": "1,5 vez a altura"
+     "t": "1,5 vez a altura (indivíduos maiores: os estilhaços da queda vão além da altura)"
     }
    ],
-   "ajuda": "Área que a árvore, ou a parte dela com defeito, pode atingir se cair (ISA). Projeção da copa: o alvo está embaixo da copa. 1 vez a altura: o alvo está ao alcance da queda da árvore inteira. 1,5 vez a altura: para indivíduos maiores, porque os estilhaços de uma eventual queda vão além da altura da árvore."
+   "ajuda": "Área que a árvore, ou a parte dela com defeito, pode atingir se cair (ISA)."
   },
   {
    "armazenar": "text",
@@ -833,22 +876,22 @@
    "opcoes": [
     {
      "v": "Raro",
-     "t": "Raro"
+     "t": "Raro (quase nunca há alvo na zona)"
     },
     {
      "v": "Ocasional",
-     "t": "Ocasional"
+     "t": "Ocasional (presente poucas vezes ou por pouco tempo)"
     },
     {
      "v": "Frequente",
-     "t": "Frequente"
+     "t": "Frequente (presente em boa parte do dia ou da semana)"
     },
     {
      "v": "Constante",
-     "t": "Constante"
+     "t": "Constante (sempre presente)"
     }
    ],
-   "ajuda": "Quanto tempo o alvo fica na zona do alvo (ISA). Raro: quase nunca há alvo ali. Ocasional: presente poucas vezes ou por pouco tempo. Frequente: presente em boa parte do dia ou da semana. Constante: sempre presente."
+   "ajuda": "Quanto tempo o alvo fica na zona do alvo (ISA). Com mais de um alvo marcado, responda pelo mais exposto: o que fica mais tempo na zona."
   },
   {
    "armazenar": "text",
@@ -858,14 +901,14 @@
    "opcoes": [
     {
      "v": "Ausente",
-     "t": "Ausente"
+     "t": "Ausente (nada entre a árvore e o alvo)"
     },
     {
      "v": "Presente",
-     "t": "Presente"
+     "t": "Presente (outra árvore, muro ou edificação segura ou desvia a queda)"
     }
    ],
-   "ajuda": "Algo entre a árvore e o alvo que segura ou desvia a queda: outra árvore, um muro, uma edificação (ISA). Quando existe, a chance de atingir o alvo é menor."
+   "ajuda": "Algo entre a árvore e o alvo que segura ou desvia a queda (ISA). Quando existe, a chance de atingir o alvo é menor. Com mais de um alvo marcado, responda pelo mais exposto."
   },
   {
    "armazenar": "text",
@@ -875,15 +918,15 @@
    "opcoes": [
     {
      "v": "Raízes e colo",
-     "t": "Raízes e colo"
+     "t": "Raízes e colo (raiz cortada ou podre, colo soterrado, solo levantando)"
     },
     {
      "v": "Tronco",
-     "t": "Tronco"
+     "t": "Tronco (oco, lesão, rachadura, codominância)"
     },
     {
      "v": "Copa e galhos",
-     "t": "Copa e galhos"
+     "t": "Copa e galhos (galho seco, podre ou mal inserido)"
     }
    ],
    "ajuda": "A parte da árvore com mais chance de falhar (ISA). É ela que define a probabilidade de falha, mais abaixo. Em árvore sem defeito aparente, marque a parte que falharia primeiro."
@@ -896,15 +939,15 @@
    "opcoes": [
     {
      "v": "Pequena",
-     "t": "Pequena"
+     "t": "Pequena (parte leve ou protegida do vento)"
     },
     {
      "v": "Média",
-     "t": "Média"
+     "t": "Média (peso e exposição ao vento moderados)"
     },
     {
      "v": "Significativa",
-     "t": "Significativa"
+     "t": "Significativa (copa pesada ou galho longo, exposto ao vento)"
     }
    ],
    "ajuda": "Força que age sobre a parte com defeito: o peso da copa ou dos galhos e a exposição ao vento (ISA). Em árvore sem defeito aparente, avalie a carga sobre a parte marcada acima."
@@ -1455,20 +1498,46 @@
    ]
   },
   {
-   "nome": "Risco",
+   "nome": "Alvo",
    "campos": [
     {
-     "campo": "Principal alvo"
+     "campo": "Zona do alvo"
     },
     {
-     "campo": "Zona do alvo"
+     "campo": "Alvo pessoas",
+     "grupo": "Alvos na zona"
+    },
+    {
+     "campo": "Alvo veículos estacionados",
+     "grupo": "Alvos na zona"
+    },
+    {
+     "campo": "Alvo veículos em movimento",
+     "grupo": "Alvos na zona"
+    },
+    {
+     "campo": "Alvo edificação",
+     "grupo": "Alvos na zona"
+    },
+    {
+     "campo": "Alvo rede elétrica ou de serviços",
+     "grupo": "Alvos na zona"
+    },
+    {
+     "campo": "Alvo outros",
+     "grupo": "Alvos na zona"
     },
     {
      "campo": "Taxa de ocupacao"
     },
     {
      "campo": "Fator de protecao"
-    },
+    }
+   ]
+  },
+  {
+   "nome": "Risco",
+   "campos": [
     {
      "campo": "Principal defeito da arvore"
     },
@@ -1575,7 +1644,8 @@
   "Danos no tronco",
   "Pragas no tronco",
   "Raízes",
-  "Pragas nas raízes"
+  "Pragas nas raízes",
+  "Alvos na zona"
  ],
  "gruposConfirmar": [
   {
@@ -3670,7 +3740,6 @@
      "Fitossanidade": "obrig",
      "Area livre (m2)": "obrig",
      "Posicao da arvore na calcada": "obrig",
-     "Principal alvo": "obrig",
      "Zona do alvo": "obrig",
      "Taxa de ocupacao": "obrig",
      "Fator de protecao": "obrig",
@@ -3693,7 +3762,6 @@
      "Fitossanidade": "obrig",
      "Area livre (m2)": "obrig",
      "Posicao da arvore na calcada": "obrig",
-     "Principal alvo": "obrig",
      "Zona do alvo": "obrig",
      "Taxa de ocupacao": "obrig",
      "Fator de protecao": "obrig",
@@ -3716,7 +3784,6 @@
      "Fitossanidade": "obrig",
      "Area livre (m2)": "obrig",
      "Posicao da arvore na calcada": "obrig",
-     "Principal alvo": "obrig",
      "Zona do alvo": "obrig",
      "Taxa de ocupacao": "obrig",
      "Fator de protecao": "obrig",
@@ -3813,12 +3880,17 @@
      "Tronco paralelo à fiação": "oculto",
      "Colo soterrado": "oculto",
      "Afloramento da raiz na via": "oculto",
-     "Principal alvo": "oculto",
      "Zona do alvo": "oculto",
      "Taxa de ocupacao": "oculto",
      "Fator de protecao": "oculto",
      "Principal defeito da arvore": "oculto",
-     "Carga sobre o defeito": "oculto"
+     "Carga sobre o defeito": "oculto",
+     "Alvo pessoas": "oculto",
+     "Alvo veículos estacionados": "oculto",
+     "Alvo veículos em movimento": "oculto",
+     "Alvo edificação": "oculto",
+     "Alvo rede elétrica ou de serviços": "oculto",
+     "Alvo outros": "oculto"
     },
     "6": {
      "Local do registro": "oculto",
@@ -3913,12 +3985,17 @@
      "Tronco paralelo à fiação": "oculto",
      "Colo soterrado": "oculto",
      "Afloramento da raiz na via": "oculto",
-     "Principal alvo": "oculto",
      "Zona do alvo": "oculto",
      "Taxa de ocupacao": "oculto",
      "Fator de protecao": "oculto",
      "Principal defeito da arvore": "oculto",
-     "Carga sobre o defeito": "oculto"
+     "Carga sobre o defeito": "oculto",
+     "Alvo pessoas": "oculto",
+     "Alvo veículos estacionados": "oculto",
+     "Alvo veículos em movimento": "oculto",
+     "Alvo edificação": "oculto",
+     "Alvo rede elétrica ou de serviços": "oculto",
+     "Alvo outros": "oculto"
     },
     "7": {
      "Situacao": "obrig",
@@ -3937,7 +4014,6 @@
      "Qtde estimada de individuos": "obrig",
      "Area livre (m2)": "obrig",
      "Posicao da arvore na calcada": "obrig",
-     "Principal alvo": "obrig",
      "Zona do alvo": "obrig",
      "Taxa de ocupacao": "obrig",
      "Fator de protecao": "obrig",
@@ -4089,12 +4165,17 @@
      "Tronco paralelo à fiação": "oculto",
      "Colo soterrado": "oculto",
      "Afloramento da raiz na via": "oculto",
-     "Principal alvo": "oculto",
      "Zona do alvo": "oculto",
      "Taxa de ocupacao": "oculto",
      "Fator de protecao": "oculto",
      "Principal defeito da arvore": "oculto",
-     "Carga sobre o defeito": "oculto"
+     "Carga sobre o defeito": "oculto",
+     "Alvo pessoas": "oculto",
+     "Alvo veículos estacionados": "oculto",
+     "Alvo veículos em movimento": "oculto",
+     "Alvo edificação": "oculto",
+     "Alvo rede elétrica ou de serviços": "oculto",
+     "Alvo outros": "oculto"
     }
    }
   },

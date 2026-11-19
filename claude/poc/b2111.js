@@ -19,7 +19,7 @@ const foco = (p) => p.evaluate(() => { const a = document.activeElement; const c
   await A.op(p, 'Local do registro', 'Via pública'); await A.op(p, 'Categoria', 'Árvore'); await A.foto(p, 'Foto 1');
   await A.abaLivre(p, 'Indivíduo'); await A.op(p, 'Situacao', 'Viva'); await p.waitForTimeout(200);
   await p.click('.prog-topo'); const etapasV = (await p.locator('.folha .menu-it').allInnerTexts()).map((t) => limpo(t).replace(/ (Completa|Em andamento|Falta obrigatório)$/, '')); await p.evaluate(() => document.querySelectorAll('.veu').forEach((v) => v.remove()));
-  const ESP = ['Identificação', 'Indivíduo', 'Meio', 'Copa', 'Tronco', 'Raízes', 'Risco', 'Manejo', 'Fotos e observações'];
+  const ESP = ['Identificação', 'Indivíduo', 'Meio', 'Copa', 'Tronco', 'Raízes', 'Alvo', 'Risco', 'Manejo', 'Fotos e observações'];
   ok('Z.2', form.versao >= 8 && JSON.stringify(etapasV) === JSON.stringify(ESP), `formulário ${form.versao}; etapas: ${etapasV.join(', ')} (antes de escolher a categoria: ${etapas.length})`);
   // 3. o que aparece em Copa, Tronco e Raízes
   const naTela = async (et) => { await A.abaLivre(p, et); return p.evaluate(() => [...document.querySelectorAll('main .campo')].map((c) => (c.dataset.grupo ? c.dataset.grupo + ': ' + [...c.querySelectorAll('.chip')].map((x) => x.textContent.trim()).join('/') : (c.querySelector('.rot') || c).textContent.trim().replace(/\?$/, '') + (c.querySelector('.op') ? ': ' + [...c.querySelectorAll('.op')].map((x) => x.textContent.trim()).join('/') : '')))); };
