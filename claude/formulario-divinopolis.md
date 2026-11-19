@@ -1,4 +1,4 @@
-# Formulário de Divinópolis: decisões (versão 12 do formulário, app 2.16.3)
+# Formulário de Divinópolis: decisões (versão 13 do formulário, app 2.16.4)
 
 Decidido pelo Ciro em 07/11/2026, revisto em 15/11/2026 (etapas por parte da árvore), em 17/11/2026 (fitossanidade e quadra sem acesso), em 18/11/2026 (sai a calçada irregular, sem acesso por face e agrupamento) e em 19/11/2026 (área livre, posição na calçada, colo soterrado, alvo e defeito da ISA).
 
@@ -22,14 +22,15 @@ Etapas por parte da árvore, na ordem da tela (cadastro completo, avaliação de
 | Copa | Qualidade da copa; galhos secos ou podres (Ausente, 0-25%, 25-50%, 50-75%, acima de 75%); podas (danos por podas, poda drástica); pragas na copa (fungo, cupim, broca, erva-de-passarinho) |
 | Tronco | Danos no tronco (lesões, codominância); ocos e cavidades; pragas no tronco (fungo, cupim, broca) |
 | Raízes | Raízes (poda de raiz, afloramento no canteiro, na calçada e na via, colo soterrado); pragas nas raízes (fungo, cupim); fitossanidade (Boa, Regular, Ruim), nota da árvore inteira |
-| Risco | Principal alvo, zona do alvo, taxa de ocupação, fator de proteção, principal defeito da árvore, carga sobre o defeito; depois probabilidade de falha, probabilidade de impacto e consequências; o risco calculado aparece no fim da etapa |
+| Alvo | Alvos na zona (de marcar, todos os que existem), zona do alvo, taxa de ocupação, fator de proteção |
+| Risco | Principal defeito da árvore, carga sobre o defeito, probabilidade de falha, probabilidade de impacto e consequências; o risco calculado aparece no fim da etapa |
 | Manejo | Ao menos uma opção. Se nada for marcado, o app pergunta se confirma "Nenhum" e segue |
 | Fotos e observações | Fotos 2 a 5, sem descrição, e observações. Opcionais |
 
 - Em todo grupo de marcar é obrigatório marcar ao menos uma opção ou "Ausente".
 - **Regra de alteração**: a divisão das variáveis por etapa só muda com a lista completa aprovada pelo Ciro antes.
 - **Campos do formulário anterior** (até a versão 7): fungo, cupim e broca gerais, "fitossanidade ausente" e "galhos secos, podres ou com risco de queda" (de marcar) saíram da tela. Continuam na base e nas exportações para os registros antigos, e aparecem na ficha desses registros em "Formulário anterior".
-- Histórico: até a versão 7 as etapas eram Identificação, Indivíduo, Meio, Podas e danos, Fitossanidade, Risco, Manejo, Fotos. O formulário 8 foi gerado por `build/divi8.js` a partir do 7, o 9 por `build/divi9.js`, o 10 por `build/divi10.js`, o 11 por `build/especies11.py` (lista de 516 espécies) e o 12 por `build/divi12.js`. "Doença aparente" e "Praga aparente" também ficaram só na base, para registros antigos.
+- Histórico: até a versão 7 as etapas eram Identificação, Indivíduo, Meio, Podas e danos, Fitossanidade, Risco, Manejo, Fotos. O formulário 8 foi gerado por `build/divi8.js` a partir do 7, o 9 por `build/divi9.js`, o 10 por `build/divi10.js`, o 11 por `build/especies11.py` (lista de 516 espécies) o 12 por `build/divi12.js` e o 13 por `build/divi13.js`. "Doença aparente" e "Praga aparente" também ficaram só na base, para registros antigos.
 - **CAP** (circunferência a 1,30 m, com fita), em centímetros. Com mais de um caule, os três mais representativos (os maiores), no máximo 3. Vale para árvore, arbusto e palmeira (ex.: areca). As exportações trazem o CAP equivalente e o DAP calculado (CAP dividido por pi).
 - **Copa**: cada usuário escolhe em "Minhas preferências" se mede 4 raios (o app calcula a área) ou a área direto, com trena a laser.
 - **Risco**: matriz da ISA, a mesma do formulário da SEADE (falha com impacto dá a probabilidade; com consequências dá o risco: Baixo, Médio, Alto ou Severo), com as cores do mapa e do estilo do QGIS.
@@ -46,10 +47,9 @@ Vieram do modelo antigo do QGIS (inv_eneas). Só o formulário mudou: o risco co
 | Tronco paralelo à fiação | Meio, grupo Fiação aérea | de marcar |
 | Colo soterrado | Raízes, grupo Raízes | de marcar |
 | Afloramento da raiz na via | Raízes, grupo Raízes | de marcar |
-| Principal alvo | Risco | Pessoas, Carros estacionados, Circulantes da via, Edificação, Outros |
-| Zona do alvo | Risco | Projeção da copa, 1 vez a altura, 1,5 vez a altura |
-| Taxa de ocupação | Risco | Raro, Ocasional, Frequente, Constante |
-| Fator de proteção | Risco | Ausente, Presente |
+| Zona do alvo | Alvo | Projeção da copa, 1 vez a altura, 1,5 vez a altura |
+| Taxa de ocupação | Alvo | Raro, Ocasional, Frequente, Constante |
+| Fator de proteção | Alvo | Ausente, Presente |
 | Principal defeito da árvore | Risco | Raízes e colo, Tronco, Copa e galhos |
 | Carga sobre o defeito | Risco | Pequena, Média, Significativa |
 
@@ -57,6 +57,13 @@ Vieram do modelo antigo do QGIS (inv_eneas). Só o formulário mudou: o risco co
 - **Colo soterrado** (definição do Ciro): não dá para ver a forma de funil do colo, que é sempre um pouco mais largo que o resto do tronco.
 - Os textos de ajuda dos campos de alvo e defeito seguem os conceitos da ficha da ISA.
 - **Ficaram de fora, por decisão do Ciro**: altura da bifurcação, largura da calçada (na árvore), desequilíbrio da copa, galhos epicórmicos, inclinação, casca, rachadura, restrição da área de risco, condições de preocupação e a opção "Praças".
+
+## Formulário 13 (19/11/2026, depois de ver o 12 na tela)
+
+- **Etapa Alvo** separada da etapa Risco (são 10 etapas). Defeito e carga ficam na Risco, porque embasam a probabilidade de falha.
+- **Alvos na zona**: no lugar de "Principal alvo" (era difícil eleger um só), grupo de marcar com todos os alvos que existem, ao menos um obrigatório: Pessoas, Veículos estacionados, Veículos em movimento, Edificação, Rede elétrica ou de serviços, Outros. Com mais de um alvo, taxa de ocupação e fator de proteção são respondidos pelo mais exposto.
+- **Explicação dentro de cada opção** (como em probabilidade de falha) em zona do alvo, taxa de ocupação, fator de proteção, principal defeito e carga sobre o defeito. O valor gravado continua o curto ("Raro", "Presente"); a ficha e o Excel legível mostram o texto com a explicação.
+- "Principal alvo" ficou só na base, como campo de formulário anterior.
 
 ## Fitossanidade (formulário 9)
 
