@@ -14,7 +14,7 @@ const aba = (n) => f.abas.find((a) => a.nome === n);
 const TXT = {
   'Zona do alvo': { 'Projeção da copa': 'o alvo está embaixo da copa', '1 vez a altura': 'o alvo está ao alcance da queda da árvore inteira', '1,5 vez a altura': 'indivíduos maiores: os estilhaços da queda vão além da altura' },
   'Taxa de ocupacao': { Raro: 'quase nunca há alvo na zona', Ocasional: 'presente poucas vezes ou por pouco tempo', Frequente: 'presente em boa parte do dia ou da semana', Constante: 'sempre presente' },
-  'Fator de protecao': { Ausente: 'nada entre a árvore e o alvo', Presente: 'outra árvore, muro ou edificação segura ou desvia a queda' },
+  'Fator de protecao': { Ausente: 'nada entre a árvore e o alvo', Presente: 'outra árvore, muro ou edificação que segura ou desvia a queda' },
   'Principal defeito da arvore': { 'Raízes e colo': 'raiz cortada ou podre, colo soterrado, solo levantando', Tronco: 'oco, lesão, rachadura, codominância', 'Copa e galhos': 'galho seco, podre ou mal inserido' },
   'Carga sobre o defeito': { Pequena: 'parte leve ou protegida do vento', 'Média': 'peso e exposição ao vento moderados', Significativa: 'copa pesada ou galho longo, exposto ao vento' },
 };
@@ -33,7 +33,7 @@ const ALVOS = [
   ['Alvo edificação', 'Edificação', 'Casa, comércio, muro.'],
   ['Alvo rede elétrica ou de serviços', 'Rede elétrica ou de serviços', 'Fios, poste, transformador.'],
   ['Alvo outros', 'Outros', 'Mobiliário urbano, banca, ponto de táxi.'],
-].map(([nome, rotulo, ex]) => ({ armazenar: 'bool', nome, rotulo, tipo: 'bool', ajuda: ex + ' Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo.' }));
+].map(([nome, rotulo, ex], i) => ({ armazenar: 'bool', nome, rotulo, tipo: 'bool', ajuda: (i ? '' : 'Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo. ') + ex }));
 f.campos.splice(f.campos.indexOf(pa) + 1, 0, ...ALVOS);
 // ---------- etapa "Alvo", antes da "Risco" ----------
 const DA_ALVO = ['Zona do alvo', 'Taxa de ocupacao', 'Fator de protecao'];

@@ -810,42 +810,42 @@
    "nome": "Alvo pessoas",
    "rotulo": "Pessoas",
    "tipo": "bool",
-   "ajuda": "Pedestres, moradores, ponto de ônibus. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
+   "ajuda": "Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo. Pedestres, moradores, ponto de ônibus."
   },
   {
    "armazenar": "bool",
    "nome": "Alvo veículos estacionados",
    "rotulo": "Veículos estacionados",
    "tipo": "bool",
-   "ajuda": "Vaga ou garagem sob a árvore. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
+   "ajuda": "Vaga ou garagem sob a árvore."
   },
   {
    "armazenar": "bool",
    "nome": "Alvo veículos em movimento",
    "rotulo": "Veículos em movimento",
    "tipo": "bool",
-   "ajuda": "Trânsito da via. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
+   "ajuda": "Trânsito da via."
   },
   {
    "armazenar": "bool",
    "nome": "Alvo edificação",
    "rotulo": "Edificação",
    "tipo": "bool",
-   "ajuda": "Casa, comércio, muro. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
+   "ajuda": "Casa, comércio, muro."
   },
   {
    "armazenar": "bool",
    "nome": "Alvo rede elétrica ou de serviços",
    "rotulo": "Rede elétrica ou de serviços",
    "tipo": "bool",
-   "ajuda": "Fios, poste, transformador. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
+   "ajuda": "Fios, poste, transformador."
   },
   {
    "armazenar": "bool",
    "nome": "Alvo outros",
    "rotulo": "Outros",
    "tipo": "bool",
-   "ajuda": "Mobiliário urbano, banca, ponto de táxi. Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque todos os que existem na zona do alvo."
+   "ajuda": "Mobiliário urbano, banca, ponto de táxi."
   },
   {
    "armazenar": "text",
@@ -905,7 +905,7 @@
     },
     {
      "v": "Presente",
-     "t": "Presente (outra árvore, muro ou edificação segura ou desvia a queda)"
+     "t": "Presente (outra árvore, muro ou edificação que segura ou desvia a queda)"
     }
    ],
    "ajuda": "Algo entre a árvore e o alvo que segura ou desvia a queda (ISA). Quando existe, a chance de atingir o alvo é menor. Com mais de um alvo marcado, responda pelo mais exposto."
