@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 11,
+ "versao": 12,
  "campos": [
   {
    "armazenar": "text",
@@ -286,6 +286,52 @@
   },
   {
    "armazenar": "text",
+   "nome": "Area livre (m2)",
+   "rotulo": "Área livre (m²)",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Menor que 1 m²",
+     "t": "Menor que 1 m²"
+    },
+    {
+     "v": "1 a 2 m²",
+     "t": "1 a 2 m²"
+    },
+    {
+     "v": "2 a 3 m²",
+     "t": "2 a 3 m²"
+    },
+    {
+     "v": "Maior que 3 m²",
+     "t": "Maior que 3 m²"
+    }
+   ],
+   "ajuda": "Área de solo sem pavimento em volta do tronco (o canteiro). Estime pela largura e pelo comprimento."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Posicao da arvore na calcada",
+   "rotulo": "Posição da árvore na calçada",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Até 1 m do meio-fio",
+     "t": "Até 1 m do meio-fio"
+    },
+    {
+     "v": "Faixa de circulação",
+     "t": "Faixa de circulação"
+    },
+    {
+     "v": "Junto ao muro ou divisa",
+     "t": "Junto ao muro ou divisa"
+    }
+   ],
+   "ajuda": "Onde o tronco está na largura da calçada: perto do meio-fio, no meio (onde as pessoas passam) ou encostado no muro ou na divisa do lote."
+  },
+  {
+   "armazenar": "text",
    "nome": "Conflitos no raio de 2 m",
    "rotulo": "Conflitos no raio de 2 m",
    "tipo": "choice",
@@ -348,6 +394,13 @@
    "tipo": "bool",
    "ajuda": "Cabos de telefone, internet e TV, presos mais baixo no poste.",
    "ajudaImg": "forms/ajuda/fiacao.svg"
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Tronco paralelo à fiação",
+   "rotulo": "Tronco paralelo à fiação",
+   "tipo": "bool",
+   "ajuda": "O tronco ou um galho principal sobe junto da rede, na mesma direção dos fios."
   },
   {
    "armazenar": "bool",
@@ -492,11 +545,25 @@
   },
   {
    "armazenar": "bool",
+   "nome": "Afloramento da raiz na via",
+   "rotulo": "Afloramento da raiz na via",
+   "tipo": "bool",
+   "ajuda": "Raízes que levantaram ou quebraram o meio-fio, a sarjeta ou o asfalto."
+  },
+  {
+   "armazenar": "bool",
+   "nome": "Colo soterrado",
+   "rotulo": "Colo soterrado",
+   "tipo": "bool",
+   "ajuda": "O colo é a base do tronco, que abre em forma de funil e é sempre um pouco mais larga que o resto. Marque quando não dá para ver esse funil, porque terra, entulho ou calçamento cobriram a base."
+  },
+  {
+   "armazenar": "bool",
    "nome": "Raízes ausente",
    "rotulo": "Ausente",
    "tipo": "bool",
    "exclusivo": true,
-   "ajuda": "Sem poda de raiz e sem raiz aparente."
+   "ajuda": "Sem poda de raiz, sem raiz aparente e com o colo à vista."
   },
   {
    "armazenar": "text",
@@ -707,6 +774,140 @@
    "tipo": "bool",
    "ajuda": "Nenhum sinal de praga ou doença.",
    "legado": true
+  },
+  {
+   "armazenar": "text",
+   "nome": "Principal alvo",
+   "rotulo": "Principal alvo",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Pessoas",
+     "t": "Pessoas"
+    },
+    {
+     "v": "Carros estacionados",
+     "t": "Carros estacionados"
+    },
+    {
+     "v": "Circulantes da via",
+     "t": "Circulantes da via"
+    },
+    {
+     "v": "Edificação",
+     "t": "Edificação"
+    },
+    {
+     "v": "Outros",
+     "t": "Outros"
+    }
+   ],
+   "ajuda": "Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque o mais importante dentro da zona do alvo."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Zona do alvo",
+   "rotulo": "Zona do alvo",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Projeção da copa",
+     "t": "Projeção da copa"
+    },
+    {
+     "v": "1 vez a altura",
+     "t": "1 vez a altura"
+    },
+    {
+     "v": "1,5 vez a altura",
+     "t": "1,5 vez a altura"
+    }
+   ],
+   "ajuda": "Área que a árvore, ou a parte dela com defeito, pode atingir se cair (ISA). Projeção da copa: o alvo está embaixo da copa. 1 vez a altura: o alvo está ao alcance da queda da árvore inteira. 1,5 vez a altura: para indivíduos maiores, porque os estilhaços de uma eventual queda vão além da altura da árvore."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Taxa de ocupacao",
+   "rotulo": "Taxa de ocupação",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Raro",
+     "t": "Raro"
+    },
+    {
+     "v": "Ocasional",
+     "t": "Ocasional"
+    },
+    {
+     "v": "Frequente",
+     "t": "Frequente"
+    },
+    {
+     "v": "Constante",
+     "t": "Constante"
+    }
+   ],
+   "ajuda": "Quanto tempo o alvo fica na zona do alvo (ISA). Raro: quase nunca há alvo ali. Ocasional: presente poucas vezes ou por pouco tempo. Frequente: presente em boa parte do dia ou da semana. Constante: sempre presente."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Fator de protecao",
+   "rotulo": "Fator de proteção",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Ausente",
+     "t": "Ausente"
+    },
+    {
+     "v": "Presente",
+     "t": "Presente"
+    }
+   ],
+   "ajuda": "Algo entre a árvore e o alvo que segura ou desvia a queda: outra árvore, um muro, uma edificação (ISA). Quando existe, a chance de atingir o alvo é menor."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Principal defeito da arvore",
+   "rotulo": "Principal defeito da árvore",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Raízes e colo",
+     "t": "Raízes e colo"
+    },
+    {
+     "v": "Tronco",
+     "t": "Tronco"
+    },
+    {
+     "v": "Copa e galhos",
+     "t": "Copa e galhos"
+    }
+   ],
+   "ajuda": "A parte da árvore com mais chance de falhar (ISA). É ela que define a probabilidade de falha, logo abaixo."
+  },
+  {
+   "armazenar": "text",
+   "nome": "Carga sobre o defeito",
+   "rotulo": "Carga sobre o defeito",
+   "tipo": "choice",
+   "opcoes": [
+    {
+     "v": "Pequena",
+     "t": "Pequena"
+    },
+    {
+     "v": "Média",
+     "t": "Média"
+    },
+    {
+     "v": "Significativa",
+     "t": "Significativa"
+    }
+   ],
+   "ajuda": "Força que age sobre a parte com defeito: o peso da copa ou dos galhos e a exposição ao vento (ISA)."
   },
   {
    "armazenar": "text",
@@ -1073,6 +1274,12 @@
    "nome": "Meio",
    "campos": [
     {
+     "campo": "Area livre (m2)"
+    },
+    {
+     "campo": "Posicao da arvore na calcada"
+    },
+    {
      "campo": "Conflitos no raio de 2 m"
     },
     {
@@ -1097,6 +1304,10 @@
     },
     {
      "campo": "Fiação serviços gerais",
+     "grupo": "Fiação aérea"
+    },
+    {
+     "campo": "Tronco paralelo à fiação",
      "grupo": "Fiação aérea"
     },
     {
@@ -1219,6 +1430,14 @@
      "grupo": "Raízes"
     },
     {
+     "campo": "Afloramento da raiz na via",
+     "grupo": "Raízes"
+    },
+    {
+     "campo": "Colo soterrado",
+     "grupo": "Raízes"
+    },
+    {
      "campo": "Pragas nas raízes ausente",
      "grupo": "Pragas nas raízes"
     },
@@ -1238,6 +1457,24 @@
   {
    "nome": "Risco",
    "campos": [
+    {
+     "campo": "Principal alvo"
+    },
+    {
+     "campo": "Zona do alvo"
+    },
+    {
+     "campo": "Taxa de ocupacao"
+    },
+    {
+     "campo": "Fator de protecao"
+    },
+    {
+     "campo": "Principal defeito da arvore"
+    },
+    {
+     "campo": "Carga sobre o defeito"
+    },
     {
      "campo": "Probabilidade de falha"
     },
@@ -3430,7 +3667,15 @@
      "Probabilidade de impacto": "obrig",
      "Consequencias": "obrig",
      "Galhos secos ou podres": "obrig",
-     "Fitossanidade": "obrig"
+     "Fitossanidade": "obrig",
+     "Area livre (m2)": "obrig",
+     "Posicao da arvore na calcada": "obrig",
+     "Principal alvo": "obrig",
+     "Zona do alvo": "obrig",
+     "Taxa de ocupacao": "obrig",
+     "Fator de protecao": "obrig",
+     "Principal defeito da arvore": "obrig",
+     "Carga sobre o defeito": "obrig"
     },
     "2": {
      "Situacao": "obrig",
@@ -3445,7 +3690,15 @@
      "Probabilidade de impacto": "obrig",
      "Consequencias": "obrig",
      "Galhos secos ou podres": "obrig",
-     "Fitossanidade": "obrig"
+     "Fitossanidade": "obrig",
+     "Area livre (m2)": "obrig",
+     "Posicao da arvore na calcada": "obrig",
+     "Principal alvo": "obrig",
+     "Zona do alvo": "obrig",
+     "Taxa de ocupacao": "obrig",
+     "Fator de protecao": "obrig",
+     "Principal defeito da arvore": "obrig",
+     "Carga sobre o defeito": "obrig"
     },
     "3": {
      "Situacao": "obrig",
@@ -3460,7 +3713,15 @@
      "Probabilidade de impacto": "obrig",
      "Consequencias": "obrig",
      "Galhos secos ou podres": "obrig",
-     "Fitossanidade": "obrig"
+     "Fitossanidade": "obrig",
+     "Area livre (m2)": "obrig",
+     "Posicao da arvore na calcada": "obrig",
+     "Principal alvo": "obrig",
+     "Zona do alvo": "obrig",
+     "Taxa de ocupacao": "obrig",
+     "Fator de protecao": "obrig",
+     "Principal defeito da arvore": "obrig",
+     "Carga sobre o defeito": "obrig"
     },
     "5": {
      "Situacao": "oculto",
@@ -3546,7 +3807,18 @@
      "Cupim nas raízes": "oculto",
      "Pragas nas raízes ausente": "oculto",
      "Foto 5": "oculto",
-     "Fitossanidade": "oculto"
+     "Fitossanidade": "oculto",
+     "Area livre (m2)": "oculto",
+     "Posicao da arvore na calcada": "oculto",
+     "Tronco paralelo à fiação": "oculto",
+     "Colo soterrado": "oculto",
+     "Afloramento da raiz na via": "oculto",
+     "Principal alvo": "oculto",
+     "Zona do alvo": "oculto",
+     "Taxa de ocupacao": "oculto",
+     "Fator de protecao": "oculto",
+     "Principal defeito da arvore": "oculto",
+     "Carga sobre o defeito": "oculto"
     },
     "6": {
      "Local do registro": "oculto",
@@ -3635,7 +3907,18 @@
      "Foto 5": "oculto",
      "Observacoes": "oculto",
      "Foto 1": "obrig",
-     "Motivo sem acesso": "obrig"
+     "Motivo sem acesso": "obrig",
+     "Area livre (m2)": "oculto",
+     "Posicao da arvore na calcada": "oculto",
+     "Tronco paralelo à fiação": "oculto",
+     "Colo soterrado": "oculto",
+     "Afloramento da raiz na via": "oculto",
+     "Principal alvo": "oculto",
+     "Zona do alvo": "oculto",
+     "Taxa de ocupacao": "oculto",
+     "Fator de protecao": "oculto",
+     "Principal defeito da arvore": "oculto",
+     "Carga sobre o defeito": "oculto"
     },
     "7": {
      "Situacao": "obrig",
@@ -3651,7 +3934,15 @@
      "Consequencias": "obrig",
      "Galhos secos ou podres": "obrig",
      "Fitossanidade": "obrig",
-     "Qtde estimada de individuos": "obrig"
+     "Qtde estimada de individuos": "obrig",
+     "Area livre (m2)": "obrig",
+     "Posicao da arvore na calcada": "obrig",
+     "Principal alvo": "obrig",
+     "Zona do alvo": "obrig",
+     "Taxa de ocupacao": "obrig",
+     "Fator de protecao": "obrig",
+     "Principal defeito da arvore": "obrig",
+     "Carga sobre o defeito": "obrig"
     }
    }
   },
@@ -3792,7 +4083,18 @@
      "Cupim nas raízes": "oculto",
      "Pragas nas raízes ausente": "oculto",
      "Foto 5": "oculto",
-     "Fitossanidade": "oculto"
+     "Fitossanidade": "oculto",
+     "Area livre (m2)": "oculto",
+     "Posicao da arvore na calcada": "oculto",
+     "Tronco paralelo à fiação": "oculto",
+     "Colo soterrado": "oculto",
+     "Afloramento da raiz na via": "oculto",
+     "Principal alvo": "oculto",
+     "Zona do alvo": "oculto",
+     "Taxa de ocupacao": "oculto",
+     "Fator de protecao": "oculto",
+     "Principal defeito da arvore": "oculto",
+     "Carga sobre o defeito": "oculto"
     }
    }
   },
@@ -3801,6 +4103,14 @@
    "por": {
     "Outro": {
      "Motivo sem acesso (outro)": "obrig"
+    }
+   }
+  },
+  {
+   "campo": "Local do registro",
+   "por": {
+    "Canteiro central": {
+     "Posicao da arvore na calcada": "oculto"
     }
    }
   }

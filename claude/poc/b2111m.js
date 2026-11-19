@@ -11,11 +11,11 @@ async function ate7(p, { podas, raizes, fito, parar }) {
   await A.campo(p, 'CAP (cm)').locator('input').first().fill('102'); await A.num(p, 'Altura total (m)', 6.5);
   for (const k of [1, 2, 3, 4]) if (await A.campo(p, `Raio de copa ${k} (m)`).count()) await A.num(p, `Raio de copa ${k} (m)`, 2 + k / 2);
   if (await A.campo(p, 'Area de copa medida (m2)').count()) await A.num(p, 'Area de copa medida (m2)', 18);
-  await A.aba(p, 'Meio'); await A.op(p, 'Conflitos no raio de 2 m', 'Ausente'); await chipC(p, 'Fiação ausente'); await A.op(p, 'Marquise ou toldo', 'Ausente'); await chipC(p, 'Tráfego sem interferência');
+  await A.aba(p, 'Meio'); await A.novosMeio(p); await A.op(p, 'Conflitos no raio de 2 m', 'Ausente'); await chipC(p, 'Fiação ausente'); await A.op(p, 'Marquise ou toldo', 'Ausente'); await chipC(p, 'Tráfego sem interferência');
   await A.aba(p, 'Podas e danos'); for (const n of [...podas, 'Danos ausente', ...raizes]) await chipC(p, n); await A.op(p, 'Ocos e cavidades', 'Ausente');
   await A.aba(p, 'Fitossanidade'); await A.op(p, 'Qualidade da copa', 'Normal'); for (const n of fito) await chipC(p, n);
   if (parar) return;
-  await A.aba(p, 'Risco'); await A.op(p, 'Probabilidade de falha', 'Improvável'); await A.campo(p, 'Probabilidade de impacto').locator('.op').nth(1).click(); await A.op(p, 'Consequencias', 'Menor');
+  await A.aba(p, 'Risco'); await A.novosRisco(p); await A.op(p, 'Probabilidade de falha', 'Improvável'); await A.campo(p, 'Probabilidade de impacto').locator('.op').nth(1).click(); await A.op(p, 'Consequencias', 'Menor');
   await A.aba(p, 'Manejo'); await chipC(p, 'Manejo nenhum');
   await A.concluir(p);
   for (const t of ['Sim, nenhum', 'Está certo']) if (await p.locator(`.folha >> text=${t}`).count()) { await p.click(`.folha button:has-text("${t}")`); await p.waitForTimeout(300); }

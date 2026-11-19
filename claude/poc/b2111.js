@@ -28,7 +28,7 @@ const foco = (p) => p.evaluate(() => { const a = document.activeElement; const c
   const tem = (l, re) => l.some((x) => re.test(x));
   ok('Z.3', tem(copa, /^Qualidade da copa/) && tem(copa, /^Galhos secos ou podres.*Ausente\/0-25%\/25-50%\/50-75%\/acima de 75%/) && tem(copa, /^Podas: Ausente\/Danos por podas\/Poda drástica$/) && tem(copa, /^Pragas e doenças na copa: Ausente\/Fungo\/Cupim\/Broca\/Erva-de-passarinho$/)
     && tem(tronco, /^Danos no tronco: Ausente\/Lesões no tronco\/Codominância de troncos$/) && tem(tronco, /^Ocos e cavidades/) && tem(tronco, /^Pragas no tronco: Ausente\/Fungo\/Cupim\/Broca$/)
-    && tem(raiz, /^Raízes: Ausente\/Poda de raiz\/Afloramento da raiz no canteiro\/Afloramento da raiz na calçada$/) && tem(raiz, /^Pragas nas raízes: Ausente\/Fungo\/Cupim$/) && tem(raiz, /^Fitossanidade.*Boa\/Regular\/Ruim/) && copa.length === 4 && tronco.length === 3 && raiz.length === 3,
+    && tem(raiz, /^Raízes: Ausente\/Poda de raiz\/Afloramento da raiz no canteiro\/Afloramento da raiz na calçada\/Afloramento da raiz na via\/Colo soterrado$/) && tem(raiz, /^Pragas nas raízes: Ausente\/Fungo\/Cupim$/) && tem(raiz, /^Fitossanidade.*Boa\/Regular\/Ruim/) && copa.length === 4 && tronco.length === 3 && raiz.length === 3,
     `Copa: ${copa.join(' | ')} || Tronco: ${tronco.join(' | ')} || Raízes: ${raiz.join(' | ')}`);
   // 4. risco calculado é o último da etapa e as fotos vão de 2 a 5, sem descrição
   await A.abaLivre(p, 'Risco'); const ordemR = await p.evaluate(() => [...document.querySelectorAll('main .campo[data-campo]')].map((c) => c.dataset.campo)); const antesR = limpo(await A.campo(p, 'Risco').locator('.calc').innerText());
@@ -44,7 +44,7 @@ const foco = (p) => p.evaluate(() => { const a = document.activeElement; const c
   // 6. aviso da trava some quando a pessoa preenche, e a faixa nunca diz "completa" com o aviso de "falta" na tela
   await inp().fill('Handroanthus chrysotrichus'); await A.campo(p, 'CAP (cm)').locator('input').first().fill('80'); await A.num(p, 'Altura total (m)', 5); for (const k of [1, 2, 3, 4]) if (await A.campo(p, `Raio de copa ${k} (m)`).count()) await A.num(p, `Raio de copa ${k} (m)`, 2); if (await A.campo(p, 'Area de copa medida (m2)').count()) await A.num(p, 'Area de copa medida (m2)', 12);
   await p.evaluate(() => { window.__app.S.reg.mexido = true; }); await p.click('.rodape .btn.prox'); await p.waitForTimeout(300);
-  await p.locator('.chip[data-campo="Fiação ausente"]').click(); await A.op(p, 'Marquise ou toldo', 'Ausente'); await p.locator('.chip[data-campo="Tráfego sem interferência"]').click();
+  await A.novosMeio(p); await p.locator('.chip[data-campo="Fiação ausente"]').click(); await A.op(p, 'Marquise ou toldo', 'Ausente'); await p.locator('.chip[data-campo="Tráfego sem interferência"]').click();
   await p.click('.rodape .btn.prox'); await p.waitForTimeout(250); const aviso = limpo(await p.locator('.toast').innerText().catch(() => '')); const faixa1 = limpo(await p.locator('.barra-pend').innerText());
   await A.op(p, 'Conflitos no raio de 2 m', 'Ausente'); await p.waitForTimeout(150); const avisoDepois = await p.locator('.toast').count(); const faixa2 = limpo(await p.locator('.barra-pend').innerText());
   ok('Z.6', /Complete "Meio".*Conflitos/.test(aviso) && /Faltam 1 nesta etapa/.test(faixa1) && avisoDepois === 0 && /Esta etapa está completa/.test(faixa2), `ao tentar seguir: aviso "${aviso}" e faixa "${faixa1.slice(0, 40)}"; ao preencher: aviso some (${avisoDepois}) e faixa "${faixa2.slice(0, 40)}"`);

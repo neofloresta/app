@@ -58,11 +58,11 @@ const tocar = async (p, lat, lon, z = 19) => { const xy = await p.evaluate(([a, 
   await A.campo(p, 'CAP (cm)').locator('input').first().fill('40'); await A.num(p, 'Altura total (m)', 4);
   for (const k of [1, 2, 3, 4]) if (await A.campo(p, `Raio de copa ${k} (m)`).count()) await A.num(p, `Raio de copa ${k} (m)`, 1 + k / 2);
   if (await A.campo(p, 'Area de copa medida (m2)').count()) await A.num(p, 'Area de copa medida (m2)', 30);
-  await A.aba(p, 'Meio'); await A.op(p, 'Conflitos no raio de 2 m', 'Ausente'); await p.locator('.chip[data-campo="Fiação ausente"]').click(); await A.op(p, 'Marquise ou toldo', 'Ausente'); await p.locator('.chip[data-campo="Tráfego sem interferência"]').click();
+  await A.aba(p, 'Meio'); await A.novosMeio(p); await A.op(p, 'Conflitos no raio de 2 m', 'Ausente'); await p.locator('.chip[data-campo="Fiação ausente"]').click(); await A.op(p, 'Marquise ou toldo', 'Ausente'); await p.locator('.chip[data-campo="Tráfego sem interferência"]').click();
   await A.aba(p, 'Copa'); await A.op(p, 'Qualidade da copa', 'Normal'); await A.op(p, 'Galhos secos ou podres', 'Ausente'); for (const n of ['Podas ausente', 'Pragas na copa ausente']) await p.locator(`.chip[data-campo="${n}"]`).click();
   await A.aba(p, 'Tronco'); for (const n of ['Danos ausente', 'Pragas no tronco ausente']) await p.locator(`.chip[data-campo="${n}"]`).click(); await A.op(p, 'Ocos e cavidades', 'Ausente');
   await A.aba(p, 'Raízes'); for (const n of ['Raízes ausente', 'Pragas nas raízes ausente']) await p.locator(`.chip[data-campo="${n}"]`).click(); await A.op(p, 'Fitossanidade', 'Boa');
-  await A.aba(p, 'Risco'); await A.op(p, 'Probabilidade de falha', 'Improvável'); await A.campo(p, 'Probabilidade de impacto').locator('.op').nth(1).click(); await A.op(p, 'Consequencias', 'Menor');
+  await A.aba(p, 'Risco'); await A.novosRisco(p); await A.op(p, 'Probabilidade de falha', 'Improvável'); await A.campo(p, 'Probabilidade de impacto').locator('.op').nth(1).click(); await A.op(p, 'Consequencias', 'Menor');
   await A.aba(p, 'Manejo'); await p.locator('.chip[data-campo="Manejo nenhum"]').click(); await A.aba(p, 'Fotos e observações'); await A.foto(p, 'Foto 2'); await A.foto(p, 'Foto 3');
   await A.concluir(p); for (const t of ['Sim, nenhum', 'Está certo', 'Salvar sem GPS']) if (await p.locator(`.folha >> text=${t}`).count()) { await p.click(`.folha button:has-text("${t}")`); await p.waitForTimeout(300); }
   const pend3 = await A.faltas(p); await p.waitForSelector('button.nova', { timeout: 15000 }).catch(() => {}); await p.waitForTimeout(4000);
