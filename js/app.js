@@ -1,6 +1,6 @@
 // Neofloresta Inventário: app de campo do Inventário da Arborização Urbana, da Neofloresta
 (() => {
-  const VERSAO = '2.17.0';
+  const VERSAO = '2.17.1';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -2240,17 +2240,29 @@
       if (direta) return clicarFace(direta.q, direta.f, ll);
       if (qd) clicarQuadra(qd, ll);
     }
+    // 2.17.1: pedir e cancelar respondem na hora. A quadra muda de cor no toque e o servidor é avisado por trás
+    // (eram duas consultas seguidas ao servidor, uns 9 segundos de espera). Se o servidor recusar, a marca é desfeita e o motivo aparece.
     async function pedirQuadra(q) {
       if (!navigator.onLine) return toast('Sem internet. O pedido precisa de internet para chegar à coordenação.', 5000, null, true);
+      if (Reservas.pedido(q.n)) return mapa.closePopup();
+      mapa.closePopup();
+      if (!Reservas.dados || Reservas.dono !== Reservas.chave()) { Reservas.dados = { pedidos: [], max: 5, ativas: 0 }; Reservas.dono = Reservas.chave(); }
+      const prov = { id: 'enviando-' + q.n, quadra: String(q.n), situacao: 'Aguardando', login: S.sessao.u, enviando: true };
+      Reservas.dados.pedidos = (Reservas.dados.pedidos || []).concat([prov]); desenharQuadras(); pintarAvisoPedidos(true);
+      toast(`Quadra ${q.n} pedida. Ela fica em laranja no mapa até a coordenação responder.`, 5000);
+      const desfaz = (msg) => { if (Reservas.dados) Reservas.dados.pedidos = (Reservas.dados.pedidos || []).filter((x) => x !== prov); desenharQuadras(); pintarAvisoPedidos(true); toast(msg, 7000, null, true); };
       try {
-        const r = await Api.b.reservaPedir(S.projeto.id, [q.n]); mapa.closePopup();
-        if (r.recusadas && r.recusadas.length) return toast(r.recusadas[0].motivo, 6000, null, true);
-        toast(`Quadra ${q.n} pedida. Ela fica em laranja no mapa até a coordenação responder.`, 5000); await Reservas.carregar(); pintarAvisoPedidos(); desenharQuadras();
-      } catch (e) { toast(e.message || 'Não foi possível pedir a quadra.', 6000, null, true); }
+        const r = await Api.b.reservaPedir(S.projeto.id, [q.n]);
+        if (r.recusadas && r.recusadas.length) return desfaz(`Quadra ${q.n}: ${r.recusadas[0].motivo}`);
+        Reservas.carregar().then(() => { pintarAvisoPedidos(); desenharQuadras(); });
+      } catch (e) { desfaz(`O pedido da quadra ${q.n} não chegou à coordenação: ${e.message || 'sem resposta do servidor'}. Peça de novo.`); }
     }
     async function cancelarPedido(q) {
-      const x = Reservas.pedido(q.n); if (!x) return;
-      try { await Api.b.reservaCancelar(S.projeto.id, x.id); mapa.closePopup(); toast('Pedido cancelado.'); await Reservas.carregar(); pintarAvisoPedidos(); desenharQuadras(); } catch (e) { toast(e.message || 'Não foi possível cancelar.', 5000, null, true); }
+      const x = Reservas.pedido(q.n); if (!x) return; mapa.closePopup();
+      if (x.enviando) return toast('O pedido ainda está sendo enviado. Tente cancelar em alguns segundos.', 5000);
+      Reservas.dados.pedidos = Reservas.dados.pedidos.filter((y) => y !== x); desenharQuadras(); pintarAvisoPedidos(true); toast('Pedido cancelado.');
+      try { await Api.b.reservaCancelar(S.projeto.id, x.id); Reservas.carregar().then(() => { pintarAvisoPedidos(); desenharQuadras(); }); }
+      catch (e) { if (Reservas.dados) Reservas.dados.pedidos = (Reservas.dados.pedidos || []).concat([x]); desenharQuadras(); pintarAvisoPedidos(true); toast(`O cancelamento da quadra ${q.n} não chegou ao servidor: ${e.message || 'sem resposta'}. Tente de novo.`, 7000, null, true); }
     }
     // coordenação: pedidos esperando, na ordem de chegada
     async function abrirPedidos() {

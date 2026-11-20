@@ -60,7 +60,8 @@ http.createServer((req, res) => {
     if (global.FALHAR && global.FALHAR.n > 0 && req.method === 'POST' && b.includes('"acao":"' + global.FALHAR.acao + '"')) { global.FALHAR.n--; req.socket.destroy(); return; }
     const t0 = Date.now();
     const out = req.method === 'POST' ? ctx.doPost({ postData: { contents: b } }) : ctx.doGet();
-    const lat = +process.env.LATENCIA || 0; global.CHAMADAS = global.CHAMADAS || []; try { global.CHAMADAS.push([Date.now(), JSON.parse(b || '{}').acao]); } catch (e) {}
+    if (req.url.startsWith('/__latencia')) { try { global.LAT = +JSON.parse(b || '{}').ms || 0; } catch (e) { global.LAT = 0; } res.writeHead(200); return res.end('{}'); }
+    const lat = global.LAT != null ? global.LAT : (+process.env.LATENCIA || 0); global.CHAMADAS = global.CHAMADAS || []; try { global.CHAMADAS.push([Date.now(), JSON.parse(b || '{}').acao]); } catch (e) {}
     if (req.url.startsWith('/__chamadas')) { res.writeHead(200); const c = global.CHAMADAS; global.CHAMADAS = []; return res.end(JSON.stringify(c)); }
     setTimeout(() => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(out.t); }, req.method === 'POST' ? lat : 0); try { const a = JSON.parse(b).acao; if (Date.now() - t0 > 200) console.log('[lento]', a, Date.now() - t0, 'ms', out.t.length, 'bytes'); } catch (e) {}
   });
