@@ -19,8 +19,8 @@ const Api = (() => {
     tabMemo = { k, t }; return t;
   }
   // ida: valores do registro no formato da planilha
-  function paraPlanilha(l, r, form) {
-    const t = tabelas(form); if (!t || (ganchos.formatoNovo && !ganchos.formatoNovo())) return l; // servidor ainda na versão anterior: segue no formato antigo (código e branco)
+  function paraPlanilha(l, r, form, forcar) {
+    const t = tabelas(form); if (!t || (!forcar && (!ganchos.formatoNovo || !ganchos.formatoNovo()))) return l; // servidor ainda na versão anterior: segue no formato antigo (código e branco)
     let E = null; try { E = ganchos.estado ? ganchos.estado(form, r.valores || {}) : null; } catch (e) { E = null; }
     for (const c of form.campos) {
       if (c.tipo === 'photo') continue; let v = l[c.nome]; const vazio = v === '' || v == null; const oculto = !!(E && E[c.nome] && E[c.nome].oculto);
@@ -40,7 +40,7 @@ const Api = (() => {
   function daPlanilhaTab(cab, linhas) { const t = tabelas(ganchos.form()); if (!t || !Array.isArray(linhas) || !Array.isArray(cab)) return linhas; const ks = cab.map((c, i) => (c in t.tipo ? i : -1)).filter((i) => i >= 0); for (const l of linhas) for (const i of ks) l[i] = valorDeDentro(t, cab[i], l[i]); return linhas; }
 
   // valores de uma linha já no formato de dentro, de volta ao formato da planilha (ajuste dos registros antigos)
-  function valoresPlanilha(valores, form) { const l = {}; for (const c of form.campos) { if (c.tipo === 'photo') continue; let v = valores[c.nome]; if (c.tipo === 'bool') v = v == null || v === '' ? '' : v === true || v === 1 || v === '1' ? 1 : 0; l[c.nome] = v ?? ''; } return paraPlanilha(l, { valores }, form); }
+  function valoresPlanilha(valores, form) { const l = {}; for (const c of form.campos) { if (c.tipo === 'photo') continue; let v = valores[c.nome]; if (c.tipo === 'bool') v = v == null || v === '' ? '' : v === true || v === 1 || v === '1' ? 1 : 0; l[c.nome] = v ?? ''; } return paraPlanilha(l, { valores }, form, true); } // o ajuste é sempre para o formato novo, qualquer que seja a versão guardada na sessão
 
   function achatar(r, form) {
     const l = {

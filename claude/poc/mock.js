@@ -8,7 +8,7 @@ class Range { constructor(sh, r, c, nr, nc) { Object.assign(this, { sh, r, c, nr
   getValue() { return this.getValues()[0][0]; }
   setValues(v) { v.forEach((l, i) => l.forEach((x, j) => { const row = this.sh.d[this.r - 1 + i] = this.sh.d[this.r - 1 + i] || []; row[this.c - 1 + j] = parseCell(x); })); return this; }
   clearContent() { for (let i = 0; i < this.nr; i++) { const row = this.sh.d[this.r - 1 + i]; if (row) for (let j = 0; j < this.nc; j++) row[this.c - 1 + j] = ''; } this.sh.d = this.sh.d.filter((l) => l.some((x) => x !== '' && x != null)); return this; }
-  setFontWeight() { return this; } setNumberFormats() { return this; } setNumberFormat() { return this; } setValue(v) { return this.setValues([[v]]); }
+  setFontWeight() { return this; } setNumberFormats() { return this; } getNumberFormats() { return Array.from({ length: this.nr }, () => Array.from({ length: this.nc }, () => '@')); } setNumberFormat() { return this; } setValue(v) { return this.setValues([[v]]); }
   createTextFinder(t) { const self = this; return { matchEntireCell() { return this; }, findNext() { for (let i = 0; i < self.nr; i++) if (String(((self.sh.d[self.r - 1 + i] || [])[self.c - 1]) ?? '') === t) return { getRow: () => self.r + i }; return null; } }; }
 }
 class Sheet { constructor(n) { this.n = n; this.d = []; }

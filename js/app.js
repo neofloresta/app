@@ -135,6 +135,7 @@
     window.addEventListener('online', () => { atualizarSync(); sincronizar(); });
     window.addEventListener('offline', atualizarSync);
     setInterval(() => sincronizar(true), 60000);
+    setInterval(() => { atualizarSessao().catch(() => {}); }, 10 * 60000); // 2.17: confere a versão do servidor a cada 10 minutos (o formato de gravação depende dela)
     setInterval(() => verificarAtualizacao(), 30 * 60000); verificarAtualizacao();
     Api.aoExpirar(() => { if (!S.expirada) { S.expirada = true; toast('Sua sessão expirou. Entre de novo para continuar enviando. Nada do aparelho foi perdido.', 6000); atualizarSync(); } });
     if (S.sessao) {
@@ -3320,7 +3321,7 @@
 
   // ---------- Ficha (leitura) e trava de registros concluídos ----------
   // texto curto da opção ("Raro"): a explicação entre parênteses aparece só na tela de coleta
-  function rotuloOpcao(c, v) { if (v == null || v === '') return ''; const o = (c.opcoes || []).find((x) => String(x.v) === String(v)); return o ? Api.curto(o.t) : String(v); }
+  function rotuloOpcao(c, v) { if (v == null || v === '') return ''; const o = (c.opcoes || []).find((x) => String(x.v) === String(v)); return o ? (Api.curto ? Api.curto(o.t) : o.t) : String(v); }
   // dia no fuso de Brasília, igual ao servidor
   let FMT_DIA = null; try { FMT_DIA = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }); } catch (e) { /* navegador sem fuso */ }
   const diaLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; return FMT_DIA ? FMT_DIA.format(d) : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }; // formatador criado uma vez: com milhares de pontos no mapa, criar um por ponto travava o celular
@@ -4058,6 +4059,8 @@
   }
   async function ajustarRegistrosAntigos() {
     if (!S.projeto) return toast('Abra um projeto antes.');
+    await atualizarSessao(); // confere a versão do servidor agora: o ajuste só vale com o Code.gs 2.17
+    if (servidorMenos(2.17)) return modal('Ajustar registros antigos', h('p', null, 'O servidor ainda está na versão ' + (S.sessao.versaoScript || 'anterior') + '. Cole o Code.gs 2.17 no Apps Script, faça a nova implantação e tente de novo.'), [{ texto: 'Entendi', valor: true }]);
     let form = S.form; try { const fr = await Api.b.formulario(S.projeto.formulario); if (fr && fr.campos) { form = fr; S.form = fr; } } catch (e) { /* segue com o formulário já aberto */ }
     if (!form) return toast('Formulário do projeto não carregado.');
     let linhas; try { linhas = await linhasProjeto(true); } catch (e) { return toast(e.message, 6000); }

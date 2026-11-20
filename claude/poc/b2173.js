@@ -47,6 +47,11 @@ const cruas = async () => (await L.post('listar', { projeto: PJ })).linhas;
   // 5. rodar de novo não muda nada
   await q.goto(L.WEB + '#admin/formularios'); await q.waitForSelector('.bt-ajustar'); await q.click('.bt-ajustar'); await q.waitForSelector('.folha:has-text("já estão no formato novo")', { timeout: 30000 }).catch(() => {}); const de2 = (await q.locator('.folha').last().innerText().catch(() => '')).replace(/\s+/g, ' ');
   ok('P.6', /já estão no formato novo/.test(de2), `segunda vez: "${de2.slice(0, 160)}"`);
+  // 6. com o servidor ainda na versão anterior, o app grava como antes (código e branco); com o 2.17, no formato novo; o ajuste é sempre no formato novo
+  const fmt = await q.evaluate(() => { const A2 = window.__app.Api, S = window.__app.S; const r = { uuid: 'x', valores: { Categoria: '1', Situacao: 'Morta', 'Fiação ausente': null }, fotos: {} }; const guard = S.sessao.versaoScript;
+    S.sessao.versaoScript = '2.16'; const velho = A2.achatar(r, S.form); const aj = A2.valoresPlanilha(r.valores, S.form); S.sessao.versaoScript = '2.17'; const novo = A2.achatar(r, S.form); S.sessao.versaoScript = guard;
+    return { velho: [velho.Categoria, velho['CAP (cm)'], velho['Fiação ausente'], velho.Especie], novo: [novo.Categoria, novo['CAP (cm)'], novo['Fiação ausente'], novo.Especie], ajuste: [aj.Categoria, aj['CAP (cm)'], aj.Especie] }; });
+  ok('P.8', JSON.stringify(fmt.velho) === JSON.stringify(['1', '', '', '']) && JSON.stringify(fmt.novo) === JSON.stringify(['Árvore', 'NA', 0, 'Não se aplica']) && JSON.stringify(fmt.ajuste) === JSON.stringify(['Árvore', 'NA', 'Não se aplica']), `servidor 2.16: ${JSON.stringify(fmt.velho)}; servidor 2.17: ${JSON.stringify(fmt.novo)}; ajuste com a sessão ainda em 2.16: ${JSON.stringify(fmt.ajuste)}`);
   ok('P.7', !p.erros.length && !q.erros.length, p.erros.concat(q.erros).join(' | ') || 'sem erros de JavaScript');
   const f = Object.values(R).filter((x) => !x.passou).length; console.log(f ? f + ' FALHA(S)' : 'TUDO OK'); await b.close(); process.exit(f ? 1 : 0);
 })().catch((e) => { console.error('ERRO', e); process.exit(2); });

@@ -660,11 +660,11 @@ function salvarRegistro(projetoId, linha, usr) {
         if (v === 'Devolvido') linha.validacao = 'Corrigido';
       }
       const valores = cab.map((c) => (c in linha ? celula(linha[c]) : celula(atual[c])));
-      gravarLinha(sh, r, valores); marcarMudanca(projetoId);
+      gravarLinha(sh, r, valores); marcarMudanca(projetoId); quadraMexida(projetoId, atual.quadra); if ('quadra' in linha) quadraMexida(projetoId, linha.quadra);
       return { atualizado: true, validacao: linha.validacao || atual.validacao || '' };
     }
     linha.validacao = 'Pendente'; linha.numero_unico = proximoNumero(projetoId, sh, cab);
-    gravarLinha(sh, sh.getLastRow() + 1, cab.map((c) => celula(linha[c]))); marcarMudanca(projetoId);
+    gravarLinha(sh, sh.getLastRow() + 1, cab.map((c) => celula(linha[c]))); marcarMudanca(projetoId); quadraMexida(projetoId, linha.quadra);
     return { novo: true };
   } finally { lock.releaseLock(); }
 }
@@ -708,7 +708,7 @@ function moverRegistro(projetoId, d, usr) {
     const novo = { latitude: lat, longitude: lon, ponto_ajustado: 'sim', ponto_dist_m: tinha ? Math.round(dist * 10) / 10 : '', atualizado_em: agora, historico: seguro(((atual.historico ? atual.historico + ' | ' : '') + nota).slice(-5000)) };
     if (d.quadra != null) novo.quadra = String(d.quadra).slice(0, 40); if (d.face != null) novo.face = String(d.face).slice(0, 10); if (d.setor != null) novo.setor = String(d.setor).slice(0, 40);
     const valores = cab.map((c) => (c in novo ? celula(novo[c]) : celula(atual[c])));
-    gravarLinha(sh, r, valores); marcarMudanca(projetoId);
+    gravarLinha(sh, r, valores); marcarMudanca(projetoId); try { CacheService.getScriptCache().remove('qval:' + projetoId); } catch (e) { /* segue */ }
     try { CacheService.getScriptCache().remove('painel:' + projetoId + ':cliente'); CacheService.getScriptCache().remove('painel:' + projetoId + ':todos'); } catch (e) { /* segue */ }
     auditar(usr.login, 'registro_posicao', projetoId, String(d.uuid) + ': ' + (Math.round(dist * 10) / 10) + ' m');
     return { atualizado: true, dist: Math.round(dist * 10) / 10, lat: lat, lon: lon, quadra: novo.quadra != null ? novo.quadra : atual.quadra || '', face: novo.face != null ? novo.face : atual.face || '', setor: novo.setor != null ? novo.setor : atual.setor || '' };
@@ -742,8 +742,9 @@ function ajustarRegistros(projetoId, d, usr) {
       const txt = (x) => (x instanceof Date ? x.toISOString() : String(x == null ? '' : x));
       itens.forEach((it) => { const k = pos[String(it.uuid)]; if (k == null) return;
         if (it.atualizado_em != null && ia >= 0 && txt(tudo[k][ia]) !== String(it.atualizado_em)) { pulados++; return; } // registro reenviado depois da leitura do app: não é tocado
-        let m = 0; Object.keys(it.valores || {}).forEach((c) => { const j = cab.indexOf(c); const v = celula(it.valores[c]); if (j < 0) { if (v !== '' && v != null) { celulas++; m = 1; } return; } if (txt(tudo[k][j]) !== String(v)) { tudo[k][j] = v; mexidas[j] = 1; celulas++; m = 1; } }); linhasM += m; });
-      if (!d.simular) Object.keys(mexidas).forEach((j) => sh.getRange(2, +j + 1, n, 1).setValues(tudo.map((l) => [l[+j]])));
+        let m = 0; Object.keys(it.valores || {}).forEach((c) => { const j = cab.indexOf(c); const v = celula(it.valores[c]); if (j < 0) { if (v !== '' && v != null) { celulas++; m = 1; } return; } if (txt(tudo[k][j]) !== String(v)) { tudo[k][j] = v; (mexidas[j] = mexidas[j] || {})[k] = 1; celulas++; m = 1; } }); linhasM += m; });
+      // só as células mexidas mudam de formato: número como número, texto como texto (igual ao que o envio do celular faz)
+      if (!d.simular) Object.keys(mexidas).forEach((j) => { const rg = sh.getRange(2, +j + 1, n, 1); const fm = rg.getNumberFormats(); Object.keys(mexidas[j]).forEach((k) => { fm[+k] = [typeof tudo[+k][+j] === 'number' ? '0.##########' : '@']; }); rg.setNumberFormats(fm); rg.setValues(tudo.map((l) => [l[+j]])); });
     }
     if (d.simular) return { registros: linhasM, celulas: celulas, pulados: pulados, simulado: true };
     const tiradas = [];
@@ -821,7 +822,7 @@ function paraCliente(projetoId, linhas) {
 // Só algumas colunas de todas as linhas, em lista compacta (mapa e sequência do código)
 // desde (ISO do servidor): só as linhas gravadas depois (mapa ao vivo). Sem desde, todas as linhas.
 // O carimbo "rg:" no cache diz quando entrou o último registro: sem novidade, a resposta sai sem abrir a planilha.
-function marcarMudanca(projetoId) { try { CacheService.getScriptCache().remove('qval:' + projetoId); } catch (e) { /* segue */ } try { CacheService.getScriptCache().put('rg:' + projetoId, new Date().toISOString(), 21600); } catch (e) { /* sem cache: as consultas leem a planilha */ } }
+function marcarMudanca(projetoId) { try { CacheService.getScriptCache().put('rg:' + projetoId, new Date().toISOString(), 21600); } catch (e) { /* sem cache: as consultas leem a planilha */ } }
 function colunas(projetoId, campos, usr, desde) {
   const agora = new Date(Date.now() - 15000).toISOString(); // 15 s de folga: um envio que ainda estava gravando entra na próxima consulta
   if (desde) { let st = null; try { st = CacheService.getScriptCache().get('rg:' + projetoId); } catch (e) { st = null; } if (st && st <= desde) return { cab: campos, linhas: [], agora: agora }; }
@@ -1399,6 +1400,8 @@ function lerSitQuadras(projetoId) { return lerOS(abaQuadras(projetoId)); }
 // 2.17: quadra validada. É automática e não é gravada: quadra levantada em que todos os registros (fora os reprovados) estão validados,
 // sem nenhum em validação ou devolvido. Volta a "levantada" sozinha quando entra registro novo ou algo é devolvido.
 // A conta lê duas colunas da planilha e fica 2 minutos em cache; validar e gravar registro limpam o cache.
+// registro novo ou alterado: o cache só é limpo se a quadra dele estava na lista das validadas (senão valeria reler a planilha a cada árvore)
+function quadraMexida(projetoId, quadra) { try { const cache = CacheService.getScriptCache(); const c = cache.get('qval:' + projetoId); if (!c) return; const q = String(quadra == null ? '' : quadra).trim(); if (!q || JSON.parse(c).indexOf(q) >= 0) cache.remove('qval:' + projetoId); } catch (e) { /* segue */ } }
 function quadrasValidadas(projetoId) {
   const cache = CacheService.getScriptCache(); const ck = 'qval:' + projetoId;
   try { const c = cache.get(ck); if (c) return JSON.parse(c); } catch (e) { /* calcula */ }
