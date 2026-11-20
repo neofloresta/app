@@ -3212,7 +3212,8 @@
     corpo.replaceChildren(
       h('div', { class: 'cartao' }, h('h3', null, 'Formulários'),
         forms.length ? h('table', { class: 'tab' }, forms.map((f) => h('tr', null, h('td', null, h('b', null, f.nome), h('br'), h('small', null, `${f.id} · ${f.campos} campos${f.versao ? ' · versão ' + f.versao : ''}`)), h('td', null, h('button', { class: 'btn sec peq', onclick: () => editar(f.id) }, 'Revisar'))))) : h('p', null, 'Nenhum formulário ainda.'),
-        h('button', { class: 'btn sec', style: 'margin-top:10px', onclick: exemplo }, forms.some((f) => f.id === 'divinopolis-inventario') ? 'Atualizar formulários prontos (inventário Divinópolis e risco)' : 'Instalar formulários prontos (inventário Divinópolis e risco)')),
+        h('button', { class: 'btn sec', style: 'margin-top:10px', onclick: exemplo }, forms.some((f) => f.id === 'divinopolis-inventario') ? 'Atualizar formulários prontos (inventário Divinópolis e risco)' : 'Instalar formulários prontos (inventário Divinópolis e risco)'),
+        S.projeto && !Api.demo ? h('div', { style: 'margin-top:14px' }, h('button', { class: 'btn sec bt-ajustar', onclick: ajustarRegistrosAntigos }, 'Ajustar registros antigos'), h('p', { class: 'dica' }, `Deixa os registros já coletados de ${S.projeto.nome} no formato novo da planilha (texto no lugar de código, nada em branco) e tira as colunas de formulário antigo. Mostra o que muda antes de gravar.`)) : null),
       h('div', { class: 'cartao' }, h('h3', null, 'Importar do QGIS'),
         h('p', { class: 'dica' }, 'No QGIS: Propriedades da camada > Estilo > Salvar estilo (.qml) com todas as categorias. Envie também o .gpkg da camada para trazer os tipos de campo e a lista de espécies.'),
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome do formulário'), nome),
@@ -3299,7 +3300,8 @@
   }
 
   // ---------- Ficha (leitura) e trava de registros concluídos ----------
-  function rotuloOpcao(c, v) { if (v == null || v === '') return ''; const o = (c.opcoes || []).find((x) => String(x.v) === String(v)); return o ? o.t : String(v); }
+  // texto curto da opção ("Raro"): a explicação entre parênteses aparece só na tela de coleta
+  function rotuloOpcao(c, v) { if (v == null || v === '') return ''; const o = (c.opcoes || []).find((x) => String(x.v) === String(v)); return o ? Api.curto(o.t) : String(v); }
   // dia no fuso de Brasília, igual ao servidor
   let FMT_DIA = null; try { FMT_DIA = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }); } catch (e) { /* navegador sem fuso */ }
   const diaLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; return FMT_DIA ? FMT_DIA.format(d) : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }; // formatador criado uma vez: com milhares de pontos no mapa, criar um por ponto travava o celular
@@ -4021,6 +4023,43 @@
     } catch (e) { /* sem camada: só a coordenada muda */ }
     try { const r = await Api.b.registroPosicao(S.projeto.id, d); toast(r.atualizado ? `Posição corrigida (${numBR(r.dist)} m).` : 'O ponto não foi movido.', 4000); await linhasProjeto(true); telaFichaServidor(l.uuid); }
     catch (e) { toast(/desconhecida/i.test(e.message) ? 'O servidor ainda não tem esta função. Atualize o Code.gs para a 2.17.' : e.message, 6000); }
+  }
+  // 2.17: ajusta os registros que já estão na planilha para o formato novo (texto no lugar de código, nada em branco) e tira as colunas
+  // de formulário antigo. Antes de tirar, aproveita o que ainda vale: o "principal alvo" vira a caixa de alvo e a caixa antiga do tronco
+  // paralelo vira a resposta da pergunta nova. O servidor guarda uma cópia da planilha antes de gravar.
+  const ALVO_ANTIGO = { Pessoas: 'Alvo pessoas', 'Carros estacionados': 'Alvo veículos estacionados', 'Circulantes da via': 'Alvo veículos em movimento', 'Edificação': 'Alvo edificação', Outros: 'Alvo outros' };
+  function valoresAjustados(l, form) {
+    const v = {}; for (const c of form.campos) { let x = l[c.nome]; if (c.tipo === 'bool') x = x === 1 || x === '1' || x === true; else if (x === '') x = null; v[c.nome] = x; }
+    const sim = (x) => x === 1 || x === '1' || x === true;
+    const alvos = form.campos.filter((c) => c.tipo === 'bool' && /^Alvo /.test(c.nome)).map((c) => c.nome);
+    if (alvos.length && !alvos.some((n) => v[n]) && l['Principal alvo'] && ALVO_ANTIGO[l['Principal alvo']] && alvos.includes(ALVO_ANTIGO[l['Principal alvo']])) v[ALVO_ANTIGO[l['Principal alvo']]] = true;
+    const par = form.campos.find((c) => c.nome === 'Tronco paralelo a fiacao eletrica');
+    if (par && (v[par.nome] == null || v[par.nome] === '') && 'Tronco paralelo à fiação' in l && l['Tronco paralelo à fiação'] !== '' && l['Tronco paralelo à fiação'] != null) v[par.nome] = sim(l['Tronco paralelo à fiação']) ? 'Sim' : 'Não';
+    return Api.valoresPlanilha(v, form);
+  }
+  async function ajustarRegistrosAntigos() {
+    if (!S.projeto) return toast('Abra um projeto antes.');
+    let form = S.form; try { const fr = await Api.b.formulario(S.projeto.formulario); if (fr && fr.campos) { form = fr; S.form = fr; } } catch (e) { /* segue com o formulário já aberto */ }
+    if (!form) return toast('Formulário do projeto não carregado.');
+    let linhas; try { linhas = await linhasProjeto(true); } catch (e) { return toast(e.message, 6000); }
+    const itens = linhas.map((l) => ({ uuid: l.uuid, valores: valoresAjustados(l, form) }));
+    let sobra = []; try { sobra = (await Api.b.registrosAjustar(S.projeto.id, { previa: true })).sobrando || []; } catch (e) { return toast(/desconhecida/i.test(e.message) ? 'O servidor ainda não tem esta função. Atualize o Code.gs para a 2.17.' : e.message, 7000); }
+    const LOTE = 200; let reg = 0, cel = 0;
+    try { for (let i = 0; i < itens.length; i += LOTE) { const r = await Api.b.registrosAjustar(S.projeto.id, { simular: true, itens: itens.slice(i, i + LOTE) }); reg += r.registros; cel += r.celulas; } } catch (e) { return toast(e.message, 7000); }
+    if (!reg && !sobra.length) return modal('Ajustar registros antigos', h('p', null, `Os ${fmtN(linhas.length)} registros de ${S.projeto.nome} já estão no formato novo e não há coluna de formulário antigo na planilha.`), [{ texto: 'Entendi', valor: true }]);
+    const ok = await modal('Ajustar registros antigos', h('div', { class: 'ajuste-previa' },
+      h('p', null, `Projeto ${S.projeto.nome}: ${fmtN(linhas.length)} registros na planilha.`),
+      h('ul', { class: 'lista-mud' }, h('li', null, `${fmtN(reg)} ${reg === 1 ? 'registro muda' : 'registros mudam'} (${fmtN(cel)} células): texto no lugar de código e nada em branco ("NA" em número, "Não se aplica" em escolha).`),
+        h('li', null, sobra.length ? `${sobra.length} ${sobra.length === 1 ? 'coluna sai' : 'colunas saem'} da planilha: ${sobra.join(', ')}.` : 'Nenhuma coluna sai da planilha.')),
+      h('p', { class: 'dica' }, 'Antes de gravar, o servidor guarda uma cópia da planilha na pasta Backup. Validação, pagamento, fotos e coordenadas não são alterados.')),
+      [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Ajustar agora', valor: true }]);
+    if (!ok) return;
+    try {
+      let copia = '', r2 = 0, c2 = 0, tiradas = [];
+      for (let i = 0; i < Math.max(1, itens.length); i += LOTE) { const ultimo = i + LOTE >= itens.length; const r = await Api.b.registrosAjustar(S.projeto.id, { itens: itens.slice(i, i + LOTE), semCopia: i > 0, remover: ultimo ? sobra : [] }); copia = copia || r.copia || ''; r2 += r.registros; c2 += r.celulas; tiradas = tiradas.concat(r.retiradas || []); }
+      delete S.linhas[S.projeto.id];
+      await modal('Ajuste feito', h('div', null, h('p', null, `${fmtN(r2)} registros ajustados (${fmtN(c2)} células) e ${tiradas.length} ${tiradas.length === 1 ? 'coluna retirada' : 'colunas retiradas'}.`), copia ? h('p', { class: 'dica' }, `Cópia guardada: ${copia}.`) : null), [{ texto: 'Entendi', valor: true }]);
+    } catch (e) { await modal('Ajuste não concluído', h('p', null, e.message), [{ texto: 'Entendi', valor: true }]); }
   }
   async function telaFichaServidor(uuidR) {
     const form = S.form;
@@ -5041,5 +5080,6 @@
   }
 
   window.__app = { S, Store, Api, sincronizar, proximoCodigo, marcarQuadras, conferirEnvio }; // usados pelos testes de estresse
+  Api.ganchos.form = () => S.form; Api.ganchos.estado = estadoCampos; // 2.17: a troca entre o formato de dentro e o da planilha fica toda na Api
   iniciar().catch((e) => { $app.replaceChildren(h('div', { class: 'login' }, h('div', { class: 'aviso' }, 'Erro ao iniciar: ' + e.message), h('button', { class: 'btn', onclick: () => sair(true) }, 'Voltar ao login'))); });
 })();

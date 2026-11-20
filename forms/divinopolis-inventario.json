@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 14,
+ "versao": 15,
  "campos": [
   {
    "armazenar": "text",
@@ -396,14 +396,6 @@
    "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
-   "armazenar": "bool",
-   "nome": "Tronco paralelo à fiação",
-   "rotulo": "Tronco paralelo à fiação (formulário anterior)",
-   "tipo": "bool",
-   "ajuda": "O tronco ou um galho principal sobe junto da rede, na mesma direção dos fios.",
-   "legado": true
-  },
-  {
    "armazenar": "text",
    "nome": "Tronco paralelo a fiacao eletrica",
    "rotulo": "Tronco paralelo à fiação elétrica aérea?",
@@ -418,7 +410,12 @@
      "t": "Sim"
     }
    ],
-   "ajuda": "O tronco ou um galho principal sobe junto da rede, na mesma direção dos fios. Sem fiação aérea, a pergunta não aparece."
+   "ajuda": "O tronco ou um galho principal sobe junto da rede, na mesma direção dos fios. Sem fiação aérea, a pergunta não aparece.",
+   "vazioSe": {
+    "campo": "Fiação ausente",
+    "valor": true,
+    "grava": "Não"
+   }
   },
   {
    "armazenar": "bool",
@@ -473,14 +470,6 @@
    "rotulo": "Danos por podas",
    "tipo": "bool",
    "ajuda": "Cortes mal feitos, lascas ou tocos deixados por podas anteriores."
-  },
-  {
-   "armazenar": "bool",
-   "nome": "Galhos secos, podres ou com risco de queda",
-   "rotulo": "Galhos secos, podres ou com risco de queda",
-   "tipo": "bool",
-   "ajuda": "Galhos mortos, ocos, rachados ou pendurados.",
-   "legado": true
   },
   {
    "armazenar": "bool",
@@ -639,50 +628,10 @@
   },
   {
    "armazenar": "bool",
-   "nome": "Fungo",
-   "rotulo": "Fungo (formulário anterior)",
-   "tipo": "bool",
-   "ajuda": "Corpos de fungo (orelhas, chapéus) no tronco, nos galhos ou na base.",
-   "legado": true
-  },
-  {
-   "armazenar": "bool",
-   "nome": "Cupim",
-   "rotulo": "Cupim (formulário anterior)",
-   "tipo": "bool",
-   "ajuda": "Galerias de terra no tronco ou cupinzeiro.",
-   "legado": true
-  },
-  {
-   "armazenar": "bool",
-   "nome": "Broca",
-   "rotulo": "Broca (formulário anterior)",
-   "tipo": "bool",
-   "ajuda": "Furos com serragem no tronco ou nos galhos.",
-   "legado": true
-  },
-  {
-   "armazenar": "bool",
    "nome": "Erva-de-passarinho",
    "rotulo": "Erva-de-passarinho",
    "tipo": "bool",
    "ajuda": "Planta parasita presa nos galhos, com folhagem diferente da árvore."
-  },
-  {
-   "armazenar": "bool",
-   "nome": "Doença aparente",
-   "rotulo": "Doença aparente (formulário anterior)",
-   "tipo": "bool",
-   "ajuda": "Manchas nas folhas, cancros ou exsudação (resina, seiva escorrendo) nos ramos.",
-   "legado": true
-  },
-  {
-   "armazenar": "bool",
-   "nome": "Praga aparente",
-   "rotulo": "Praga aparente (formulário anterior)",
-   "tipo": "bool",
-   "ajuda": "Insetos em quantidade nas folhas e ramos: cochonilhas, lagartas, pulgões.",
-   "legado": true
   },
   {
    "armazenar": "bool",
@@ -784,44 +733,6 @@
     }
    ],
    "ajuda": "Nota da árvore inteira. Boa: sem sinais de praga ou doença. Regular: sinais leves ou localizados, sem comprometer a árvore. Ruim: ataque intenso ou generalizado, com comprometimento visível."
-  },
-  {
-   "armazenar": "bool",
-   "nome": "Fitossanidade ausente",
-   "rotulo": "Fitossanidade ausente (formulário anterior)",
-   "tipo": "bool",
-   "ajuda": "Nenhum sinal de praga ou doença.",
-   "legado": true
-  },
-  {
-   "armazenar": "text",
-   "nome": "Principal alvo",
-   "rotulo": "Principal alvo (formulário anterior)",
-   "tipo": "choice",
-   "opcoes": [
-    {
-     "v": "Pessoas",
-     "t": "Pessoas"
-    },
-    {
-     "v": "Carros estacionados",
-     "t": "Carros estacionados"
-    },
-    {
-     "v": "Circulantes da via",
-     "t": "Circulantes da via"
-    },
-    {
-     "v": "Edificação",
-     "t": "Edificação"
-    },
-    {
-     "v": "Outros",
-     "t": "Outros"
-    }
-   ],
-   "ajuda": "Alvo é o que pode ser atingido se a árvore ou uma parte dela cair (ISA). Marque o mais importante dentro da zona do alvo.",
-   "legado": true
   },
   {
    "armazenar": "bool",
@@ -1095,41 +1006,6 @@
    ],
    "expr": "CASE\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+2' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+3' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Muito provavel+4' THEN 'Severo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+2' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+3' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Provavel+4' THEN 'Alto'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+2' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+3' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Pouco provavel+4' THEN 'Médio'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+1' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+2' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+3' THEN 'Baixo'\r\nWHEN  \"Matriz de Prob + Conseq\"  = 'Improvavel+4' THEN 'Baixo'\r\nEND",
    "ajuda": "Calculado pelo app com três respostas: a probabilidade de falha com a de impacto dá a probabilidade; com as consequências dá o risco (matriz da ISA). Alvo, zona, ocupação, proteção, defeito e carga não entram na conta: servem para embasar as três respostas."
-  },
-  {
-   "armazenar": "text",
-   "nome": "Risco nivel 1",
-   "rotulo": "Risco (formulário anterior)",
-   "tipo": "choice",
-   "opcoes": [
-    {
-     "v": "Baixo",
-     "t": "Baixo"
-    },
-    {
-     "v": "Médio",
-     "t": "Médio"
-    },
-    {
-     "v": "Alto",
-     "t": "Alto"
-    },
-    {
-     "v": "Severo",
-     "t": "Severo"
-    }
-   ],
-   "nota": "Avaliação de risco nível 1 (ABNT NBR 16246-3): visual, sem a matriz.",
-   "ajuda": "Avaliação de risco nível 1 (ABNT NBR 16246-3): julgamento visual, sem a matriz de probabilidade e consequências. Usada no cadastro rápido das faces com calçada irregular.",
-   "legado": true
-  },
-  {
-   "armazenar": "text",
-   "nome": "Nivel da avaliacao",
-   "rotulo": "Nível da avaliação de risco (formulário anterior)",
-   "tipo": "text",
-   "ajuda": "Preenchido pelo app (ABNT NBR 16246-3): 1 no cadastro rápido das faces com calçada irregular; 2 no cadastro completo.",
-   "legado": true
   },
   {
    "armazenar": "bool",
@@ -3839,7 +3715,6 @@
      "Interfere veículos": "oculto",
      "Tráfego sem interferência": "oculto",
      "Danos por podas": "oculto",
-     "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
      "Poda de raiz": "oculto",
      "Podas ausente": "oculto",
@@ -3851,13 +3726,7 @@
      "Afloramento da raiz na calçada": "oculto",
      "Raízes ausente": "oculto",
      "Qualidade da copa": "oculto",
-     "Fungo": "oculto",
-     "Cupim": "oculto",
-     "Broca": "oculto",
      "Erva-de-passarinho": "oculto",
-     "Doença aparente": "oculto",
-     "Praga aparente": "oculto",
-     "Fitossanidade ausente": "oculto",
      "Risco": "oculto",
      "Probabilidade de falha": "oculto",
      "Probabilidade de impacto": "oculto",
@@ -3943,7 +3812,6 @@
      "Interfere veículos": "oculto",
      "Tráfego sem interferência": "oculto",
      "Danos por podas": "oculto",
-     "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
      "Poda de raiz": "oculto",
      "Podas ausente": "oculto",
@@ -3956,12 +3824,7 @@
      "Raízes ausente": "oculto",
      "Qualidade da copa": "oculto",
      "Galhos secos ou podres": "oculto",
-     "Fungo": "oculto",
-     "Cupim": "oculto",
-     "Broca": "oculto",
      "Erva-de-passarinho": "oculto",
-     "Doença aparente": "oculto",
-     "Praga aparente": "oculto",
      "Fungo na copa": "oculto",
      "Cupim na copa": "oculto",
      "Broca na copa": "oculto",
@@ -3974,7 +3837,6 @@
      "Cupim nas raízes": "oculto",
      "Pragas nas raízes ausente": "oculto",
      "Fitossanidade": "oculto",
-     "Fitossanidade ausente": "oculto",
      "Probabilidade de falha": "oculto",
      "Probabilidade de impacto": "oculto",
      "Falha+Impacto": "oculto",
@@ -4125,7 +3987,6 @@
      "Interfere veículos": "oculto",
      "Tráfego sem interferência": "oculto",
      "Danos por podas": "oculto",
-     "Galhos secos, podres ou com risco de queda": "oculto",
      "Poda drástica": "oculto",
      "Poda de raiz": "oculto",
      "Podas ausente": "oculto",
@@ -4137,13 +3998,7 @@
      "Afloramento da raiz na calçada": "oculto",
      "Raízes ausente": "oculto",
      "Qualidade da copa": "oculto",
-     "Fungo": "oculto",
-     "Cupim": "oculto",
-     "Broca": "oculto",
      "Erva-de-passarinho": "oculto",
-     "Doença aparente": "oculto",
-     "Praga aparente": "oculto",
-     "Fitossanidade ausente": "oculto",
      "Risco": "oculto",
      "Probabilidade de falha": "oculto",
      "Probabilidade de impacto": "oculto",
@@ -4225,5 +4080,18 @@
    }
   }
  ],
- "marcaVersao": "Galhos secos ou podres"
+ "marcaVersao": "Galhos secos ou podres",
+ "camposRetirados": [
+  "Tronco paralelo à fiação",
+  "Galhos secos, podres ou com risco de queda",
+  "Fungo",
+  "Cupim",
+  "Broca",
+  "Doença aparente",
+  "Praga aparente",
+  "Fitossanidade ausente",
+  "Principal alvo",
+  "Risco nivel 1",
+  "Nivel da avaliacao"
+ ]
 }

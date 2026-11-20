@@ -11,7 +11,7 @@
  */
 
 const PROPS = PropertiesService.getScriptProperties();
-const VERSAO_SCRIPT = '2.16';
+const VERSAO_SCRIPT = '2.17';
 const COLS_USUARIOS = ['login', 'senha', 'nome', 'perfil', 'projeto', 'equipe', 'codigo', 'email', 'ativo', 'senha_hash', 'sal', 'tentativas', 'bloqueado_ate', 'termo_aceito_em', 'criado_em', 'modo_copa', 'termo_versao', 'trajeto', 'ultimo_acesso', 'avaliador_id', 'auxiliar_id', 'indicacao'];
 const COLS_TIMES = ['id', 'nome', 'tipo', 'projeto', 'ativo', 'criado_em'];
 const TIPOS_TIME = ['Próprio', 'Parceiro'];
@@ -43,7 +43,7 @@ const BLOQUEIO_MIN = 15;
 const FUSO = 'America/Sao_Paulo';
 const ITERACOES = 1000;
 const SENHA_MIN = 8;
-const ACOES_ESCRITA = ['registro', 'registro_posicao', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar', 'setores_importar', 'setores_atribuir', 'auditoria_sortear', 'auditoria_conferir', 'medicao_fechar', 'chuva_registrar', 'com_salvar', 'com_resolver', 'com_apagar', 'reserva_pedir', 'reserva_decidir', 'reserva_cancelar'];
+const ACOES_ESCRITA = ['registro', 'registro_posicao', 'registros_ajustar', 'foto', 'validar', 'importar', 'os_salvar', 'os_andamento', 'quadras_importar', 'quadras_marcar', 'trajeto_salvar', 'setores_importar', 'setores_atribuir', 'auditoria_sortear', 'auditoria_conferir', 'medicao_fechar', 'chuva_registrar', 'com_salvar', 'com_resolver', 'com_apagar', 'reserva_pedir', 'reserva_decidir', 'reserva_cancelar'];
 // texto que começaria uma fórmula na planilha vira texto puro
 function seguro(v) { v = v == null ? '' : String(v); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
 function hashToken(t) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'sessao|' + t, Utilities.Charset.UTF_8)); }
@@ -137,6 +137,7 @@ function doPost(e) {
       case 'situacao_meus': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, itens: situacaoMeus(d.projeto, usr) });
       case 'conferir': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json({ ok: true, achados: conferirEnvios(d.projeto, d.uuids, usr) });
       case 'registro_posicao': pode('revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, moverRegistro(d.projeto, d, usr)));
+      case 'registros_ajustar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, ajustarRegistros(d.projeto, d, usr)));
       case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
       case 'quadras_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarQuadras(d.projeto, d.camada, usr)));
       case 'quadras_camada': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaQuadras(d.projeto, d.versao)));
@@ -595,8 +596,25 @@ function conferirEnvios(projetoId, uuids, usr) {
   }
   return out;
 }
+// ---------- 2.17: como a planilha guarda os valores ----------
+// Texto no lugar de código ("Árvore", "Improvável") e nada em branco ("NA" em número, "Não se aplica" em escolha e texto).
+// O app faz a troca na ida e na volta. Aqui o servidor só garante o texto dos campos com código (celular ainda na versão anterior)
+// e desfaz a troca nas contas que ele mesmo faz (painel).
+function curtoOp(t) { const m = String(t == null ? '' : t).match(/^([^(]+?)\s*\((.+)\)\s*$/); return m ? m[1] : String(t == null ? '' : t); }
+function tabCodigos(form) {
+  const t = { texto: {}, codigo: {}, num: {}, campos: {} };
+  (form && form.campos || []).forEach((c) => { t.campos[c.nome] = 1; if (c.tipo === 'number' || c.tipo === 'multinumber' || c.armazenar === 'real' || c.armazenar === 'integer') t.num[c.nome] = 1;
+    if (c.tipo === 'choice' && Array.isArray(c.opcoes) && c.opcoes.length && c.opcoes.every((o) => /^\d+$/.test(String(o.v)))) { t.texto[c.nome] = {}; t.codigo[c.nome] = {}; c.opcoes.forEach((o) => { t.texto[c.nome][String(o.v)] = curtoOp(o.t); t.codigo[c.nome][curtoOp(o.t)] = String(o.v); }); } });
+  return t;
+}
+function linhasDeDentro(form, linhas) { // formato da planilha -> formato das contas (código e vazio); aceita os dois jeitos
+  const t = tabCodigos(form);
+  linhas.forEach((l) => { Object.keys(l).forEach((k) => { if (!t.campos[k]) return; const v = l[k]; if (v === 'Não se aplica' || (v === 'NA' && t.num[k])) l[k] = ''; else if (t.codigo[k] && typeof v === 'string' && t.codigo[k][v] != null) l[k] = t.codigo[k][v]; }); });
+  return linhas;
+}
 function salvarRegistro(projetoId, linha, usr) {
   if (!linha || !linha.uuid) throw new Error('Registro sem identificador.');
+  try { const tc = tabCodigos(lerFormulario(projeto(projetoId).formulario)); Object.keys(tc.texto).forEach((c) => { if (c in linha && tc.texto[c][String(linha[c])] != null) linha[c] = tc.texto[c][String(linha[c])]; }); } catch (e) { /* sem formulário: grava como veio */ }
   COLS_SISTEMA.forEach((c) => delete linha[c]); // o aparelho não escreve a validação
   Object.keys(linha).forEach((k) => { if (/ link$/.test(k) && linha[k] && !/^https:\/\/drive\.google\.com\//.test(String(linha[k]))) linha[k] = ''; });
   if (linha.atualizado_em && new Date(linha.atualizado_em) > new Date(Date.now() + 10 * 60000)) throw new Error('Data do aparelho adiantada. Acerte a data e a hora do celular e envie de novo.');
@@ -694,6 +712,41 @@ function moverRegistro(projetoId, d, usr) {
     try { CacheService.getScriptCache().remove('painel:' + projetoId + ':cliente'); CacheService.getScriptCache().remove('painel:' + projetoId + ':todos'); } catch (e) { /* segue */ }
     auditar(usr.login, 'registro_posicao', projetoId, String(d.uuid) + ': ' + (Math.round(dist * 10) / 10) + ' m');
     return { atualizado: true, dist: Math.round(dist * 10) / 10, lat: lat, lon: lon, quadra: novo.quadra != null ? novo.quadra : atual.quadra || '', face: novo.face != null ? novo.face : atual.face || '', setor: novo.setor != null ? novo.setor : atual.setor || '' };
+  } finally { lock.releaseLock(); }
+}
+// 2.17: ajuste dos registros antigos, pedido pela tela de Formulários (só administrador). O app calcula o que muda e mostra antes;
+// aqui o servidor guarda uma cópia da planilha, grava as células pedidas (coluna por coluna, de uma vez) e retira as colunas de
+// formulário antigo. Só sai coluna que não é do formulário atual nem do sistema.
+const COLS_FIXAS = ['uuid', 'projeto', 'equipe', 'usuario', 'criado_em', 'atualizado_em', 'concluido_em', 'latitude', 'longitude', 'precisao_gps_m', 'endereco_aprox', 'bairro_aprox', 'ponto_ajustado', 'ponto_dist_m', 'quadra', 'face', 'setor', 'historico', 'sensores_foto', 'altura_dist_m', 'altura_ang_base', 'altura_ang_topo', 'origem'];
+function colunasDoRegistro(form) { const m = {}; COLS_FIXAS.concat(COLS_SISTEMA, COLS_INTERNAS, COLS_DUPLA).forEach((c) => { m[c] = 1; }); (form.campos || []).forEach((c) => { m[c.nome] = 1; if (c.tipo === 'photo') m[c.nome + ' link'] = 1; }); return m; }
+function ajustarRegistros(projetoId, d, usr) {
+  const p = projeto(projetoId); const form = lerFormulario(p.formulario); const fica = colunasDoRegistro(form);
+  const itens = Array.isArray(d.itens) ? d.itens.slice(0, 20000) : []; const remover = (Array.isArray(d.remover) ? d.remover : []).map(String);
+  remover.forEach((c) => { if (fica[c] || /^altura_|_em$|_id$/.test(c)) throw new Error('A coluna "' + c + '" é do formulário atual ou do sistema e não pode ser retirada.'); });
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = planilha(projetoId); let cab = cabecalho(sh, []); const n = sh.getLastRow() - 1;
+    // colunas da planilha que não são do formulário atual nem do sistema: o app mostra a lista antes de pedir a retirada
+    const sobrando = cab.filter((c) => c !== '' && !fica[c]);
+    if (d.previa) return { sobrando: sobrando, registros: Math.max(0, n) };
+    let copia = '';
+    if (!d.semCopia && !d.simular) { try { const agora = Utilities.formatDate(new Date(), FUSO, 'yyyy-MM-dd HH:mm'); copia = DriveApp.getFileById(p.planilha_id).makeCopy(p.nome + ' - antes do ajuste 2.17 ' + agora, pastaBackup()).getName(); } catch (e) { throw new Error('Não consegui guardar a cópia da planilha antes do ajuste (' + e.message + '). Nada foi alterado.'); } }
+    let celulas = 0, linhasM = 0;
+    if (n > 0 && itens.length) {
+      const cols = {}; itens.forEach((it) => { Object.keys(it.valores || {}).forEach((c) => { cols[c] = 1; }); }); const nomes = Object.keys(cols);
+      nomes.forEach((c) => { if (!fica[c]) throw new Error('A coluna "' + c + '" não é do formulário atual.'); if (COLS_SISTEMA.indexOf(c) >= 0 || COLS_FIXAS.indexOf(c) >= 0 || COLS_DUPLA.indexOf(c) >= 0 || COLS_INTERNAS.indexOf(c) >= 0) throw new Error('O ajuste não mexe na coluna "' + c + '".'); });
+      if (d.simular) nomes.forEach((c) => { if (cab.indexOf(c) < 0) throw new Error('simular: coluna nova ' + c); }); else cab = cabecalho(sh, nomes);
+      const uu = sh.getRange(2, cab.indexOf('uuid') + 1, n, 1).getValues().map((x) => String(x[0])); const pos = {}; uu.forEach((u, i) => { pos[u] = i; });
+      const dados = {}; nomes.forEach((c) => { dados[c] = sh.getRange(2, cab.indexOf(c) + 1, n, 1).getValues(); }); const mexidas = {};
+      itens.forEach((it) => { const k = pos[String(it.uuid)]; if (k == null) return; let m = 0; Object.keys(it.valores || {}).forEach((c) => { const v = celula(it.valores[c]); if (String(dados[c][k][0]) !== String(v)) { dados[c][k] = [v]; mexidas[c] = 1; celulas++; m = 1; } }); linhasM += m; });
+      if (!d.simular) Object.keys(mexidas).forEach((c) => sh.getRange(2, cab.indexOf(c) + 1, n, 1).setValues(dados[c]));
+    }
+    if (d.simular) return { registros: linhasM, celulas: celulas, sobrando: sobrando.filter((c) => remover.indexOf(c) >= 0), simulado: true };
+    const tiradas = [];
+    remover.forEach((c) => { const cb = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String); const i = cb.indexOf(c); if (i >= 0) { sh.deleteColumn(i + 1); tiradas.push(c); } });
+    marcarMudanca(projetoId); try { CacheService.getScriptCache().remove('painel:' + projetoId + ':cliente'); CacheService.getScriptCache().remove('painel:' + projetoId + ':todos'); } catch (e) { /* segue */ }
+    auditar(usr.login, 'registros_ajustar', projetoId, linhasM + ' registro(s), ' + celulas + ' célula(s), colunas retiradas: ' + (tiradas.join(', ') || 'nenhuma'));
+    return { registros: linhasM, celulas: celulas, retiradas: tiradas, copia: copia };
   } finally { lock.releaseLock(); }
 }
 function validar(projetoId, itens, usr) {
@@ -802,7 +855,7 @@ function painel(projetoId, usr) {
   const cache = CacheService.getScriptCache(); const em = cache.get(chave);
   if (em) return JSON.parse(em);
   const p = projeto(projetoId); const form = lerFormulario(p.formulario);
-  let linhas = listarPagina(projetoId, 0, 0, usr).linhas;
+  let linhas = linhasDeDentro(form, listarPagina(projetoId, 0, 0, usr).linhas);
   const out = indicadores(form, linhas, p);
   if (usr.perfil === 'cliente') { // dados das equipes ficam só com a Neofloresta
     delete out.diario; delete out.tempos.porEquipe; delete out.equipes; out.tempos.int = null;
@@ -1575,8 +1628,8 @@ function marcarDia(projetoId, d, usr) {
 function camposProducao(form) {
   const alt = form.campos.find((c) => /altura total/i.test(c.nome)) || form.campos.find((c) => /altura/i.test(c.nome) && c.tipo !== 'photo');
   const foto = form.campos.find((c) => c.tipo === 'photo'); const cod = form.campos.find((c) => c.auto === 'codigo'); const esp = form.campos.find((c) => c.tipo === 'species');
-  const cat = form.campos.find((c) => /categoria/i.test(c.nome) && Array.isArray(c.opcoes)); const cal = {}; if (cat) cat.opcoes.forEach((o) => { if (o && /cal[cç]ada|sem acesso/i.test(String(o.t || o))) cal[String(o.v != null ? o.v : o)] = 1; });
-  const sa = {}; if (cat) cat.opcoes.forEach((o) => { if (o && /sem acesso/i.test(String(o.t || o))) sa[String(o.v != null ? o.v : o)] = 1; }); // só a categoria "Sem acesso" vale por mais de uma face
+  const cat = form.campos.find((c) => /categoria/i.test(c.nome) && Array.isArray(c.opcoes)); const cal = {}; if (cat) cat.opcoes.forEach((o) => { if (o && /cal[cç]ada|sem acesso/i.test(String(o.t || o))) { cal[String(o.v != null ? o.v : o)] = 1; cal[curtoOp(o.t || o)] = 1; } }); // 2.17: a planilha pode trazer o código ou o texto
+  const sa = {}; if (cat) cat.opcoes.forEach((o) => { if (o && /sem acesso/i.test(String(o.t || o))) { sa[String(o.v != null ? o.v : o)] = 1; sa[curtoOp(o.t || o)] = 1; } }); // só a categoria "Sem acesso" vale por mais de uma face
   return { alt: alt && alt.nome, foto: foto && foto.nome, cod: cod && cod.nome, esp: esp && esp.nome, cat: cat && cat.nome, cal: cal, sa: sa };
 }
 const situacaoReg = (l) => (l.validacao === 'Descartado' ? 'Descartada' : l.pagamento ? 'Paga' : l.validacao === 'Validado' ? 'Validada' : l.validacao === 'Devolvido' ? 'Devolvida' : 'Em validação');

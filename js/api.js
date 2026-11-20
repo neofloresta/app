@@ -2,6 +2,45 @@
 const Api = (() => {
   let url = null; let cred = null; let aoExpirar = null;
 
+  // ---------- 2.17: como a planilha guarda os valores ----------
+  // Na planilha: texto no lugar de código ("Árvore", "Improvável") e nada em branco ("NA" em número, "Não se aplica" em escolha e texto).
+  // Por dentro o app continua com os códigos e com vazio. A troca acontece só aqui: na ida (achatar) e na volta (daPlanilha).
+  const NA_NUM = 'NA', NA_TXT = 'Não se aplica';
+  const ganchos = { form: () => null, estado: null }; // o app informa o formulário aberto e a função que diz quais campos estão ocultos
+  const curto = (t) => { const m = String(t == null ? '' : t).match(/^([^(]+?)\s*\((.+)\)\s*$/); return m ? m[1] : String(t == null ? '' : t); };
+  let tabMemo = null;
+  function tabelas(form) {
+    if (!form) return null; const k = form.id + ':' + form.versao; if (tabMemo && tabMemo.k === k) return tabMemo.t;
+    const t = { texto: {}, codigo: {}, tipo: {} };
+    for (const c of form.campos || []) {
+      t.tipo[c.nome] = c.tipo === 'number' || c.tipo === 'multinumber' || c.armazenar === 'real' || c.armazenar === 'integer' ? 'num' : c.tipo;
+      if (c.tipo === 'choice' && (c.opcoes || []).length && c.opcoes.every((o) => /^\d+$/.test(String(o.v)))) { t.texto[c.nome] = {}; t.codigo[c.nome] = {}; for (const o of c.opcoes) { t.texto[c.nome][String(o.v)] = curto(o.t); t.codigo[c.nome][curto(o.t)] = String(o.v); } }
+    }
+    tabMemo = { k, t }; return t;
+  }
+  // ida: valores do registro no formato da planilha
+  function paraPlanilha(l, r, form) {
+    const t = tabelas(form); if (!t) return l; let E = null; try { E = ganchos.estado ? ganchos.estado(form, r.valores || {}) : null; } catch (e) { E = null; }
+    for (const c of form.campos) {
+      if (c.tipo === 'photo') continue; let v = l[c.nome]; const vazio = v === '' || v == null; const oculto = !!(E && E[c.nome] && E[c.nome].oculto);
+      if (c.tipo === 'bool') { if (vazio) l[c.nome] = 0; continue; }
+      if (!vazio && t.texto[c.nome] && t.texto[c.nome][String(v)] != null) { l[c.nome] = t.texto[c.nome][String(v)]; continue; }
+      if (!vazio || !E || c.legado) continue; // sem a regra de ocultos (formulário não carregado), não inventa valor
+      if (c.tipo === 'textarea' || /observa/i.test(c.nome)) continue; // observações podem ficar em branco
+      // pergunta escondida por outra resposta que já responde por ela (ex.: fiação ausente = tronco não está paralelo à fiação)
+      if (oculto && c.vazioSe && (r.valores || {})[c.vazioSe.campo] === c.vazioSe.valor) { l[c.nome] = c.vazioSe.grava; continue; }
+      l[c.nome] = t.tipo[c.nome] === 'num' ? NA_NUM : NA_TXT;
+    }
+    return l;
+  }
+  // volta: uma linha (objeto) ou uma tabela (cab + linhas) da planilha no formato de dentro do app. Aceita os dois jeitos (código ou texto)
+  function valorDeDentro(t, campo, v) { if (v === NA_TXT || (v === NA_NUM && t.tipo[campo] === 'num')) return ''; const m = t.codigo[campo]; return m && typeof v === 'string' && m[v] != null ? m[v] : v; }
+  function daPlanilha(linhas) { const t = tabelas(ganchos.form()); if (!t || !Array.isArray(linhas)) return linhas; for (const l of linhas) { if (!l || typeof l !== 'object') continue; for (const k of Object.keys(l)) if (k in t.tipo) l[k] = valorDeDentro(t, k, l[k]); } return linhas; }
+  function daPlanilhaTab(cab, linhas) { const t = tabelas(ganchos.form()); if (!t || !Array.isArray(linhas) || !Array.isArray(cab)) return linhas; const ks = cab.map((c, i) => (c in t.tipo ? i : -1)).filter((i) => i >= 0); for (const l of linhas) for (const i of ks) l[i] = valorDeDentro(t, cab[i], l[i]); return linhas; }
+
+  // valores de uma linha já no formato de dentro, de volta ao formato da planilha (ajuste dos registros antigos)
+  function valoresPlanilha(valores, form) { const l = {}; for (const c of form.campos) { if (c.tipo === 'photo') continue; let v = valores[c.nome]; if (c.tipo === 'bool') v = v == null || v === '' ? '' : v === true || v === 1 || v === '1' ? 1 : 0; l[c.nome] = v ?? ''; } return paraPlanilha(l, { valores }, form); }
+
   function achatar(r, form) {
     const l = {
       uuid: r.uuid, projeto: r.projeto, equipe: r.equipe, usuario: r.usuario,
@@ -21,7 +60,7 @@ const Api = (() => {
       if (c.tipo === 'photo') { const f = (r.fotos || {})[c.nome]; l[c.nome] = f ? f.nome : ''; l[c.nome + ' link'] = f && f.url ? f.url : ''; }
       else { let v = (r.valores || {})[c.nome]; if (c.tipo === 'bool') v = v == null ? '' : v ? 1 : 0; l[c.nome] = v ?? ''; }
     }
-    return l;
+    return paraPlanilha(l, r, form);
   }
 
   function paraMapa(linhas, campos) { return { cab: campos, linhas: linhas.map((l) => campos.map((c) => l[c] ?? '')) }; }
@@ -94,7 +133,7 @@ const Api = (() => {
     async reservar() { return null; }, // na demonstração só existe um aparelho
     async listar(projeto) {
       const b = await this.base(); const p = b.projetos.find((x) => x.id === projeto); const form = b.formularios[p.formulario];
-      return (await Store.registros(projeto)).filter((r) => r.status !== 'rascunho').map((r) => Object.assign(achatar(r, form), b.validacao[r.uuid] || { validacao: 'Pendente' }));
+      return daPlanilha((await Store.registros(projeto)).filter((r) => r.status !== 'rascunho').map((r) => Object.assign(achatar(r, form), b.validacao[r.uuid] || { validacao: 'Pendente' })));
     },
     async mapa(projeto, campos) { return paraMapa(await this.listar(projeto), campos); },
     async listarTudo(projeto) { return this.listar(projeto); },
@@ -197,16 +236,16 @@ const Api = (() => {
     async registro(projeto, linha) { return chamar('registro', { projeto, linha }); },
     // faixa exclusiva de códigos para este aparelho. Servidor antigo (sem a ação): devolve null e o app usa a sequência local
     async reservar(projeto, prefixo, campo, qtd, minimo) { try { const j = await chamar('reservar', { projeto, prefixo, campo, qtd, minimo }); return { ini: j.ini, fim: j.fim }; } catch (e) { if (/desconhecida/i.test(e.message)) return null; throw e; } },
-    async listar(projeto) { return (await chamar('listar', { projeto })).linhas; },
+    async listar(projeto) { return daPlanilha((await chamar('listar', { projeto })).linhas); },
     // só as colunas pedidas, em lista compacta (mapa e sequência do código). Servidor antigo: cai no listar completo.
     async mapa(projeto, campos) {
-      try { const j = await chamar('mapa', { projeto, campos }); return { cab: j.cab, linhas: j.linhas, agora: j.agora || '' }; } catch (e) {
+      try { const j = await chamar('mapa', { projeto, campos }); return { cab: j.cab, linhas: daPlanilhaTab(j.cab, j.linhas), agora: j.agora || '' }; } catch (e) {
         if (!/desconhecida/i.test(e.message)) throw e;
         return paraMapa(await this.listar(projeto), campos);
       }
     },
     // mapa ao vivo: só as linhas gravadas depois de "desde" (carimbo do servidor). Servidor antigo: devolve null e o app não atualiza sozinho
-    async mapaNovos(projeto, campos, desde) { try { const j = await chamar('mapa_novos', { projeto, campos, desde }); return { linhas: j.linhas, agora: j.agora }; } catch (e) { if (/desconhecida/i.test(e.message)) return null; throw e; } },
+    async mapaNovos(projeto, campos, desde) { try { const j = await chamar('mapa_novos', { projeto, campos, desde }); return { linhas: daPlanilhaTab(j.cab || campos, j.linhas), agora: j.agora }; } catch (e) { if (/desconhecida/i.test(e.message)) return null; throw e; } },
     // pontos de comunicação (aviso solto no mapa). Servidor antigo: lista vazia
     async comListar(projeto, desde) { try { const j = await chamar('com_listar', { projeto, desde: desde || '' }); return { itens: j.itens || [], agora: j.agora }; } catch (e) { if (/desconhecida/i.test(e.message)) return null; throw e; } },
     async comSalvar(projeto, com) { return chamar('com_salvar', { projeto, com }); },
@@ -222,7 +261,7 @@ const Api = (() => {
       const N = 4000; let out = [];
       for (let de = 0; ; de += N) {
         const j = await chamar('listar', { projeto, de, n: N });
-        out = out.concat(j.linhas); if (progresso) progresso(out.length, j.total);
+        out = out.concat(daPlanilha(j.linhas)); if (progresso) progresso(out.length, j.total);
         if ('proximo' in j) { if (j.proximo == null) break; de = j.proximo - N; continue; }
         if (j.total == null || j.linhas.length < N || de + N >= j.total) break; // servidor antigo devolve tudo de uma vez
       }
@@ -232,6 +271,7 @@ const Api = (() => {
     async situacaoMeus(projeto) { return (await chamar('situacao_meus', { projeto })).itens; },
     async fotoVer(projeto, id) { const j = await chamar('foto_ver', { projeto, id }); const bin = atob(j.dados); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return new Blob([u8], { type: j.mime }); },
     async validar(projeto, itens) { return chamar('validar', { projeto, itens }); },
+    async registrosAjustar(projeto, dados) { return chamar('registros_ajustar', Object.assign({ projeto }, dados)); },
     async registroPosicao(projeto, dados) { return chamar('registro_posicao', Object.assign({ projeto }, dados)); },
     async importar(projeto, linhas) { return chamar('importar', { projeto, linhas }); },
     async auditar(tipo, alvo, detalhe) { return chamar('auditar', { tipo, alvo, detalhe }).catch(() => {}); },
@@ -285,7 +325,7 @@ const Api = (() => {
   };
 
   return {
-    achatar,
+    achatar, ganchos, daPlanilha, curto, valoresPlanilha,
     configurar(u) { url = u || null; },
     get demo() { return !url; },
     get servidor() { return url; },

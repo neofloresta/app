@@ -16,7 +16,7 @@ class Sheet { constructor(n) { this.n = n; this.d = []; }
   getLastRow() { return this.d.length; } getLastColumn() { return Math.max(0, ...this.d.map((l) => l.length)); }
   getDataRange() { return new Range(this, 1, 1, this.getLastRow(), this.getLastColumn()); }
   getRange(r, c, nr = 1, nc = 1) { return new Range(this, r, c, nr, nc); }
-  setFrozenRows() {} deleteRow(r) { this.d.splice(r - 1, 1); } }
+  setFrozenRows() {} deleteRow(r) { this.d.splice(r - 1, 1); } deleteColumn(c) { this.d.forEach((l) => { if (l.length >= c) l.splice(c - 1, 1); }); } }
 const sss = {};
 const SpreadsheetApp = { create(n) { const id = nid(); const s = { id, sheets: [new Sheet('Planilha1')], getId: () => id, getSheets() { return this.sheets; }, getSheetByName(n) { return this.sheets.find((x) => x.n === n); }, insertSheet(n) { const x = new Sheet(n); this.sheets.push(x); return x; } }; sss[id] = s; files[id] = { name: n, moveTo() {}, makeCopy(nm, pasta) { const c = mkFile(nm, ''); c.pai = pasta; pasta.files.push(c); const orig = sss[id]; const cp = SpreadsheetApp.create(nm); delete sss[cp.id]; cp.sheets = orig.sheets.map((sh) => { const x = new Sheet(sh.n); x.d = sh.d.map((l) => l.slice()); return x; }); cp.getId = () => c.id; sss[c.id] = cp; return c; } }; return s; }, openById(id) { return sss[id]; } };
 function mkFolder(name) { const id = nid(); const f = { id, name, kids: [], files: [], getId: () => id, getUrl: () => 'https://drive/' + id,
