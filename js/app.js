@@ -1,6 +1,6 @@
 // Neofloresta Inventário: app de campo do Inventário da Arborização Urbana, da Neofloresta
 (() => {
-  const VERSAO = '2.17.1';
+  const VERSAO = '2.17.2';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -841,7 +841,8 @@
     async carregar() {
       if (!this.ativo() || !navigator.onLine || S.expirada) return false;
       try {
-        const antes = JSON.stringify(((this.dados || {}).pedidos || []).map((x) => x.id + x.situacao)); const r = await Api.b.reservaListar(S.projeto.id); this.lido = Date.now(); if (!r) return false;
+        const antes = JSON.stringify(((this.dados || {}).pedidos || []).map((x) => x.id + x.situacao)); const seq = this.seq = (this.seq || 0) + 1; const r = await Api.b.reservaListar(S.projeto.id); this.lido = Date.now(); if (!r) return false;
+        if (seq !== this.seq) return false; // já saiu uma leitura mais nova: esta resposta, mais antiga, não passa por cima
         this.dados = r; this.dono = this.chave(); await Store.set(this.chave(), r).catch(() => {}); return antes !== JSON.stringify(r.pedidos.map((x) => x.id + x.situacao));
       } catch (e) { return false; }
     },
@@ -1123,27 +1124,30 @@
   // ---------- Setores censitários ----------
   // camada do IBGE importada pela coordenação; cada setor tem a equipe responsável (aba Setores do projeto)
   const Setores = {
-    async camada() {
-      if (!S.projeto) return null; const k = 'st:' + S.projeto.id; let c = await Store.get(k);
-      if (!Api.demo && navigator.onLine && !S.expirada && (!S.stEm || S.stEm.p !== S.projeto.id || Date.now() - S.stEm.t > 600000)) {
-        try { const j = await Api.b.setoresCamada(S.projeto.id, c && c.versao); S.stEm = { p: S.projeto.id, t: Date.now() }; if (j.semCamada) { c = null; await Store.del(k); } else if (!j.igual) { c = { versao: j.versao, camada: JSON.parse(j.camada) }; await Store.set(k, c); } } catch (e) { /* sem conexão: cópia do aparelho */ }
-      }
-      if (!c) { S.stIdx = null; return null; }
-      if (!S.stIdx || S.stIdx.v !== c.versao || S.stIdx.p !== S.projeto.id) S.stIdx = { p: S.projeto.id, v: c.versao, idx: Quadras.indice(c.camada.setores, 0.01) };
+    // 2.17.2: com `rapido`, quem chama não espera o servidor quando o aparelho já tem a resposta guardada (mesmo vencida):
+    // devolve a cópia e atualiza por trás. Era isso que segurava o "Concluir" e a abertura do cadastro por vários segundos.
+    // "Sem camada" também fica guardado, para o projeto sem setores não consultar o servidor a cada árvore.
+    async camada(rapido) {
+      if (!S.projeto) return null; const pj = S.projeto.id; const k = 'st:' + pj; let c = await Store.get(k);
+      const vencida = !Api.demo && navigator.onLine && !S.expirada && (!S.stEm || S.stEm.p !== pj || Date.now() - S.stEm.t > 600000);
+      const buscar = async (atual) => { try { const j = await Api.b.setoresCamada(pj, atual && atual.versao); S.stEm = { p: pj, t: Date.now() }; if (j.semCamada) { atual = { sem: true }; await Store.set(k, atual); } else if (!j.igual) { atual = { versao: j.versao, camada: JSON.parse(j.camada) }; await Store.set(k, atual); } } catch (e) { /* sem conexão: cópia do aparelho */ } return atual; };
+      if (vencida) { if (rapido && c) { S.stEm = { p: pj, t: Date.now() }; buscar(c); } else c = await buscar(c); }
+      if (!c || c.sem) { S.stIdx = null; return null; }
+      if (!S.stIdx || S.stIdx.v !== c.versao || S.stIdx.p !== pj) S.stIdx = { p: pj, v: c.versao, idx: Quadras.indice(c.camada.setores, 0.01) };
       return c.camada;
     },
-    async situacao(forcar) {
-      const k = 'stsit:' + S.projeto.id; let l = await Store.get(k);
-      if (!Api.demo && navigator.onLine && !S.expirada && (forcar || !l || !S.stSitEm || S.stSitEm.p !== S.projeto.id || Date.now() - S.stSitEm.t > 120000)) {
-        try { l = await Api.b.setoresSituacao(S.projeto.id); await Store.set(k, l); S.stSitEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { /* sem conexão */ }
-      }
+    async situacao(forcar, rapido) {
+      const pj = S.projeto.id; const k = 'stsit:' + pj; let l = await Store.get(k);
+      const vencida = !Api.demo && navigator.onLine && !S.expirada && (forcar || !l || !S.stSitEm || S.stSitEm.p !== pj || Date.now() - S.stSitEm.t > 120000);
+      const buscar = async () => { try { const n = await Api.b.setoresSituacao(pj); await Store.set(k, n); S.stSitEm = { p: pj, t: Date.now() }; return n; } catch (e) { return null; /* sem conexão */ } };
+      if (vencida) { if (rapido && l && !forcar) { S.stSitEm = { p: pj, t: Date.now() }; buscar(); } else l = (await buscar()) || l; }
       return l || [];
     },
     // setor do ponto e se é da minha equipe; null quando o projeto não tem setores
     async doPonto(lon, lat) {
       try {
-        if (!(await this.camada())) return null;
-        const q = S.stIdx.idx.achar(+lon, +lat, 0); const sit = await this.situacao();
+        if (!(await this.camada(true))) return null;
+        const q = S.stIdx.idx.achar(+lon, +lat, 0); const sit = await this.situacao(false, true);
         const meus = sit.filter((x) => x.equipe && x.equipe === minhaEquipe()).map((x) => x.numero);
         return { n: q ? q.n : '', temMeus: meus.length > 0, fora: perfil() === 'coletor' && meus.length > 0 && !(q && meus.includes(q.n)) };
       } catch (e) { return null; }
@@ -1909,7 +1913,7 @@
       recalcular(r);
       anotarHistorico();
       if (!r.concluido_em) r.concluido_em = agoraISO();
-      if (r.lat != null && r.lat !== '') { const st = await Promise.race([Setores.doPonto(r.lon, r.lat).catch(() => null), new Promise((ok) => setTimeout(() => ok(null), 2500))]); if (st) { r.setor = st.n; if (perfil() === 'coletor') r.foraSetor = st.fora; } } // com sinal fraco não segura o "Salvando...": o setor é conferido em até 2,5 s
+      if (r.lat != null && r.lat !== '') { const st = await Promise.race([Setores.doPonto(r.lon, r.lat).catch(() => null), new Promise((ok) => setTimeout(() => ok(null), 2500))]); if (st) { r.setor = st.n; if (perfil() === 'coletor') r.foraSetor = st.fora; } } // o setor sai da cópia do aparelho, sem esperar o servidor; o limite de 2,5 s cobre só a primeira vez, quando ainda não há cópia
       if (r.validacao === 'Devolvido') r.validacao = 'Corrigido';
       S.editando.delete(r.uuid);
       r.status = 'pendente'; r.gpsAuto = false; r.atualizado_em = agoraISO(); delete r.erroSync;
@@ -2250,7 +2254,7 @@
       const prov = { id: 'enviando-' + q.n, quadra: String(q.n), situacao: 'Aguardando', login: S.sessao.u, enviando: true };
       Reservas.dados.pedidos = (Reservas.dados.pedidos || []).concat([prov]); desenharQuadras(); pintarAvisoPedidos(true);
       toast(`Quadra ${q.n} pedida. Ela fica em laranja no mapa até a coordenação responder.`, 5000);
-      const desfaz = (msg) => { if (Reservas.dados) Reservas.dados.pedidos = (Reservas.dados.pedidos || []).filter((x) => x !== prov); desenharQuadras(); pintarAvisoPedidos(true); toast(msg, 7000, null, true); };
+      const desfaz = (msg) => { if (Reservas.dados) Reservas.dados.pedidos = (Reservas.dados.pedidos || []).filter((x) => x !== prov); desenharQuadras(); pintarAvisoPedidos(true); toast(msg, 7000, null, true); Reservas.carregar().then(() => { pintarAvisoPedidos(true); desenharQuadras(); }); };
       try {
         const r = await Api.b.reservaPedir(S.projeto.id, [q.n]);
         if (r.recusadas && r.recusadas.length) return desfaz(`Quadra ${q.n}: ${r.recusadas[0].motivo}`);
@@ -2262,12 +2266,12 @@
       if (x.enviando) return toast('O pedido ainda está sendo enviado. Tente cancelar em alguns segundos.', 5000);
       Reservas.dados.pedidos = Reservas.dados.pedidos.filter((y) => y !== x); desenharQuadras(); pintarAvisoPedidos(true); toast('Pedido cancelado.');
       try { await Api.b.reservaCancelar(S.projeto.id, x.id); Reservas.carregar().then(() => { pintarAvisoPedidos(); desenharQuadras(); }); }
-      catch (e) { if (Reservas.dados) Reservas.dados.pedidos = (Reservas.dados.pedidos || []).concat([x]); desenharQuadras(); pintarAvisoPedidos(true); toast(`O cancelamento da quadra ${q.n} não chegou ao servidor: ${e.message || 'sem resposta'}. Tente de novo.`, 7000, null, true); }
+      catch (e) { if (Reservas.dados) Reservas.dados.pedidos = (Reservas.dados.pedidos || []).filter((y) => y.id !== x.id).concat([x]); desenharQuadras(); pintarAvisoPedidos(true); toast(`O cancelamento da quadra ${q.n} não chegou ao servidor: ${e.message || 'sem resposta'}. Tente de novo.`, 7000, null, true); }
     }
     // coordenação: pedidos esperando, na ordem de chegada
-    async function abrirPedidos() {
+    async function abrirPedidos(semLer) {
       document.querySelectorAll('.veu').forEach((v) => v.remove()); mapa.closePopup();
-      await Reservas.carregar(); pintarBtPed(); const ag = Reservas.aguardando();
+      if (semLer !== true) await Reservas.carregar(); pintarBtPed(); const ag = Reservas.aguardando();
       const porQuadra = {}; ag.forEach((x) => { porQuadra[x.quadra] = (porQuadra[x.quadra] || 0) + 1; });
       const limparFoco = () => { focoPed = null; document.querySelectorAll('.ped-foco').forEach((e) => e.remove()); };
       limparFoco(); desenharQuadras();
@@ -2275,8 +2279,17 @@
       const decidir = async (x, dec) => {
         let motivo = '';
         if (dec === 'Recusado') { const ta = h('input', { class: 'entrada', placeholder: 'Motivo (opcional)', maxlength: 200 }); const ok = await modal('Recusar o pedido', h('div', null, h('p', null, `${x.nome}, quadra ${x.quadra}`), ta), [{ texto: 'Voltar', classe: 'sec', valor: false }, { texto: 'Recusar', valor: true }]); if (!ok) return abrirPedidos(); motivo = ta.value.trim(); }
-        try { const r = await Api.b.reservaDecidir(S.projeto.id, x.id, dec, motivo); toast(r.situacao === 'Aprovado' ? `Quadra ${x.quadra} reservada para ${x.nome}.` : r.motivo || 'Pedido recusado.', 5000); } catch (e) { toast(e.message || 'Não foi possível decidir.', 6000, null, true); }
-        await Reservas.carregar(); await refaz();
+        // 2.17.2: a decisão aparece na hora (o pedido sai da lista e a quadra muda de cor); o servidor é avisado por trás.
+        // Eram três consultas seguidas antes de a tela responder. Se o servidor recusar ou falhar, a lista volta como o servidor tem.
+        const guard = Reservas.dados ? Reservas.dados.pedidos : null; const qs = qdSit.get(x.quadra); const eqAntes = qs ? qs.equipe : undefined;
+        if (Reservas.dados) Reservas.dados.pedidos = (Reservas.dados.pedidos || []).filter((y) => y.id !== x.id);
+        if (dec === 'Aprovado' && qs && !qs.equipe) qs.equipe = x.equipe || x.nome; // só para a cor no mapa; o valor de verdade vem do servidor logo depois
+        limparFoco(); desenharQuadras(); pintarBtPed(); toast(dec === 'Aprovado' ? `Quadra ${x.quadra} reservada para ${x.nome}.` : `Pedido da quadra ${x.quadra} recusado.`, 4000);
+        abrirPedidos(true); // a lista volta já sem o pedido decidido, sem esperar o servidor
+        const acertar = async () => { await Reservas.carregar(); qdSit = await carregarSitQd(true); desenhar(false); pintarBtPed(); };
+        try { const r = await Api.b.reservaDecidir(S.projeto.id, x.id, dec, motivo); if (dec === 'Aprovado' && r.situacao !== 'Aprovado') toast(`Quadra ${x.quadra}: ${r.motivo || 'o servidor não aprovou o pedido.'}`, 7000, null, true); }
+        catch (e) { if (Reservas.dados && guard) Reservas.dados.pedidos = guard; if (qs) qs.equipe = eqAntes; toast(`A decisão da quadra ${x.quadra} não chegou ao servidor: ${e.message || 'sem resposta'}. Decida de novo.`, 7000, null, true); }
+        acertar();
       };
       const linha = (x) => h('div', { class: 'ped-lin' }, h('b', null, `${x.nome} pediu a quadra ${x.quadra}`), h('small', null, dataAno(x.criado_em) + (porQuadra[x.quadra] > 1 ? ` · ${porQuadra[x.quadra]} pedidos para esta quadra` : '')),
         h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec peq', onclick: () => { document.querySelectorAll('.veu').forEach((v) => v.remove()); const q = qdDados && qdDados.quadras.find((y) => y.n === x.quadra); if (!q) return toast('Quadra ' + x.quadra + ' não está na camada.');
