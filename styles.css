@@ -821,3 +821,9 @@ html { touch-action: pan-x pan-y; } /* sem zoom de pinça na página (o mapa tem
 .cam-lado { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 64px; justify-content: center; background: none; border: 0; color: #fff; font: inherit; }
 .cam-lado small { font-size: 13px; }
 .cam-lado .ico { width: 28px; height: 28px; }
+
+/* 2.17: pedidos de quadra visíveis no mapa */
+.qd-reservas { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); z-index: 900; background: #fff; color: var(--tinta, #1C2A30); border: 2px solid #7B1FA2; border-radius: 999px; padding: 6px 14px; font-size: 14px; font-weight: 500; white-space: nowrap; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; box-shadow: 0 2px 6px rgba(0,0,0,.2); pointer-events: none; }
+.qd-reservas.cheio { border-color: #E65100; background: #FFF3E0; }
+.ped-foco { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 950; background: #fff; border: 3px solid #D50000; border-radius: 14px; padding: 10px 14px; display: grid; gap: 8px; justify-items: center; box-shadow: 0 3px 10px rgba(0,0,0,.25); max-width: calc(100% - 24px); }
+.ped-foco b { font-size: 15px; }
