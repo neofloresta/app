@@ -72,6 +72,7 @@
     alvo: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
     cidade: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', balao: '<path d="M5 4h14a2 2 0 012 2v9a2 2 0 01-2 2h-6l-4 4v-4H5a2 2 0 01-2-2V6a2 2 0 012-2z"/><path d="M8 9h8M8 12.5h5"/>', camadas: '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>', selecionar: '<path d="M5 5h4M15 5h4M5 19h4M15 19h4M5 5v4M19 5v4M5 15v4M19 15v4"/><path d="M10 12l2 2 3-4"/>', fechar: '<path d="M6 6l12 12M18 6L6 18"/>',
     ajuda: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
+    imagem: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>', voltar: '<path d="M15 5l-7 7 7 7"/>', mapa: '<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>',
     busca: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>', camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', mais: '<path d="M12 5v14M5 12h14"/>',
     etapas: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>', esq: '<path d="M15 5l-7 7 7 7"/>', dir: '<path d="M9 5l7 7-7 7"/>',
@@ -523,11 +524,13 @@
   async function pedirFotoFace(txt) {
     let foto = null; const prev = h('small', { class: 'dica' }, ' Sem foto ainda.');
     const cam = h('input', { type: 'file', accept: 'image/*', capture: 'environment', class: 'oculto', onchange: async () => { const a = cam.files[0]; if (!a) return; try { foto = await reduzir(a, 1600, 0.75); prev.textContent = ' Foto pronta.'; } catch (e) { toast('Não foi possível ler a foto. Tente de novo.', 4000); } } });
-    const ok = await modal('Foto da face', h('div', null, h('p', null, txt), h('p', { class: 'dica' }, 'Uma foto só, da calçada no sentido do comprimento, mostrando o trecho inteiro.'), h('div', { class: 'campo' }, h('button', { class: 'btn sec', type: 'button', onclick: () => cam.click() }, ico('camera'), 'Tirar foto'), cam, prev)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Encerrar a face', valor: true }]);
-    if (!ok) return null; if (!foto) { toast('Tire a foto da face para encerrar.', 4000); return pedirFotoFace(txt); }
+    const ok = await modal('Foto da face', h('div', null, h('p', null, txt), h('p', { class: 'dica' }, 'Uma foto só, da calçada no sentido do comprimento, mostrando o trecho inteiro.' + (fotoFaceOpcional() ? ' No time da casa a foto é opcional.' : '')), h('div', { class: 'campo' }, h('button', { class: 'btn sec', type: 'button', onclick: async () => { const v = await cameraApp('Foto da face', { sistema: () => cam.click() }); if (v && typeof v !== 'string') { try { foto = await reduzir(v, 1600, 0.75); prev.textContent = ' Foto pronta.'; } catch (e) { toast('Não foi possível ler a foto. Tente de novo.', 4000); } } } }, ico('camera'), 'Tirar foto'), cam, prev)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Encerrar a face', valor: true }]);
+    if (!ok) return null; if (!foto) { if (fotoFaceOpcional()) return 'sem'; toast('Tire a foto da face para encerrar.', 4000); return pedirFotoFace(txt); }
     return foto;
   }
   const exigeFotoFace = () => perfil() === 'coletor';
+  // time da casa (Neofloresta): a foto da face é opcional; no time parceiro (modo quadra) continua obrigatória
+  const fotoFaceOpcional = () => { const u = S.sessao && S.sessao.usuario; return !(u && u.modoQuadra); };
   async function encerrarFace(minhas) {
     const idx = S.qdIdx; const achar = (id) => { const k = id.lastIndexOf('-'); const q = idx.porN.get(id.slice(0, k)); const f = q && q.f && q.f.find((y) => y.i === id.slice(k + 1)); return q && f ? { q, f, id } : null; };
     let fs = minhas.map((x) => achar(x.numero)).filter(Boolean);
@@ -542,7 +545,7 @@
       [{ texto: 'Cancelar', classe: 'sec', valor: null }, { texto: 'Levantada, sem árvores (foto)', classe: 'sec', valor: 'sem' }, { texto: 'Sim, levantada', valor: 'ok' }]);
     if (v === 'sem') return iniciarCalcadaFace(alvo.q, alvo.f);
     if (v !== 'ok') return;
-    let fotoBlob = null; if (exigeFotoFace()) { if (somenteVer()) return; fotoBlob = await pedirFotoFace(`Face ${alvo.f.i} da quadra ${alvo.q.n} (${alvo.f.r}).`); if (!fotoBlob) return; }
+    let fotoBlob = null; if (exigeFotoFace()) { if (somenteVer()) return; fotoBlob = await pedirFotoFace(`Face ${alvo.f.i} da quadra ${alvo.q.n} (${alvo.f.r}).`); if (!fotoBlob) return; if (fotoBlob === 'sem') fotoBlob = null; }
     try { const r = await marcarQuadras([Object.assign({ tipo: 'face', numero: alvo.id, situacao: 'Levantada', rua: alvo.f.r }, fotoBlob ? { fotoBlob } : {})]); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Face encerrada. Vai quando houver rede.' : `Face ${alvo.f.i} da quadra ${alvo.q.n} encerrada.`, 3500); pintarEncerrarFace(); } catch (e) { toast(e.message, 5000); }
   }
   async function pintarOSEquipe() {
@@ -1035,7 +1038,7 @@
     const cam = h('input', { type: 'file', accept: 'image/*', capture: 'environment', class: 'oculto', onchange: async () => { const a = cam.files[0]; if (!a) return; try { foto = await reduzir(a, 1280, 0.7); prev.textContent = ' Foto pronta.'; } catch (e) { toast('Não foi possível ler a foto. Tente de novo.', 4000); } } });
     const obs = h('textarea', { class: 'entrada', rows: 2, placeholder: 'Opcional. Ex.: chuva forte, paramos na Rua Goiás' }); obs.value = obs0 || '';
     const ok = await modal('Parada por chuva', h('div', null, h('p', { class: 'dica' }, 'Registra a hora da parada com uma foto do tempo. A coordenação confere e decide se o dia entra na média da semana.'),
-      h('div', { class: 'campo' }, h('button', { class: 'btn sec', type: 'button', onclick: () => cam.click() }, 'Tirar foto'), cam, prev), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Observação'), obs)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Registrar parada', valor: true }]);
+      h('div', { class: 'campo' }, h('button', { class: 'btn sec', type: 'button', onclick: async () => { const v = await cameraApp('Foto do tempo', { sistema: () => cam.click() }); if (v && typeof v !== 'string') { try { foto = await reduzir(v, 1280, 0.7); prev.textContent = ' Foto pronta.'; } catch (e) { toast('Não foi possível ler a foto. Tente de novo.', 4000); } } } }, 'Tirar foto'), cam, prev), h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Observação'), obs)), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Registrar parada', valor: true }]);
     if (!ok) return; if (!foto) { toast('Tire a foto do tempo para registrar a parada.', 4000); return paradaChuva(obs.value); }
     const fila = (await Store.get(chuvaChave())) || []; fila.push({ quando: agoraISO(), obs: obs.value.trim(), foto, projeto: S.projeto.id }); await Store.set(chuvaChave(), fila);
     toast(navigator.onLine ? 'Parada registrada. Enviando.' : 'Parada registrada. O envio sai quando houver internet.', 4000); enviarChuvas().catch(() => {});
@@ -1348,7 +1351,10 @@
   // preferências de cada login neste aparelho
   // a coordenação define no cadastro do usuário como a dupla mede a copa (4 raios ou área com trena a laser)
   // a copa segue o time do avaliador (definido no servidor): time da casa mede a área direto, time parceiro mede dois raios
+  // time da casa (Neofloresta): em cada árvore o coletor escolhe entre dois raios e área direto; a árvore nova vem no último jeito usado
+  const escolheCopa = () => { const u = S.sessao && S.sessao.usuario; const rg = S.form && (S.form.regras || []).find((x) => x.campo === 'Modo de copa'); return !!(u && perfil() === 'coletor' && u.time && !u.modoQuadra && rg && rg.por && rg.por.raios2 && rg.por.area); };
   async function prefCopa() { const u = S.sessao && S.sessao.usuario; let m = (u && u.modo_copa) || (await Store.get('pref:copa:' + (S.sessao && S.sessao.u))) || 'raios';
+    if (escolheCopa()) { const ult = await Store.get('copa:ult:' + S.sessao.u); if (ult === 'raios2' || ult === 'area') m = ult; }
     if (m === 'raios2' && !(S.form && (S.form.regras || []).some((r) => r.campo === 'Modo de copa' && r.por && r.por.raios2))) m = 'raios'; // formulário antigo, sem os dois raios
     return m; }
   async function telaPreferencias() {
@@ -1361,7 +1367,7 @@
           h('p', { class: 'dica' }, 'As fotos ficam na qualidade original e continuam guardadas no celular depois de enviadas. ' + esp),
           h('button', { class: 'btn sec', onclick: liberarEspaco }, 'Liberar espaço: apagar do celular fotos já confirmadas no servidor há mais de 30 dias')),
         h('div', { class: 'cartao' }, h('h3', null, 'Tela'), chave('Modo Sol (alto contraste)', 'Letras pretas, bordas mais fortes e texto maior, para ler no sol forte.', sol, async (v) => { await Store.set('modoSol', v); document.documentElement.classList.toggle('sol', v); })),
-        S.form && S.form.campos.some((c) => c.auto === 'modocopa') ? h('div', { class: 'cartao' }, h('h3', null, 'Como medir a copa'), h('p', null, copa === 'area' ? 'Área direto, com trena a laser.' : copa === 'raios2' ? 'Dois raios com trena: um ao longo da calçada e outro perpendicular (o app calcula a área).' : '4 raios com trena (o app calcula a área).'), h('p', { class: 'dica' }, 'Definido pelo time da sua equipe.')) : null,
+        S.form && S.form.campos.some((c) => c.auto === 'modocopa') ? h('div', { class: 'cartao' }, h('h3', null, 'Como medir a copa'), h('p', null, escolheCopa() ? 'Em cada árvore você escolhe: 2 raios (o app calcula a área) ou área direto, com trena a laser. A árvore nova vem no último jeito usado.' : copa === 'area' ? 'Área direto, com trena a laser.' : copa === 'raios2' ? 'Dois raios com trena: um ao longo da calçada e outro perpendicular (o app calcula a área).' : '4 raios com trena (o app calcula a área).'), h('p', { class: 'dica' }, 'Definido pelo time da sua equipe.')) : null,
         perfil() === 'coletor' && S.form && S.form.campos.some(ehAltura) ? h('div', { class: 'cartao' }, h('h3', null, 'Altura pelo celular'), h('p', { class: 'dica' }, 'Opcional. A altura digitada à mão continua valendo.'),
           h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: calibrarPasso }, passo ? `Passo: ${numBR(Math.round(passo * 100) / 100)} m (calibrar de novo)` : 'Calibrar o passo'), h('button', { class: 'btn sec', onclick: zerarSensor }, zero != null ? 'Sensor zerado (zerar de novo)' : 'Zerar o sensor de inclinação'))) : null));
   }
@@ -1606,7 +1612,7 @@
       const campos = []; for (let i = 0; i < campos0.length;) { let j = i; while (j < campos0.length && campos0[j].grupo && campos0[j].grupo === campos0[i].grupo) j++; if (j === i) { campos.push(campos0[i]); i++; continue; } const run = campos0.slice(i, j); campos.push(...run.filter((x) => x.c.exclusivo), ...run.filter((x) => !x.c.exclusivo)); i = j; }
       // código, data e equipe numa linha de resumo no topo (não se mexe neles)
       const resumoAuto = campos.filter((x) => x.c.auto === 'codigo' || x.c.auto === 'coletor' || (x.c.agora && x.c.somenteLeitura));
-      const blocos = []; let grupoAtual = null; let chips = null; let nums = null; let fotos = null;
+      const blocos = []; let grupoAtual = null; let chips = null; let nums = null; let fotos = null; let copaPosta = false; const cmCopa = escolheCopa() ? form.campos.find((x) => x.auto === 'modocopa') : null;
       if (resumoAuto.length) blocos.push(h('div', { class: 'resumo-auto' }, resumoAuto.map((x) => { const v = r.valores[x.c.nome]; return h('span', null, x.c.agora ? dataCurta(v) : (v || 'automático')); })));
       for (const { c, grupo } of campos) {
         if (resumoAuto.some((x) => x.c === c)) continue;
@@ -1639,6 +1645,11 @@
         }
         if (c.tipo === 'number' && !c.calculado) {
           chips = fotos = null;
+          // copa: "2 raios" ou "Área", sempre à vista acima das medidas; vale para esta árvore e fica como padrão da próxima
+          if (cmCopa && !copaPosta && /raio de copa|area de copa medida/i.test(norm(c.nome))) {
+            copaPosta = true; nums = null; const atual = r.valores[cmCopa.nome] === 'area' ? 'area' : 'raios2';
+            blocos.push(h('div', { class: 'campo copa-modo', 'data-copa-modo': atual }, h('label', { class: 'rot' }, 'Copa: como medir'), h('div', { class: 'opcoes copa-ops' }, [['raios2', '2 raios'], ['area', 'Área']].map(([v, t]) => h('button', { class: 'op' + (atual === v ? ' sel' : ''), type: 'button', 'data-modo': v, onclick: () => { if (r.valores[cmCopa.nome] === v) return; Store.set('copa:ult:' + S.sessao.u, v); mudar(cmCopa, v); } }, t)))));
+          }
           const fam = c.nome.replace(/\d+/g, '#'); // Raio 1..4 juntos em 2x2; Altura na sua própria linha
           if (!nums || nums.dataset.fam !== fam) { nums = h('div', { class: 'grade-num' + (fam.includes('#') ? ' grade-2x2' : ' grade-1') }); nums.dataset.fam = fam; blocos.push(nums); }
           nums.append(campoEl(c, fam.includes('#') && nums.childElementCount > 0)); continue;
@@ -1794,32 +1805,36 @@
 
     function fotoEl(c) {
       const wrap = h('div', { class: 'foto-tile' });
-      const cam = h('input', { type: 'file', accept: 'image/*', capture: 'environment', onchange: () => receber(cam) });
-      const gal = h('input', { type: 'file', accept: 'image/*', onchange: () => receber(gal) });
+      const cam = h('input', { type: 'file', accept: 'image/*', capture: 'environment', onchange: () => receber(cam.files && cam.files[0], 'camera') });
+      const gal = h('input', { type: 'file', accept: 'image/*', onchange: () => receber(gal.files && gal.files[0], 'galeria') });
+      // a foto é tirada por dentro do app; a câmera do celular e a galeria ficam como botões na mesma tela
+      // galeria só nas fotos da árvore (geral, identificação e extras); calçada sem árvores e sem acesso exigem foto tirada na hora
+      const soCamera = () => { if (r.semAcesso) return true; const cat = form.campos.find((x) => x.nome === 'Categoria'); const oc = cat && (cat.opcoes || []).find((o) => String(o.v) === String(r.valores[cat.nome])); return !!(oc && /sem [aá]rvore|sem acesso/i.test(oc.t)); };
+      const abrirCam = async () => { const v = await cameraApp(c.rotulo, { sistema: () => cam.click(), galeria: soCamera() ? null : () => gal.click() }); if (v && typeof v !== 'string') receber(v, 'app'); };
       const desenhar = async () => {
         const f = r.fotos[c.nome];
         let u = null; if (f) { const b = await Store.foto(f.chave); if (b) u = URL.createObjectURL(b); }
         const opcoes = async () => {
           const v = await modal(c.rotulo, u ? ampliavel(h('img', { src: u, alt: c.rotulo }), 'foto') : h('p', null, 'Foto já enviada ao servidor.'),
-            [{ texto: 'Remover', classe: 'perigo', valor: 'rm' }, { texto: 'Galeria', classe: 'sec', valor: 'gal' }, { texto: 'Tirar outra', valor: 'cam' }]);
-          if (v === 'cam') cam.click(); else if (v === 'gal') gal.click();
+            [{ texto: 'Remover', classe: 'perigo', valor: 'rm' }, ...(soCamera() ? [] : [{ texto: 'Galeria', classe: 'sec', valor: 'gal' }]), { texto: 'Tirar outra', valor: 'cam' }]);
+          if (v === 'cam') abrirCam(); else if (v === 'gal') gal.click();
           else if (v === 'rm' && await confirmar('Remover foto', 'Remover esta foto do registro?', 'Remover', 'perigo')) { delete r.fotos[c.nome]; if (r.sensores) delete r.sensores[c.nome]; mudar(c, r.valores[c.nome]); desenhar(); }
         };
         wrap.replaceChildren(
           f ? h('button', { class: 'tile cheia', onclick: opcoes, style: u ? `background-image:url(${u})` : '' }, u ? null : ico('check'))
             : h('button', { class: 'tile', onclick: async () => {
               const cAlt = form.campos.find(ehAltura); const primeira = form.campos.find((x) => x.tipo === 'photo') === c;
-              if (!primeira || !cAlt || E[cAlt.nome].oculto || perfil() !== 'coletor' || r.valores[cAlt.nome] != null && r.valores[cAlt.nome] !== '') return cam.click();
+              if (!primeira || !cAlt || E[cAlt.nome].oculto || perfil() !== 'coletor' || r.valores[cAlt.nome] != null && r.valores[cAlt.nome] !== '') return abrirCam();
               const v = await modal(c.rotulo, h('p', { class: 'dica' }, 'A altura pelo celular é opcional: dá para digitar depois.'), [{ texto: 'Só foto', classe: 'sec', valor: 'foto' }, { texto: 'Foto e altura', valor: 'alt' }]);
-              if (v === 'foto') return cam.click(); if (v !== 'alt') return;
+              if (v === 'foto') return abrirCam(); if (v !== 'alt') return;
               const m = await medirAltura(); if (m) { r.alturaMed = m; mudar(cAlt, m.altura); toast(`Altura ${numBR(m.altura)} m guardada. Agora a foto.`, 3000); }
-              cam.click();
+              abrirCam();
             } }, ico('camera')),
           h('div', { class: 'tile-rot' }, c.rotulo, E[c.nome].obrig ? h('span', { class: 'obr' }, '*') : null),
-          ...(f ? [] : [h('button', { class: 'tile-gal link', onclick: () => gal.click() }, 'usar da galeria')]), cam, gal);
+          cam, gal);
       };
-      async function receber(inp) {
-        const arq = inp.files && inp.files[0]; if (!arq) return;
+      async function receber(arq, fonte) {
+        if (!arq) return;
         try {
           const exif = await lerExif(arq); const blob = await reduzir(arq, 0, 0.92); // qualidade original
           const chave = r.uuid + ':' + c.nome + ':' + Date.now();
@@ -1828,7 +1843,7 @@
           if (antiga && !antiga.enviado && !daBase) Store.apagarFoto(antiga.chave);
           const prefixo = S.projeto.prefixo || S.projeto.id;
           r.fotos[c.nome] = { nome: `DCIM/${prefixo}_${carimbo()}_${r.uuid.replace(/-/g, '').slice(0, 6)}.jpg`, chave, enviado: false, url: '' };
-          r.sensores = r.sensores || {}; r.sensores[c.nome] = Object.assign({ em: agoraISO(), fonte: inp === gal ? 'galeria' : 'camera' }, exif || {}); // escondido: só a coordenação recebe
+          r.sensores = r.sensores || {}; r.sensores[c.nome] = Object.assign({ em: agoraISO(), fonte }, exif || {}); // escondido: só a coordenação recebe
           mudar(c, r.valores[c.nome]); desenhar();
         } catch (e) { toast('Não foi possível ler a foto: ' + e.message); }
       }
@@ -1857,7 +1872,13 @@
       }
     }
 
+    // "Concluir" responde na hora: um toque só vale uma vez, e a tela mostra "Salvando..." enquanto grava e volta ao mapa
+    let concluindo = false, salvandoEl = null;
     async function concluir() {
+      if (concluindo) return; concluindo = true;
+      try { await concluir2(); } finally { concluindo = false; if (salvandoEl) { const el = salvandoEl; salvandoEl = null; setTimeout(() => el.remove(), 250); } }
+    }
+    async function concluir2() {
       S.tentou = true; S.tentouFim = true;
       const f = faltando(r);
       if (f.length) { if (navigator.vibrate) navigator.vibrate(120); irPendente(0); return; }
@@ -1880,6 +1901,8 @@
         if (!ok) return;
       }
       clearTimeout(salvarTimer);
+      salvandoEl = h('div', { class: 'abrindo-cad salvando-cad', role: 'status' }, h('div', { class: 'abrindo-cx' }, h('div', { class: 'abrindo-roda', 'aria-hidden': 'true' }), h('b', { class: 'abrindo-pm' }, 'Salvando...'))); document.body.append(salvandoEl);
+      await new Promise((ok) => requestAnimationFrame(() => setTimeout(ok, 0))); // deixa a tela pintar o aviso antes de gravar
       // campos ocultos pela classe não levam valor antigo para a planilha
       for (const c of form.campos) if (E[c.nome].oculto && !c.auto && !c.agora) { if (c.tipo === 'photo') delete r.fotos[c.nome]; else r.valores[c.nome] = null; }
       recalcular(r);
@@ -2303,7 +2326,7 @@
         s.cond === 'sem_acesso' ? h('small', { class: 'face-cond' }, h('b', null, 'Sem acesso'), s.cond_motivo ? ' · ' + s.cond_motivo : '') : null,
         s.marcada_por ? h('small', null, `marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}`) : null,
         s.foto && ehCoord() ? (() => { const a = h('div', { class: 'face-foto' }); verFotoOS(s.foto, a); return a; })() : null,
-        pode && !FACE_FEITA.includes(st) ? h('button', { class: 'btn cheio acao', onclick: async () => { let fotoBlob = null; if (exigeFotoFace()) { if (somenteVer()) return; fotoBlob = await pedirFotoFace(`Face ${f.i} da quadra ${q.n} (${f.r}).`); if (!fotoBlob) return; } marcar([Object.assign({ numero: id, situacao: 'Levantada' }, fotoBlob ? { fotoBlob } : {})]); } }, ico('check'), 'Marcar como levantada') : null,
+        pode && !FACE_FEITA.includes(st) ? h('button', { class: 'btn cheio acao', onclick: async () => { let fotoBlob = null; if (exigeFotoFace()) { if (somenteVer()) return; fotoBlob = await pedirFotoFace(`Face ${f.i} da quadra ${q.n} (${f.r}).`); if (!fotoBlob) return; if (fotoBlob === 'sem') fotoBlob = null; } marcar([Object.assign({ numero: id, situacao: 'Levantada' }, fotoBlob ? { fotoBlob } : {})]); } }, ico('check'), 'Marcar como levantada') : null,
         pode && st === 'A levantar' ? h('button', { class: 'btn sec cheio acao', onclick: () => marcar([{ numero: id, situacao: 'Em levantamento' }]) }, 'Em levantamento') : null,
         pode ? h('button', { class: 'btn sec cheio acao', onclick: () => { mapa.closePopup(); iniciarCalcadaFace(q, f); } }, ico('camera'), st === 'Levantada, sem árvores' ? 'Refazer o cadastro da calçada sem árvores' : 'Sem árvores (só a foto)') : null,
         pode && !FACE_FEITA.includes(st) ? h('button', { class: 'btn sec cheio acao bt-sem-acesso', onclick: () => { mapa.closePopup(); iniciarSemAcessoFace(q, f); } }, ico('camera'), 'Sem acesso (foto e motivo)') : null,
@@ -4933,6 +4956,40 @@
       Object.keys(R).forEach((k) => { if (R[k] == null || R[k] === '') delete R[k]; });
       return Object.keys(R).length ? R : null;
     } catch (e) { return null; }
+  }
+  // Câmera por dentro do app: a foto é tirada sem sair do app. Com a câmera do celular, o Android fechava o app em segundo plano
+  // (aviso de memória) e a foto se perdia. A câmera do celular continua como reserva, e a galeria só onde o cadastro permite.
+  // Resolve com a foto (Blob JPEG), com 'sistema' ou 'galeria' (o botão já abriu a escolha do celular, dentro do toque), ou com null (fechou).
+  function cameraApp(titulo, { sistema, galeria } = {}) {
+    return new Promise((res) => {
+      let stream = null, fim = false, tirando = false;
+      const video = h('video', { autoplay: true, playsinline: true, muted: true }); video.muted = true; video.setAttribute('playsinline', '');
+      const msg = h('p', { class: 'cam-msg' }, 'Abrindo a câmera...');
+      const fechar = (v) => { if (fim) return; fim = true; if (stream) stream.getTracks().forEach((t) => t.stop()); veu.remove(); res(v); };
+      const disparar = async () => {
+        if (tirando || !stream) return; tirando = true; bt.disabled = true; veu.classList.add('tirando');
+        const trilha = stream.getVideoTracks()[0]; let blob = null;
+        // a foto em tamanho cheio do sensor, quando o navegador oferece; se demorar ou falhar, vale o quadro da tela
+        if (window.ImageCapture) { try { blob = await Promise.race([new ImageCapture(trilha).takePhoto(), new Promise((r2) => setTimeout(() => r2(null), 5000))]); } catch (e) { blob = null; } }
+        if (!blob || !blob.size) { try { const cv = document.createElement('canvas'); cv.width = video.videoWidth; cv.height = video.videoHeight; cv.getContext('2d').drawImage(video, 0, 0); blob = await new Promise((r2) => cv.toBlob(r2, 'image/jpeg', 0.92)); } catch (e) { blob = null; } }
+        if (!blob) { tirando = false; bt.disabled = false; veu.classList.remove('tirando'); msg.textContent = 'Não foi possível tirar a foto aqui. Use a câmera do celular.'; msg.classList.remove('oculto'); return; }
+        fechar(blob);
+      };
+      const bt = h('button', { class: 'cam-disparo', type: 'button', disabled: true, 'aria-label': 'Tirar foto', onclick: disparar });
+      const btSis = sistema ? h('button', { class: 'cam-lado', type: 'button', onclick: () => { sistema(); fechar('sistema'); } }, ico('camera'), h('small', null, 'Câmera do celular')) : h('span', { class: 'cam-lado' });
+      const btGal = galeria ? h('button', { class: 'cam-lado cam-gal', type: 'button', onclick: () => { galeria(); fechar('galeria'); } }, ico('imagem'), h('small', null, 'Galeria')) : h('span', { class: 'cam-lado' });
+      const veu = h('div', { class: 'cam-app' }, h('div', { class: 'cam-topo' }, h('b', null, titulo || 'Foto'), h('button', { class: 'cam-x', type: 'button', 'aria-label': 'Fechar', onclick: () => fechar(null) }, ico('fechar'))), h('div', { class: 'cam-vis' }, video, msg), h('div', { class: 'cam-base' }, btGal, bt, btSis));
+      document.body.append(veu);
+      const falhou = () => { msg.textContent = sistema ? 'A câmera não abriu aqui dentro. Toque em "Câmera do celular".' : 'A câmera não abriu. Confira a permissão de câmera do navegador.'; msg.classList.remove('oculto'); };
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return falhou();
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }).then(async (st) => {
+        if (fim) return st.getTracks().forEach((t) => t.stop());
+        stream = st; video.srcObject = st; try { await video.play(); } catch (e) { /* o autoplay cuida */ }
+        // sem a foto do sensor (iPhone), pede o maior quadro que a câmera der
+        if (!window.ImageCapture) { try { await st.getVideoTracks()[0].applyConstraints({ width: { ideal: 4096 }, height: { ideal: 3072 } }); } catch (e) { /* fica no quadro que abriu */ } }
+        msg.classList.add('oculto'); bt.disabled = false;
+      }).catch(falhou);
+    });
   }
   async function reduzir(arq, max, q) {
     if (!max && arq.type === 'image/jpeg') return arq; // qualidade original: nem abre a imagem

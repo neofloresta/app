@@ -47,6 +47,7 @@ const suites = [
   ['2.15 nas telas: marcas e cadeado no mapa', 'node b215.js'],
   ['2.16: face sem acesso, agrupamento e sem calçada irregular', 'node b216.js'],
   ['2.16.3 a 2.16.5: formulários 12, 13 e 14 (área livre, posição na calçada, colo soterrado, alvo e defeito da ISA)', 'node b217.js'],
+  ['2.17 no campo: câmera por dentro do app, galeria, Concluir na hora e copa por árvore no time da casa', 'node b2170.js'],
   ['2.14 nas telas: pedido de reserva pelo coletor parceiro e aprovação da coordenação', 'node b214.js'],
   ['rendimento por equipe e filtro de dia no mapa', 'node brend.js'],
   ['GPS parado, códigos em dois celulares, toque no ponto', 'node b9.js'],

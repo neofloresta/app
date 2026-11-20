@@ -31,7 +31,7 @@ async function novosRisco(p) { // formulário 13: os campos do alvo ficam na eta
   if (tem) await aba(p, 'Risco');
   for (const [n, v] of [['Principal defeito da arvore', 'Tronco'], ['Carga sobre o defeito', 'Pequena']]) if (await campo(p, n).count()) await op(p, n, v);
 }
-async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, altura = 6.5, morta = false, manejoNenhum = true, categoria = 'Árvore', qtde = null, fiacao = null, paralelo = 'Não' } = {}) {
+async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, altura = 6.5, morta = false, manejoNenhum = true, categoria = 'Árvore', qtde = null, fiacao = null, paralelo = 'Não', semConcluir = false } = {}) {
   await p.click('button.nova'); await p.waitForSelector('.prog'); await p.waitForTimeout(200);
   await op(p, 'Local do registro', 'Via pública'); await op(p, 'Categoria', categoria);
   const sitId = await campo(p, 'Situacao').count(); if (sitId) { await op(p, 'Situacao', morta ? 'Morta' : 'Viva'); await p.waitForTimeout(150); } // formulário 14: situação e fitossanidade na Identificação
@@ -54,6 +54,7 @@ async function arvoreCompleta(p, { especie = 'Moquilea tomentosa', fotos = 3, al
     await aba(p, 'Manejo'); if (manejoNenhum) await p.locator('.chip[data-campo="Manejo nenhum"]').click();
     if (fotos > 1) { await aba(p, 'Fotos e observações'); await foto(p, 'Foto 2'); if (fotos > 2) await foto(p, 'Foto 3'); }
   }
+  if (semConcluir) return [];
   await concluir(p);
   if (await p.locator('.folha >> text=Sim, nenhum').count()) { await p.click('.folha button:has-text("Sim, nenhum")'); await p.waitForTimeout(300); }
   if (await p.locator('.folha >> text=Está certo').count()) { await p.click('.folha button:has-text("Está certo")'); await p.waitForTimeout(300); }

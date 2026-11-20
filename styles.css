@@ -803,3 +803,21 @@ html { touch-action: pan-x pan-y; } /* sem zoom de pinça na página (o mapa tem
 
 /* 2.15: marcas de quadra e cadeado */
 .aviso-bloq { display:block; padding:.5rem .6rem; border-radius:.5rem; background:rgba(55,71,79,.12); font-weight:600; }
+
+/* 2.17: câmera por dentro do app (foto sem sair do app), com galeria e câmera do celular na mesma tela */
+.cam-app { position: fixed; inset: 0; z-index: 80; background: #000; color: #fff; display: flex; flex-direction: column; }
+.cam-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 12px 10px 16px; }
+.cam-topo b { font-size: 16px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cam-x { width: 48px; height: 48px; display: grid; place-items: center; background: none; border: 0; color: #fff; }
+.cam-x .ico { width: 28px; height: 28px; }
+.opcoes.copa-ops { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cam-vis { flex: 1; min-height: 0; position: relative; display: grid; place-items: center; overflow: hidden; }
+.cam-vis video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.cam-msg { position: absolute; left: 24px; right: 24px; text-align: center; font-size: 16px; line-height: 1.4; margin: 0; }
+.cam-base { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; padding: 14px 12px calc(18px + env(safe-area-inset-bottom)); }
+.cam-disparo { width: 76px; height: 76px; border-radius: 50%; border: 5px solid #fff; background: #fff; box-shadow: inset 0 0 0 4px #000; }
+.cam-disparo:disabled { opacity: .35; }
+.cam-app.tirando .cam-vis video { opacity: .4; }
+.cam-lado { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 64px; justify-content: center; background: none; border: 0; color: #fff; font: inherit; }
+.cam-lado small { font-size: 13px; }
+.cam-lado .ico { width: 28px; height: 28px; }
