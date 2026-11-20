@@ -2114,8 +2114,12 @@
       // 2.17: a quadra pedida fica marcada no mapa (laranja tracejado) para quem pediu e para a coordenação; a que a coordenação abriu pelo "Ver no mapa" ganha contorno vermelho
       if (focoPed === q.n) return { color: '#D50000', weight: 5, fillColor: '#FF6D00', fillOpacity: perto ? 0.18 : 0.45 };
       if (!Api.demo && Reservas.pedido(q.n)) return { color: '#E65100', weight: 3, dashArray: '8 6', fillColor: '#FB8C00', fillOpacity: perto ? 0.18 : 0.42 };
-      // time parceiro: quadra reservada para a equipe e ainda não começada aparece em roxo claro, com contorno forte
-      if (modoQuadra() && s.equipe && s.equipe === minhaEquipe() && !s.fechada_em && (s.situacao || 'A levantar') === 'A levantar') return { color: COR_TIME.parc, weight: 3, fillColor: COR_TIME.parc, fillOpacity: perto ? 0.08 : 0.25 };
+      // quadra reservada para uma equipe e ainda não começada: contorno forte na cor do time e preenchimento bem claro.
+      // Aparece para a coordenação e o auditor (o que já foi distribuído) e para as equipes; a da própria equipe do parceiro fica um pouco mais cheia
+      if (s.equipe && !s.fechada_em && (s.situacao || 'A levantar') === 'A levantar' && (S.eqParc || modoQuadra())) {
+        const minha = modoQuadra() && s.equipe === minhaEquipe(); const t = timeDaQd(s) || 'parc';
+        if (minha || selQd.value === 'sit') return { color: COR_TIME[t], weight: 3, fillColor: COR_TIME[t], fillOpacity: perto ? 0.08 : minha ? 0.25 : 0.12 };
+      }
       if (motivoBloqueio(s)) return { color: '#5F6B70', weight: 2, dashArray: '3 5', fillColor: '#37474F', fillOpacity: 0.28 };
       if (ehCoord() && s.marca) return { color: COR_MARCA[s.marca], weight: 3, dashArray: s.marca === 'Validação' ? '3 5' : null, fillColor: COR_MARCA[s.marca], fillOpacity: perto ? 0.06 : 0.3 };
       if (selQd.value === 'sit' && timeDaQd(s) && s.situacao && s.situacao !== 'A levantar') { // por time: claro em levantamento, cheio levantada, contorno verde na validada
@@ -2259,7 +2263,7 @@
         const r = await Api.b.reservaPedir(S.projeto.id, [q.n]);
         if (r.recusadas && r.recusadas.length) return desfaz(`Quadra ${q.n}: ${r.recusadas[0].motivo}`);
         Reservas.carregar().then(() => { pintarAvisoPedidos(); desenharQuadras(); });
-      } catch (e) { desfaz(`O pedido da quadra ${q.n} não chegou à coordenação: ${e.message || 'sem resposta do servidor'}. Peça de novo.`); }
+      } catch (e) { desfaz(e.rede ? `O pedido da quadra ${q.n} não chegou à coordenação: ${e.message}. Peça de novo.` : `Quadra ${q.n}: ${e.message || 'o servidor não aceitou o pedido.'}`); }
     }
     async function cancelarPedido(q) {
       const x = Reservas.pedido(q.n); if (!x) return; mapa.closePopup();
@@ -2282,13 +2286,15 @@
         // 2.17.2: a decisão aparece na hora (o pedido sai da lista e a quadra muda de cor); o servidor é avisado por trás.
         // Eram três consultas seguidas antes de a tela responder. Se o servidor recusar ou falhar, a lista volta como o servidor tem.
         const guard = Reservas.dados ? Reservas.dados.pedidos : null; const qs = qdSit.get(x.quadra); const eqAntes = qs ? qs.equipe : undefined;
-        if (Reservas.dados) Reservas.dados.pedidos = (Reservas.dados.pedidos || []).filter((y) => y.id !== x.id);
+        if (Reservas.dados) Reservas.dados.pedidos = (Reservas.dados.pedidos || []).filter((y) => y.id !== x.id && !(dec === 'Aprovado' && y.situacao === 'Aguardando' && y.quadra === x.quadra)); // ao aprovar, os outros pedidos da mesma quadra caem (o servidor recusa sozinho)
         if (dec === 'Aprovado' && qs && !qs.equipe) qs.equipe = x.equipe || x.nome; // só para a cor no mapa; o valor de verdade vem do servidor logo depois
         limparFoco(); desenharQuadras(); pintarBtPed(); toast(dec === 'Aprovado' ? `Quadra ${x.quadra} reservada para ${x.nome}.` : `Pedido da quadra ${x.quadra} recusado.`, 4000);
         abrirPedidos(true); // a lista volta já sem o pedido decidido, sem esperar o servidor
-        const acertar = async () => { await Reservas.carregar(); qdSit = await carregarSitQd(true); desenhar(false); pintarBtPed(); };
+        const acertar = async () => { try { await Reservas.carregar(); qdSit = await carregarSitQd(true); desenhar(false); pintarBtPed(); if (document.querySelector('.ped-lista')) abrirPedidos(true); } catch (e) { /* saiu do projeto no meio: nada a acertar */ } }; // a lista aberta é refeita com o que o servidor tem
         try { const r = await Api.b.reservaDecidir(S.projeto.id, x.id, dec, motivo); if (dec === 'Aprovado' && r.situacao !== 'Aprovado') toast(`Quadra ${x.quadra}: ${r.motivo || 'o servidor não aprovou o pedido.'}`, 7000, null, true); }
-        catch (e) { if (Reservas.dados && guard) Reservas.dados.pedidos = guard; if (qs) qs.equipe = eqAntes; toast(`A decisão da quadra ${x.quadra} não chegou ao servidor: ${e.message || 'sem resposta'}. Decida de novo.`, 7000, null, true); }
+        catch (e) { if (Reservas.dados && guard) Reservas.dados.pedidos = guard; if (qs) qs.equipe = eqAntes; desenharQuadras(); pintarBtPed();
+          // só é falha de envio quando a rede caiu; recusa por regra do servidor (limite de quadras, pedido já decidido por outra pessoa) mostra o motivo como veio
+          toast(e.rede ? `A decisão da quadra ${x.quadra} não chegou ao servidor: ${e.message || 'sem resposta'}. Decida de novo.` : `Quadra ${x.quadra}: ${e.message || 'o servidor não aceitou a decisão.'}`, 8000, null, true); }
         acertar();
       };
       const linha = (x) => h('div', { class: 'ped-lin' }, h('b', null, `${x.nome} pediu a quadra ${x.quadra}`), h('small', null, dataAno(x.criado_em) + (porQuadra[x.quadra] > 1 ? ` · ${porQuadra[x.quadra]} pedidos para esta quadra` : '')),
@@ -2483,7 +2489,7 @@
       let itens = selCor.value === 'os' ? [...Object.entries(COR_OS), ['Sem ordem', '#C9D3D6']] : selCor.value === 'risco' ? Object.entries(corRisco) : equipes.map((e) => [e, corEq(e)]);
       let itQd = qdDados && selQd.value && !(mapa.getZoom() >= ZOOM_FACES && selQd.value === 'sit') ? (selQd.value === 'eq' ? [...new Set([...qdSit.values()].map((s) => s.equipe).filter(Boolean))].sort().map((e) => [e, corEq(e)]).concat([['Sem equipe', '#9AA9B0']]) : S.eqParc ? [['A levantar', COR_QD['A levantar']], ['Neofloresta: em levantamento', COR_TIME_CLARA.casa], ['Neofloresta: levantada', COR_TIME.casa], ['Parceiro: em levantamento', COR_TIME_CLARA.parc], ['Parceiro: levantada', COR_TIME.parc], ['Validada (contorno verde)', COR_VALIDADA]] : Object.entries(COR_QD)) : [];
       if (itQd.length && !Api.demo && (modoQuadra() || ehCoord()) && Reservas.aguardando().length) itQd = itQd.concat([['Pedido aguardando (tracejado)', '#FB8C00']]);
-      if (itQd.length && modoQuadra()) itQd = itQd.concat([['Reservada para a sua equipe', COR_TIME_CLARA.parc]]);
+      if (itQd.length && selQd.value === 'sit' && (S.eqParc || modoQuadra())) itQd = itQd.concat([['Reservada, não começada (contorno forte)', COR_TIME_CLARA.parc]]);
       if (porEq && itQd.length && selQd.value === 'eq') { const tem = new Set(itens.map((x) => x[0])); itQd.forEach((x) => { if (!tem.has(x[0])) itens.push(x); }); itQd = []; } // pontos e quadras por equipe: um bloco só
       if (porEq) itens = itens.map(([t, c]) => [rotEquipe(t), c]);
       const itFc = qdDados && selQd.value === 'sit' && fcLayers.size ? Object.entries(COR_FC).filter(([t]) => t !== 'A levantar') : [];
