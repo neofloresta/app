@@ -1,4 +1,4 @@
-# Formulário de Divinópolis: decisões (versão 14 do formulário, app 2.16.5)
+# Formulário de Divinópolis: decisões (versão 15 do formulário, app 2.17.0)
 
 Decidido pelo Ciro em 07/11/2026, revisto em 15/11/2026 (etapas por parte da árvore), em 17/11/2026 (fitossanidade e quadra sem acesso), em 18/11/2026 (sai a calçada irregular, sem acesso por face e agrupamento) e em 19/11/2026 (área livre, posição na calçada, colo soterrado, alvo e defeito da ISA; fitossanidade na Identificação e tronco paralelo como pergunta própria).
 
@@ -72,6 +72,13 @@ Vieram do modelo antigo do QGIS (inv_eneas). Só o formulário mudou: o risco co
 - **Tronco paralelo à fiação elétrica aérea?** virou pergunta própria (Não ou Sim, obrigatória), na etapa Meio, depois do grupo da fiação. Com "Fiação ausente" marcada, a pergunta não aparece e hoje fica vazia na planilha (a 2.17 passa a gravar "Não"). A caixa de marcar dos formulários 12 e 13 ficou só na base.
 - A rede elétrica continua entre os alvos na zona.
 - Calçada sem árvores: o formulário já não tinha campo de largura (só a foto); nada a mudar.
+
+## Formulário 15 (20/11/2026, app 2.17)
+
+- Saem os 11 campos de formulário anterior (fungo, cupim e broca gerais, doença e praga aparente, fitossanidade ausente, galhos secos de marcar, principal alvo, risco nível 1, nível da avaliação e a caixa antiga do tronco paralelo). A ficha deixa de ter a seção "Formulário anterior". As colunas saem da planilha pelo "Ajustar registros antigos", que antes converte o principal alvo e a caixa antiga do tronco paralelo. Gerado por `build/divi15.js`.
+- Na planilha nada fica em branco: número que não se aplica grava "NA", escolha ou texto que não se aplica grava "Não se aplica", caixa não marcada grava 0. Tronco paralelo com fiação ausente grava "Não". Em branco só fotos extras e observações.
+- Categoria, probabilidade de falha, probabilidade de impacto e consequências ficam por extenso na planilha ("Árvore", "Improvável"). Por dentro o app segue com os códigos.
+- Ficha, Excel e relatório mostram o texto curto da opção; a explicação aparece só na tela de coleta.
 
 ## Fitossanidade (formulário 9)
 

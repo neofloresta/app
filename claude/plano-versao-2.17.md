@@ -1,6 +1,6 @@
 # Plano de ajustes alinhado com o Ciro em 19/11/2026
 
-Tudo abaixo foi decidido pelo Ciro em conversa, ponto a ponto, em 19/11/2026. A intenção dele é que esta seja a última mudança estrutural. Situação: o Ciro deu o "pode fazer" em 19/11/2026. Entrega 1 feita (formulário 14, app 2.16.5); entrega 2 em andamento.
+Tudo abaixo foi decidido pelo Ciro em conversa, ponto a ponto, em 19/11/2026. A intenção dele é que esta seja a última mudança estrutural. Situação em 20/11/2026: entrega 1 publicada (formulário 14, app 2.16.5) e entrega 2 publicada (app 2.17.0, na madrugada de 20/11). Falta o Ciro colar o Code.gs 2.17, atualizar os formulários (formulário 15) e rodar o "Ajustar registros antigos". Passo a passo em claude/passo-a-passo-2.17.md.
 
 ## Já feito em 19/11/2026
 
@@ -56,6 +56,26 @@ Tudo abaixo foi decidido pelo Ciro em conversa, ponto a ponto, em 19/11/2026. A 
 |---|---|
 | 16 | Parceiro: avaliador em dupla 60% (R$ 1,20 e R$ 0,80), sozinho R$ 2,00, Gap R$ 0,50. Mesmo valor para árvore, agrupamento, face sem árvore e face sem acesso. Já apresentado à Gap |
 | 17 | Valores do prêmio da Neofloresta no projeto, com data de início |
+
+### Como ficou a entrega 2 (o que difere do combinado)
+
+- Quadra validada: não é uma situação gravada, é calculada pelo servidor (quadra levantada com todos os registros validados) e enviada ao app. A simbologia ficou com contorno verde grosso, sem o sinal de conferido. O Ciro viu a imagem e aceitou ("se está leve e funciona, ok").
+- Legenda por time diz "Neofloresta" e "Parceiro" (o app não sabe o nome do time de cada quadra).
+- Trabalho em conjunto (item 9) vale só entre equipes cujo usuário está em um time próprio. Equipe sem time continua presa à própria quadra. Conferir se Neo-1 e Neo-2 têm o time "Neofloresta" no usuário.
+- Planilha (itens 13, 14, 24): a troca entre o formato de dentro do app (código e vazio) e o da planilha (texto, "NA", "Não se aplica") fica toda em js/api.js. O app só grava no formato novo quando o servidor é 2.17. O servidor converte para texto os campos com código que chegarem de celular antigo.
+- Formulário 15: sem os 11 campos de formulário antigo; lista `camposRetirados` com os 14 nomes de coluna de todas as versões anteriores, que é o que o ajuste pode tirar da planilha.
+- "Ajustar registros antigos" fica em Coordenação > Formulários: confere o servidor, mostra o que muda, guarda cópia, grava e tira as colunas. Rodar com a coleta parada.
+- Prêmio (item 17): o servidor aceita teto 0 (sem teto). O prêmio de meta continua um quarto por semana batida; num mês com 5 semanas batidas passa da tabela do regulamento (R$ 312,50 e R$ 187,50). Pendente de decisão do Ciro.
+- Pedidos de quadra (pedido do Ciro em 19/11 à noite, depois de testar com o login de treinamento): quadra pedida em laranja tracejado e reservada em roxo claro no mapa do coletor parceiro, contador "Suas quadras", limite avisado antes do pedido; na coordenação, "Ver no mapa" destaca a quadra em vermelho e traz Aprovar e Recusar na própria tela.
+- Verificação: duas revisões independentes e a bateria completa (61 itens) passaram antes de publicar.
+
+### Pendências depois da 2.17
+
+- Lentidão geral que o Ciro sente: falta ele dizer onde pesa mais (abrir o mapa, tocar na quadra, pedir, aprovar, trocar de tela) para medir.
+- Medir o tempo do "Concluir" com o mapa de Divinópolis carregado (só foi feita a resposta visual, a trava e o limite de 2,5 s na conferência do setor).
+- Conferir no celular de verdade: resolução da foto tirada por dentro do app e se o aviso de memória sumiu.
+- Marcar face sem internet: o teste da fila voltou a passar na bateria final, sem causa identificada para a falha anterior; observar com a Gap em campo.
+- Exportar dados de um projeto diferente do aberto lê sem a conversão se os formulários forem diferentes.
 
 ## Entrega 3: teste de carga na planilha de verdade (item 23)
 
