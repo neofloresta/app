@@ -292,7 +292,7 @@ const Api = (() => {
     async chavesListar() { return (await chamar('chaves_listar')).chaves; },
     async quadrasImportar(projeto, camada) { return chamar('quadras_importar', { projeto, camada }); },
     async quadrasCamada(projeto, versao) { return chamar('quadras_camada', { projeto, versao: versao || '' }); },
-    async quadrasSituacao(projeto) { const j = await chamar('quadras_situacao', { projeto, faces: true }); return { quadras: j.quadras || [], faces: j.faces || [], parceiras: j.parceiras || null }; },
+    async quadrasSituacao(projeto) { const j = await chamar('quadras_situacao', { projeto, faces: true }); return { quadras: j.quadras || [], faces: j.faces || [], parceiras: j.parceiras || null, casa: j.casa || null }; },
     async quadrasMarcar(projeto, itens) { return chamar('quadras_marcar', { projeto, itens }); },
     async conferir(projeto, uuids) { return (await chamar('conferir', { projeto, uuids })).achados; },
     async trajetoSalvar(projeto, trecho) { return chamar('trajeto_salvar', { projeto, trecho }); },

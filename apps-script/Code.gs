@@ -80,7 +80,7 @@ function configurar() {
 function doGet() { BASE_ABERTA = null; TABS = {}; return json({ ok: true, app: 'Neofloresta Inventário', versao: VERSAO_SCRIPT, configurado: !!PROPS.getProperty('BASE_ID') }); }
 
 function doPost(e) {
-  BASE_ABERTA = null; TABS = {}; EQ_PARC = null;
+  BASE_ABERTA = null; TABS = {}; EQ_PARC = null; EQ_CASA = null;
   let d = {};
   try {
     d = JSON.parse(e.postData.contents);
@@ -141,7 +141,7 @@ function doPost(e) {
       case 'validar': pode('revisor'); exigeProjeto(d.projeto); if ((d.itens || []).length > 1000) throw new Error('Envie no máximo 1000 registros por vez.'); return json(Object.assign({ ok: true }, validar(d.projeto, d.itens || [], usr)));
       case 'quadras_importar': pode(); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, importarQuadras(d.projeto, d.camada, usr)));
       case 'quadras_camada': exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, camadaQuadras(d.projeto, d.versao)));
-      case 'quadras_situacao': { exigeProjeto(d.projeto); try { vencerReservas(d.projeto); } catch (er) { /* tenta na próxima consulta */ } const cli = usr.perfil === 'cliente'; const pub = (o) => { const x = publicoOS(o); if (cli) { delete x.equipe; delete x.marcada_por; delete x.historico; delete x.atribuida; delete x.foto; delete x.reservada_em; delete x.fechada_em; delete x.cond_motivo; delete x.registro; delete x.obs; } return x; }; const qv = {}; quadrasValidadas(d.projeto).forEach((q) => { qv[q] = 1; }); const pubQ = (o) => { const x = pub(o); if (x.situacao === 'Levantada' && qv[String(x.numero)]) x.validada = true; return x; }; return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(pubQ), faces: d.faces ? lerSitFaces(d.projeto).map(pub) : undefined, parceiras: cli ? undefined : Object.keys(equipesParceiras()) }); }
+      case 'quadras_situacao': { exigeProjeto(d.projeto); try { vencerReservas(d.projeto); } catch (er) { /* tenta na próxima consulta */ } const cli = usr.perfil === 'cliente'; const pub = (o) => { const x = publicoOS(o); if (cli) { delete x.equipe; delete x.marcada_por; delete x.historico; delete x.atribuida; delete x.foto; delete x.reservada_em; delete x.fechada_em; delete x.cond_motivo; delete x.registro; delete x.obs; } return x; }; const qv = {}; quadrasValidadas(d.projeto).forEach((q) => { qv[q] = 1; }); const pubQ = (o) => { const x = pub(o); if (x.situacao === 'Levantada' && qv[String(x.numero)]) x.validada = true; return x; }; return json({ ok: true, quadras: lerSitQuadras(d.projeto).map(pubQ), faces: d.faces ? lerSitFaces(d.projeto).map(pub) : undefined, parceiras: cli ? undefined : Object.keys(equipesParceiras()), casa: cli ? undefined : Object.keys(equipesDaCasa()) }); }
       case 'trajeto_salvar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, salvarTrajeto(d.projeto, d.trecho || {}, usr)));
       case 'trajetos': pode('revisor'); exigeProjeto(d.projeto); return json({ ok: true, trechos: lerTrajetos(d.projeto, d.dia) });
       case 'quadras_marcar': pode('coletor', 'revisor'); exigeProjeto(d.projeto); return json(Object.assign({ ok: true }, marcarQuadras(d.projeto, d.itens, usr)));
@@ -392,7 +392,10 @@ let EQ_PARC = null;
 // nomes das equipes cujos usuários são de time parceiro (minúsculas); lido uma vez por chamada
 function equipesParceiras() { if (EQ_PARC) return EQ_PARC; const m = {}; try { tabela('Usuarios').forEach((u) => { const e = String(u.equipe || '').trim().toLowerCase(); if (e && timeParceiroDo(u)) m[e] = 1; }); } catch (e) { /* sem usuários */ } EQ_PARC = m; return m; }
 // 2.17: equipes do time da casa (Neofloresta) trabalham juntas: uma encerra a face, fecha a quadra e cadastra onde a outra começou
-function equipeDaCasa(usr, outra) { return !!outra && !timeParceiroDo(usr) && !equipesParceiras()[String(outra).trim().toLowerCase()]; }
+// vale só entre equipes de time próprio: quem não tem time definido continua trabalhando só na própria quadra, como antes
+let EQ_CASA = null;
+function equipesDaCasa() { if (EQ_CASA) return EQ_CASA; const m = {}; try { tabela('Usuarios').forEach((u) => { const e = String(u.equipe || '').trim().toLowerCase(); if (e && String(u.indicacao || '').trim() && !timeParceiroDo(u)) m[e] = 1; }); } catch (e) { /* sem usuários */ } EQ_CASA = m; return m; }
+function equipeDaCasa(usr, outra) { return !!outra && !!String(usr.indicacao || '').trim() && !timeParceiroDo(usr) && !!equipesDaCasa()[String(outra).trim().toLowerCase()]; }
 function timeParceiroDo(u) { const t = String(u.indicacao || '').trim(); return !!t && tiposDosTimes()(t) === 'parceiro'; }
 function auxiliarDoTurno(id, usr, projetoId) {
   if (!id) return ''; const pe = tabela('Pessoas').find((x) => x.id === String(id));

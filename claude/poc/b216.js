@@ -36,7 +36,7 @@ const tocar = async (p, lat, lon, z = 19) => { const xy = await p.evaluate(([a, 
   await A.campo(p, 'Motivo sem acesso (outro)').locator('input, textarea').first().fill('encosta íngreme'); await p.waitForTimeout(200); await A.concluir(p); const pend2 = await A.faltas(p);
   await p.waitForSelector('button.nova', { timeout: 15000 }).catch(() => {}); await p.waitForTimeout(4000);
   let F = await L.post('quadras_situacao', { projeto: PJ, faces: true }); const fa = F.faces.find((f) => f.numero === auto.q.n + '-' + auto.f.i) || {}; const Qd = (await L.post('quadras_situacao', { projeto: PJ })).quadras.find((q) => q.numero === auto.q.n) || {};
-  let ls = await lin(); const sa = ls.find((l) => String(l.Categoria) === '6') || {};
+  let ls = await lin(); const sa = ls.find((l) => ['6', 'Sem acesso'].includes(String(l.Categoria))) || {};
   ok('J.1', /face sem acesso/i.test(titulo) && !temIrr && campos0.includes('Foto 1') && campos0.includes('Motivo sem acesso') && !campos0.some((n) => /qtde|quantidade/i.test(n)) && !campos0.includes('Motivo sem acesso (outro)') && campos1.includes('Motivo sem acesso (outro)') && pend1.length > 0 && pend2.length === 0
     && fa.cond === 'sem_acesso' && fa.situacao === 'Levantada, sem árvores' && fa.cond_motivo === 'Outro: encosta íngreme' && fa.registro === sa.uuid && !Qd.fechada_em && sa['Motivo sem acesso'] === 'Outro' && sa['Motivo sem acesso (outro)'] === 'encosta íngreme',
     `cadastro "${titulo}" com ${campos0.join(', ')}; Outro pede o texto (${campos1.includes('Motivo sem acesso (outro)')}); pendências sem texto: ${pend1.join(', ')}; face ${fa.situacao}/${fa.cond} "${fa.cond_motivo}", quadra fechada: ${!!Qd.fechada_em}`);
@@ -66,7 +66,7 @@ const tocar = async (p, lat, lon, z = 19) => { const xy = await p.evaluate(([a, 
   await A.aba(p, 'Manejo'); await p.locator('.chip[data-campo="Manejo nenhum"]').click(); await A.aba(p, 'Fotos e observações'); await A.foto(p, 'Foto 2'); await A.foto(p, 'Foto 3');
   await A.concluir(p); for (const t of ['Sim, nenhum', 'Está certo', 'Salvar sem GPS']) if (await p.locator(`.folha >> text=${t}`).count()) { await p.click(`.folha button:has-text("${t}")`); await p.waitForTimeout(300); }
   const pend3 = await A.faltas(p); await p.waitForSelector('button.nova', { timeout: 15000 }).catch(() => {}); await p.waitForTimeout(4000);
-  ls = await lin(); const ag = ls.find((l) => String(l.Categoria) === '7') || {};
+  ls = await lin(); const ag = ls.find((l) => ['7', 'Agrupamento'].includes(String(l.Categoria))) || {};
   ok('J.3', opcs.includes('Agrupamento') && qtdeOk === 1 && pend3.length === 0 && Number(ag['Qtde estimada de individuos']) === 55 && ag.Especie === 'Leucaena leucocephala' && Number(ag['Altura total (m)']) === 4 && !!ag.latitude,
     `categorias: ${opcs.join(', ')}; campo de quantidade na tela: ${qtdeOk}; pendências: ${pend3.join(', ') || 'nenhuma'}; servidor: categoria ${ag.Categoria}, qtde ${ag['Qtde estimada de individuos']}, espécie ${ag.Especie}, altura ${ag['Altura total (m)']}`);
   // 4. pagamento: agrupamento vale 1 registro, face sem acesso vale 1 face (depois do auditor)

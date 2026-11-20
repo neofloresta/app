@@ -2959,7 +2959,7 @@
     const nomeP = (ids) => String(ids || '').split(',').filter(Boolean).map((i) => (projetos.find((p) => p.id === i.trim()) || {}).nome || i).join(', ') || 'Todos os projetos';
     const card = (pe) => { const inat = pe.ativo === 'não'; return h('div', { class: 'us-card' + (inat ? ' inativo' : '') },
       h('div', { class: 'us-cab' }, h('b', null, pe.nome), h('span', { class: 'selo' + (pe.vinculo === 'Parceiro' ? ' selo-parceiro' : '') }, pe.vinculo), inat ? h('span', { class: 'tag-cinza' }, 'desativada') : null),
-      h('small', null, [pe.funcao === 'Avaliador' ? pe.registro : 'Auxiliar', pe.time ? 'Time ' + pe.time : '', pe.vinculo === 'Parceiro' && pe.empresa ? pe.empresa : '', pe.equipe].filter(Boolean).join(' · ')), h('small', null, nomeP(pe.projeto)),
+      h('small', null, [pe.funcao === 'Avaliador' ? pe.registro || 'Avaliador' : 'Auxiliar', pe.time ? 'Time ' + pe.time : '', pe.vinculo === 'Parceiro' && pe.empresa ? pe.empresa : '', pe.equipe].filter(Boolean).join(' · ')), h('small', null, nomeP(pe.projeto)),
       h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec peq', onclick: () => editar(pe) }, 'Editar'), h('button', { class: 'btn sec peq', onclick: () => alternar(pe) }, inat ? 'Reativar' : 'Desativar'))); };
     const grupo = (t, f) => { const l = ps.filter((x) => x.funcao === f).sort((a, b) => (a.ativo === 'não') - (b.ativo === 'não') || a.nome.localeCompare(b.nome, 'pt')); return h('div', null, h('h4', null, `${t} (${l.filter((x) => x.ativo !== 'não').length})`), l.length ? h('div', { class: 'us-lista' }, l.map(card)) : h('p', { class: 'dica' }, 'Ninguém cadastrado.')); };
     corpo.replaceChildren(h('div', { class: 'cartao' }, h('h3', null, 'Pessoas das equipes'),
@@ -4461,7 +4461,7 @@
   const timeDaQd = (s) => { if (!S.eqParc || !s) return ''; if (s.equipe) return S.eqParc.has(String(s.equipe).trim().toLowerCase()) ? 'parc' : 'casa'; return s.marca === 'Neofloresta' || (s.situacao && s.situacao !== 'A levantar') ? 'casa' : ''; };
   const minhaEquipe = () => (S.projeto && S.projeto.equipe) || (S.sessao && S.sessao.usuario && S.sessao.usuario.equipe) || '';
   // 2.17: no time da casa (Neofloresta) as equipes trabalham juntas; a equipe "é minha" quando é a minha ou outra da casa. Parceiro continua preso à própria equipe
-  const daCasa = (eq) => !!eq && perfil() === 'coletor' && !modoQuadra() && !!S.eqParc && !S.eqParc.has(String(eq).trim().toLowerCase());
+  const daCasa = (eq) => !!eq && perfil() === 'coletor' && !modoQuadra() && !!(S.sessao && S.sessao.usuario && S.sessao.usuario.time) && !!S.eqCasa && S.eqCasa.has(String(eq).trim().toLowerCase());
   const eqMinha = (eq) => !!eq && (eq === minhaEquipe() || daCasa(eq));
   async function carregarQuadras() {
     const k = 'qd:' + S.projeto.id; let c = await Store.get(k);
@@ -4487,10 +4487,10 @@
   async function carregarSitQd(forcar, soLocal) {
     const k = 'qdsit:' + S.projeto.id; const c = (await Store.get(k)) || { quadras: [] };
     if (!soLocal && navigator.onLine && !S.expirada && (forcar || !S.qdSitEm || S.qdSitEm.p !== S.projeto.id || Date.now() - S.qdSitEm.t > 60000)) {
-      try { const r = await Api.b.quadrasSituacao(S.projeto.id); c.quadras = r.quadras; c.faces = r.faces || []; if (r.parceiras) c.parceiras = r.parceiras; await Store.set(k, c); S.qdSitEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { /* sem conexão */ }
+      try { const r = await Api.b.quadrasSituacao(S.projeto.id); c.quadras = r.quadras; c.faces = r.faces || []; if (r.parceiras) c.parceiras = r.parceiras; if (r.casa) c.casa = r.casa; await Store.set(k, c); S.qdSitEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { /* sem conexão */ }
     }
     const m = new Map(c.quadras.map((q) => [q.numero, Object.assign({}, q)]));
-    S.eqParc = c.parceiras ? new Set(c.parceiras) : null; m.parceiras = S.eqParc;
+    S.eqParc = c.parceiras ? new Set(c.parceiras) : null; m.parceiras = S.eqParc; S.eqCasa = c.casa ? new Set(c.casa) : null;
     m.faces = new Map((c.faces || []).map((f) => [f.numero, Object.assign({}, f)]));
     const u = S.sessao && S.sessao.u;
     for (const it of (await filaTodaQd()).filter((x) => x.projeto === S.projeto.id && x.usuario === u && !x.recusado)) for (const i of it.itens) {

@@ -96,7 +96,7 @@ const sitF = async (T) => { const j = await P('quadras_situacao', { t: T, projet
   ok('F.9', /Equipe 1/.test(pop2) && chips2 === 0, `face da Equipe 1 vista pela Equipe 2: só consulta (botões ${chips2})`);
   // 8. painel e "Ver a cidade"
   await pa.goto(L.WEB + '#painel'); await pa.waitForSelector('.kpis'); await pa.waitForSelector('text=Calçada levantada', { timeout: 20000 }).catch(() => null);
-  const kp = await pa.locator('.kpi:has-text("Calçada levantada")').innerText().catch(() => ''); const tab = await pa.locator('.painel-os table').first().innerText().catch(() => '');
+  const kp = await pa.locator('.kpi:has-text("Calçada levantada")').innerText().catch(() => ''); const tab = await pa.locator('.painel-os .cartao:has-text("Por equipe") table').first().innerText().catch(() => '');
   await pa.screenshot({ path: 'fc-painel.png', fullPage: true });
   ok('F.10', /km/.test(kp) && /Faces levantadas/i.test(tab) && /Equipe 1/.test(tab), `"${kp.replace(/\s+/g, ' ')}"; tabela por equipe: ${tab.split('\n').slice(0, 2).join(' | ').replace(/\t/g, ' ')}`);
   await pa.goto(L.WEB + '#mapa'); await pa.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 20000, state: 'attached' });

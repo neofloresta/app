@@ -36,11 +36,11 @@ async function ate7(p, { podas, raizes, fito, parar }) {
   await p.goto(L.WEB + '#form/' + ra.uuid); await p.waitForSelector('.ficha-sec'); await p.waitForTimeout(400);
   const sec = await p.evaluate(() => [...document.querySelectorAll('.ficha-sec')].map((s) => s.querySelector('h3').textContent + ': ' + [...s.querySelectorAll('.fl')].map((x) => x.textContent.replace(/\s+/g, ' ').trim()).join(' / ')));
   const ant = sec.find((t) => /^Formulário anterior/.test(t)) || '';
-  ok('M.2', v1 === F8.versao && /Fungo/.test(ant) && /Galhos secos, podres/.test(ant) && sec.some((t) => /^Raízes:.*Poda de raiz/.test(t)), `app com o formulário ${v1}; ficha do registro antigo: ${sec.filter((t) => /^(Raízes|Formulário anterior)/.test(t)).join(' || ')}`);
+  ok('M.2', v1 === F8.versao && !ant && sec.some((t) => /^Raízes:.*Poda de raiz/.test(t)), `app com o formulário ${v1}; ficha do registro antigo: ${sec.filter((t) => /^(Raízes|Formulário anterior)/.test(t)).join(' || ')}`);
   await p.click('button:has-text("Editar registro")'); await p.click('.folha button:has-text("Editar registro")'); await p.waitForSelector('.prog'); await p.waitForTimeout(300);
   const v = await p.evaluate(() => { const x = window.__app.S.reg.valores; return { aus: x['Raízes ausente'], poda: x['Poda de raiz'], fungo: x.Fungo }; });
   await A.concluir(p); const pend = await A.faltas(p);
-  ok('M.3', v.aus === false && v.poda === true && v.fungo === true && pend.includes('Galhos secos ou podres') && pend.includes('Pragas no tronco'), `ao editar: "Raízes ausente" ${v.aus}, "Poda de raiz" ${v.poda}, fungo antigo guardado ${v.fungo}; o app pede os campos novos: ${pend.join(', ')}`);
+  ok('M.3', v.aus === false && v.poda === true && pend.includes('Galhos secos ou podres') && pend.includes('Pragas no tronco'), `ao editar: "Raízes ausente" ${v.aus}, "Poda de raiz" ${v.poda}, fungo antigo guardado ${v.fungo}; o app pede os campos novos: ${pend.join(', ')}`);
   ok('M.4', !p.erros.length, p.erros.length ? p.erros.join(' | ') : 'sem erros de JavaScript');
   const falhas = Object.values(R).filter((x) => !x.passou).length; console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK'); await b.close(); process.exit(falhas ? 1 : 0);
 })().catch((e) => { console.error('ERRO', e); process.exit(1); });

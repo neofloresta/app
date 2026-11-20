@@ -7,12 +7,12 @@ const quadrado = (n, x0, y0, x1, y1) => ({ n, b: [x0, y0, x1, y1], a: [[x0, y0, 
   await L.subir(); await L.configurar();
   await L.post('usuario_salvar', { usuario_dados: { login: 'div-1', trajeto: 'sim' } });
   // 1. cadastro de pessoas (servidor)
-  const semReg = await L.post('pessoa_salvar', { pessoa: { nome: 'Sem Registro', funcao: 'Avaliador', vinculo: 'CLT', projeto: PJ } }).then(() => 'aceitou').catch((e) => e.message);
+  const semReg = await L.post('pessoa_salvar', { pessoa: { nome: 'Sem Registro', funcao: 'Avaliador', vinculo: 'CLT', projeto: 'outro-projeto' } }).then(() => 'aceitou').catch((e) => e.message);
   await L.post('pessoa_salvar', { pessoa: { nome: 'Ana Souza', funcao: 'Avaliador', registro: 'CRBio 12345/04-D', vinculo: 'CLT', projeto: PJ, equipe: 'Equipe 1' } });
   await L.post('pessoa_salvar', { pessoa: { nome: 'João Lima', funcao: 'Auxiliar', vinculo: 'Parceiro', empresa: 'MEI', projeto: PJ, equipe: 'Equipe 1' } });
   await L.post('pessoa_salvar', { pessoa: { nome: 'Carla Dias', funcao: 'Auxiliar', vinculo: 'CLT', projeto: 'outro-projeto' } });
   const lc = (await L.post('pessoas_listar', {}, 'div-1', 'equipe01')).pessoas;
-  ok('E.1', /registro profissional/.test(semReg) && lc.length === 2 && lc.every((x) => !('empresa' in x) && !('ativo' in x)), `avaliador sem registro recusado ("${semReg.slice(0, 70)}"); a equipe recebe só as ${lc.length} pessoas do projeto dela, sem dados internos`);
+  ok('E.1', semReg === 'aceitou' && lc.length === 2 && lc.every((x) => !('empresa' in x) && !('ativo' in x)), `avaliador sem registro profissional (opcional desde a 2.17): ${semReg.slice(0, 70)}; a equipe recebe só as ${lc.length} pessoas do projeto dela, sem dados internos`);
 
   // 2. dupla fixa do acesso, definida pela coordenação (2.8): o celular não pergunta nada
   const ps = (await L.post('pessoas_listar', {})).pessoas; const idAna = ps.find((x) => x.nome === 'Ana Souza').id, idJoao = ps.find((x) => x.nome === 'João Lima').id;
@@ -59,14 +59,13 @@ const quadrado = (n, x0, y0, x1, y1) => ({ n, b: [x0, y0, x1, y1], a: [[x0, y0, 
   const C = await L.celular(b, { viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false }); const q = C.p;
   await L.logar(q, 'admin', L.senha()); await q.waitForTimeout(1200);
   await q.goto(L.WEB + '#admin/pessoas'); await q.waitForSelector('.us-card', { timeout: 20000 }); const cards = await q.locator('.us-card').allInnerTexts();
-  await q.click('button:has-text("+ Nova pessoa")'); await q.fill('.folha input >> nth=0', 'Bruno Alves'); await q.selectOption('.folha select >> nth=0', 'Avaliador'); await q.click('.folha button:has-text("Salvar")'); await q.waitForTimeout(600);
-  const errSalvar = await q.locator('.toast.erro').innerText().catch(() => ''); const voltou = await q.locator('.folha input >> nth=0').inputValue().catch(() => '');
-  await q.fill('.folha input >> nth=1', 'CREA-MG 123456'); await q.click('.folha button:has-text("Salvar")'); await q.waitForTimeout(1500);
+  await q.click('button:has-text("+ Nova pessoa")'); await q.fill('.folha input >> nth=0', 'Bruno Alves'); await q.selectOption('.folha select >> nth=0', 'Avaliador'); await q.click('.folha button:has-text("Salvar")'); await q.waitForTimeout(1500);
+  const errSalvar = await q.locator('.toast.erro').innerText().catch(() => ''); // 2.17: o registro profissional do avaliador é opcional, a pessoa salva de primeira
   const cards2 = await q.locator('.us-card').count();
   await q.screenshot({ path: 'b27e-pessoas.png', fullPage: true });
   await q.goto(L.WEB + '#admin/setores'); await q.waitForSelector('text=setores na camada', { timeout: 20000 }); const st = await q.locator('main .cartao').innerText();
   await q.screenshot({ path: 'b27e-setores.png', fullPage: true });
-  ok('E.9', cards.length === 3 && /registro profissional/.test(errSalvar) && voltou === 'Bruno Alves' && cards2 === 4 && /2 setores na camada · 1 com equipe/.test(st), `Pessoas: ${cards.length} cartões, nova pessoa sem registro volta com o digitado e depois salva (${cards2}); Setores: "${(st.match(/\d+ setores na camada[^\n]*/) || [''])[0]}"`);
+  ok('E.9', cards.length === 4 && !errSalvar && cards2 === 5 && /2 setores na camada · 1 com equipe/.test(st), `Pessoas: ${cards.length} cartões, nova pessoa sem registro profissional salva de primeira (${cards2}); Setores: "${(st.match(/\d+ setores na camada[^\n]*/) || [''])[0]}"`);
   await p.screenshot({ path: 'b27e-campo.png' });
   const erros = [...p.erros, ...q.erros]; ok('E.10', !erros.length, erros.length ? erros.join(' | ') : 'sem erros de JavaScript');
   fs.writeFileSync(__dirname + '/res-b27e.json', JSON.stringify(R, null, 1));
