@@ -1,7 +1,14 @@
 {
- "versao": "2.16.5",
+ "versao": "2.17.0",
  "data": "2026-11-19",
  "notas": [
+  "Foto tirada por dentro do app, sem abrir a câmera do celular; galeria e câmera do celular ficam como botões na mesma tela",
+  "Concluir responde na hora (Salvando...) e não grava duas vezes",
+  "Time Neofloresta: copa por 2 raios ou área em cada árvore, foto da face opcional, e uma equipe encerra a face e fecha a quadra que a outra começou",
+  "Coordenação e auditor corrigem a posição de um registro arrastando o ponto",
+  "Quadra validada (automática) e quadras por time no mapa e no painel",
+  "Planilha com texto no lugar de código e nada em branco; colunas de formulário antigo saem (Ajustar registros antigos, em Formulários)",
+  "Registro profissional do avaliador opcional; prêmio com superação sem teto (teto 0)",
   "Formulário 14: viva ou morta e fitossanidade na primeira etapa, e tronco paralelo à fiação elétrica como pergunta própria (não aparece sem fiação aérea)",
   "Formulário 13: etapa Alvo separada da etapa Risco, alvos na zona de marcar (todos os que existem) e explicação dentro de cada opção",
   "Formulário 12: área livre, posição da árvore na calçada, tronco paralelo à fiação, colo soterrado, afloramento de raiz na via e, no risco, principal alvo, zona do alvo, taxa de ocupação, fator de proteção, principal defeito e carga sobre o defeito",
