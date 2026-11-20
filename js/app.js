@@ -1908,7 +1908,7 @@
       recalcular(r);
       anotarHistorico();
       if (!r.concluido_em) r.concluido_em = agoraISO();
-      if (r.lat != null && r.lat !== '') { const st = await Setores.doPonto(r.lon, r.lat); if (st) { r.setor = st.n; if (perfil() === 'coletor') r.foraSetor = st.fora; } }
+      if (r.lat != null && r.lat !== '') { const st = await Promise.race([Setores.doPonto(r.lon, r.lat).catch(() => null), new Promise((ok) => setTimeout(() => ok(null), 2500))]); if (st) { r.setor = st.n; if (perfil() === 'coletor') r.foraSetor = st.fora; } } // com sinal fraco não segura o "Salvando...": o setor é conferido em até 2,5 s
       if (r.validacao === 'Devolvido') r.validacao = 'Corrigido';
       S.editando.delete(r.uuid);
       r.status = 'pendente'; r.gpsAuto = false; r.atualizado_em = agoraISO(); delete r.erroSync;
@@ -4061,23 +4061,24 @@
     let form = S.form; try { const fr = await Api.b.formulario(S.projeto.formulario); if (fr && fr.campos) { form = fr; S.form = fr; } } catch (e) { /* segue com o formulário já aberto */ }
     if (!form) return toast('Formulário do projeto não carregado.');
     let linhas; try { linhas = await linhasProjeto(true); } catch (e) { return toast(e.message, 6000); }
-    const itens = linhas.map((l) => ({ uuid: l.uuid, valores: valoresAjustados(l, form) }));
-    let sobra = []; try { sobra = (await Api.b.registrosAjustar(S.projeto.id, { previa: true })).sobrando || []; } catch (e) { return toast(/desconhecida/i.test(e.message) ? 'O servidor ainda não tem esta função. Atualize o Code.gs para a 2.17.' : e.message, 7000); }
-    const LOTE = 200; let reg = 0, cel = 0;
+    const itens = linhas.map((l) => ({ uuid: l.uuid, atualizado_em: l.atualizado_em == null ? '' : String(l.atualizado_em), valores: valoresAjustados(l, form) }));
+    let sobra = [], outras = []; try { const pv = await Api.b.registrosAjustar(S.projeto.id, { previa: true }); sobra = pv.sobrando || []; outras = pv.outras || []; } catch (e) { return toast(/desconhecida/i.test(e.message) ? 'O servidor ainda não tem esta função. Atualize o Code.gs para a 2.17.' : e.message, 7000); }
+    const LOTE = 1000; let reg = 0, cel = 0;
     try { for (let i = 0; i < itens.length; i += LOTE) { const r = await Api.b.registrosAjustar(S.projeto.id, { simular: true, itens: itens.slice(i, i + LOTE) }); reg += r.registros; cel += r.celulas; } } catch (e) { return toast(e.message, 7000); }
     if (!reg && !sobra.length) return modal('Ajustar registros antigos', h('p', null, `Os ${fmtN(linhas.length)} registros de ${S.projeto.nome} já estão no formato novo e não há coluna de formulário antigo na planilha.`), [{ texto: 'Entendi', valor: true }]);
     const ok = await modal('Ajustar registros antigos', h('div', { class: 'ajuste-previa' },
       h('p', null, `Projeto ${S.projeto.nome}: ${fmtN(linhas.length)} registros na planilha.`),
       h('ul', { class: 'lista-mud' }, h('li', null, `${fmtN(reg)} ${reg === 1 ? 'registro muda' : 'registros mudam'} (${fmtN(cel)} células): texto no lugar de código e nada em branco ("NA" em número, "Não se aplica" em escolha).`),
-        h('li', null, sobra.length ? `${sobra.length} ${sobra.length === 1 ? 'coluna sai' : 'colunas saem'} da planilha: ${sobra.join(', ')}.` : 'Nenhuma coluna sai da planilha.')),
-      h('p', { class: 'dica' }, 'Antes de gravar, o servidor guarda uma cópia da planilha na pasta Backup. Validação, pagamento, fotos e coordenadas não são alterados.')),
+        h('li', null, sobra.length ? `${sobra.length} ${sobra.length === 1 ? 'coluna de formulário antigo sai' : 'colunas de formulário antigo saem'} da planilha: ${sobra.join(', ')}.` : 'Nenhuma coluna sai da planilha.'),
+        outras.length ? h('li', null, `Ficam como estão (não são do formulário, mas também não são de formulário antigo): ${outras.join(', ')}.`) : null),
+      h('p', { class: 'dica' }, 'Antes de gravar, o servidor guarda uma cópia da planilha na pasta Backup. Validação, pagamento, fotos e coordenadas não são alterados. Faça com a coleta parada: registro enviado durante o ajuste é pulado, e os celulares podem esperar alguns segundos para enviar.')),
       [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Ajustar agora', valor: true }]);
     if (!ok) return;
     try {
-      let copia = '', r2 = 0, c2 = 0, tiradas = [];
-      for (let i = 0; i < Math.max(1, itens.length); i += LOTE) { const ultimo = i + LOTE >= itens.length; const r = await Api.b.registrosAjustar(S.projeto.id, { itens: itens.slice(i, i + LOTE), semCopia: i > 0, remover: ultimo ? sobra : [] }); copia = copia || r.copia || ''; r2 += r.registros; c2 += r.celulas; tiradas = tiradas.concat(r.retiradas || []); }
+      let copia = '', r2 = 0, c2 = 0, tiradas = [], pul = 0;
+      for (let i = 0; i < Math.max(1, itens.length); i += LOTE) { const ultimo = i + LOTE >= itens.length; const r = await Api.b.registrosAjustar(S.projeto.id, { itens: itens.slice(i, i + LOTE), semCopia: i > 0, remover: ultimo }); copia = copia || r.copia || ''; r2 += r.registros; c2 += r.celulas; pul += r.pulados || 0; tiradas = tiradas.concat(r.retiradas || []); }
       delete S.linhas[S.projeto.id];
-      await modal('Ajuste feito', h('div', null, h('p', null, `${fmtN(r2)} registros ajustados (${fmtN(c2)} células) e ${tiradas.length} ${tiradas.length === 1 ? 'coluna retirada' : 'colunas retiradas'}.`), copia ? h('p', { class: 'dica' }, `Cópia guardada: ${copia}.`) : null), [{ texto: 'Entendi', valor: true }]);
+      await modal('Ajuste feito', h('div', null, h('p', null, `${fmtN(r2)} registros ajustados (${fmtN(c2)} células) e ${tiradas.length} ${tiradas.length === 1 ? 'coluna retirada' : 'colunas retiradas'}.`), pul ? h('p', null, `${fmtN(pul)} ${pul === 1 ? 'registro foi pulado' : 'registros foram pulados'} porque mudaram durante o ajuste. Rode de novo para ajustá-los.`) : null, copia ? h('p', { class: 'dica' }, `Cópia guardada: ${copia}.`) : null), [{ texto: 'Entendi', valor: true }]);
     } catch (e) { await modal('Ajuste não concluído', h('p', null, e.message), [{ texto: 'Entendi', valor: true }]); }
   }
   async function telaFichaServidor(uuidR) {
@@ -5056,11 +5057,14 @@
   // (aviso de memória) e a foto se perdia. A câmera do celular continua como reserva, e a galeria só onde o cadastro permite.
   // Resolve com a foto (Blob JPEG), com 'sistema' ou 'galeria' (o botão já abriu a escolha do celular, dentro do toque), ou com null (fechou).
   function cameraApp(titulo, { sistema, galeria } = {}) {
+    if (document.querySelector('.cam-app')) return Promise.resolve(null); // toque duplo: uma câmera só
     return new Promise((res) => {
       let stream = null, fim = false, tirando = false;
       const video = h('video', { autoplay: true, playsinline: true, muted: true }); video.muted = true; video.setAttribute('playsinline', '');
       const msg = h('p', { class: 'cam-msg' }, 'Abrindo a câmera...');
-      const fechar = (v) => { if (fim) return; fim = true; if (stream) stream.getTracks().forEach((t) => t.stop()); veu.remove(); res(v); };
+      const fechar = (v) => { if (fim) return; fim = true; window.removeEventListener('hashchange', sair); document.removeEventListener('visibilitychange', oculta); if (stream) stream.getTracks().forEach((t) => t.stop()); veu.remove(); res(v); };
+      const sair = () => fechar(null); const oculta = () => { if (document.hidden) fechar(null); }; // botão voltar ou tela bloqueada: desliga a câmera
+      window.addEventListener('hashchange', sair); document.addEventListener('visibilitychange', oculta);
       const disparar = async () => {
         if (tirando || !stream) return; tirando = true; bt.disabled = true; veu.classList.add('tirando');
         const trilha = stream.getVideoTracks()[0]; let blob = null;
@@ -5099,6 +5103,6 @@
   }
 
   window.__app = { S, Store, Api, sincronizar, proximoCodigo, marcarQuadras, conferirEnvio }; // usados pelos testes de estresse
-  Api.ganchos.form = () => S.form; Api.ganchos.estado = estadoCampos; // 2.17: a troca entre o formato de dentro e o da planilha fica toda na Api
+  if (Api.ganchos) { Api.ganchos.form = () => S.form; Api.ganchos.estado = estadoCampos; Api.ganchos.formatoNovo = () => !servidorMenos(2.17); } // 2.17: a troca entre o formato de dentro e o da planilha fica toda na Api
   iniciar().catch((e) => { $app.replaceChildren(h('div', { class: 'login' }, h('div', { class: 'aviso' }, 'Erro ao iniciar: ' + e.message), h('button', { class: 'btn', onclick: () => sair(true) }, 'Voltar ao login'))); });
 })();

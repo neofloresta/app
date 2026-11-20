@@ -6,7 +6,7 @@ const Api = (() => {
   // Na planilha: texto no lugar de código ("Árvore", "Improvável") e nada em branco ("NA" em número, "Não se aplica" em escolha e texto).
   // Por dentro o app continua com os códigos e com vazio. A troca acontece só aqui: na ida (achatar) e na volta (daPlanilha).
   const NA_NUM = 'NA', NA_TXT = 'Não se aplica';
-  const ganchos = { form: () => null, estado: null }; // o app informa o formulário aberto e a função que diz quais campos estão ocultos
+  const ganchos = { form: () => null, estado: null, formatoNovo: null }; // o app informa o formulário aberto e a função que diz quais campos estão ocultos
   const curto = (t) => { const m = String(t == null ? '' : t).match(/^([^(]+?)\s*\((.+)\)\s*$/); return m ? m[1] : String(t == null ? '' : t); };
   let tabMemo = null;
   function tabelas(form) {
@@ -20,7 +20,8 @@ const Api = (() => {
   }
   // ida: valores do registro no formato da planilha
   function paraPlanilha(l, r, form) {
-    const t = tabelas(form); if (!t) return l; let E = null; try { E = ganchos.estado ? ganchos.estado(form, r.valores || {}) : null; } catch (e) { E = null; }
+    const t = tabelas(form); if (!t || (ganchos.formatoNovo && !ganchos.formatoNovo())) return l; // servidor ainda na versão anterior: segue no formato antigo (código e branco)
+    let E = null; try { E = ganchos.estado ? ganchos.estado(form, r.valores || {}) : null; } catch (e) { E = null; }
     for (const c of form.campos) {
       if (c.tipo === 'photo') continue; let v = l[c.nome]; const vazio = v === '' || v == null; const oculto = !!(E && E[c.nome] && E[c.nome].oculto);
       if (c.tipo === 'bool') { if (vazio) l[c.nome] = 0; continue; }

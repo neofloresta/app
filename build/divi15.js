@@ -15,7 +15,10 @@ f.regras = (f.regras || []).filter((r) => !fora.includes(r.campo)); for (const r
 for (const a of f.abas) a.campos = a.campos.filter((x) => !fora.includes(x.campo));
 const par = f.campos.find((c) => c.nome === 'Tronco paralelo a fiacao eletrica'); if (!par) throw new Error('Falta o campo do tronco paralelo');
 par.vazioSe = { campo: 'Fiação ausente', valor: true, grava: 'Não' };
-f.camposRetirados = fora; // o app usa esta lista para tirar as colunas da planilha no ajuste dos registros antigos
+// colunas de formulário antigo: todo campo que já existiu em alguma versão deste formulário e não existe mais (o servidor só tira estas)
+const { execSync } = require('child_process'); const raiz = path.join(__dirname, '..'); const jaExistiu = new Set(fora);
+for (const h of execSync('git log --format=%h -- forms/divinopolis-inventario.json', { cwd: raiz }).toString().trim().split('\n')) { try { const v = JSON.parse(execSync(`git show ${h}:forms/divinopolis-inventario.json`, { cwd: raiz, maxBuffer: 5e7 }).toString()); (v.campos || []).forEach((c) => jaExistiu.add(c.nome)); } catch (e) { /* versão ilegível: ignora */ } }
+const atuais = new Set(f.campos.map((c) => c.nome)); f.camposRetirados = [...jaExistiu].filter((n) => !atuais.has(n)).sort();
 f.versao = 15;
 fs.writeFileSync(arq, JSON.stringify(f, null, 1));
-console.log(f.campos.length, 'campos; retirados:', fora.join(', '));
+console.log(f.campos.length, 'campos; retirados agora:', fora.join(', '), '| colunas de formulário antigo:', f.camposRetirados.join(', '));

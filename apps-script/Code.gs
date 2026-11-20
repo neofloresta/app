@@ -721,32 +721,36 @@ const COLS_FIXAS = ['uuid', 'projeto', 'equipe', 'usuario', 'criado_em', 'atuali
 function colunasDoRegistro(form) { const m = {}; COLS_FIXAS.concat(COLS_SISTEMA, COLS_INTERNAS, COLS_DUPLA).forEach((c) => { m[c] = 1; }); (form.campos || []).forEach((c) => { m[c.nome] = 1; if (c.tipo === 'photo') m[c.nome + ' link'] = 1; }); return m; }
 function ajustarRegistros(projetoId, d, usr) {
   const p = projeto(projetoId); const form = lerFormulario(p.formulario); const fica = colunasDoRegistro(form);
-  const itens = Array.isArray(d.itens) ? d.itens.slice(0, 20000) : []; const remover = (Array.isArray(d.remover) ? d.remover : []).map(String);
-  remover.forEach((c) => { if (fica[c] || /^altura_|_em$|_id$/.test(c)) throw new Error('A coluna "' + c + '" é do formulário atual ou do sistema e não pode ser retirada.'); });
+  const itens = Array.isArray(d.itens) ? d.itens.slice(0, 5000) : [];
+  // só sai coluna de formulário antigo (lista do próprio formulário); coluna criada à mão ou vinda de importação fica
+  const antigas = {}; (form.camposRetirados || []).forEach((c) => { antigas[c] = 1; antigas[c + ' link'] = 1; });
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
     const sh = planilha(projetoId); let cab = cabecalho(sh, []); const n = sh.getLastRow() - 1;
-    // colunas da planilha que não são do formulário atual nem do sistema: o app mostra a lista antes de pedir a retirada
-    const sobrando = cab.filter((c) => c !== '' && !fica[c]);
-    if (d.previa) return { sobrando: sobrando, registros: Math.max(0, n) };
+    const sobrando = cab.filter((c) => c !== '' && !fica[c] && antigas[c]); const outras = cab.filter((c) => c !== '' && !fica[c] && !antigas[c]);
+    if (d.previa) return { sobrando: sobrando, outras: outras, registros: Math.max(0, n) };
+    const remover = d.remover ? sobrando : [];
     let copia = '';
-    if (!d.semCopia && !d.simular) { try { const agora = Utilities.formatDate(new Date(), FUSO, 'yyyy-MM-dd HH:mm'); copia = DriveApp.getFileById(p.planilha_id).makeCopy(p.nome + ' - antes do ajuste 2.17 ' + agora, pastaBackup()).getName(); } catch (e) { throw new Error('Não consegui guardar a cópia da planilha antes do ajuste (' + e.message + '). Nada foi alterado.'); } }
-    let celulas = 0, linhasM = 0;
+    if (!d.semCopia && !d.simular) { try { const agora = Utilities.formatDate(new Date(), FUSO, 'yyyy-MM-dd HH-mm'); copia = DriveApp.getFileById(p.planilha_id).makeCopy(p.nome + ' - antes do ajuste ' + agora, pastaBackup()).getName(); } catch (e) { throw new Error('Não consegui guardar a cópia da planilha antes do ajuste (' + e.message + '). Nada foi alterado.'); } }
+    let celulas = 0, linhasM = 0, pulados = 0;
     if (n > 0 && itens.length) {
       const cols = {}; itens.forEach((it) => { Object.keys(it.valores || {}).forEach((c) => { cols[c] = 1; }); }); const nomes = Object.keys(cols);
       nomes.forEach((c) => { if (!fica[c]) throw new Error('A coluna "' + c + '" não é do formulário atual.'); if (COLS_SISTEMA.indexOf(c) >= 0 || COLS_FIXAS.indexOf(c) >= 0 || COLS_DUPLA.indexOf(c) >= 0 || COLS_INTERNAS.indexOf(c) >= 0) throw new Error('O ajuste não mexe na coluna "' + c + '".'); });
-      if (d.simular) nomes.forEach((c) => { if (cab.indexOf(c) < 0) throw new Error('simular: coluna nova ' + c); }); else cab = cabecalho(sh, nomes);
-      const uu = sh.getRange(2, cab.indexOf('uuid') + 1, n, 1).getValues().map((x) => String(x[0])); const pos = {}; uu.forEach((u, i) => { pos[u] = i; });
-      const dados = {}; nomes.forEach((c) => { dados[c] = sh.getRange(2, cab.indexOf(c) + 1, n, 1).getValues(); }); const mexidas = {};
-      itens.forEach((it) => { const k = pos[String(it.uuid)]; if (k == null) return; let m = 0; Object.keys(it.valores || {}).forEach((c) => { const v = celula(it.valores[c]); if (String(dados[c][k][0]) !== String(v)) { dados[c][k] = [v]; mexidas[c] = 1; celulas++; m = 1; } }); linhasM += m; });
-      if (!d.simular) Object.keys(mexidas).forEach((c) => sh.getRange(2, cab.indexOf(c) + 1, n, 1).setValues(dados[c]));
+      const faltam = nomes.filter((c) => cab.indexOf(c) < 0); if (faltam.length && !d.simular) cab = cabecalho(sh, nomes);
+      const tudo = sh.getRange(2, 1, n, cab.length).getValues(); // a planilha é lida uma vez só
+      const iu = cab.indexOf('uuid'), ia = cab.indexOf('atualizado_em'); const pos = {}; tudo.forEach((l, i) => { pos[String(l[iu])] = i; }); const mexidas = {};
+      const txt = (x) => (x instanceof Date ? x.toISOString() : String(x == null ? '' : x));
+      itens.forEach((it) => { const k = pos[String(it.uuid)]; if (k == null) return;
+        if (it.atualizado_em != null && ia >= 0 && txt(tudo[k][ia]) !== String(it.atualizado_em)) { pulados++; return; } // registro reenviado depois da leitura do app: não é tocado
+        let m = 0; Object.keys(it.valores || {}).forEach((c) => { const j = cab.indexOf(c); const v = celula(it.valores[c]); if (j < 0) { if (v !== '' && v != null) { celulas++; m = 1; } return; } if (txt(tudo[k][j]) !== String(v)) { tudo[k][j] = v; mexidas[j] = 1; celulas++; m = 1; } }); linhasM += m; });
+      if (!d.simular) Object.keys(mexidas).forEach((j) => sh.getRange(2, +j + 1, n, 1).setValues(tudo.map((l) => [l[+j]])));
     }
-    if (d.simular) return { registros: linhasM, celulas: celulas, sobrando: sobrando.filter((c) => remover.indexOf(c) >= 0), simulado: true };
+    if (d.simular) return { registros: linhasM, celulas: celulas, pulados: pulados, simulado: true };
     const tiradas = [];
     remover.forEach((c) => { const cb = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String); const i = cb.indexOf(c); if (i >= 0) { sh.deleteColumn(i + 1); tiradas.push(c); } });
     marcarMudanca(projetoId); try { CacheService.getScriptCache().remove('painel:' + projetoId + ':cliente'); CacheService.getScriptCache().remove('painel:' + projetoId + ':todos'); } catch (e) { /* segue */ }
     auditar(usr.login, 'registros_ajustar', projetoId, linhasM + ' registro(s), ' + celulas + ' célula(s), colunas retiradas: ' + (tiradas.join(', ') || 'nenhuma'));
-    return { registros: linhasM, celulas: celulas, retiradas: tiradas, copia: copia };
+    return { registros: linhasM, celulas: celulas, pulados: pulados, retiradas: tiradas, copia: copia };
   } finally { lock.releaseLock(); }
 }
 function validar(projetoId, itens, usr) {
@@ -2100,7 +2104,7 @@ function autenticarChave(k, acao) {
 function listarCopias(projetoId) {
   const p = projeto(projetoId); const out = []; const raiz = pastaBackup(); const it = raiz.getFolders();
   const esc = String(p.nome).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const rxDia = new RegExp('^' + esc + ' - \\d{4}-\\d{2}-\\d{2}$'); const rxAntes = new RegExp('^' + esc + ' - antes da restauração \\d{4}-\\d{2}-\\d{2} \\d{2}-\\d{2}$');
+  const rxDia = new RegExp('^' + esc + ' - \\d{4}-\\d{2}-\\d{2}$'); const rxAntes = new RegExp('^' + esc + ' - antes (da restauração|do ajuste) \\d{4}-\\d{2}-\\d{2} \\d{2}-\\d{2}$');
   const soltos = raiz.getFiles(); while (soltos.hasNext()) { const a = soltos.next(); if (rxAntes.test(String(a.getName()))) out.push({ id: a.getId(), nome: a.getName(), dia: String(a.getName()).slice(-16, -6) }); }
   while (it.hasNext()) {
     const f = it.next(); const fs = f.getFiles();

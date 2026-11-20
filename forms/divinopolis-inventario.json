@@ -4082,16 +4082,18 @@
  ],
  "marcaVersao": "Galhos secos ou podres",
  "camposRetirados": [
-  "Tronco paralelo à fiação",
-  "Galhos secos, podres ou com risco de queda",
-  "Fungo",
-  "Cupim",
   "Broca",
+  "Cupim",
+  "DAP (cm)",
   "Doença aparente",
-  "Praga aparente",
   "Fitossanidade ausente",
+  "Fungo",
+  "Galhos secos, podres ou com risco de queda",
+  "Largura da calcada (m)",
+  "Nivel da avaliacao",
+  "Praga aparente",
   "Principal alvo",
   "Risco nivel 1",
-  "Nivel da avaliacao"
+  "Tronco paralelo à fiação"
  ]
 }
