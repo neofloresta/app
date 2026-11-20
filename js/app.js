@@ -515,7 +515,7 @@
     try {
       const cam = await carregarQuadras(); if (!cam || S.qdTemFaces !== S.projeto.id || !document.body.contains(el)) return;
       const sit = await carregarSitQd(false); const eq = minhaEquipe();
-      const minhas = [...(sit.faces || new Map()).values()].filter((f) => f.situacao === 'Em levantamento' && (!f.equipe || f.equipe === eq || ehCoord()));
+      const minhas = [...(sit.faces || new Map()).values()].filter((f) => f.situacao === 'Em levantamento' && (!f.equipe || f.equipe === eq || eqMinha(f.equipe) || ehCoord()));
       if (!minhas.length || !document.body.contains(el)) return el.replaceChildren();
       el.replaceChildren(h('button', { class: 'btn contorno encerrar-face', onclick: () => encerrarFace(minhas) }, ico('check'), minhas.length > 1 ? `Encerrar face (${minhas.length} em andamento)` : 'Encerrar face'));
     } catch (e) { /* sem quadras */ }
@@ -2090,7 +2090,7 @@
     const comCamada = L.layerGroup().addTo(mapa); const comItens = new Map(); let comDesde = '', comFila = [], setDados = null, comNovo = null;
     const veCom = Com.veem(); const verSet = () => S.verSet !== false, verCom = () => S.verCom !== false;
     const qdCamada = L.layerGroup().addTo(mapa); const rotulos = L.layerGroup().addTo(mapa);
-    const corQd = (q) => { const s = qdSit.get(q.n) || {}; if (selQd.value === 'eq') return s.equipe ? corEq(s.equipe) : '#9AA9B0'; return COR_QD[s.situacao || 'A levantar']; };
+    const corQd = (q) => { const s = qdSit.get(q.n) || {}; if (selQd.value === 'eq') return s.equipe ? corEq(s.equipe) : '#9AA9B0'; const t = timeDaQd(s); if (t && s.situacao && s.situacao !== 'A levantar') return COR_TIME[t]; return COR_QD[s.situacao || 'A levantar']; };
     const qdLayers = new Map();
     // faces de quadra: linhas sobre o contorno da quadra, por cima dela e por baixo dos pontos
     const fcLayers = new Map(); let selTipo = 'qd'; const ZOOM_FACES = 16; let fcAberta = null;
@@ -2108,6 +2108,11 @@
       if (sel) return { color: '#6A1B9A', weight: 3, fillColor: '#9C4DCC', fillOpacity: 0.4 };
       if (motivoBloqueio(s)) return { color: '#5F6B70', weight: 2, dashArray: '3 5', fillColor: '#37474F', fillOpacity: 0.28 };
       if (ehCoord() && s.marca) return { color: COR_MARCA[s.marca], weight: 3, dashArray: s.marca === 'Validação' ? '3 5' : null, fillColor: COR_MARCA[s.marca], fillOpacity: perto ? 0.06 : 0.3 };
+      if (selQd.value === 'sit' && timeDaQd(s) && s.situacao && s.situacao !== 'A levantar') { // por time: claro em levantamento, cheio levantada, contorno verde na validada
+        const feita = s.situacao === 'Levantada';
+        if (perto) return { color: s.validada ? COR_VALIDADA : cor, weight: s.validada ? 3 : 1.5, fillColor: cor, fillOpacity: 0.05 };
+        return { color: s.validada ? COR_VALIDADA : cor, weight: s.validada ? 3 : 1, fillColor: cor, fillOpacity: feita ? 0.6 : 0.22 };
+      }
       return perto ? { color: '#8A9BA2', weight: 1, fillColor: cor, fillOpacity: 0.04 } : { color: cor, weight: 1, fillColor: cor, fillOpacity: forte ? 0.45 : 0.14 }; };
     // só as quadras perto da área visível ficam desenhadas: arrastar e dar zoom continuam leves com milhares de quadras
     function sincQdVista() {
@@ -2177,7 +2182,7 @@
       if (!ok) return; if (pend) sincronizar(true);
       marcar([{ numero: q.n, fechar: true }]);
     }
-    const podeMarcarQd = (s) => ehCoord() || (perfil() === 'coletor' && (!s.equipe || s.equipe === minhaEquipe()));
+    const podeMarcarQd = (s) => ehCoord() || (perfil() === 'coletor' && (!s.equipe || eqMinha(s.equipe)));
     // ---- ficha: no celular sobe de baixo (folha) e o mapa se desloca para o item continuar à vista; no computador, balão ----
     let folha = null, aoFecharFicha = null;
     function fecharFicha() { if (folha) { folha.remove(); folha = null; telaM.classList.remove('com-folha'); } const f = aoFecharFicha; aoFecharFicha = null; if (f) f(); }
@@ -2270,7 +2275,7 @@
       const eqIn = escolhaEquipe(s.equipe || '');
       const pop = h('div', { class: 'ficha qd-ficha' }, h('b', null, 'Quadra ' + q.n),
         q.p ? Object.entries(q.p).map(([k, v]) => h('small', null, (/^ruas?$/i.test(k) ? '' : k + ': ') + v)) : null,
-        h('div', null, h('span', { class: 'os-st', style: `background:${COR_QD[st]}` }, st + (s.__pend ? ' · a enviar' : '')), ' ', perfil() === 'cliente' ? '' : s.equipe ? s.equipe : 'sem equipe'),
+        h('div', null, h('span', { class: 'os-st', style: `background:${s.validada ? COR_VALIDADA : COR_QD[st]}` }, (s.validada ? 'Validada' : st) + (s.__pend ? ' · a enviar' : '')), ' ', perfil() === 'cliente' ? '' : s.equipe ? s.equipe : 'sem equipe'),
         h('small', null, `${pl(arv, 'árvore cadastrada', 'árvores cadastradas')} dentro dela` + (s.marcada_por ? ` · marcada por ${s.marcada_por} em ${dataAno(s.marcada_em)}` : '')),
         q.f ? h('small', null, `Faces: ${fFeitas} de ${q.f.length} levantadas.` + (mapa.getZoom() < ZOOM_FACES ? '' : ' Toque na linha de uma face para marcar.')) : null,
         q.f && mapa.getZoom() < ZOOM_FACES ? h('button', { class: 'btn sec peq', onclick: () => { fecharFicha(); mapa.setView(Quadras.centro(q), 18); } }, 'Aproximar para marcar faces') : null,
@@ -2278,8 +2283,8 @@
         blocoPedido(q),
         s.fechada_em ? h('small', null, h('b', null, 'Quadra fechada'), ' em ' + dataAno(s.fechada_em)) : null,
         s.reservada_em && !s.fechada_em && perfil() !== 'cliente' ? h('small', { class: 'dica' }, 'Reservada em ' + dataAno(s.reservada_em)) : null,
-        q.f && !s.fechada_em && s.equipe && (ehCoord() || (perfil() === 'coletor' && s.equipe === minhaEquipe())) ? h('button', { class: 'btn peq acao', onclick: () => fecharQuadra(q, s, marcar) }, ico('check'), 'Fechar quadra') : null,
-        q.f && !s.fechada_em && fFeitas < q.f.length && perfil() === 'coletor' && !somenteVer() && (s.equipe === minhaEquipe() || (!s.equipe && !modoQuadra())) ? h('button', { class: 'btn sec peq acao bt-sem-acesso', onclick: () => { mapa.closePopup(); fecharFicha(); iniciarSemAcesso(q); } }, 'Quadra sem acesso (condomínio fechado, área particular)') : null,
+        q.f && !s.fechada_em && s.equipe && (ehCoord() || (perfil() === 'coletor' && eqMinha(s.equipe))) ? h('button', { class: 'btn peq acao', onclick: () => fecharQuadra(q, s, marcar) }, ico('check'), 'Fechar quadra') : null,
+        q.f && !s.fechada_em && fFeitas < q.f.length && perfil() === 'coletor' && !somenteVer() && (eqMinha(s.equipe) || (!s.equipe && !modoQuadra())) ? h('button', { class: 'btn sec peq acao bt-sem-acesso', onclick: () => { mapa.closePopup(); fecharFicha(); iniciarSemAcesso(q); } }, 'Quadra sem acesso (condomínio fechado, área particular)') : null,
         podeMarcarQd(s) && !(s.fechada_em && !ehCoord()) && !modoQuadra() ? h('div', { class: 'chips qd-chips' }, SIT_QD.map((x) => h('button', { class: 'chip' + (x === st ? ' sel' : ''), onclick: () => x !== st && marcar([{ numero: q.n, situacao: x }]) }, x))) : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn.el, h('button', { class: 'btn sec peq', onclick: () => { const v = eqIn.valor(); if (v == null) return toast('Escolha a equipe.'); marcar([{ numero: q.n, equipe: v }]); } }, 'Definir equipe')) : null,
         ehCoord() && !s.equipe ? h('div', { class: 'chips qd-chips' }, [['', 'Livre'], ['Neofloresta', 'Da Neofloresta'], ['Validação', 'Em validação']].map(([v, t]) => h('button', { class: 'chip' + ((s.marca || '') === v ? ' sel' : ''), onclick: () => (s.marca || '') !== v && !servidorAntigo(2.15) && marcar([{ numero: q.n, marca: v }]) }, t))) : null,
@@ -2303,7 +2308,7 @@
     }
     // face sem equipe segue a equipe da quadra; a coordenação pode passar a face para outra equipe
     const eqDaQuadra = (q) => { const x = qdSit.get(q.n) || {}; return x.equipe && x.atribuida !== 'nao' ? x.equipe : ''; };
-    const podeMarcarFc = (s, q) => ehCoord() || (perfil() === 'coletor' && (s.equipe ? s.equipe === minhaEquipe() : !eqDaQuadra(q) || eqDaQuadra(q) === minhaEquipe()));
+    const podeMarcarFc = (s, q) => ehCoord() || (perfil() === 'coletor' && (s.equipe ? eqMinha(s.equipe) : !eqDaQuadra(q) || eqMinha(eqDaQuadra(q))));
     function clicarFace(q, f, ll) {
       const id = q.n + '-' + f.i;
       if (selecao) { if (selTipo !== 'fc') return toast('Toque nas quadras para escolher.'); if (selecao.has(id)) selecao.delete(id); else selecao.add(id); pintarSelecao(); restilizar([id]); return; }
@@ -2317,7 +2322,7 @@
       const mais = [
         lado.length > 1 && (pode || ehCoord()) ? h('button', { class: 'btn sec peq', onclick: () => vaiSel(lado.map((x) => x.id)) }, `Escolher o lado todo da rua (${lado.length} faces, ${fmtM(mLado)})`) : null,
         pode ? h('button', { class: 'btn sec peq', onclick: () => vaiSel([id]) }, 'Escolher várias faces') : null,
-        (() => { const sq = qdSit.get(q.n) || {}; return sq.equipe && !sq.fechada_em && (ehCoord() || (perfil() === 'coletor' && sq.equipe === minhaEquipe())) ? h('button', { class: 'btn sec peq acao', onclick: () => { mapa.closePopup(); fecharQuadra(q, sq, async (itens) => { try { const r = await marcarQuadras(itens); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Quadra fechada.'); qdSit = await carregarSitQd(!r.fila); desenhar(false); } catch (e) { toast(e.message, 5000); } }); } }, `Fechar a quadra ${q.n}`) : null; })(),
+        (() => { const sq = qdSit.get(q.n) || {}; return sq.equipe && !sq.fechada_em && (ehCoord() || (perfil() === 'coletor' && eqMinha(sq.equipe))) ? h('button', { class: 'btn sec peq acao', onclick: () => { mapa.closePopup(); fecharQuadra(q, sq, async (itens) => { try { const r = await marcarQuadras(itens); if (r.recusadas && r.recusadas.length) toast(r.recusadas[0].motivo, 5000); else toast(r.fila ? 'Sem internet: guardado no aparelho.' : 'Quadra fechada.'); qdSit = await carregarSitQd(!r.fila); desenhar(false); } catch (e) { toast(e.message, 5000); } }); } }, `Fechar a quadra ${q.n}`) : null; })(),
         pode && st === 'Levantada' ? h('button', { class: 'btn sec peq acao', onclick: () => marcar([{ numero: id, situacao: 'Em levantamento' }]) }, 'Voltar para Em levantamento') : null,
         pode && st !== 'A levantar' ? h('button', { class: 'btn sec peq acao', onclick: () => marcar([{ numero: id, situacao: 'A levantar' }]) }, 'Voltar para A levantar') : null,
         ehCoord() ? h('div', { class: 'qd-eq' }, eqIn.el, h('button', { class: 'btn sec peq', onclick: () => { const v = eqIn.valor(); if (v == null) return toast('Escolha a equipe.'); marcar([{ numero: id, equipe: v }]); } }, 'Definir equipe')) : null].filter(Boolean);
@@ -2433,7 +2438,7 @@
       leg = L.control({ position: 'bottomleft' });
       const porEq = selCor.value !== 'os' && selCor.value !== 'risco';
       let itens = selCor.value === 'os' ? [...Object.entries(COR_OS), ['Sem ordem', '#C9D3D6']] : selCor.value === 'risco' ? Object.entries(corRisco) : equipes.map((e) => [e, corEq(e)]);
-      let itQd = qdDados && selQd.value && !(mapa.getZoom() >= ZOOM_FACES && selQd.value === 'sit') ? (selQd.value === 'eq' ? [...new Set([...qdSit.values()].map((s) => s.equipe).filter(Boolean))].sort().map((e) => [e, corEq(e)]).concat([['Sem equipe', '#9AA9B0']]) : Object.entries(COR_QD)) : [];
+      let itQd = qdDados && selQd.value && !(mapa.getZoom() >= ZOOM_FACES && selQd.value === 'sit') ? (selQd.value === 'eq' ? [...new Set([...qdSit.values()].map((s) => s.equipe).filter(Boolean))].sort().map((e) => [e, corEq(e)]).concat([['Sem equipe', '#9AA9B0']]) : S.eqParc ? [['A levantar', COR_QD['A levantar']], ['Neofloresta: em levantamento', COR_TIME_CLARA.casa], ['Neofloresta: levantada', COR_TIME.casa], ['Parceiro: em levantamento', COR_TIME_CLARA.parc], ['Parceiro: levantada', COR_TIME.parc], ['Validada (contorno verde)', COR_VALIDADA]] : Object.entries(COR_QD)) : [];
       if (porEq && itQd.length && selQd.value === 'eq') { const tem = new Set(itens.map((x) => x[0])); itQd.forEach((x) => { if (!tem.has(x[0])) itens.push(x); }); itQd = []; } // pontos e quadras por equipe: um bloco só
       if (porEq) itens = itens.map(([t, c]) => [rotEquipe(t), c]);
       const itFc = qdDados && selQd.value === 'sit' && fcLayers.size ? Object.entries(COR_FC).filter(([t]) => t !== 'A levantar') : [];
@@ -2755,7 +2760,7 @@
           h('div', { class: 'grade3' }, h('div', null, h('small', null, 'Valor por registro (R$)'), pV), h('div', null, h('small', null, 'Parte do time parceiro, dentro do valor (R$)'), pI), h('div', null, h('small', null, 'Parte do avaliador quando há auxiliar (%)'), pA)),
           h('div', { class: 'dica' }, 'Exemplo: R$ 2,50 por registro, R$ 0,50 para o time e R$ 2,00 para quem coleta. Sozinho, o avaliador fica com os R$ 2,00; com auxiliar, metade para cada.'),
           h('b', { class: 'rot' }, 'Equipe com carteira (prêmio por semana)'),
-          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Meta por dia, na média da semana (registros)'), mD), h('div', null, h('small', null, 'Teto da superação por dia'), mT)),
+          h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Meta por dia, na média da semana (registros)'), mD), h('div', null, h('small', null, 'Teto da superação por dia (0 = sem teto)'), mT)),
           h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Prêmio de meta por mês, avaliador (R$)'), pmA), h('div', null, h('small', null, 'Prêmio de meta por mês, auxiliar (R$)'), pmX)),
           h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Superação por registro, avaliador (R$)'), sA), h('div', null, h('small', null, 'Superação por registro, auxiliar (R$)'), sX)),
           h('div', { class: 'grade2' }, h('div', null, h('small', null, 'Face de quadra sem árvore vale (registros)'), pF), h('div', null, h('small', null, 'Mudança de regra vale a partir de'), rDe)),
@@ -2772,7 +2777,7 @@
       if (novo && projetos.some((x) => x.id === pid)) return toast('Já existe projeto com esse identificador.');
       const fg = nOk(fGps, 1, 50), fd = nOk(fDist, 1, 50), ff = nOk(fFolga, 0, 50);
       if (fg == null || fd == null || ff == null) return toast('Faces de quadra: use números entre 1 e 50 metros (folga de 0 a 50).', 5000);
-      const prod = { prod_valor: nOk(pV, 0, 1000), prod_avaliador_pct: nOk(pA, 0, 100), meta_dia: nOk(mD, 1, 10000), teto_dia: nOk(mT, 1, 10000), premio_meta_av: nOk(pmA, 0, 100000), premio_meta_ax: nOk(pmX, 0, 100000), sup_av: nOk(sA, 0, 1000), sup_ax: nOk(sX, 0, 1000), peso_face: nOk(pF, 0, 10), regras_de: rDe.value || '', bonus_valor: nOk(pB, 0, 1000), bonus_erro_max: nOk(pBe, 0, 100), indicacao_valor: nOk(pI, 0, 1000), auditoria_pct: nOk(aP, 1, 100), auditoria_erro_max: nOk(aE, 0, 100), parceiro_ve_valor: pVe.value };
+      const prod = { prod_valor: nOk(pV, 0, 1000), prod_avaliador_pct: nOk(pA, 0, 100), meta_dia: nOk(mD, 1, 10000), teto_dia: nOk(mT, 0, 10000), premio_meta_av: nOk(pmA, 0, 100000), premio_meta_ax: nOk(pmX, 0, 100000), sup_av: nOk(sA, 0, 1000), sup_ax: nOk(sX, 0, 1000), peso_face: nOk(pF, 0, 10), regras_de: rDe.value || '', bonus_valor: nOk(pB, 0, 1000), bonus_erro_max: nOk(pBe, 0, 100), indicacao_valor: nOk(pI, 0, 1000), auditoria_pct: nOk(aP, 1, 100), auditoria_erro_max: nOk(aE, 0, 100), parceiro_ve_valor: pVe.value };
       if (Object.values(prod).some((v) => v == null)) return toast('Produção, prêmios e auditoria: confira os números (porcentagens de 0 a 100).', 5000);
       try { await Api.b.projetoSalvar(Object.assign({}, p, { id: pid, nome: nome.value.trim(), formulario: fo.value, epsg: ep.value, prefixo: Q2F.slug(pre.value || pid), contratante: contr.value.trim(), contrato: ncon.value.trim(), municipio: mun.value.trim(), meta: String(parseInt(meta.value, 10) || ''), cliente_ve: cve.value, face_gps: fg, face_dist: fd, face_folga: ff, responsavel: rt.value.trim(), registro_profissional: reg.value.trim(), art: art.value.trim(), tipos_os: tos.value.split('\n').map((x) => x.trim()).filter(Boolean).join('; ') }, prod)); toast('Projeto salvo.'); await recarregarSessao(); telaAdmin('projetos'); } catch (e) { toast(e.message, 5000); }
     }
@@ -2915,7 +2920,7 @@
       const eq = h('select', { class: 'entrada' }, h('option', { value: '' }, 'Sem equipe fixa'), equipes.map((e) => h('option', { value: e, selected: pe.equipe === e }, e)));
       const marcados = new Set(String(pe.projeto || '').split(',').map((x) => x.trim()).filter(Boolean));
       const prj = h('div', { class: 'chips' }, projetos.map((p) => { const b = h('button', { class: 'chip' + (marcados.has(p.id) ? ' sel' : ''), type: 'button', onclick: () => { b.classList.toggle('sel'); if (marcados.has(p.id)) marcados.delete(p.id); else marcados.add(p.id); } }, p.nome); return b; }));
-      const cReg = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Formação e registro profissional'), rg); const cEmp = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Parceiro como'), em);
+      const cReg = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Formação e registro profissional (opcional)'), rg); const cEmp = h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Parceiro como'), em);
       const ver = () => { cReg.classList.toggle('oculto', fu.value !== 'Avaliador'); cEmp.classList.toggle('oculto', vi.value !== 'Parceiro'); }; fu.onchange = ver; vi.onchange = ver; ver();
       const ok = await modal(novo ? 'Nova pessoa' : 'Editar pessoa', h('div', null,
         h('div', { class: 'campo' }, h('label', { class: 'rot' }, 'Nome'), no),
@@ -2928,7 +2933,6 @@
       const d = { id: pe.id, nome: no.value.trim(), funcao: fu.value, registro: fu.value === 'Avaliador' ? rg.value.trim() : '', vinculo: vi.value, empresa: vi.value === 'Parceiro' ? em.value.trim() : '', equipe: eq.value, time: ti.value, projeto: [...marcados].join(','), ativo: pe.ativo || 'sim' };
       const erro = (m) => { toast(m, 5000, null, true); return editar(novo ? null : pe, d); };
       if (!d.nome) return erro('Informe o nome.');
-      if (d.funcao === 'Avaliador' && !d.registro) return erro('Avaliador precisa do registro profissional (ex.: CRBio 12345/04-D, CREA-MG 123456).');
       try { await Api.b.pessoaSalvar(d); toast('Pessoa salva.'); telaAdmin('pessoas'); } catch (e) { erro(e.message); }
     }
     async function alternar(pe) { try { await Api.b.pessoaSalvar(Object.assign({}, pe, { ativo: pe.ativo === 'não' ? 'sim' : 'não' })); telaAdmin('pessoas'); } catch (e) { toast(e.message, 5000); } }
@@ -3055,7 +3059,7 @@
         h('p', { class: 'dica' }, 'Conta o registro validado pelo auditor: árvore com 2 m de altura ou mais, foto e coordenada. Face de quadra sem árvore, com foto, também conta. Devolvido só conta depois de corrigido e validado de novo.')),
       m ? h('div', { class: 'cartao' }, h('h3', null, 'Meta da semana'), h('div', { class: 'meta-barra' }, h('div', { style: `width:${Math.min(100, (m.mediaSemana / Math.max(1, m.porDia)) * 100)}%` })),
         h('p', null, m.diasTrabalhados ? `Média de ${fmtN(m.mediaSemana)} registros validados por dia, em ${fmtN(m.diasTrabalhados)} ${m.diasTrabalhados === 1 ? 'dia trabalhado' : 'dias trabalhados'}.` : 'Ainda sem registro validado nesta semana.'),
-        h('p', { class: 'dica' }, (m.falta > 0 ? `Faltam ${fmtN(m.falta)} por dia, na média, para a meta de ${fmtN(m.porDia)}. ` : `Meta de ${fmtN(m.porDia)} por dia batida na média. `) + `O que passar da meta, até ${fmtN(m.teto)} por dia na média, entra como superação. A validação pode chegar depois do dia de campo.`)) : null,
+        h('p', { class: 'dica' }, (m.falta > 0 ? `Faltam ${fmtN(m.falta)} por dia, na média, para a meta de ${fmtN(m.porDia)}. ` : `Meta de ${fmtN(m.porDia)} por dia batida na média. `) + `O que passar da meta${m.teto > 0 ? `, até ${fmtN(m.teto)} por dia na média,` : ''} entra como superação. A validação pode chegar depois do dia de campo.`)) : null,
       (P.pessoas || []).length ? h('div', { class: 'cartao' }, h('h3', null, 'Valor estimado'),
         h('div', { class: 'tab-rolagem' }, h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Pessoa'), h('th', null, 'Validados'), h('th', null, 'Estimado')),
           P.pessoas.map((x) => h('tr', null, h('td', null, x.nome), h('td', null, fmtN(x.validados)),
@@ -3090,7 +3094,7 @@
       if (aba === 'indic') conteudo.replaceChildren(P.indicacoes.length ? tabela(['Parceiro', 'Registros que contam', 'Valor no período', 'Registros a pagar', 'A pagar'], P.indicacoes.map((x) => h('tr', null, h('td', null, x.nome), h('td', null, fmtN(x.arvores)), h('td', null, R$(x.valor)), h('td', null, fmtN(x.arvoresPagar)), h('td', null, h('b', null, R$(x.valorPagar)))))) : h('p', { class: 'dica' }, `Nenhum registro de time parceiro no período. Cadastre o time em Coordenação, Times, e ligue os avaliadores a ele em Pessoas. A parte do time é de ${R$(Rg.indicacao)} por registro que conta.`));
       if (aba === 'equipes') conteudo.replaceChildren(tabela(['Equipe', ...C, 'Por registro', 'Prêmio apurado'], P.equipes.map((x) => h('tr', null, h('td', null, x.equipe), ...num(x), h('td', null, R$(x.valor)), h('td', null, R$(x.premio))))));
       if (aba === 'semanas') conteudo.replaceChildren(P.semanas.length ? tabela(['Semana', 'Pessoa', 'Função', 'Dias trabalhados', 'Registros', 'Média por dia', 'Meta', 'Prêmio de meta', 'Superação', 'Total', 'Situação'], P.semanas.map((s) => h('tr', null, h('td', null, sem5(s)), h('td', null, s.nome), h('td', null, s.funcao), h('td', null, fmtN(s.diasTrabalhados)), h('td', null, fmtN(s.registros)), h('td', null, fmtN(s.media)), h('td', null, s.bateu ? 'batida' : `abaixo de ${fmtN(s.meta)}`), h('td', null, R$(s.premioMeta)), h('td', null, R$(s.superacao)), h('td', null, h('b', null, R$(s.total))), h('td', null, s.situacao === 'Apurada' ? h('b', null, 'Apurada') : s.pendentes ? `Aberta: ${fmtN(s.pendentes)} sem decisão do auditor` : 'Em andamento')))) : h('p', { class: 'dica' }, 'Nenhuma semana de quem tem carteira termina neste período.'),
-        h('p', { class: 'dica' }, `Cada semana (segunda a domingo) entra no período em que termina, uma vez só. Se o auditor avaliar depois, volte a este período para exportar. Prêmio de meta: ${R$(Rg.premioMetaAv)} por mês para o avaliador e ${R$(Rg.premioMetaAx)} para o auxiliar, um quarto por semana em que a média dos dias trabalhados chega a ${fmtN(Rg.meta)}. Superação: ${R$(Rg.supAv)} (avaliador) e ${R$(Rg.supAx)} (auxiliar) por registro da média acima da meta, até ${fmtN(Rg.teto)}, vezes os dias trabalhados. A semana só é apurada quando o auditor avaliou todos os registros dela.`));
+        h('p', { class: 'dica' }, `Cada semana (segunda a domingo) entra no período em que termina, uma vez só. Se o auditor avaliar depois, volte a este período para exportar. Prêmio de meta: ${R$(Rg.premioMetaAv)} por mês para o avaliador e ${R$(Rg.premioMetaAx)} para o auxiliar, um quarto por semana em que a média dos dias trabalhados chega a ${fmtN(Rg.meta)}. Superação: ${R$(Rg.supAv)} (avaliador) e ${R$(Rg.supAx)} (auxiliar) por registro da média acima da meta${Rg.teto > 0 ? `, até ${fmtN(Rg.teto)}` : ', sem teto'}, vezes os dias trabalhados. A semana só é apurada quando o auditor avaliou todos os registros dela.`));
       if (aba === 'dias') conteudo.replaceChildren(P.dias.length ? tabela(['Dia', 'Equipe', 'Dupla', 'Registros que contam', 'O dia conta na média?'], P.dias.map((x) => h('tr', null, h('td', null, dBRc(x.dia)), h('td', null, x.equipe), h('td', null, x.dupla || ''), h('td', null, fmtN(x.validadas)), h('td', null, x.clt ? selDia(x) : h('small', { class: 'dica' }, 'parceiro: sem meta'))))) : h('p', { class: 'dica' }, 'Nenhum registro que conta no período.'),
         h('h4', null, 'Paradas por chuva registradas pelas equipes'), chuvas.length ? tabela(['Dia', 'Hora', 'Equipe', 'Observação', 'Foto', 'Situação do dia'], chuvas.map((x) => h('tr', null, h('td', null, dBRc(x.dia)), h('td', null, x.hora), h('td', null, x.equipe), h('td', null, x.obs || ''), h('td', null, /^https:\/\/drive\.google\.com\//.test(x.foto || '') ? h('a', { href: x.foto, target: '_blank', rel: 'noopener' }, 'ver foto') : ''), h('td', null, x.situacao || 'sem marcação')))) : h('p', { class: 'dica' }, 'Nenhuma parada registrada no período.'),
         h('p', { class: 'dica' }, 'Dia parcial ou perdido (chuva, por exemplo) sai da média da semana da dupla com carteira: não puxa a média para baixo.'));
@@ -3126,7 +3130,7 @@
         { nome: 'Paradas por chuva', cols: ['Dia', 'Hora', 'Equipe', 'Observação', 'Situação do dia'], linhas: chuvas.map((x) => ({ Dia: dBRc(x.dia), Hora: x.hora, Equipe: x.equipe, 'Observação': x.obs || '', 'Situação do dia': x.situacao || '' })) },
         { nome: 'Gestão da equipe', cols: ['Dia', 'Equipe', 'Dupla', 'Primeiro registro', 'Último registro', 'Intervalo (min)', 'Horas em campo', 'Coletados', 'Por hora'], linhas: (P.jornada || []).map((x) => ({ Dia: dBRc(x.dia), Equipe: x.equipe, Dupla: x.dupla, 'Primeiro registro': x.inicio, 'Último registro': x.fim, 'Intervalo (min)': x.intervaloMin, 'Horas em campo': x.horas, Coletados: x.coletados, 'Por hora': x.porHora })) },
         { nome: 'Por setor', cols: ['Setor', 'Auditoria', 'Erro (%)', 'Coletados', 'Contam'], linhas: P.setores.map((x) => ({ Setor: x.setor, Auditoria: x.situacao, 'Erro (%)': x.erro_pct, Coletados: x.coletadas, Contam: x.validadas })) },
-        { nome: 'Regras', cols: ['Regra', 'Valor'], linhas: [['Período', `${dBRc(P.de)} a ${dBRc(P.ate)}`], ['Regras em vigor desde', Rg.vigenteDesde ? dBRc(Rg.vigenteDesde) : 'o começo do projeto'], ['Valor por registro que conta (parceiros)', R$(Rg.valor)], ['Parte do time parceiro, dentro desse valor', R$(Rg.indicacao)], ['Divisão quando há auxiliar', `${Rg.pctAvaliador}% avaliador, ${100 - Rg.pctAvaliador}% auxiliar`], ['Meta por dia (dupla com carteira)', String(Rg.meta)], ['Teto da superação por dia', String(Rg.teto)], ['Prêmio de meta por mês', `${R$(Rg.premioMetaAv)} avaliador, ${R$(Rg.premioMetaAx)} auxiliar`], ['Superação por registro', `${R$(Rg.supAv)} avaliador, ${R$(Rg.supAx)} auxiliar`], ['Face de quadra sem árvore vale', String(Rg.pesoFace) + ' registro'], ['Registro que conta', 'validado pelo auditor; árvore com 2 m de altura ou mais, foto e coordenada']].map(([a, b2]) => ({ Regra: a, Valor: b2 })) }]);
+        { nome: 'Regras', cols: ['Regra', 'Valor'], linhas: [['Período', `${dBRc(P.de)} a ${dBRc(P.ate)}`], ['Regras em vigor desde', Rg.vigenteDesde ? dBRc(Rg.vigenteDesde) : 'o começo do projeto'], ['Valor por registro que conta (parceiros)', R$(Rg.valor)], ['Parte do time parceiro, dentro desse valor', R$(Rg.indicacao)], ['Divisão quando há auxiliar', `${Rg.pctAvaliador}% avaliador, ${100 - Rg.pctAvaliador}% auxiliar`], ['Meta por dia (dupla com carteira)', String(Rg.meta)], ['Teto da superação por dia', Rg.teto > 0 ? String(Rg.teto) : 'sem teto'], ['Prêmio de meta por mês', `${R$(Rg.premioMetaAv)} avaliador, ${R$(Rg.premioMetaAx)} auxiliar`], ['Superação por registro', `${R$(Rg.supAv)} avaliador, ${R$(Rg.supAx)} auxiliar`], ['Face de quadra sem árvore vale', String(Rg.pesoFace) + ' registro'], ['Registro que conta', 'validado pelo auditor; árvore com 2 m de altura ou mais, foto e coordenada']].map(([a, b2]) => ({ Regra: a, Valor: b2 })) }]);
       baixar(`producao_${S.projeto.id}_${P.de}_${P.ate}.xlsx`, b);
     }
     const soma = (k) => P.equipes.reduce((a, x) => a + x[k], 0);
@@ -3995,6 +3999,29 @@
     desenhar();
   }
   const idDrive = (u) => { const m = String(u || '').match(/\/d\/([\w-]{20,})/) || String(u || '').match(/id=([\w-]{20,})/); return m ? m[1] : null; };
+  // 2.17: coordenação e auditor corrigem a posição de um registro arrastando o ponto (ex.: gravado na calçada do outro lado).
+  // Vale em qualquer situação do registro. Quadra, face e setor são refeitos pelo ponto novo; o histórico guarda a coordenada antiga e a distância.
+  async function corrigirPosicao(l) {
+    const la0 = +l.latitude, lo0 = +l.longitude; let novo = null;
+    const div = h('div', { class: 'mapa-mini', style: 'height:55vh;min-height:300px' }); const info = h('p', { class: 'dica pos-info' }, 'Arraste o marcador até o pé da árvore.');
+    const p = modal('Corrigir posição', h('div', null, div, info), [{ texto: 'Cancelar', classe: 'sec', valor: false }, { texto: 'Salvar posição', valor: true }]);
+    setTimeout(() => {
+      const m = L.map(div, { maxZoom: 21 }).setView([la0, lo0], 19); camadasFundo(m, true);
+      L.circleMarker([la0, lo0], { radius: 6, color: '#fff', weight: 2, fillColor: '#9AA9B0', fillOpacity: 1 }).addTo(m); // onde estava
+      const mk = L.marker([la0, lo0], { draggable: true }).addTo(m); if (window.__app) window.__app.posMarca = mk;
+      const mudou = () => { const ll = mk.getLatLng(); novo = { lat: ll.lat, lon: ll.lng }; info.textContent = `Ponto novo a ${numBR(Math.round(distM(la0, lo0, novo.lat, novo.lon) * 10) / 10)} m do antigo (o cinza).`; };
+      mk.on('dragend', mudou); mk.on('move', mudou);
+    }, 60);
+    if (!(await p)) return; if (!novo || distM(la0, lo0, novo.lat, novo.lon) < 0.05) return toast('O ponto não foi movido.');
+    const d = { uuid: l.uuid, lat: novo.lat, lon: novo.lon };
+    try { // quadra e face pelo ponto novo, quando o projeto tem a camada; setor também
+      const cam = await carregarQuadras();
+      if (cam && S.qdIdx) { const fcs = S.qdTemFaces === S.projeto.id ? S.qdIdx.idx.faces(novo.lon, novo.lat, 15) : []; const dentro = S.qdIdx.idx.achar(novo.lon, novo.lat); const q = fcs[0] ? fcs[0].q : dentro; d.quadra = q ? String(q.n) : ''; d.face = fcs[0] ? fcs[0].id : ''; }
+      const st = await Setores.doPonto(novo.lon, novo.lat); if (st) d.setor = st.n;
+    } catch (e) { /* sem camada: só a coordenada muda */ }
+    try { const r = await Api.b.registroPosicao(S.projeto.id, d); toast(r.atualizado ? `Posição corrigida (${numBR(r.dist)} m).` : 'O ponto não foi movido.', 4000); await linhasProjeto(true); telaFichaServidor(l.uuid); }
+    catch (e) { toast(/desconhecida/i.test(e.message) ? 'O servidor ainda não tem esta função. Atualize o Code.gs para a 2.17.' : e.message, 6000); }
+  }
   async function telaFichaServidor(uuidR) {
     const form = S.form;
     let linhas; try { linhas = await linhasProjeto(false); } catch (e) { return toast(e.message); }
@@ -4016,7 +4043,7 @@
           l.validacao_obs ? h('p', null, 'Motivo: ' + l.validacao_obs) : null,
           h('small', null, `${dataBR(l.criado_em)} · ${l.equipe || ''}${l.usuario ? ' (' + l.usuario + ')' : ''}${l.precisao_gps_m ? ' · GPS ±' + Math.round(l.precisao_gps_m) + ' m' : ''}${l.validado_por ? ' · avaliado por ' + l.validado_por + ' em ' + dataBR(l.validado_em) : ''}`),
           l.__alertas && l.__alertas.length ? h('p', { class: 'al' }, 'Alertas: ' + l.__alertas.join(' · ')) : null),
-        l.latitude !== '' && l.latitude != null ? h('div', { class: 'cartao' }, mapaDiv, h('a', { href: `https://www.google.com/maps/search/?api=1&query=${l.latitude},${l.longitude}`, target: '_blank', rel: 'noopener' }, 'Abrir no Google Maps')) : null,
+        l.latitude !== '' && l.latitude != null ? h('div', { class: 'cartao' }, mapaDiv, h('div', { class: 'linha-btn', style: 'align-items:center;justify-content:space-between' }, h('a', { href: `https://www.google.com/maps/search/?api=1&query=${l.latitude},${l.longitude}`, target: '_blank', rel: 'noopener' }, 'Abrir no Google Maps'), ehCoord() && !Api.demo ? h('button', { class: 'btn sec peq bt-corrigir-pos', onclick: () => corrigirPosicao(l) }, 'Corrigir posição') : null)) : null,
         fichaConteudo(form, valores, fotos),
         secaoOSArvore(uuidR, true),
         l.historico ? h('section', { class: 'cartao ficha-sec' }, h('h3', null, 'Histórico de alterações'), String(l.historico).split(' | ').map((x) => h('p', { class: 'hist' }, x))) : null,
@@ -4366,7 +4393,14 @@
     return '';
   }
   const COR_QD = { 'A levantar': '#9AA9B0', 'Em levantamento': '#F2A900', Levantada: '#2E7D32' };
+  // 2.17: quadras por time. Neofloresta em azul, time parceiro em roxo; claro em levantamento, cheio levantada, cheio com contorno verde quando validada
+  const COR_TIME = { casa: '#1565C0', parc: '#7B1FA2' }; const COR_TIME_CLARA = { casa: '#8FB8E3', parc: '#C9A0D8' }; const COR_VALIDADA = '#2E7D32';
+  // de que time é a quadra: parceiro quando a equipe dela é de time parceiro; da casa nos demais casos em que há equipe, marca "Neofloresta" ou trabalho começado
+  const timeDaQd = (s) => { if (!S.eqParc || !s) return ''; if (s.equipe) return S.eqParc.has(String(s.equipe).trim().toLowerCase()) ? 'parc' : 'casa'; return s.marca === 'Neofloresta' || (s.situacao && s.situacao !== 'A levantar') ? 'casa' : ''; };
   const minhaEquipe = () => (S.projeto && S.projeto.equipe) || (S.sessao && S.sessao.usuario && S.sessao.usuario.equipe) || '';
+  // 2.17: no time da casa (Neofloresta) as equipes trabalham juntas; a equipe "é minha" quando é a minha ou outra da casa. Parceiro continua preso à própria equipe
+  const daCasa = (eq) => !!eq && perfil() === 'coletor' && !modoQuadra() && !!S.eqParc && !S.eqParc.has(String(eq).trim().toLowerCase());
+  const eqMinha = (eq) => !!eq && (eq === minhaEquipe() || daCasa(eq));
   async function carregarQuadras() {
     const k = 'qd:' + S.projeto.id; let c = await Store.get(k);
     if (!Api.demo && navigator.onLine && !S.expirada && (!S.qdEm || S.qdEm.p !== S.projeto.id || Date.now() - S.qdEm.t > 600000)) {
@@ -4391,9 +4425,10 @@
   async function carregarSitQd(forcar, soLocal) {
     const k = 'qdsit:' + S.projeto.id; const c = (await Store.get(k)) || { quadras: [] };
     if (!soLocal && navigator.onLine && !S.expirada && (forcar || !S.qdSitEm || S.qdSitEm.p !== S.projeto.id || Date.now() - S.qdSitEm.t > 60000)) {
-      try { const r = await Api.b.quadrasSituacao(S.projeto.id); c.quadras = r.quadras; c.faces = r.faces || []; await Store.set(k, c); S.qdSitEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { /* sem conexão */ }
+      try { const r = await Api.b.quadrasSituacao(S.projeto.id); c.quadras = r.quadras; c.faces = r.faces || []; if (r.parceiras) c.parceiras = r.parceiras; await Store.set(k, c); S.qdSitEm = { p: S.projeto.id, t: Date.now() }; } catch (e) { /* sem conexão */ }
     }
     const m = new Map(c.quadras.map((q) => [q.numero, Object.assign({}, q)]));
+    S.eqParc = c.parceiras ? new Set(c.parceiras) : null; m.parceiras = S.eqParc;
     m.faces = new Map((c.faces || []).map((f) => [f.numero, Object.assign({}, f)]));
     const u = S.sessao && S.sessao.u;
     for (const it of (await filaTodaQd()).filter((x) => x.projeto === S.projeto.id && x.usuario === u && !x.recusado)) for (const i of it.itens) {
@@ -4453,7 +4488,7 @@
       if (!['coletor', 'revisor', 'admin'].includes(perfil())) return;
       const cam = await carregarQuadras(); if (!cam) return;
       const sit = await carregarSitQd(false); const fs = sit.faces || new Map(); const itens = [];
-      const daOutra = (s) => perfil() === 'coletor' && s.equipe && s.equipe !== minhaEquipe();
+      const daOutra = (s) => perfil() === 'coletor' && s.equipe && !eqMinha(s.equipe);
       if (r.faceId && r.semAcesso) {
         const mt = motivoSemAcesso(r);
         const itens = r.semAcesso.faces.map((id) => ({ tipo: 'face', numero: id, situacao: 'Levantada, sem árvores', registro: r.uuid, cond: 'sem_acesso', motivo: mt }));
@@ -4538,9 +4573,9 @@
     const f0 = faltam[0]; await novoRegistro({ faceId: q.n + '-' + f0.i, faceRua: f0.r, faceTxt: `quadra ${q.n}, sem acesso`, cat: [cat.nome, op.v], extra: {}, semAcesso: { quadra: q.n, faces: faltam.map((f) => q.n + '-' + f.i) } });
   }
   function resumoQd(cam, sit) {
-    const tot = cam ? cam.quadras.length : 0; const por = { 'A levantar': 0, 'Em levantamento': 0, Levantada: 0 }; const eq = {};
-    if (cam) for (const q of cam.quadras) { const s = sit.get(q.n) || {}; const st = s.situacao || 'A levantar'; por[st]++; if (s.equipe) { eq[s.equipe] = eq[s.equipe] || { total: 0, Levantada: 0, 'Em levantamento': 0 }; eq[s.equipe].total++; if (st !== 'A levantar') eq[s.equipe][st]++; } }
-    return { tot, por, eq };
+    const tot = cam ? cam.quadras.length : 0; const por = { 'A levantar': 0, 'Em levantamento': 0, Levantada: 0 }; const eq = {}; let validadas = 0; const time = { casa: { 'Em levantamento': 0, Levantada: 0, Validada: 0 }, parc: { 'Em levantamento': 0, Levantada: 0, Validada: 0 } };
+    if (cam) for (const q of cam.quadras) { const s = sit.get(q.n) || {}; const st = s.situacao || 'A levantar'; por[st]++; if (s.validada) validadas++; { const t = timeDaQd(s); if (t && st !== 'A levantar') { time[t][st]++; if (s.validada) time[t].Validada++; } } if (s.equipe) { eq[s.equipe] = eq[s.equipe] || { total: 0, Levantada: 0, 'Em levantamento': 0 }; eq[s.equipe].total++; if (st !== 'A levantar') eq[s.equipe][st]++; } }
+    return { tot, por, eq, validadas, time };
   }
   function resumoFaces(cam, sit) {
     const fs = sit.faces || new Map(); const o = { n: 0, mTot: 0, mFeito: 0, mSem: 0, eq: {}, semAcesso: 0, mSemAcesso: 0 };
@@ -4560,10 +4595,12 @@
     if (perfil() === 'cliente') { if (!F.n || !F.mSem) return; const ks = corpo.querySelector('.painel-aba[data-aba="inv"] .kpis'); if (ks) ks.append(kpi('Potencial de plantio', km(F.mSem), 'de calçada levantada sem nenhuma árvore')); return; }
     for (const e of Object.keys(F.eq)) if (!r.eq[e]) r.eq[e] = { total: 0, Levantada: 0, 'Em levantamento': 0 };
     const sec = h('section', { class: 'painel-os' }, h('h2', { class: 'painel-tit' }, 'Andamento por quadras'),
-      h('div', { class: 'kpis' }, kpi('Quadras levantadas', fmtN(r.por.Levantada), `de ${fmtN(r.tot)} (${fmtP(r.tot ? r.por.Levantada / r.tot : 0)})`), kpi('Em levantamento', fmtN(r.por['Em levantamento']), ''), kpi('A levantar', fmtN(r.por['A levantar']), ''),
+      h('div', { class: 'kpis' }, kpi('Quadras levantadas', fmtN(r.por.Levantada), `de ${fmtN(r.tot)} (${fmtP(r.tot ? r.por.Levantada / r.tot : 0)})`), kpi('Quadras validadas', fmtN(r.validadas), `de ${fmtN(r.por.Levantada)} levantadas`), kpi('Em levantamento', fmtN(r.por['Em levantamento']), ''), kpi('A levantar', fmtN(r.por['A levantar']), ''),
         F.n ? kpi('Calçada levantada', km(F.mFeito), `de ${km(F.mTot)} (${fmtP(F.mTot ? F.mFeito / F.mTot : 0)}) · ${km(F.mSem)} sem árvores`) : null,
         F.semAcesso ? kpi('Sem acesso', pl(F.semAcesso, 'face', 'faces'), km(F.mSemAcesso) + ' de calçada onde a equipe não entra') : null),
       h('div', { class: 'prog-qd' }, h('div', { style: `width:${(r.por.Levantada / Math.max(1, r.tot)) * 100}%;background:${COR_QD.Levantada}` }), h('div', { style: `width:${(r.por['Em levantamento'] / Math.max(1, r.tot)) * 100}%;background:${COR_QD['Em levantamento']}` })),
+      S.eqParc && (r.por.Levantada || r.por['Em levantamento']) ? h('div', { class: 'cartao tab-rolagem' }, h('h3', null, 'Por time'), h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Time'), h('th', null, 'Em levantamento'), h('th', null, 'Levantadas'), h('th', null, 'Validadas')),
+        [['casa', 'Neofloresta'], ['parc', 'Parceiro']].map(([k, nm]) => h('tr', null, h('td', null, h('span', { class: 'os-st', style: `background:${COR_TIME[k]}` }, nm)), h('td', null, fmtN(r.time[k]['Em levantamento'])), h('td', null, fmtN(r.time[k].Levantada)), h('td', null, fmtN(r.time[k].Validada)))))) : null,
       Object.keys(r.eq).length ? h('div', { class: 'cartao tab-rolagem' }, h('h3', null, 'Por equipe'), h('table', { class: 'tab' }, h('tr', null, h('th', null, 'Equipe'), h('th', null, 'Quadras atribuídas'), h('th', null, 'Levantadas'), h('th', null, 'Em levantamento'), h('th', null, 'Andamento'), F.n ? h('th', null, 'Faces levantadas') : null, F.n ? h('th', null, 'Calçada levantada') : null),
         Object.entries(r.eq).sort((a, b) => a[0].localeCompare(b[0], 'pt')).map(([e, x]) => h('tr', null, h('td', null, e), h('td', null, fmtN(x.total)), h('td', null, fmtN(x.Levantada)), h('td', null, fmtN(x['Em levantamento'])), h('td', null, x.total ? fmtP(x.Levantada / x.total) : ''),
           F.n ? h('td', null, fmtN((F.eq[e] || {}).n || 0)) : null, F.n ? h('td', null, km((F.eq[e] || {}).m || 0)) : null)))) : null,

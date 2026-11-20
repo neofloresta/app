@@ -1,0 +1,51 @@
+// 2.17 nas telas: mapa de quadras por time com a validada, painel por time, corrigir posição arrastando e equipe da casa encerrando a face da outra
+const { chromium } = require('playwright'); const L = require('./lib'); const fs = require('fs'); const vm = require('vm');
+const R = {}; const ok = (id, passou, obs) => { R[id] = { passou, obs }; console.log(id, passou ? 'PASSOU' : 'FALHOU', '|', obs); };
+const PJ = 'divinopolis'; const ctx = { TextDecoder, console }; vm.createContext(ctx); vm.runInContext(fs.readFileSync(L.APP + '/js/quadras.js', 'utf8') + ';this.Quadras=Quadras;', ctx); const Q = ctx.Quadras;
+const limpo = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+(async () => {
+  await L.subir(); await L.configurar(); const vT = (fs.readFileSync(L.APP + '/js/app.js', 'utf8').match(/TERMO_VERSAO = '([^']+)'/) || [])[1];
+  await L.post('time_salvar', { time: { nome: 'Gap', tipo: 'Parceiro' } }); await L.post('time_salvar', { time: { nome: 'Neofloresta', tipo: 'Próprio' } });
+  const novo = async (login, ind) => { await L.post('usuario_salvar', { usuario_dados: { login, senha: login + '12345', nome: login, perfil: 'coletor', projeto: PJ, equipe: login.toUpperCase(), codigo: login.slice(0, 3).toUpperCase(), indicacao: ind } }); await L.post('aceitar_termo', { versao: vT }, login, login + '12345'); };
+  await novo('gap1', 'Gap'); await novo('neo1', 'Neofloresta'); await novo('neo2', 'Neofloresta');
+  const lido = await Q.lerArquivo('q.geojson', fs.readFileSync(__dirname + '/fixtures/quadras_divinopolis_faces.geojson')); const cam = Q.compactar(lido.feicoes, 'quadra', ['ruas']);
+  const centro = [-20.1436, -44.8908]; const cq = (x) => [(x.b[1] + x.b[3]) / 2, (x.b[0] + x.b[2]) / 2];
+  const viz = cam.quadras.filter((x) => x.f && x.f.length >= 2 && Math.abs(cq(x)[0] - centro[0]) < 0.0035 && Math.abs(cq(x)[1] - centro[1]) < 0.0035).sort((a, b) => Math.hypot(cq(a)[0] - centro[0], cq(a)[1] - centro[1]) - Math.hypot(cq(b)[0] - centro[0], cq(b)[1] - centro[1])).slice(0, 14);
+  await L.post('quadras_importar', { projeto: PJ, camada: JSON.stringify(Object.assign({}, cam, { total: viz.length, quadras: viz })) });
+  const p = (a, d, u, s) => L.post(a, Object.assign({ projeto: PJ }, d), u, s); const adm = (itens) => p('quadras_marcar', { itens });
+  const t = new Date(Date.now() - 3600e3).toISOString(); let nU = 0; const reg = async (q, eq, valida) => { const uuid = 'ffff0000-0000-4000-8000-' + String(++nU).padStart(12, '0'); const c = cq(q); await p('registro', { linha: { uuid, projeto: PJ, equipe: eq, criado_em: t, atualizado_em: t, concluido_em: t, latitude: c[0], longitude: c[1], 'Altura total (m)': 5, Categoria: '1', Codigo: 'T' + nU, 'Foto 1': 'DCIM/x.jpg', 'Foto 1 link': 'https://drive.google.com/file/d/abcdefghijklmnopqrstuvwxyz/view', quadra: q.n } }); if (valida) await p('validar', { itens: [{ uuid, estado: 'Validado' }] }); return uuid; };
+  // quadras: Neofloresta em levantamento (2), levantada (2), validada (2); parceiro em levantamento (2), levantada (2), validada (1); o resto a levantar
+  const plano = [['NEO1', 'Em levantamento'], ['NEO2', 'Em levantamento'], ['NEO1', 'Levantada'], ['NEO2', 'Levantada'], ['NEO1', 'Validada'], ['NEO2', 'Validada'], ['GAP1', 'Em levantamento'], ['GAP1', 'Em levantamento'], ['GAP1', 'Levantada'], ['GAP1', 'Levantada'], ['GAP1', 'Validada']];
+  let uMover = null;
+  for (let i = 0; i < plano.length; i++) { const [eq, st] = plano[i]; const q = viz[i]; await adm([{ tipo: 'quadra', numero: q.n, equipe: eq }]); await adm([{ tipo: 'quadra', numero: q.n, situacao: st === 'Validada' ? 'Levantada' : st }]); const u = await reg(q, eq, st === 'Validada'); if (st === 'Levantada' && !uMover) uMover = { uuid: u, q }; }
+  const b = await chromium.launch();
+  // 1. coordenação: mapa por situação com as cores por time e a legenda
+  const A = await L.celular(b, { viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false }); const q = A.p; await L.logar(q, 'admin', L.senha()); await q.waitForTimeout(1500);
+  if (await q.locator('.proj-lista').count()) { await q.locator('.proj-lista button, .proj-lista .item, .proj-lista a').first().click().catch(() => {}); await q.waitForTimeout(1200); }
+  await q.goto(L.WEB + '#mapa'); await q.waitForSelector('select:has(option:text("Quadras por situação")):not(.oculto)', { timeout: 30000, state: 'attached' }); await q.waitForTimeout(1500);
+  await q.evaluate(([a, o]) => { window.__app.mapa.setView([a, o], 15, { animate: false }); }, centro); await q.selectOption('select:has(option:text("Quadras por situação"))', 'sit'); await q.waitForTimeout(2500);
+  const leg = limpo(await q.locator('.mapa-leg').first().innerText().catch(() => '')); await q.screenshot({ path: __dirname + '/b2172-mapa.png' });
+  const est = await q.evaluate(() => { const o = {}; window.__app.mapa.eachLayer((ly) => { if (ly.options && ly.options.fillColor && ly.getLatLngs && ly.options.fillOpacity != null) { const k = [ly.options.fillColor, ly.options.fillOpacity, ly.options.color, ly.options.weight].join('|'); o[k] = (o[k] || 0) + 1; } }); return o; });
+  const tem = (k) => est[k] || 0;
+  ok('V.1', tem('#1565C0|0.22|#1565C0|1') === 2 && tem('#1565C0|0.6|#1565C0|1') === 2 && tem('#1565C0|0.6|#2E7D32|3') === 2 && tem('#7B1FA2|0.22|#7B1FA2|1') === 2 && tem('#7B1FA2|0.6|#7B1FA2|1') === 2 && tem('#7B1FA2|0.6|#2E7D32|3') === 1 && /Neofloresta: levantada/.test(leg) && /Parceiro: em levantamento/.test(leg) && /Validada/.test(leg),
+    `estilos no mapa (cor de dentro | opacidade | contorno | espessura): ${JSON.stringify(est)}; legenda: "${leg.slice(0, 220)}"`);
+  // 2. painel: quadras validadas e tabela por time
+  await q.goto(L.WEB + '#painel'); await q.waitForSelector('.painel-os', { timeout: 30000 }).catch(() => {}); await q.waitForTimeout(1500); const abaOp = q.locator('.subabas button:has-text("Operação"), .subabas button:has-text("Andamento")').first(); if (await abaOp.count()) { await abaOp.click(); await q.waitForTimeout(600); }
+  const pn = limpo(await q.locator('.painel-os:has-text("Andamento por quadras")').innerText().catch(() => ''));
+  ok('V.2', /Quadras validadas 3 de 7 levantadas/.test(pn) && /Neofloresta 2 4 2/.test(pn) && /Parceiro 2 3 1/.test(pn), `painel: "${pn.slice(0, 330)}"`);
+  // 3. corrigir a posição arrastando o ponto, na ficha do registro
+  await q.goto(L.WEB + '#ficha/' + uMover.uuid); await q.waitForSelector('.bt-corrigir-pos', { timeout: 30000 }); await q.click('.bt-corrigir-pos'); await q.waitForSelector('.folha:has-text("Corrigir posição") .leaflet-marker-draggable', { timeout: 10000 }); await q.waitForTimeout(500);
+  const alvo = cq(viz[11]); await q.evaluate(([a, o]) => { const mk = window.__app.posMarca; mk.setLatLng([a, o]); mk.fire('dragend'); }, alvo); await q.waitForTimeout(200); const info = limpo(await q.locator('.pos-info').innerText());
+  await q.click('.folha button:has-text("Salvar posição")'); await q.waitForSelector('.ficha-servidor:has-text("posição corrigida")', { timeout: 20000 }).catch(() => {}); await q.waitForTimeout(500);
+  const lin = (await p('listar', {})).linhas.find((l) => l.uuid === uMover.uuid); const hist = limpo(await q.locator('.ficha-servidor .hist').last().innerText().catch(() => ''));
+  ok('V.3', /Ponto novo a \d/.test(info) && Math.abs(+lin.latitude - alvo[0]) < 1e-6 && String(lin.quadra) === String(viz[11].n) && /posição corrigida/.test(hist), `aviso: "${info}"; planilha: quadra ${uMover.q.n} → ${lin.quadra}; histórico na ficha: "${hist.slice(0, 170)}"`);
+  // 4. no celular, a neo2 vê e encerra a face que a neo1 deixou em levantamento (foto opcional no time da casa)
+  const qa = viz[0]; const fa = qa.n + '-' + qa.f[0].i; await p('quadras_marcar', { itens: [{ tipo: 'face', numero: fa, situacao: 'Em levantamento' }] }, 'neo1', 'neo112345');
+  process.env.COM_FOTO_FACE = '1'; const E = await L.celular(b, { geolocation: { latitude: cq(qa)[0], longitude: cq(qa)[1], accuracy: 4 } }); const pe = E.p; await L.logar(pe, 'neo2', 'neo212345'); await pe.waitForSelector('button.nova', { timeout: 20000 }); await pe.waitForTimeout(1500); await pe.goto(L.WEB + '#lista');
+  await pe.waitForSelector('button.encerrar-face', { timeout: 20000 }).catch(() => {}); const temBt = await pe.locator('button.encerrar-face').count(); let fim = '', dica = ''; if (!temBt) console.log('DEPURA', JSON.stringify(await pe.evaluate(async () => { const S = window.__app.S; const c = await window.__app.Store.get('qdsit:' + S.projeto.id); return { parc: c && c.parceiras, eq: S.eqParc ? [...S.eqParc] : null, faces: (c.faces || []).filter((f) => f.situacao === 'Em levantamento'), temFaces: S.qdTemFaces, u: S.sessao.usuario, html: (document.getElementById('encerrar-face') || {}).outerHTML }; })));
+  if (temBt) { await pe.click('button.encerrar-face'); await pe.waitForSelector('.folha:has-text("Deseja mesmo encerrar")'); await pe.waitForTimeout(450); await pe.click('.folha button:has-text("Sim, levantada")'); await pe.waitForSelector('.folha:has-text("Foto da face")'); await pe.waitForTimeout(450); dica = limpo(await pe.locator('.folha:has-text("Foto da face")').innerText()); await pe.click('.folha button:has-text("Encerrar a face")'); await pe.waitForTimeout(2500); }
+  const sf = ((await p('quadras_situacao', { faces: true })).faces || []).find((x) => x.numero === fa) || {}; fim = sf.situacao + ' por ' + sf.marcada_por;
+  ok('V.4', temBt === 1 && /opcional/.test(dica) && sf.situacao === 'Levantada' && sf.marcada_por === 'neo2' && !sf.foto, `botão "Encerrar face" para a neo2: ${temBt}; aviso de foto opcional: ${/opcional/.test(dica)}; face da neo1: ${fim}; sem foto: ${!sf.foto}`);
+  ok('V.5', !q.erros.length && !pe.erros.length, q.erros.concat(pe.erros).join(' | ') || 'sem erros de JavaScript');
+  const f = Object.values(R).filter((x) => !x.passou).length; console.log(f ? f + ' FALHA(S)' : 'TUDO OK'); await b.close(); process.exit(f ? 1 : 0);
+})().catch((e) => { console.error('ERRO', e); process.exit(2); });
