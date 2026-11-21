@@ -794,9 +794,11 @@ function validar(projetoId, itens, usr) {
 }
 // O aparelho do coletor pergunta como estão os registros dele (validado, devolvido e motivo)
 function situacaoMeus(projetoId, usr) {
-  const c = colunas(projetoId, ['uuid', 'usuario', 'validacao', 'validacao_obs', 'validado_em'], { perfil: 'admin' });
+  // 2.18: a espécie como ficou na planilha depois da conferência vai junto, para o coletor ver quando a coordenação corrigiu
+  let cEsp = ''; try { const ce = (lerFormulario(projeto(projetoId).formulario).campos || []).filter((x) => x.tipo === 'species')[0]; cEsp = ce ? ce.nome : ''; } catch (e) { cEsp = ''; }
+  const c = colunas(projetoId, ['uuid', 'usuario', 'validacao', 'validacao_obs', 'validado_em'].concat(cEsp ? [cEsp] : []), { perfil: 'admin' });
   return c.linhas.filter((l) => String(l[1]).toLowerCase() === usr.login.toLowerCase() && l[2] && l[2] !== 'Pendente')
-    .map((l) => ({ uuid: l[0], validacao: l[2], obs: l[3], em: l[4] }));
+    .map((l) => ({ uuid: l[0], validacao: l[2], obs: l[3], em: l[4], especie: cEsp && l[5] !== 'Não se aplica' ? String(l[5] || '') : '' }));
 }
 
 // Página de registros (de = posição inicial, n = quantidade). Sem n devolve tudo.

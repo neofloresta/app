@@ -827,3 +827,9 @@ html { touch-action: pan-x pan-y; } /* sem zoom de pinça na página (o mapa tem
 .qd-reservas.cheio { border-color: #E65100; background: #FFF3E0; }
 .ped-foco { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 950; background: #fff; border: 3px solid #D50000; border-radius: 14px; padding: 10px 14px; display: grid; gap: 8px; justify-items: center; box-shadow: 0 3px 10px rgba(0,0,0,.25); max-width: calc(100% - 24px); }
 .ped-foco b { font-size: 15px; }
+
+/* 2.18: zoom na câmera do app */
+.cam-zoom { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 10px; background: rgba(0,0,0,.45); border-radius: 999px; padding: 6px; }
+.cam-z { min-width: 48px; height: 48px; border-radius: 50%; border: 0; background: rgba(255,255,255,.18); color: #fff; font: inherit; font-weight: 500; font-size: 15px; }
+.cam-z.sel { background: #fff; color: #000; }
+.reg .esp-conf { display: block; color: #00546E; font-weight: 500; }

@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 15,
+ "versao": 16,
  "campos": [
   {
    "armazenar": "text",
@@ -70,6 +70,10 @@
      "t": "Agrupamento"
     },
     {
+     "v": "8",
+     "t": "Fragmento florestal"
+    },
+    {
      "v": "5",
      "t": "Calçada sem árvores"
     },
@@ -79,7 +83,7 @@
     }
    ],
    "obrigatorio": true,
-   "ajuda": "Árvore, arbusto e palmeira entram a partir de 2 m de altura. Calçada sem árvores: trecho de calçada sem nenhum indivíduo. Agrupamento: muitos indivíduos juntos (cerca-viva, calçada sem uso). Um registro só, com a quantidade estimada, o CAP de 3 indivíduos e a altura média."
+   "ajuda": "Árvore, arbusto e palmeira entram a partir de 2 m de altura. Calçada sem árvores: trecho de calçada sem nenhum indivíduo. Agrupamento: muitos indivíduos juntos (cerca-viva, calçada sem uso). Um registro só, com a quantidade estimada, o CAP de 3 indivíduos e a altura média. Fragmento florestal: mato nativo de várias espécies que avança sobre a calçada; é avaliado como um maciço só, sem espécie. Agrupamento é para muitos indivíduos da mesma espécie."
   },
   {
    "armazenar": "text",
@@ -162,7 +166,7 @@
    "min": 2,
    "avisoMax": 500,
    "oculto": true,
-   "ajuda": "Agrupamento: quantos indivíduos há no conjunto, por contagem visual."
+   "ajuda": "Agrupamento ou fragmento florestal: quantos indivíduos há no conjunto, por contagem visual."
   },
   {
    "armazenar": "text",
@@ -1016,13 +1020,6 @@
   },
   {
    "armazenar": "bool",
-   "nome": "Manejo remoção do alvo",
-   "rotulo": "Remoção do alvo",
-   "tipo": "bool",
-   "ajuda": "Tirar ou afastar o que pode ser atingido (ex.: mudar vaga de estacionamento)."
-  },
-  {
-   "armazenar": "bool",
    "nome": "Manejo poda",
    "rotulo": "Poda",
    "tipo": "bool",
@@ -1058,17 +1055,10 @@
   },
   {
    "armazenar": "bool",
-   "nome": "Manejo suporte complementar",
-   "rotulo": "Suporte complementar",
+   "nome": "Manejo avaliação nível 3",
+   "rotulo": "Avaliação nível 3",
    "tipo": "bool",
-   "ajuda": "Cabos ou escoras para reduzir o risco de falha."
-  },
-  {
-   "armazenar": "bool",
-   "nome": "Manejo avaliação nível 2 ou 3",
-   "rotulo": "Avaliação nível 2 ou 3",
-   "tipo": "bool",
-   "ajuda": "Avaliação detalhada, com instrumentos (ex.: tomografia)."
+   "ajuda": "Para exemplar de grande porte ou valor que merece um exame aprofundado (tomografia, por exemplo) antes de decidir."
   },
   {
    "armazenar": "bool",
@@ -1468,10 +1458,6 @@
      "grupo": "Manejo e mitigações"
     },
     {
-     "campo": "Manejo remoção do alvo",
-     "grupo": "Manejo e mitigações"
-    },
-    {
      "campo": "Manejo poda",
      "grupo": "Manejo e mitigações"
     },
@@ -1492,11 +1478,7 @@
      "grupo": "Manejo e mitigações"
     },
     {
-     "campo": "Manejo suporte complementar",
-     "grupo": "Manejo e mitigações"
-    },
-    {
-     "campo": "Manejo avaliação nível 2 ou 3",
+     "campo": "Manejo avaliação nível 3",
      "grupo": "Manejo e mitigações"
     },
     {
@@ -3735,14 +3717,11 @@
      "Consequencias": "oculto",
      "Matriz de Prob + Conseq": "oculto",
      "Manejo remoção do indivíduo": "oculto",
-     "Manejo remoção do alvo": "oculto",
      "Manejo poda": "oculto",
      "Manejo tutoramento": "oculto",
      "Manejo adubação": "oculto",
      "Manejo aumento de canteiro": "oculto",
      "Manejo limpeza de epífitas e parasitas": "oculto",
-     "Manejo suporte complementar": "oculto",
-     "Manejo avaliação nível 2 ou 3": "oculto",
      "Manejo nenhum": "oculto",
      "Outras mitigacoes": "oculto",
      "Foto 2": "oculto",
@@ -3779,7 +3758,8 @@
      "Alvo edificação": "oculto",
      "Alvo rede elétrica ou de serviços": "oculto",
      "Alvo outros": "oculto",
-     "Tronco paralelo a fiacao eletrica": "oculto"
+     "Tronco paralelo a fiacao eletrica": "oculto",
+     "Manejo avaliação nível 3": "oculto"
     },
     "6": {
      "Local do registro": "oculto",
@@ -3845,14 +3825,11 @@
      "Matriz de Prob + Conseq": "oculto",
      "Risco": "oculto",
      "Manejo remoção do indivíduo": "oculto",
-     "Manejo remoção do alvo": "oculto",
      "Manejo poda": "oculto",
      "Manejo tutoramento": "oculto",
      "Manejo adubação": "oculto",
      "Manejo aumento de canteiro": "oculto",
      "Manejo limpeza de epífitas e parasitas": "oculto",
-     "Manejo suporte complementar": "oculto",
-     "Manejo avaliação nível 2 ou 3": "oculto",
      "Manejo nenhum": "oculto",
      "Outras mitigacoes": "oculto",
      "Foto 2": "oculto",
@@ -3877,7 +3854,8 @@
      "Alvo edificação": "oculto",
      "Alvo rede elétrica ou de serviços": "oculto",
      "Alvo outros": "oculto",
-     "Tronco paralelo a fiacao eletrica": "oculto"
+     "Tronco paralelo a fiacao eletrica": "oculto",
+     "Manejo avaliação nível 3": "oculto"
     },
     "7": {
      "Situacao": "obrig",
@@ -3902,6 +3880,31 @@
      "Principal defeito da arvore": "obrig",
      "Carga sobre o defeito": "obrig",
      "Tronco paralelo a fiacao eletrica": "obrig"
+    },
+    "8": {
+     "Situacao": "obrig",
+     "Especie": "oculto",
+     "CAP (cm)": "obrig",
+     "Altura total (m)": "obrig",
+     "Conflitos no raio de 2 m": "obrig",
+     "Marquise ou toldo": "obrig",
+     "Ocos e cavidades": "obrig",
+     "Qualidade da copa": "obrig",
+     "Probabilidade de falha": "obrig",
+     "Probabilidade de impacto": "obrig",
+     "Consequencias": "obrig",
+     "Galhos secos ou podres": "obrig",
+     "Fitossanidade": "obrig",
+     "Qtde estimada de individuos": "obrig",
+     "Area livre (m2)": "obrig",
+     "Posicao da arvore na calcada": "obrig",
+     "Zona do alvo": "obrig",
+     "Taxa de ocupacao": "obrig",
+     "Fator de protecao": "obrig",
+     "Principal defeito da arvore": "obrig",
+     "Carga sobre o defeito": "obrig",
+     "Tronco paralelo a fiacao eletrica": "obrig",
+     "Especie suspeita": "oculto"
     }
    }
   },
@@ -4007,14 +4010,11 @@
      "Consequencias": "oculto",
      "Matriz de Prob + Conseq": "oculto",
      "Manejo remoção do indivíduo": "oculto",
-     "Manejo remoção do alvo": "oculto",
      "Manejo poda": "oculto",
      "Manejo tutoramento": "oculto",
      "Manejo adubação": "oculto",
      "Manejo aumento de canteiro": "oculto",
      "Manejo limpeza de epífitas e parasitas": "oculto",
-     "Manejo suporte complementar": "oculto",
-     "Manejo avaliação nível 2 ou 3": "oculto",
      "Manejo nenhum": "oculto",
      "Outras mitigacoes": "oculto",
      "Foto 2": "oculto",
@@ -4051,7 +4051,8 @@
      "Alvo edificação": "oculto",
      "Alvo rede elétrica ou de serviços": "oculto",
      "Alvo outros": "oculto",
-     "Tronco paralelo a fiacao eletrica": "oculto"
+     "Tronco paralelo a fiacao eletrica": "oculto",
+     "Manejo avaliação nível 3": "oculto"
     }
    }
   },
@@ -4090,10 +4091,16 @@
   "Fungo",
   "Galhos secos, podres ou com risco de queda",
   "Largura da calcada (m)",
+  "Manejo avaliação nível 2 ou 3",
+  "Manejo remoção do alvo",
+  "Manejo suporte complementar",
   "Nivel da avaliacao",
   "Praga aparente",
   "Principal alvo",
   "Risco nivel 1",
   "Tronco paralelo à fiação"
- ]
+ ],
+ "renomeados": {
+  "Manejo avaliação nível 3": "Manejo avaliação nível 2 ou 3"
+ }
 }

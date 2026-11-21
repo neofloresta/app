@@ -468,7 +468,8 @@
       for (const r of await Store.registros(S.projeto.id)) {
         const it = m.get(r.uuid); const v = it ? it.validacao : (r.validacao && r.validacao !== 'Corrigido' ? 'Pendente' : r.validacao);
         const o = it ? it.obs || '' : r.validacao_obs || '';
-        if ((r.validacao || '') !== (v || '') || (r.validacao_obs || '') !== o) { r.validacao = v; r.validacao_obs = o; await Store.salvarRegistro(r); mudou = true; }
+        const ec = it && it.validacao === 'Validado' && it.especie ? it.especie : ''; // espécie conferida pela coordenação (só depois de validado)
+        if ((r.validacao || '') !== (v || '') || (r.validacao_obs || '') !== o || (r.especieConf || '') !== ec) { r.validacao = v; r.validacao_obs = o; r.especieConf = ec; await Store.salvarRegistro(r); mudou = true; }
       }
       if (mudou && (['', '#inicio', '#lista', '#mapa'].includes(location.hash))) listarRegistros();
     } catch (e) { /* servidor antigo ou sem conexão */ }
@@ -622,7 +623,9 @@
         img ? h('img', { src: img, alt: '' }) : h('div', { class: 'sem' }),
         h('div', { class: 'tx' }, h('b', null, (cc && r.valores[cc.nome]) || codigoDe(S.form, r.valores) || 'Sem código'),
           h('i', null, (ce && r.valores[ce.nome]) || (() => { const ct = S.form.campos.find((k) => k.tipo === 'choice' && /categoria/i.test(norm(k.nome))); const t = ct && rotuloOpcao(ct, r.valores[ct.nome]); return t ? t.replace(/\s*\(.*\)/, '') : 'Espécie não informada'; })()), h('small', null, `${dataBR(r.atualizado_em)} · ${r.equipe || ''}`),
-          r.validacao === 'Devolvido' && r.validacao_obs ? h('small', { class: 'motivo' }, 'Motivo: ' + r.validacao_obs) : null),
+          r.validacao === 'Devolvido' && r.validacao_obs ? h('small', { class: 'motivo' }, 'Motivo: ' + r.validacao_obs) : null,
+          // a coordenação conferiu e a espécie ficou diferente da que o coletor informou (ou ele não tinha identificado)
+          r.especieConf && ce && norm(r.especieConf) !== norm(String(r.valores[ce.nome] || '')) ? h('small', { class: 'esp-conf' }, 'Espécie conferida: ' + r.especieConf) : null),
         h('span', { class: 'st ' + clsSt }, rotSt)));
     }
     el.replaceChildren(...itens);
@@ -3642,7 +3645,7 @@
     const risco = cRisco ? cRisco.opcoes.map((o) => ({ rot: o.t, n: (d.escolhas[cRisco.nome] || {})[o.v] || 0, cor: COR_RISCO[o.v] })) : [];
     const cat = cCat ? cCat.opcoes.map((o, k) => ({ rot: o.t.replace(/\s*\(.*\)/, ''), n: (d.escolhas[cCat.nome] || {})[o.v] || 0, cor: CORES[k % CORES.length] })) : [];
     const ind = cCat ? ['1', '2', '3'].reduce((a, v) => a + ((d.escolhas[cCat.nome] || {})[v] || 0), 0) : d.total;
-    const agN = cCat ? (d.escolhas[cCat.nome] || {})['7'] || 0 : 0; const nq = (d.numeros || {})['Qtde estimada de individuos']; const agEst = nq ? Math.round(nq.soma || 0) : 0; // agrupamento: contado à parte, pela estimativa visual
+    const agN = cCat ? ((d.escolhas[cCat.nome] || {})['7'] || 0) + ((d.escolhas[cCat.nome] || {})['8'] || 0) : 0; /* agrupamentos e fragmentos florestais */ const nq = (d.numeros || {})['Qtde estimada de individuos']; const agEst = nq ? Math.round(nq.soma || 0) : 0; // agrupamento: contado à parte, pela estimativa visual
     const sit = cSit ? cSit.opcoes.map((o) => ({ rot: o.t, n: (d.escolhas[cSit.nome] || {})[o.v] || 0 })) : [];
     const manejo = form.campos.filter((c) => c.tipo === 'bool' && /^manejo/i.test(c.nome) && !/nenhum/i.test(c.nome)).map((c) => ({ rot: c.rotulo, n: d.marcados[c.nome] || 0 })).sort((a, b) => b.n - a.n);
     const ocorr = form.campos.filter((c) => c.tipo === 'bool' && !/^manejo|ausente|nenhum|sem interfer/i.test(c.nome)).map((c) => ({ rot: form.campos.filter((x) => x.tipo === 'bool' && x.rotulo === c.rotulo).length > 1 ? c.nome : c.rotulo, n: d.marcados[c.nome] || 0 })).filter((x) => x.n).sort((a, b) => b.n - a.n).slice(0, 12);
@@ -3883,7 +3886,7 @@
       const noPer = (l) => { const d = diaLocal(l.validado_em); return d && d >= de.value && d <= ate.value; };
       const doPer = linhas.filter((l) => noPer(l));
       const val = doPer.filter((l) => l.validacao === 'Validado'), dev = doPer.filter((l) => l.validacao === 'Devolvido'), desc = doPer.filter((l) => l.validacao === 'Descartado');
-      const ehInd = (l) => !cat || ['1', '2', '3'].includes(String(l[cat.nome])); const ehAg = (l) => !!cat && String(l[cat.nome]) === '7';
+      const ehInd = (l) => !cat || ['1', '2', '3'].includes(String(l[cat.nome])); const ehAg = (l) => !!cat && ['7', '8'].includes(String(l[cat.nome])); // agrupamento e fragmento florestal
       const equipes = [...new Set(val.map((l) => l.equipe || '-'))].sort();
       const tab = (cab, ls) => h('table', { class: 'tab-rel' }, h('thead', null, h('tr', null, cab.map((c) => h('th', null, c)))), h('tbody', null, ls.map((l) => h('tr', null, l.map((c) => h('td', null, c))))));
       const p = S.projeto; const dBR = (x) => x.split('-').reverse().join('/');
@@ -4086,6 +4089,7 @@
     if (alvos.length && !alvos.some((n) => v[n]) && l['Principal alvo'] && ALVO_ANTIGO[l['Principal alvo']] && alvos.includes(ALVO_ANTIGO[l['Principal alvo']])) v[ALVO_ANTIGO[l['Principal alvo']]] = true;
     const par = form.campos.find((c) => c.nome === 'Tronco paralelo a fiacao eletrica');
     if (par && (v[par.nome] == null || v[par.nome] === '') && 'Tronco paralelo à fiação' in l && l['Tronco paralelo à fiação'] !== '' && l['Tronco paralelo à fiação'] != null) v[par.nome] = sim(l['Tronco paralelo à fiação']) ? 'Sim' : 'Não';
+    for (const [nv, an] of Object.entries(form.renomeados || {})) if (nv in v && (v[nv] == null || v[nv] === '' || v[nv] === false) && an in l && l[an] !== '' && l[an] != null) { const c = form.campos.find((y) => y.nome === nv); v[nv] = c && c.tipo === 'bool' ? sim(l[an]) : l[an]; } // campo que mudou de nome
     return Api.valoresPlanilha(v, form);
   }
   async function ajustarRegistrosAntigos() {
@@ -4739,7 +4743,7 @@
       [...linhas].filter((l) => !(+l.numero_unico)).sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)) || String(a.uuid).localeCompare(String(b.uuid))).forEach((l) => { l.numero_unico = ++maxN; });
       linhas.sort((a, b) => (+a.numero_unico) - (+b.numero_unico));
       const cDap = form.campos.find((c) => c.tipo === 'multinumber' && /dap|cap/i.test(c.nome)); const ehCap = cDap && /cap/i.test(cDap.nome);
-      if (cDap) linhas.forEach((l) => { const v = Indicadores.valorNum(l[cDap.nome], true); const ag = String(l[(form.campos.find((c) => /categoria/i.test(norm(c.nome))) || {}).nome]) === '7'; const v2 = ag && v != null ? (Indicadores.valorNum(l[cDap.nome], false) != null && String(l[cDap.nome]).includes(';') ? String(l[cDap.nome]).split(';').map((x) => paraNum(x)).filter((x) => x != null).reduce((a, b, _, A) => a + b / A.length, 0) : v) : v; l.dap_equivalente_cm = v2 == null ? '' : Math.round((ehCap ? v2 / Math.PI : v2) * 10) / 10; if (ehCap) l.cap_equivalente_cm = v2 == null ? '' : Math.round(v2 * 10) / 10; });
+      if (cDap) linhas.forEach((l) => { const v = Indicadores.valorNum(l[cDap.nome], true); const ag0 = String(l[(form.campos.find((c) => /categoria/i.test(norm(c.nome))) || {}).nome]); const ag = ag0 === '7' || ag0 === '8'; const v2 = ag && v != null ? (Indicadores.valorNum(l[cDap.nome], false) != null && String(l[cDap.nome]).includes(';') ? String(l[cDap.nome]).split(';').map((x) => paraNum(x)).filter((x) => x != null).reduce((a, b, _, A) => a + b / A.length, 0) : v) : v; l.dap_equivalente_cm = v2 == null ? '' : Math.round((ehCap ? v2 / Math.PI : v2) * 10) / 10; if (ehCap) l.cap_equivalente_cm = v2 == null ? '' : Math.round(v2 * 10) / 10; });
       let camQd = null; // número da quadra de cada ponto, quando o projeto tem camada de quadras
       try { const qj = await Api.b.quadrasCamada(p.id); if (qj && qj.camada) { camQd = JSON.parse(qj.camada); const ix = Quadras.indice(camQd.quadras); linhas.forEach((l) => { const q = l.longitude !== '' && isFinite(+l.longitude) && +l.longitude ? ix.achar(+l.longitude, +l.latitude) : null; l.quadra = q ? q.n : ''; }); } } catch (e) { /* sem camada */ }
       if (form.campos.some((c) => /area de copa/i.test(c.nome))) linhas.forEach((l) => { const m = paraNum(l['Area de copa medida (m2)']), cl = paraNum(l['Area de copa (m2)']); l.area_copa_m2 = m != null ? m : cl != null ? cl : ''; });
@@ -5103,15 +5107,23 @@
         if (tirando || !stream) return; tirando = true; bt.disabled = true; veu.classList.add('tirando');
         const trilha = stream.getVideoTracks()[0]; let blob = null;
         // a foto em tamanho cheio do sensor, quando o navegador oferece; se demorar ou falhar, vale o quadro da tela
-        if (window.ImageCapture) { try { blob = await Promise.race([new ImageCapture(trilha).takePhoto(), new Promise((r2) => setTimeout(() => r2(null), 5000))]); } catch (e) { blob = null; } }
-        if (!blob || !blob.size) { try { const cv = document.createElement('canvas'); cv.width = video.videoWidth; cv.height = video.videoHeight; cv.getContext('2d').drawImage(video, 0, 0); blob = await new Promise((r2) => cv.toBlob(r2, 'image/jpeg', 0.92)); } catch (e) { blob = null; } }
+        const digital = !zoomOptico && zoom > 1; // zoom na imagem: a foto é o recorte do centro do quadro
+        if (window.ImageCapture && !digital) { try { blob = await Promise.race([new ImageCapture(trilha).takePhoto(), new Promise((r2) => setTimeout(() => r2(null), 5000))]); } catch (e) { blob = null; } }
+        if (!blob || !blob.size) { try { const vw = video.videoWidth, vh = video.videoHeight; const z = digital ? zoom : 1; const cv = document.createElement('canvas'); cv.width = Math.round(vw / z); cv.height = Math.round(vh / z); cv.getContext('2d').drawImage(video, (vw - cv.width) / 2, (vh - cv.height) / 2, cv.width, cv.height, 0, 0, cv.width, cv.height); blob = await new Promise((r2) => cv.toBlob(r2, 'image/jpeg', 0.92)); } catch (e) { blob = null; } }
         if (!blob) { tirando = false; bt.disabled = false; veu.classList.remove('tirando'); msg.textContent = 'Não foi possível tirar a foto aqui. Use a câmera do celular.'; msg.classList.remove('oculto'); return; }
         fechar(blob);
       };
+      // zoom: o da própria câmera quando o aparelho oferece (a foto sai com a qualidade do sensor); senão, zoom na imagem (recorte do centro)
+      let zoom = 1, zoomMax = 1, zoomOptico = false; const zBar = h('div', { class: 'cam-zoom oculto' });
+      const aplicarZoom = async (z) => { zoom = Math.max(1, Math.min(zoomMax, z)); for (const b of zBar.children) b.classList.toggle('sel', +b.dataset.z === zoom);
+        if (zoomOptico) { try { await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ zoom: zoomBase * zoom }] }); } catch (e) { zoomOptico = false; } }
+        video.style.transform = zoomOptico || zoom === 1 ? '' : `scale(${zoom})`; };
+      let zoomBase = 1; const montarZoom = () => { try { const cap = stream.getVideoTracks()[0].getCapabilities ? stream.getVideoTracks()[0].getCapabilities() : {}; if (cap.zoom && cap.zoom.max > cap.zoom.min) { zoomOptico = true; zoomBase = cap.zoom.min || 1; zoomMax = Math.min(4, Math.floor(cap.zoom.max / zoomBase)); } else zoomMax = 3; } catch (e) { zoomMax = 3; }
+        zBar.replaceChildren(...[1, 2, 3, 4].filter((z) => z <= zoomMax).map((z) => h('button', { type: 'button', class: 'cam-z' + (z === 1 ? ' sel' : ''), 'data-z': z, onclick: () => aplicarZoom(z) }, z + 'x'))); zBar.classList.toggle('oculto', zoomMax < 2); };
       const bt = h('button', { class: 'cam-disparo', type: 'button', disabled: true, 'aria-label': 'Tirar foto', onclick: disparar });
       const btSis = sistema ? h('button', { class: 'cam-lado', type: 'button', onclick: () => { sistema(); fechar('sistema'); } }, ico('camera'), h('small', null, 'Câmera do celular')) : h('span', { class: 'cam-lado' });
       const btGal = galeria ? h('button', { class: 'cam-lado cam-gal', type: 'button', onclick: () => { galeria(); fechar('galeria'); } }, ico('imagem'), h('small', null, 'Galeria')) : h('span', { class: 'cam-lado' });
-      const veu = h('div', { class: 'cam-app' }, h('div', { class: 'cam-topo' }, h('b', null, titulo || 'Foto'), h('button', { class: 'cam-x', type: 'button', 'aria-label': 'Fechar', onclick: () => fechar(null) }, ico('fechar'))), h('div', { class: 'cam-vis' }, video, msg), h('div', { class: 'cam-base' }, btGal, bt, btSis));
+      const veu = h('div', { class: 'cam-app' }, h('div', { class: 'cam-topo' }, h('b', null, titulo || 'Foto'), h('button', { class: 'cam-x', type: 'button', 'aria-label': 'Fechar', onclick: () => fechar(null) }, ico('fechar'))), h('div', { class: 'cam-vis' }, video, msg, zBar), h('div', { class: 'cam-base' }, btGal, bt, btSis));
       document.body.append(veu);
       const falhou = () => { msg.textContent = sistema ? 'A câmera não abriu aqui dentro. Toque em "Câmera do celular".' : 'A câmera não abriu. Confira a permissão de câmera do navegador.'; msg.classList.remove('oculto'); };
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return falhou();
@@ -5120,7 +5132,7 @@
         stream = st; video.srcObject = st; try { await video.play(); } catch (e) { /* o autoplay cuida */ }
         // sem a foto do sensor (iPhone), pede o maior quadro que a câmera der
         if (!window.ImageCapture) { try { await st.getVideoTracks()[0].applyConstraints({ width: { ideal: 4096 }, height: { ideal: 3072 } }); } catch (e) { /* fica no quadro que abriu */ } }
-        msg.classList.add('oculto'); bt.disabled = false;
+        msg.classList.add('oculto'); bt.disabled = false; montarZoom();
       }).catch(falhou);
     });
   }
