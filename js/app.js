@@ -1,6 +1,6 @@
 // Neofloresta Inventário: app de campo do Inventário da Arborização Urbana, da Neofloresta
 (() => {
-  const VERSAO = '2.18.0';
+  const VERSAO = '2.18.1';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -1209,7 +1209,7 @@
       const btMapa = h('button', { class: 'btn sec', onclick: async () => { if (pronto) return; pronto = true; noMapa = true; const ok = await escolherNoMapa(r); noMapa = false; if (ok) { sair(true); } else if (!sair.feito) { pronto = false; } } }, 'Marcar no mapa (destravar)');
       const veu = h('div', { class: 'veu mp-veu' }, h('div', { class: 'folha mp' }, h('h3', null, 'Marcando o ponto'),
         h('div', { class: 'mp-orienta' }, ORIENTA_GPS), num, st, det, h('div', { class: 'mp-meta' }, `Espere o erro ficar em até ${META} m. O app marca sozinho quando estabilizar.`),
-        h('div', { class: 'linha-btn col' }, btAgora, btSem, btMapa), dicas));
+        h('div', { class: 'linha-btn col' }, btAgora, btSem, btMapa, h('button', { class: 'btn sec', id: 'mp-cancelar', onclick: () => { if (pronto) return; pronto = true; sair(false); } }, 'Cancelar')), dicas)); // 2.18.1: sair sem marcar e sem abrir cadastro
       document.body.append(veu);
       const dist = (a, b) => Math.hypot((a.lon - b.lon) * 111320 * Math.cos(a.lat * Math.PI / 180), (a.lat - b.lat) * 110540);
       const media = () => { const melhor = Math.min(...leituras.map((x) => x.prec)); const us = leituras.filter((x) => x.prec <= melhor * 1.5); let sw = 0, la = 0, lo = 0; for (const x of us) { const w = 1 / (x.prec * x.prec); sw += w; la += x.lat * w; lo += x.lon * w; } return { lat: la / sw, lon: lo / sw, prec: Math.round(melhor * 10) / 10, n: us.length }; };
