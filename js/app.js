@@ -1198,7 +1198,7 @@
   const DICAS_GPS = ['Ligue a "Precisão da localização do Google" em Configurações, Localização, Serviços de localização.', 'Ao começar o dia, espere 1 minuto parado em um lugar aberto antes da primeira árvore.', ORIENTA_GPS, 'Segure o celular na mão, com a tela para cima, não no bolso.', 'Se o erro não baixar, desligue e ligue a localização do celular.'];
   function marcarPonto(r) {
     return new Promise((fim) => {
-      const META = EH_IOS ? 6 : 4; /* o iPhone quase nunca informa erro abaixo de 5 m; a conferência no satélite vem depois de qualquer jeito */ let t0 = Date.now(); const leituras = []; let pronto = false, noMapa = false;
+      const META = 4; let t0 = Date.now(); const leituras = []; let pronto = false, noMapa = false;
       const num = h('div', { class: 'mp-num' }, '...'); const st = h('div', { class: 'mp-st' }, 'Procurando o sinal do GPS...');
       const det = h('small', { class: 'mp-det' });
       const hojeK = 'gpsDia:' + new Date().toDateString();
@@ -1263,7 +1263,7 @@
           else { Object.assign(r, { lat: c.lat, lon: c.lng, prec: gps0 ? gps0.prec : S.pos ? S.pos.prec : null, posManual: true, posDist: gps0 ? Math.round(distM(c, gps0)) : d, gpsAuto: false, marcadoEm: agoraISO(), pontoConferido: conferir || undefined }); Store.salvarRegistro(r); } }
         try { if (mapa) mapa.remove(); } catch (e) { /* já saiu */ } veu.remove(); fim(!!ok); };
       const aoSair = () => fechar(false); window.addEventListener('hashchange', aoSair);
-      const impreciso = conferir && gps0 && +gps0.prec > (EH_IOS ? 6 : 4);
+      const impreciso = conferir && gps0 && +gps0.prec > 4;
       const veu = h('div', { class: 'veu mp-veu' }, h('div', { class: 'folha mp' + (conferir ? ' mp-conf' : '') }, h('h3', null, conferir ? 'É aqui que a árvore está?' : 'Localização destravada'),
         h('div', { class: 'mp-orienta' + (impreciso ? ' ruim' : '') }, conferir ? (impreciso ? `GPS com erro de ±${numBR(gps0.prec)} m. Confira com atenção: se o alvo não estiver no pé da árvore, arraste o mapa.` : 'Confira no mapa. Se o alvo não estiver no pé da árvore, arraste o mapa até acertar.') : 'Arraste o mapa até o alvo ficar no pé da árvore.'),
         h('div', { class: 'mp-mapa-cx' }, div, h('div', { class: 'mp-alvo', 'aria-hidden': 'true' })), info,
