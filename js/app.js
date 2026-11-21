@@ -1198,7 +1198,7 @@
   const DICAS_GPS = ['Ligue a "Precisão da localização do Google" em Configurações, Localização, Serviços de localização.', 'Ao começar o dia, espere 1 minuto parado em um lugar aberto antes da primeira árvore.', ORIENTA_GPS, 'Segure o celular na mão, com a tela para cima, não no bolso.', 'Se o erro não baixar, desligue e ligue a localização do celular.'];
   function marcarPonto(r) {
     return new Promise((fim) => {
-      const META = 4; let t0 = Date.now(); const leituras = []; let pronto = false, noMapa = false;
+      const META = EH_IOS ? 6 : 4; /* o iPhone quase nunca informa erro abaixo de 5 m; a conferência no satélite vem depois de qualquer jeito */ let t0 = Date.now(); const leituras = []; let pronto = false, noMapa = false;
       const num = h('div', { class: 'mp-num' }, '...'); const st = h('div', { class: 'mp-st' }, 'Procurando o sinal do GPS...');
       const det = h('small', { class: 'mp-det' });
       const hojeK = 'gpsDia:' + new Date().toDateString();
@@ -1263,7 +1263,7 @@
           else { Object.assign(r, { lat: c.lat, lon: c.lng, prec: gps0 ? gps0.prec : S.pos ? S.pos.prec : null, posManual: true, posDist: gps0 ? Math.round(distM(c, gps0)) : d, gpsAuto: false, marcadoEm: agoraISO(), pontoConferido: conferir || undefined }); Store.salvarRegistro(r); } }
         try { if (mapa) mapa.remove(); } catch (e) { /* já saiu */ } veu.remove(); fim(!!ok); };
       const aoSair = () => fechar(false); window.addEventListener('hashchange', aoSair);
-      const impreciso = conferir && gps0 && +gps0.prec > 4;
+      const impreciso = conferir && gps0 && +gps0.prec > (EH_IOS ? 6 : 4);
       const veu = h('div', { class: 'veu mp-veu' }, h('div', { class: 'folha mp' + (conferir ? ' mp-conf' : '') }, h('h3', null, conferir ? 'É aqui que a árvore está?' : 'Localização destravada'),
         h('div', { class: 'mp-orienta' + (impreciso ? ' ruim' : '') }, conferir ? (impreciso ? `GPS com erro de ±${numBR(gps0.prec)} m. Confira com atenção: se o alvo não estiver no pé da árvore, arraste o mapa.` : 'Confira no mapa. Se o alvo não estiver no pé da árvore, arraste o mapa até acertar.') : 'Arraste o mapa até o alvo ficar no pé da árvore.'),
         h('div', { class: 'mp-mapa-cx' }, div, h('div', { class: 'mp-alvo', 'aria-hidden': 'true' })), info,
@@ -2224,7 +2224,7 @@
       for (const q of qdDados.quadras) { if (q.b[2] < b.getWest() || q.b[0] > b.getEast() || q.b[3] < b.getSouth() || q.b[1] > b.getNorth()) continue; if (++n > 400) break; L.marker(Quadras.centro(q), { interactive: false, keyboard: false, icon: L.divIcon({ className: 'qd-rot', html: h('span', null, motivoBloqueio(qdSit.get(q.n)) ? '🔒 ' + q.n : ehCoord() && (qdSit.get(q.n) || {}).marca === 'Validação' ? '⏳ ' + q.n : q.n), iconSize: null }) }).addTo(rotulos); }
     }
     let zAnt = mapa.getZoom();
-    mapa.on('moveend zoomend', () => setTimeout(() => { if (!document.body.contains(div)) return; sincQdVista(); pintarRotulos(); const z = mapa.getZoom(); if ((z >= ZOOM_FACES) !== (zAnt >= ZOOM_FACES)) { legenda(); desenharQuadras(); } if (z !== zAnt) ajustarRaios(); zAnt = z; }, 0)); window.__app.mapa = mapa;
+    mapa.on('moveend zoomend', () => setTimeout(() => { if (!document.body.contains(div)) return; sincQdVista(); pintarRotulos(); const z = mapa.getZoom(); if ((z >= ZOOM_FACES) !== (zAnt >= ZOOM_FACES)) { legenda(); desenharQuadras(); } if (z !== zAnt) ajustarRaios(); zAnt = z; try { pintarTroncos(); } catch (e) { /* mapa ainda montando */ } }, 0)); window.__app.mapa = mapa;
     // fechar quadra: conferência curta (árvores por face, faces sem encerrar, cadastros não terminados, o que falta enviar) antes de fechar
     async function fecharQuadra(q, s, marcar) {
       if (somenteVer()) return; const fsit = fcSit(); const regs = (await Store.registros(S.projeto.id)).filter((r) => String(r.quadra || '') === String(q.n));
@@ -2467,6 +2467,11 @@
       } catch (e) { /* sem quadras */ }
     };
     const camada = L.layerGroup().addTo(mapa); trajCamada.addTo(mapa);
+    // 2.18: copa grande fica translúcida e por baixo; o pé de cada árvore de copa grande ganha um ponto cheio por cima (dá para ver e tocar a árvore que está debaixo de outra)
+    const troncos = L.layerGroup().addTo(mapa); const COPA_PX = 9;
+    function pintarTroncos() { troncos.clearLayers(); if (mapa.getZoom() < 17) return; const bd = mapa.getBounds().pad(0.15); let n = 0; camada.eachLayer((l) => { if (n >= 800 || !l.__o || l.getRadius() <= COPA_PX || !bd.contains(l.getLatLng())) return; n++; L.circleMarker(l.getLatLng(), { renderer: render, radius: 4.5, color: '#fff', weight: 1.5, fillColor: l.options.fillColor, fillOpacity: 1 }).on('click', (e) => { L.DomEvent.stop(e); if (fichaAberta()) return fecharFicha(); ficha(l.__o, e.latlng); }).addTo(troncos); }); }
+    // a posição de quem usa fica em camada própria, acima das árvores, quadras e faces: nada cobre o ponto azul
+    const paneEu = mapa.createPane('eu'); paneEu.style.zIndex = 640; paneEu.style.pointerEvents = 'none'; const rendEu = L.svg({ pane: 'eu', padding: 0.3 });
     // trajeto das equipes (coordenação): em cor própria, fora das paletas, e desligável
     async function pintarTrajetos() {
       const gen = ++trajGen; trajCamada.clearLayers(); if (!trajOn) return; // só a chamada mais recente desenha
@@ -2487,13 +2492,13 @@
       if (porOS && !osPorArv) { carregarOSMapa().then(() => desenhar(false)); }
       const hojeD = diaLocal(agoraISO()); const ontemD = diaLocal(new Date(Date.now() - 864e5).toISOString()); const d7 = diaLocal(new Date(Date.now() - 6 * 864e5).toISOString());
       const dv = selDia.value; const okDia = (o) => { if (!dv) return true; const x = o.dia || ''; if (!x) return false; if (dv === 'hoje') return x === hojeD; if (dv === 'ontem') return x === ontemD; if (dv === '7') return x >= d7; if (dv === 'outro') return !diaIn.value || x === diaIn.value; return true; };
-      const vis = pts.filter((o) => (!q || o.chave.includes(q)) && (!eq || o.equipe === eq) && (!rk || String(o.risco) === rk) && (!soAlto || o.risco === 'Alto' || o.risco === 'Severo') && (!ba || o.bairro === ba) && okDia(o));
+      const vis = pts.filter((o) => (!q || o.chave.includes(q)) && (!eq || o.equipe === eq) && (!rk || String(o.risco) === rk) && (!soAlto || o.risco === 'Alto' || o.risco === 'Severo') && (!ba || o.bairro === ba) && okDia(o)).sort((a, b) => (b.rm || 0) - (a.rm || 0)); // copa maior primeiro: a menor é desenhada por cima e recebe o toque
       const mpp = metrosPorPixel();
       for (const o of vis) {
         const os = porOS && osPorArv ? osPorArv.get(o.uid) : null;
         const fill = porOS ? (os ? COR_OS[os.status] : '#C9D3D6') : porRisco ? corRisco[o.risco] || '#8A969C' : corEq(o.equipe || '-');
         // ponto no tamanho real da copa (como no satélite), com mínimo de 4 px para continuar visível e tocável
-        const mk = L.circleMarker([o.lat, o.lon], { renderer: render, radius: raioPx(o, mpp, vis.length), color: '#13262B', weight: 1.2, fillColor: fill, fillOpacity: 0.8 }).on('click', (e) => { L.DomEvent.stop(e); if (fichaAberta()) return fecharFicha(); ficha(o, e.latlng); }).addTo(camada);
+        const rp = raioPx(o, mpp, vis.length); const mk = L.circleMarker([o.lat, o.lon], { renderer: render, radius: rp, color: '#13262B', weight: 1.2, fillColor: fill, fillOpacity: rp > COPA_PX ? 0.4 : 0.85 }).on('click', (e) => { L.DomEvent.stop(e); if (fichaAberta()) return fecharFicha(); ficha(o, e.latlng); }).addTo(camada);
         mk.__o = o;
       }
       if (porOS && osPorArv) for (const o of osSoltas) L.circleMarker([+o.latitude, +o.longitude], { renderer: render, radius: 8, color: '#13262B', weight: 2, fillColor: COR_OS[o.status], fillOpacity: 0.95 }).on('click', () => ir('#os/' + encodeURIComponent(o.id))).addTo(camada);
@@ -2502,7 +2507,7 @@
       const minhasQ = rq && meu && rq.eq[meu] ? ` · Minhas quadras: ${fmtN(rq.eq[meu].Levantada)} de ${fmtN(rq.eq[meu].total)} levantadas` : '';
       const hojeN = meu ? pts.filter((o) => o.equipe === meu && o.dia === hojeD).length : 0;
       conta.textContent = `${vis.length.toLocaleString('pt-BR')} de ${pts.length.toLocaleString('pt-BR')} pontos` + (rq ? ` · ${fmtN(rq.por.Levantada)} de ${fmtN(rq.tot)} quadras levantadas` : '') + minhasQ + (meu ? ` · Hoje: ${fmtN(hojeN)}` : '') + (porOS && osPorArv ? ` · ${[...osPorArv.values()].filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length + osSoltas.filter((x) => ['Aberta', 'Em execução', 'Solicitada'].includes(x.status)).length} com ordem em aberto` : '') + (conta.dataset.qd ? ' · ' + conta.dataset.qd : '');
-      legenda(); pintarTrajetos();
+      legenda(); pintarTrajetos(); pintarTroncos();
       if (ajustar && vis.length && !(porCidade && semFiltro())) {
         if (vis.length === 1 && busca.value.trim()) { mapa.setView([vis[0].lat, vis[0].lon], 19); ficha(vis[0]); }
         else mapa.fitBounds(L.latLngBounds(vis.map((o) => [o.lat, o.lon])), { padding: [30, 30], maxZoom: 19 });
@@ -2510,7 +2515,7 @@
     }
     function metrosPorPixel() { const c = mapa.getCenter(); return 40075016.686 * Math.cos(c.lat * Math.PI / 180) / Math.pow(2, mapa.getZoom() + 8); }
     const raioPx = (o, mpp, n) => { const min = n > 2000 && mapa.getZoom() < 16 ? 3 : 4; return o.rm ? Math.max(min, Math.min(80, o.rm / mpp)) : (n > 2000 ? 4 : 5); };
-    function ajustarRaios() { const mpp = metrosPorPixel(); const n = camada.getLayers().length; camada.eachLayer((l) => { if (l.__o) l.setRadius(raioPx(l.__o, mpp, n)); }); }
+    function ajustarRaios() { const mpp = metrosPorPixel(); const n = camada.getLayers().length; camada.eachLayer((l) => { if (!l.__o) return; const rp = raioPx(l.__o, mpp, n); l.options.fillOpacity = rp > COPA_PX ? 0.4 : 0.85; l.setRadius(rp); }); }
     function ficha(o, ll) {
       const pop = h('div', { class: 'ficha' }, h('b', null, o.cod || 'Sem código'), o.esp ? h('i', null, o.esp) : null,
         o.cat ? h('div', null, rotOp(cCat, o.cat)) : null, o.risco ? h('div', null, 'Risco ' + String(rotOp(cRisco, o.risco)).toLowerCase()) : null,
@@ -2764,8 +2769,8 @@
     }
     const ouv = (p) => {
       if (!p || !document.body.contains(div)) return;
-      if (!euPrec) euPrec = L.circle([p.lat, p.lon], { renderer: render, interactive: false, radius: p.prec || 5, color: '#1E88E5', weight: 1, fillColor: '#1E88E5', fillOpacity: 0.12 }).addTo(mapa); else { euPrec.setLatLng([p.lat, p.lon]); euPrec.setRadius(p.prec || 5); }
-      if (!eu) eu = L.circleMarker([p.lat, p.lon], { renderer: render, interactive: false, radius: 9, color: '#fff', weight: 3, fillColor: '#1E88E5', fillOpacity: 1 }).addTo(mapa); else eu.setLatLng([p.lat, p.lon]);
+      if (!euPrec) euPrec = L.circle([p.lat, p.lon], { renderer: rendEu, pane: 'eu', interactive: false, radius: p.prec || 5, color: '#1E88E5', weight: 1, fillColor: '#1E88E5', fillOpacity: 0.12 }).addTo(mapa); else { euPrec.setLatLng([p.lat, p.lon]); euPrec.setRadius(p.prec || 5); }
+      if (!eu) eu = L.circleMarker([p.lat, p.lon], { renderer: rendEu, pane: 'eu', interactive: false, radius: 9, color: '#fff', weight: 3, fillColor: '#1E88E5', fillOpacity: 1 }).addTo(mapa); else eu.setLatLng([p.lat, p.lon]);
       if (seguindo) mapa.panTo([p.lat, p.lon], { animate: true });
     };
     Gps.ouvintes.add(ouv); if (S.pos) ouv(S.pos);
