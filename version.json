@@ -1,7 +1,13 @@
 {
- "versao": "2.17.2",
- "data": "2026-11-19",
+ "versao": "2.18.0",
+ "data": "2026-11-20",
  "notas": [
+  "Toda árvore: depois de o GPS marcar, o app abre o satélite em cima do ponto e pergunta se é ali; dá para arrastar e acertar. A meta do GPS passa a ser 4 m",
+  "O satélite das quadras da equipe fica guardado no celular para uso sem internet e é apagado quando a quadra fecha",
+  "Zoom na câmera do app (1x a 4x, conforme o aparelho)",
+  "iPhone: a medida da altura pelo celular passa a funcionar (permissão do sensor e leitura corrigida)",
+  "A espécie conferida pela coordenação aparece para o coletor na lista",
+  "Formulário 16: nova categoria Fragmento florestal (como o agrupamento, sem espécie) e manejo sem remoção do alvo e suporte complementar; avaliação passa a ser só de nível 3",
   "Concluir e a abertura do cadastro não esperam mais o servidor para conferir o setor",
   "Pedir, cancelar, aprovar e recusar quadra respondem na hora: a tela muda no toque e o envio segue por trás",
   "Foto tirada por dentro do app, sem abrir a câmera do celular; galeria e câmera do celular ficam como botões na mesma tela",

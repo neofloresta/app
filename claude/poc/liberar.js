@@ -51,6 +51,7 @@ const suites = [
   ['servidor 2.17: time da casa junto nas faces e quadras, quadra validada, corrigir posição e prêmio sem teto', 'node b2171.js'],
   ['2.17 nas telas: quadras por time, painel, corrigir posição e face encerrada por outra equipe da casa', 'node b2172.js'],
   ['2.17 na planilha: texto no lugar de código, nada em branco e ajuste dos registros antigos', 'node b2173.js'],
+  ['2.18: conferência do ponto no satélite, satélite guardado, espécie conferida, altura e câmera no iPhone (simulado)', 'node b2180.js'],
   ['2.14 nas telas: pedido de reserva pelo coletor parceiro e aprovação da coordenação', 'node b214.js'],
   ['rendimento por equipe e filtro de dia no mapa', 'node brend.js'],
   ['GPS parado, códigos em dois celulares, toque no ponto', 'node b9.js'],

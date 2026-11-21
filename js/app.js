@@ -1,6 +1,6 @@
 // Neofloresta Inventário: app de campo do Inventário da Arborização Urbana, da Neofloresta
 (() => {
-  const VERSAO = '2.17.2';
+  const VERSAO = '2.18.0';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -606,7 +606,7 @@
     const lista = f === 'devolvido' ? dev : todos.filter((r) => !f || norm(camposCodigo(S.form).map((k) => r.valores[k.nome]).join(' ') + ' ' + (ce && r.valores[ce.nome])).includes(f));
     if (!lista.length) {
       if (filtro || perfil() !== 'coletor') return el.replaceChildren(h('div', { class: 'vazio-lista' }, filtro ? 'Nada encontrado.' : 'Nenhuma árvore cadastrada ainda neste aparelho.'));
-      const instalado = window.matchMedia && matchMedia('(display-mode: standalone)').matches; const ios = /iphone|ipad/i.test(navigator.userAgent);
+      const instalado = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; const ios = EH_IOS;
       return el.replaceChildren(h('div', { class: 'cartao primeiros' }, h('h3', null, 'Primeiros passos'),
         h('ol', null,
           !instalado ? h('li', null, h('b', null, 'Instale o app. '), ios ? 'No Safari, toque em Compartilhar e em "Adicionar à Tela de Início".' : 'No Chrome, toque nos 3 pontinhos e em "Instalar app".') : null,
@@ -1282,10 +1282,13 @@
   // Método da tangente: altura = distância x (tan do ângulo do topo - tan do ângulo da base). A inclinação vem da gravidade no eixo da câmera, então o celular torto para o lado não muda a conta.
   const ehAltura = (c) => c.tipo === 'number' && /altura total/i.test(c.nome);
   const inclinacao = (g, zero) => { const m = Math.hypot(g.x, g.y, g.z); return m > 1 ? Math.asin(Math.max(-1, Math.min(1, -g.z / m))) * 180 / Math.PI - (zero || 0) : null; };
+  // 2.18 iPhone: o sensor só liga depois que a pessoa permite, e o pedido tem de sair de dentro de um toque; e o iPhone informa a gravidade com o sinal trocado em relação ao Android
+  const EH_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const Movimento = { estado: '', pedir() { try { if (typeof DeviceMotionEvent === 'undefined' || typeof DeviceMotionEvent.requestPermission !== 'function') return Promise.resolve('granted'); if (this.estado === 'granted') return Promise.resolve('granted'); return DeviceMotionEvent.requestPermission().then((v) => { this.estado = v; return v; }, () => this.estado || 'prompt'); } catch (e) { return Promise.resolve('prompt'); } } };
   function lerInclinacao(aoLer) { // devolve a função que desliga
-    const leit = []; const f = (e) => { const g = e.accelerationIncludingGravity; if (!g || g.z == null) return; const el = inclinacao(g, 0); if (el == null) return; leit.push([Date.now(), el]); while (leit.length && Date.now() - leit[0][0] > 1000) leit.shift(); aoLer(leit); };
+    const leit = []; const f = (e) => { const g0 = e.accelerationIncludingGravity; if (!g0 || g0.z == null) return; const g = EH_IOS ? { x: -g0.x, y: -g0.y, z: -g0.z } : g0; const el = inclinacao(g, 0); if (el == null) return; leit.push([Date.now(), el]); while (leit.length && Date.now() - leit[0][0] > 1000) leit.shift(); aoLer(leit); };
     const ligar = () => window.addEventListener('devicemotion', f);
-    ligar(); try { if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') DeviceMotionEvent.requestPermission().catch(() => {}); } catch (e) { /* iPhone pede permissão; nos outros a leitura já vem */ }
+    ligar(); Movimento.pedir(); // iPhone pede permissão; nos outros a leitura já vem
     return () => window.removeEventListener('devicemotion', f);
   }
   const mediaLeit = (leit) => { if (leit.length < 5) return null; const v = leit.map((x) => x[1]); const m = v.reduce((a, x) => a + x, 0) / v.length; return { m, dp: Math.sqrt(v.reduce((a, x) => a + (x - m) * (x - m), 0) / v.length), dur: leit[leit.length - 1][0] - leit[0][0] }; };
@@ -1309,12 +1312,12 @@
           corpo.replaceChildren(h('p', null, 'Afaste-se do tronco até ver a árvore inteira. O ideal é ficar a uma distância parecida com a altura dela.'),
             h('div', { class: 'campo' }, h('label', { class: 'rot' }, porPasso ? 'Quantos passos do tronco até aqui' : 'Distância do tronco até aqui (m), pela trena'), inp),
             porPasso ? h('p', { class: 'dica' }, passo ? `Seu passo calibrado: ${numBR(Math.round(passo * 100) / 100)} m.` : 'Passo ainda não calibrado: o app usa 0,75 m. Calibre em Preferências para a medida ficar boa.') : null);
-          acoes.replaceChildren(bt('Cancelar', () => fechar(null), 'sec'), bt('Continuar', () => { const v = paraNum(inp.value); if (!(v > 0)) return toast(porPasso ? 'Informe o número de passos.' : 'Informe a distância em metros.'); dist = porPasso ? v * (passo || 0.75) : v; if (dist < 2 || dist > 80) return toast('Distância fora do esperado (de 2 a 80 m). Confira.', 4000); etapa = 1; pintar(); ligarVideo(); }));
+          acoes.replaceChildren(bt('Cancelar', () => fechar(null), 'sec'), bt('Continuar', () => { const v = paraNum(inp.value); if (!(v > 0)) return toast(porPasso ? 'Informe o número de passos.' : 'Informe a distância em metros.'); dist = porPasso ? v * (passo || 0.75) : v; if (dist < 2 || dist > 80) return toast('Distância fora do esperado (de 2 a 80 m). Confira.', 4000); Movimento.pedir(); etapa = 1; pintar(); ligarVideo(); }));
           setTimeout(() => inp.focus(), 100);
         } else if (etapa === 1 || etapa === 2) {
           const alvo = etapa === 1 ? 'na BASE do tronco, rente ao chão' : 'no TOPO da copa, no ponto mais alto';
           msg.textContent = ''; corpo.replaceChildren(h('p', null, 'Mire a cruz ', h('b', null, alvo), '. Toque em Marcar e segure parado por 1 segundo.'), angTxt, msg);
-          acoes.replaceChildren(bt('Cancelar', () => fechar(null), 'sec'), bt(etapa === 1 ? 'Marcar a base' : 'Marcar o topo', () => { if (semSensor) return; armado = Date.now() + 400; msg.textContent = 'Segure parado...'; msg.className = 'clin-msg'; }));
+          acoes.replaceChildren(bt('Cancelar', () => fechar(null), 'sec'), bt(etapa === 1 ? 'Marcar a base' : 'Marcar o topo', () => { Movimento.pedir(); if (semSensor && !EH_IOS) return; armado = Date.now() + 400; msg.textContent = 'Segure parado...'; msg.className = 'clin-msg'; }));
         } else {
           const alt = Math.round(dist * (Math.tan(topo * Math.PI / 180) - Math.tan(base * Math.PI / 180)) * 10) / 10;
           corpo.replaceChildren(h('div', { class: 'clin-res' }, h('b', null, numBR(alt) + ' m'), h('small', null, `distância ${numBR(Math.round(dist * 10) / 10)} m · base ${numBR(Math.round(base * 10) / 10)}° · topo ${numBR(Math.round(topo * 10) / 10)}°`)),
@@ -1327,7 +1330,7 @@
       const tm = setInterval(() => {
         if (etapa !== 1 && etapa !== 2) return;
         const m = leitAt.length && Date.now() - leitAt[leitAt.length - 1][0] < 700 ? mediaLeit(leitAt) : null;
-        if (!m) { if (Date.now() - t0 > 3000 && !leitAt.length) { semSensor = true; angTxt.textContent = 'sem leitura'; msg.textContent = 'Este celular não informou a inclinação. Feche e digite a altura à mão.'; msg.className = 'clin-msg ruim'; } return; }
+        if (!m) { if (Date.now() - t0 > 3000 && !leitAt.length) { semSensor = true; angTxt.textContent = 'sem leitura'; msg.textContent = Movimento.estado === 'denied' ? 'O iPhone não liberou o sensor de movimento. Feche o app por completo, abra de novo e toque em Permitir quando ele perguntar. Por enquanto, digite a altura à mão.' : EH_IOS ? 'Toque em Marcar e depois em Permitir, para o iPhone liberar o sensor de movimento.' : 'Este celular não informou a inclinação. Feche e digite a altura à mão.'; msg.className = 'clin-msg ruim'; } return; }
         if (semSensor) { semSensor = false; msg.textContent = ''; msg.className = 'clin-msg'; } // a leitura chegou atrasada: segue normalmente
         const a = m.m - zero; angTxt.textContent = numBR(Math.round(a * 10) / 10) + '°';
         if (!armado || Date.now() < armado + 1000) return; armado = 0;
@@ -3508,8 +3511,8 @@
   async function concluirConfiguracao() { S.configurado = true; await Store.set('configurado:' + S.sessao.u, agoraISO()); ir('#inicio'); }
   async function telaConfigurar(passo) {
     const PASSOS = ['Localização', 'Instalar o app', 'Teste do GPS'];
-    const instalado = window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches);
-    const ios = /iphone|ipad/i.test(navigator.userAgent);
+    const instalado = (window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches)) || navigator.standalone === true;
+    const ios = EH_IOS;
     if (passo === 1 && instalado) passo = 2;
     const prox = () => (passo >= PASSOS.length - 1 ? concluirConfiguracao() : telaConfigurar(passo + 1 === 1 && instalado ? 2 : passo + 1));
     const pontos = h('div', { class: 'cfg-pontos', 'aria-label': `Passo ${passo + 1} de ${PASSOS.length}` }, PASSOS.map((t, k) => h('span', { class: k === passo ? 'at' : k < passo ? 'feito' : '' })));
@@ -4526,19 +4529,19 @@
       try {
         const eq = minhaEquipe(); const cam = await carregarQuadras(); if (!eq || !cam) { this.estado = null; return null; }
         const sit = await carregarSitQd(false); const k = 'sat:' + S.projeto.id + ':' + S.sessao.u; const est = (await Store.get(k)) || {}; let mudou = false;
-        const quero = cam.quadras.filter((q) => { const s = sit.get(q.n) || {}; return s.equipe === eq && !s.fechada_em; }).slice(0, 12); const ns = new Set(quero.map((q) => String(q.n)));
+        const quero = cam.quadras.filter((q) => { const s = sit.get(q.n) || {}; return eqMinha(s.equipe) && !s.fechada_em; }).sort((a, b) => ((sit.get(b.n) || {}).equipe === eq) - ((sit.get(a.n) || {}).equipe === eq)).slice(0, 12); const ns = new Set(quero.map((q) => String(q.n))); // primeiro as da própria equipe; no time da casa entram também as das outras equipes da casa
         const usados = new Set(); for (const q of quero) for (const u of this.urls(q)) usados.add(u);
-        const cache = await caches.open('mapa-fundo');
+        const cache = await caches.open('mapa-quadras'); // separado do mapa comum, que o app apara quando enche
         for (const n of Object.keys(est)) if (!ns.has(n)) { for (const u of est[n].urls || []) if (!usados.has(u)) await cache.delete(u).catch(() => {}); delete est[n]; mudou = true; } // quadra fechada ou devolvida: apaga
         if (navigator.onLine) for (const q of quero) {
-          const e0 = est[q.n]; if (e0 && e0.ok) continue; const urls = this.urls(q); let n = 0;
+          const e0 = est[q.n]; if (e0 && e0.ok && (await cache.match(e0.urls[0]))) continue; const urls = this.urls(q); let n = 0;
           for (const u of urls) { try { if (await cache.match(u)) { n++; continue; } const r = await fetch(u, { mode: 'cors' }); if (r.ok) { await cache.put(u, r.clone()); n++; } } catch (e) { /* sem sinal nesta imagem: tenta na próxima vez */ } }
           est[q.n] = { urls, n, ok: n === urls.length, em: agoraISO() }; mudou = true;
         }
         if (mudou) await Store.set(k, est);
         this.estado = { tot: quero.length, ok: quero.filter((q) => est[q.n] && est[q.n].ok).length };
         window.dispatchEvent(new Event('satelite-guardado')); return this.estado;
-      } catch (e) { return this.estado; } finally { this.rodando = false; }
+      } catch (e) { console.warn('satelite', e); return this.estado; } finally { this.rodando = false; }
     },
   };
   // 2.17: no time da casa (Neofloresta) as equipes trabalham juntas; a equipe "é minha" quando é a minha ou outra da casa. Parceiro continua preso à própria equipe
