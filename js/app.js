@@ -1,6 +1,6 @@
 // Neofloresta Inventário: app de campo do Inventário da Arborização Urbana, da Neofloresta
 (() => {
-  const VERSAO = '2.18.1';
+  const VERSAO = '2.18.2';
   const TERMO_VERSAO = '2026-11-d';
   const S = { editando: new Set(), linhas: {}, sessao: null, projeto: null, form: null, reg: null, aba: 0, tentou: false, pos: null, sincronizando: false, revisao: null, adminAba: 'exportar' };
   const $app = document.getElementById('app');
@@ -1315,7 +1315,7 @@
           corpo.replaceChildren(h('p', null, 'Afaste-se do tronco até ver a árvore inteira. O ideal é ficar a uma distância parecida com a altura dela.'),
             h('div', { class: 'campo' }, h('label', { class: 'rot' }, porPasso ? 'Quantos passos do tronco até aqui' : 'Distância do tronco até aqui (m), pela trena'), inp),
             porPasso ? h('p', { class: 'dica' }, passo ? `Seu passo calibrado: ${numBR(Math.round(passo * 100) / 100)} m.` : 'Passo ainda não calibrado: o app usa 0,75 m. Calibre em Preferências para a medida ficar boa.') : null);
-          acoes.replaceChildren(bt('Cancelar', () => fechar(null), 'sec'), bt('Continuar', () => { const v = paraNum(inp.value); if (!(v > 0)) return toast(porPasso ? 'Informe o número de passos.' : 'Informe a distância em metros.'); dist = porPasso ? v * (passo || 0.75) : v; if (dist < 2 || dist > 80) return toast('Distância fora do esperado (de 2 a 80 m). Confira.', 4000); Movimento.pedir(); etapa = 1; pintar(); ligarVideo(); }));
+          acoes.replaceChildren(bt('Cancelar', () => fechar(null), 'sec'), bt('Continuar', () => { const v = paraNum(inp.value); if (!(v > 0)) return toast(porPasso ? 'Informe o número de passos.' : 'Informe a distância em metros.'); dist = porPasso ? v * (passo || 0.75) : v; if (dist < 2 || dist > 80) return toast('Distância fora do esperado (de 2 a 80 m). Confira.', 4000); const pm = Movimento.pedir(); etapa = 1; pintar(); pm.then((est) => { if (EH_IOS && est === 'denied') toast('O iPhone não liberou o sensor de movimento. Feche o app por completo, abra de novo e toque em Permitir.', 7000); ligarVideo(); }); })); // no iPhone a câmera só é pedida depois da resposta sobre o sensor: dois pedidos juntos, um deles se perde
           setTimeout(() => inp.focus(), 100);
         } else if (etapa === 1 || etapa === 2) {
           const alvo = etapa === 1 ? 'na BASE do tronco, rente ao chão' : 'no TOPO da copa, no ponto mais alto';
@@ -1333,7 +1333,8 @@
       const tm = setInterval(() => {
         if (etapa !== 1 && etapa !== 2) return;
         const m = leitAt.length && Date.now() - leitAt[leitAt.length - 1][0] < 700 ? mediaLeit(leitAt) : null;
-        if (!m) { if (Date.now() - t0 > 3000 && !leitAt.length) { semSensor = true; angTxt.textContent = 'sem leitura'; msg.textContent = Movimento.estado === 'denied' ? 'O iPhone não liberou o sensor de movimento. Feche o app por completo, abra de novo e toque em Permitir quando ele perguntar. Por enquanto, digite a altura à mão.' : EH_IOS ? 'Toque em Marcar e depois em Permitir, para o iPhone liberar o sensor de movimento.' : 'Este celular não informou a inclinação. Feche e digite a altura à mão.'; msg.className = 'clin-msg ruim'; } return; }
+        if (!m) { if (armado && Date.now() > armado + 2500) { armado = 0; msg.textContent = 'O sensor de movimento não respondeu' + (EH_IOS ? ` (permissão do iPhone: ${({ granted: 'liberada', denied: 'negada' })[Movimento.estado] || 'sem resposta'})` : '') + '. Toque em Marcar de novo ou feche e digite a altura à mão.'; msg.className = 'clin-msg ruim'; return; }
+          if (Date.now() - t0 > 3000 && !leitAt.length && !armado) { semSensor = true; angTxt.textContent = 'sem leitura'; msg.textContent = EH_IOS && Movimento.estado === 'denied' ? 'O iPhone não liberou o sensor de movimento. Feche o app por completo, abra de novo e toque em Permitir quando ele perguntar. Por enquanto, digite a altura à mão.' : EH_IOS ? 'Toque em Marcar e depois em Permitir, para o iPhone liberar o sensor de movimento.' : 'Este celular não informou a inclinação. Feche e digite a altura à mão.'; msg.className = 'clin-msg ruim'; } return; }
         if (semSensor) { semSensor = false; msg.textContent = ''; msg.className = 'clin-msg'; } // a leitura chegou atrasada: segue normalmente
         const a = m.m - zero; angTxt.textContent = numBR(Math.round(a * 10) / 10) + '°';
         if (!armado || Date.now() < armado + 1000) return; armado = 0;

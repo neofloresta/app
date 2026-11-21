@@ -2,7 +2,7 @@
  "id": "divinopolis-inventario",
  "nome": "Inventário de arborização viária (Divinópolis)",
  "camada": "divinopolis_arvores",
- "versao": 16,
+ "versao": 17,
  "campos": [
   {
    "armazenar": "text",
@@ -349,14 +349,14 @@
      "t": "Presente"
     }
    ],
-   "ajuda": "Elementos a até 2 m do tronco que disputam espaço com a árvore: poste, placa, entrada de garagem, boca de lobo, hidrante, muro."
+   "ajuda": "Elementos a até 2 m do tronco que disputam espaço com a árvore: poste, placa, entrada de garagem, boca de lobo, hidrante, lixeira, faixa de pedestre. Muro não conta como conflito."
   },
   {
    "armazenar": "bool",
    "nome": "Fiação baixa isolada",
    "rotulo": "Baixa isolada",
    "tipo": "bool",
-   "ajuda": "Rede de baixa tensão em cabo único trançado (multiplexado), preto, logo abaixo da média tensão.",
+   "ajuda": "Rede de baixa tensão em cabo único trançado (multiplexado), preto, logo abaixo da média tensão. Marque o que existe no trecho da árvore, encoste ou não na copa.",
    "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
@@ -364,7 +364,7 @@
    "nome": "Fiação baixa nua",
    "rotulo": "Baixa nua",
    "tipo": "bool",
-   "ajuda": "Rede de baixa tensão com fios separados e sem capa, presos em fila vertical no poste.",
+   "ajuda": "Rede de baixa tensão com fios separados e sem capa, presos em fila vertical no poste. Marque o que existe no trecho da árvore, encoste ou não na copa.",
    "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
@@ -372,7 +372,7 @@
    "nome": "Fiação média compacta",
    "rotulo": "Média compacta",
    "tipo": "bool",
-   "ajuda": "Rede de média tensão com cabos cobertos presos em espaçadores, no alto do poste.",
+   "ajuda": "Rede de média tensão com cabos cobertos presos em espaçadores, no alto do poste. Marque o que existe no trecho da árvore, encoste ou não na copa.",
    "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
@@ -380,7 +380,7 @@
    "nome": "Fiação média nua",
    "rotulo": "Média nua",
    "tipo": "bool",
-   "ajuda": "Rede de média tensão com fios sem capa, apoiados em isoladores numa cruzeta no topo do poste.",
+   "ajuda": "Rede de média tensão com fios sem capa, apoiados em isoladores numa cruzeta no topo do poste. Marque o que existe no trecho da árvore, encoste ou não na copa.",
    "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
@@ -388,7 +388,7 @@
    "nome": "Fiação derivação",
    "rotulo": "Derivação",
    "tipo": "bool",
-   "ajuda": "Ramal que sai da rede e vai até o imóvel (entrada de energia).",
+   "ajuda": "Ramal que sai da rede e vai até o imóvel (entrada de energia). Marque o que existe no trecho da árvore, encoste ou não na copa.",
    "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
@@ -396,7 +396,7 @@
    "nome": "Fiação serviços gerais",
    "rotulo": "Serviços gerais",
    "tipo": "bool",
-   "ajuda": "Cabos de telefone, internet e TV, presos mais baixo no poste.",
+   "ajuda": "Cabos de telefone, internet e TV, presos mais baixo no poste. Marque o que existe no trecho da árvore, encoste ou não na copa.",
    "ajudaImg": "forms/ajuda/fiacao.svg"
   },
   {
@@ -427,7 +427,7 @@
    "rotulo": "Ausente",
    "tipo": "bool",
    "exclusivo": true,
-   "ajuda": "Nenhuma fiação aérea sobre ou ao lado da copa."
+   "ajuda": "Nenhuma fiação aérea passando no trecho da árvore."
   },
   {
    "armazenar": "text",
@@ -1034,13 +1034,6 @@
   },
   {
    "armazenar": "bool",
-   "nome": "Manejo adubação",
-   "rotulo": "Adubação",
-   "tipo": "bool",
-   "ajuda": "Adubação ou correção do solo."
-  },
-  {
-   "armazenar": "bool",
    "nome": "Manejo aumento de canteiro",
    "rotulo": "Aumento de canteiro",
    "tipo": "bool",
@@ -1214,31 +1207,31 @@
     },
     {
      "campo": "Fiação baixa isolada",
-     "grupo": "Fiação aérea"
+     "grupo": "Fiação aérea presente (mesmo sem tocar a copa)"
     },
     {
      "campo": "Fiação baixa nua",
-     "grupo": "Fiação aérea"
+     "grupo": "Fiação aérea presente (mesmo sem tocar a copa)"
     },
     {
      "campo": "Fiação média compacta",
-     "grupo": "Fiação aérea"
+     "grupo": "Fiação aérea presente (mesmo sem tocar a copa)"
     },
     {
      "campo": "Fiação média nua",
-     "grupo": "Fiação aérea"
+     "grupo": "Fiação aérea presente (mesmo sem tocar a copa)"
     },
     {
      "campo": "Fiação derivação",
-     "grupo": "Fiação aérea"
+     "grupo": "Fiação aérea presente (mesmo sem tocar a copa)"
     },
     {
      "campo": "Fiação serviços gerais",
-     "grupo": "Fiação aérea"
+     "grupo": "Fiação aérea presente (mesmo sem tocar a copa)"
     },
     {
      "campo": "Fiação ausente",
-     "grupo": "Fiação aérea"
+     "grupo": "Fiação aérea presente (mesmo sem tocar a copa)"
     },
     {
      "campo": "Tronco paralelo a fiacao eletrica"
@@ -1466,10 +1459,6 @@
      "grupo": "Manejo e mitigações"
     },
     {
-     "campo": "Manejo adubação",
-     "grupo": "Manejo e mitigações"
-    },
-    {
      "campo": "Manejo aumento de canteiro",
      "grupo": "Manejo e mitigações"
     },
@@ -1512,7 +1501,7 @@
   }
  ],
  "gruposObrig": [
-  "Fiação aérea",
+  "Fiação aérea presente (mesmo sem tocar a copa)",
   "Interferência no tráfego",
   "Podas",
   "Pragas e doenças na copa",
@@ -3719,7 +3708,6 @@
      "Manejo remoção do indivíduo": "oculto",
      "Manejo poda": "oculto",
      "Manejo tutoramento": "oculto",
-     "Manejo adubação": "oculto",
      "Manejo aumento de canteiro": "oculto",
      "Manejo limpeza de epífitas e parasitas": "oculto",
      "Manejo nenhum": "oculto",
@@ -3827,7 +3815,6 @@
      "Manejo remoção do indivíduo": "oculto",
      "Manejo poda": "oculto",
      "Manejo tutoramento": "oculto",
-     "Manejo adubação": "oculto",
      "Manejo aumento de canteiro": "oculto",
      "Manejo limpeza de epífitas e parasitas": "oculto",
      "Manejo nenhum": "oculto",
@@ -4012,7 +3999,6 @@
      "Manejo remoção do indivíduo": "oculto",
      "Manejo poda": "oculto",
      "Manejo tutoramento": "oculto",
-     "Manejo adubação": "oculto",
      "Manejo aumento de canteiro": "oculto",
      "Manejo limpeza de epífitas e parasitas": "oculto",
      "Manejo nenhum": "oculto",
@@ -4091,6 +4077,7 @@
   "Fungo",
   "Galhos secos, podres ou com risco de queda",
   "Largura da calcada (m)",
+  "Manejo adubação",
   "Manejo avaliação nível 2 ou 3",
   "Manejo remoção do alvo",
   "Manejo suporte complementar",

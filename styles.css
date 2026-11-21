@@ -179,7 +179,7 @@ textarea.entrada { min-height: 96px; resize: vertical; }
 
 /* Folhas e avisos */
 .veu { position: fixed; inset: 0; background: rgba(0, 20, 25, .45); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
-.folha { background: var(--sup); width: 100%; max-width: 760px; border-radius: 18px 18px 0 0; padding: 18px 16px; padding-bottom: calc(18px + env(safe-area-inset-bottom)); max-height: 92vh; overflow: auto; }
+.folha { background: var(--sup); width: 100%; max-width: 760px; border-radius: 18px 18px 0 0; padding: 18px 16px; padding-bottom: calc(18px + env(safe-area-inset-bottom)); max-height: 92vh; max-height: 92dvh; overflow: auto; }
 .folha h3 { margin: 0 0 12px; color: var(--teal); }
 .folha p { margin: 0 0 14px; line-height: 1.45; }
 .menu-it { display: flex; width: 100%; align-items: center; gap: 12px; border: 0; background: var(--sup); padding: 15px 6px; font-size: 16px; border-bottom: 1px solid var(--linha); text-align: left; }
@@ -715,7 +715,7 @@ details.campo b.rot { display: block; margin: 12px 0 4px; }
 
 /* 2.11: localização destravada (alvo no centro do mapa) */
 .mp-mapa-cx { position: relative; margin: 8px 0; }
-.mp-mapa { height: 46vh; min-height: 240px; border-radius: var(--raio); overflow: hidden; }
+.mp-mapa { height: 46vh; height: 42dvh; min-height: 200px; border-radius: var(--raio); overflow: hidden; }
 .mp-alvo { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border: 3px solid #D32F2F; border-radius: 50%; pointer-events: none; z-index: 500; box-shadow: 0 0 0 2px #fff; }
 .mp-alvo::before, .mp-alvo::after { content: ''; position: absolute; background: #D32F2F; }
 .mp-alvo::before { left: 50%; top: -10px; width: 2px; height: 54px; margin-left: -1px; }
@@ -723,7 +723,7 @@ details.campo b.rot { display: block; margin: 12px 0 4px; }
 .mp-dist.ruim { color: #B3261E; font-weight: 600; }
 
 /* 2.11: altura pelo celular */
-.clin-visor { position: relative; height: 34vh; min-height: 180px; background: #10242B; border-radius: var(--raio); overflow: hidden; margin: 8px 0; }
+.clin-visor { position: relative; height: 34vh; height: 30dvh; min-height: 140px; background: #10242B; border-radius: var(--raio); overflow: hidden; margin: 8px 0; }
 .clin-video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .clin-mira { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; pointer-events: none; }
 .clin-mira::before, .clin-mira::after { content: ''; position: absolute; background: #FFD54F; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55); }
@@ -836,3 +836,6 @@ html { touch-action: pan-x pan-y; } /* sem zoom de pinça na página (o mapa tem
 .mp-orienta.ruim { background: #FFF3E0; border-left: 4px solid #E65100; color: #7A2E00; padding: 8px 10px; border-radius: 6px; }
 .qd-reservas .sat-st { display: block; font-weight: 400; font-size: 12.5px; color: #2E7D32; }
 .qd-reservas .sat-st.falta { color: #B45309; font-weight: 500; }
+
+/* 2.18.2: em celular com a barra de 3 botões (ou tela baixa), os botões da medida de altura e da marcação do ponto ficam presos embaixo, sempre inteiros */
+.folha.clin .linha-btn { position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom)); background: var(--sup); padding: 10px 0 calc(18px + env(safe-area-inset-bottom)); margin-bottom: calc(-18px - env(safe-area-inset-bottom)); z-index: 2; }

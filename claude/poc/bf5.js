@@ -46,8 +46,8 @@ const visiveis = async (p) => { await p.evaluate(() => { if (window.__app.S.reg)
   ok('F.7', nCaules === 3 && botaoVisivel === 0, `${nCaules} caules medidos e o botão "+ caule" sumiu`);
   // 8. ajuda (?) e desenho da fiação
   await A.campo(p, 'CAP (cm)').locator('.ajuda-bt').click(); const ajDap = await A.campo(p, 'CAP (cm)').locator('.ajuda-box').innerText();
-  await A.abaLivre(p, 'Meio'); await p.locator('[data-grupo="Fiação aérea"] .ajuda-bt').click(); await p.waitForTimeout(500);
-  const img = await p.locator('[data-grupo="Fiação aérea"] .ajuda-img').evaluate((i) => i.naturalWidth).catch(() => 0);
+  await A.abaLivre(p, 'Meio'); await p.locator('[data-grupo^="Fiação aérea"] .ajuda-bt').click(); await p.waitForTimeout(500);
+  const img = await p.locator('[data-grupo^="Fiação aérea"] .ajuda-img').evaluate((i) => i.naturalWidth).catch(() => 0);
   await p.screenshot({ path: 'f5-ajuda-fiacao.png' });
   ok('F.8', /três mais representativos/.test(ajDap) && img > 0, `ajuda do CAP: "${ajDap.slice(0, 90)}..."; desenho da fiação carregado (${img} px)`);
   // 9. preferência de copa: área direto

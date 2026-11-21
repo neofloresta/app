@@ -1,7 +1,10 @@
 {
- "versao": "2.18.1",
+ "versao": "2.18.2",
  "data": "2026-11-21",
  "notas": [
+  "Formulário 17: muro não conta como conflito no raio de 2 m; manejo sem adubação; fiação aérea é presença de fiação, encoste ou não na copa",
+  "Medida da altura: botões sempre inteiros na tela, mesmo em celular com a barra de 3 botões",
+  "iPhone: o app pede a permissão do sensor antes da câmera e avisa quando o sensor não responde",
   "Botão Cancelar na tela de marcar o ponto",
   "Toda árvore: depois de o GPS marcar, o app abre o satélite em cima do ponto e pergunta se é ali; dá para arrastar e acertar. A meta do GPS passa a ser 4 m",
   "O satélite das quadras da equipe fica guardado no celular para uso sem internet e é apagado quando a quadra fecha",
