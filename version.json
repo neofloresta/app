@@ -4,6 +4,7 @@
  "notas": [
   "Toda árvore: depois de o GPS marcar, o app abre o satélite em cima do ponto e pergunta se é ali; dá para arrastar e acertar. A meta do GPS passa a ser 4 m",
   "O satélite das quadras da equipe fica guardado no celular para uso sem internet e é apagado quando a quadra fecha",
+  "O app apaga sozinho do celular a foto que o servidor confirmou há mais de 3 dias (confere de novo antes de apagar); o cadastro fica no celular e a foto fica no servidor",
   "Zoom na câmera do app (1x a 4x, conforme o aparelho)",
   "iPhone: a medida da altura pelo celular passa a funcionar (permissão do sensor e leitura corrigida)",
   "A espécie conferida pela coordenação aparece para o coletor na lista",

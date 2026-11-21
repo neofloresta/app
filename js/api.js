@@ -43,6 +43,7 @@ const Api = (() => {
   function valoresPlanilha(valores, form) { const l = {}; for (const c of form.campos) { if (c.tipo === 'photo') continue; let v = valores[c.nome]; if (c.tipo === 'bool') v = v == null || v === '' ? '' : v === true || v === 1 || v === '1' ? 1 : 0; l[c.nome] = v ?? ''; } return paraPlanilha(l, { valores }, form, true); } // o ajuste é sempre para o formato novo, qualquer que seja a versão guardada na sessão
 
   function achatar(r, form) {
+    if (r && r.valores && form && form.renomeados) for (const [nv, an] of Object.entries(form.renomeados)) { const v = r.valores; if (v[an] != null && v[an] !== '' && v[an] !== false && (v[nv] == null || v[nv] === '' || v[nv] === false)) v[nv] = v[an]; } // campo que mudou de nome: cadastro feito no formulário anterior não perde a marca
     const l = {
       uuid: r.uuid, projeto: r.projeto, equipe: r.equipe, usuario: r.usuario,
       criado_em: r.criado_em, atualizado_em: r.atualizado_em, concluido_em: r.concluido_em || '',
@@ -82,9 +83,9 @@ const Api = (() => {
     const id = semCred ? {} : cred && cred.t ? { t: cred.t } : { u: cred && cred.u, s: cred && cred.s };
     const corpo = JSON.stringify(Object.assign({ acao }, id, comoLogin && !semCred ? { como: comoLogin } : {}, dados || {}));
     let resp;
-    try { resp = await fetch(url, { method: 'POST', body: corpo, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow' }); } catch (e) { throw Object.assign(new Error('Sem conexão com o servidor. Confira a internet.'), { rede: true }); }
-    if (!resp.ok) throw new Error('Servidor respondeu ' + resp.status);
-    const j = await resp.json();
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null; const tmo = ctl ? setTimeout(() => ctl.abort(), 180000) : 0; // pedido que nunca volta (tela bloqueada no iPhone) não pode prender a fila de envio
+    try { resp = await fetch(url, { method: 'POST', body: corpo, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow', signal: ctl ? ctl.signal : undefined }); } catch (e) { clearTimeout(tmo); throw Object.assign(new Error('Sem conexão com o servidor. Confira a internet.'), { rede: true }); }
+    let j; try { if (!resp.ok) throw new Error('Servidor respondeu ' + resp.status); j = await resp.json(); } catch (e) { if (e && e.name === 'AbortError') throw Object.assign(new Error('Sem conexão com o servidor. Confira a internet.'), { rede: true }); throw e; } finally { clearTimeout(tmo); }
     if (!j.ok) { const e = new Error(j.erro || 'Erro no servidor'); e.sessao = !!j.sessao; if (e.sessao && aoExpirar) aoExpirar(e); throw e; }
     return j;
   }

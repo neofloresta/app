@@ -65,7 +65,7 @@
     });
   }
   const confirmar = (titulo, texto, ok = 'Confirmar', classe = '', nao = 'Cancelar') => modal(titulo, h('p', null, texto), [{ texto: nao, classe: 'sec', valor: false }, { texto: ok, classe, valor: true }]);
-  function baixar(nome, dados, tipo) { const b = dados instanceof Blob ? dados : new Blob([dados], { type: tipo }); const a = h('a', { href: URL.createObjectURL(b), download: nome }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
+  function baixar(nome, dados, tipo) { const b = dados instanceof Blob ? dados : new Blob([dados], { type: tipo }); const a = h('a', { href: URL.createObjectURL(b), download: nome }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 60000); }
   const ICONES = {
     sino: '<path d="M6 8a6 6 0 0112 0c0 6 3 7 3 8H3c0-1 3-2 3-8zM10 20a2 2 0 004 0"/>',
     pessoas: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3.2 2.5-5.5 5.5-5.5s5.5 2.3 5.5 5.5"/><circle cx="16.5" cy="9" r="2.6"/><path d="M15.5 13.8c2.9-.4 5 1.8 5 4.7"/>',
@@ -374,6 +374,7 @@
     if (S.expirada) return;
     await atualizarSituacao();
     await conferirEnvio();
+    limparFotosEnviadas().catch(() => {});
     if (['', '#inicio', '#lista', '#mapa'].includes(location.hash)) listarRegistros();
   }
   // Conferência: pergunta ao servidor se os registros enviados chegaram e se cada foto tem link.
@@ -389,13 +390,13 @@
       for (const r0 of alvo) {
         const r = await Store.registro(r0.uuid); if (!r || r.status !== 'enviado' || r.__base) continue;
         const a = ach[r.uuid];
-        if (a && Object.keys(r.fotos || {}).every((k) => !r.fotos[k] || !r.fotos[k].chave || a.fotos[k])) { r.conferido = true; await Store.salvarRegistro(r); continue; }
+        if (a && Object.keys(r.fotos || {}).every((k) => !r.fotos[k] || !r.fotos[k].chave || a.fotos[k])) { r.conferido = true; r.conferidoEm = agoraISO(); await Store.salvarRegistro(r); continue; }
         r.tentConf = (r.tentConf || 0) + 1;
         if (r.tentConf > 3) { r.conferenciaFalhou = true; r.erroSync = 'O servidor não confirmou este registro depois de 3 envios. Avise a coordenação.'; await Store.salvarRegistro(r); continue; } // não vale como confirmado: as fotos nunca são liberadas
         if (!a) { r.status = 'pendente'; reenviar++; } // não está na planilha: manda de novo
         else {
           let falta = false; for (const [campo, f] of Object.entries(r.fotos || {})) if (f && f.chave && !a.fotos[campo]) { f.enviado = false; falta = true; }
-          if (falta) reenviar++; else r.conferido = true;
+          if (falta) reenviar++; else { r.conferido = true; r.conferidoEm = agoraISO(); }
         }
         await Store.salvarRegistro(r);
       }
@@ -1228,7 +1229,7 @@
       };
       function travar(manual) {
         if (pronto || !leituras.length) return; pronto = true;
-        const m = media(); Object.assign(r, { lat: m.lat, lon: m.lon, prec: m.prec, gpsAuto: false, marcadoEm: agoraISO(), leiturasGps: m.n });
+        const m = media(); Object.assign(r, { lat: m.lat, lon: m.lon, prec: m.prec, gpsAuto: false, marcadoEm: agoraISO(), leiturasGps: m.n, posManual: false, posDist: null, pontoConferido: false });
         Store.salvarRegistro(r);
         num.className = 'mp-num ' + (m.prec <= META ? 'bom' : m.prec <= 10 ? 'medio' : 'ruim'); num.textContent = '±' + numBR(m.prec) + ' m';
         st.textContent = manual ? 'Ponto marcado.' : 'Ponto marcado ✓'; btAgora.disabled = true;
@@ -1256,9 +1257,9 @@
       if (!conferir && !(await confirmar('Destravar a localização', 'Você vai marcar o ponto com o dedo, no mapa, e não pelo GPS. Use quando o GPS não dá a posição certa da árvore. O registro fica marcado como ajustado no mapa. Ao marcar, a localização trava de novo.', 'Destravar', 'perigo'))) return fim(false);
       const div = h('div', { class: 'mp-mapa' }); const info = h('p', { class: 'dica mp-dist' }, 'Arraste o mapa.');
       const distM = (a, b) => Math.hypot((a.lng - b.lon) * 111320 * Math.cos(a.lat * Math.PI / 180), (a.lat - b.lat) * 110540);
-      let mapa = null; const fechar = (ok) => { if (fechar.feito) return; fechar.feito = true; window.removeEventListener('hashchange', aoSair);
+      let mapa = null, arrastou = false; const fechar = (ok) => { if (fechar.feito) return; fechar.feito = true; window.removeEventListener('hashchange', aoSair);
         if (ok && mapa) { const c = mapa.getCenter(); const d = S.pos ? Math.round(distM(c, S.pos)) : null;
-          if (gps0 && distM(c, gps0) <= 1) { r.pontoConferido = true; Store.salvarRegistro(r); } // conferiu sem mexer: fica o ponto do GPS
+          if (gps0 && (!arrastou || distM(c, gps0) <= 1)) { r.pontoConferido = true; Store.salvarRegistro(r); } // conferiu sem mexer: fica o ponto do GPS
           else { Object.assign(r, { lat: c.lat, lon: c.lng, prec: gps0 ? gps0.prec : S.pos ? S.pos.prec : null, posManual: true, posDist: gps0 ? Math.round(distM(c, gps0)) : d, gpsAuto: false, marcadoEm: agoraISO(), pontoConferido: conferir || undefined }); Store.salvarRegistro(r); } }
         try { if (mapa) mapa.remove(); } catch (e) { /* já saiu */ } veu.remove(); fim(!!ok); };
       const aoSair = () => fechar(false); window.addEventListener('hashchange', aoSair);
@@ -1270,10 +1271,12 @@
       document.body.append(veu);
       setTimeout(() => { if (fechar.feito) return;
         const cam = !r.lat && !S.pos && S.qdCentro ? S.qdCentro : null; const c0 = r.lat != null ? [r.lat, r.lon] : S.pos ? [S.pos.lat, S.pos.lon] : cam || [-15.8, -47.9];
-        mapa = L.map(div, { maxZoom: 21 }).setView(c0, r.lat != null || S.pos ? 19 : cam ? 15 : 4); camadasFundo(mapa, conferir); // a conferência abre no satélite
+        mapa = L.map(div, Object.assign({ maxZoom: 21 }, conferir ? { touchZoom: 'center', doubleClickZoom: 'center', scrollWheelZoom: 'center' } : {})).setView(c0, r.lat != null || S.pos ? 19 : cam ? 15 : 4); camadasFundo(mapa, conferir); // a conferência abre no satélite; nela o zoom não tira o alvo do lugar, só arrastar
+        mapa.on('dragstart', () => { arrastou = true; });
+        if (conferir) { let veio = false, falhou = 0; mapa.eachLayer((ly) => { if (!ly.on || !ly._url) return; ly.on('tileload', () => { veio = true; }); ly.on('tileerror', () => { falhou++; }); }); setTimeout(() => { if (fechar.feito || veio || !falhou) return; const o = veu.querySelector('.mp-orienta'); if (o) { o.textContent = 'Sem imagem de satélite aqui (sem internet e esta quadra não está guardada). Se você está ao lado do tronco, toque em "Sim, é aqui".'; o.classList.add('ruim'); } }, 3500); }
         if (S.pos) { L.circle([S.pos.lat, S.pos.lon], { radius: Math.max(2, S.pos.prec || 5), color: '#1E88E5', weight: 1, fillOpacity: 0.12, interactive: false }).addTo(mapa); L.circleMarker([S.pos.lat, S.pos.lon], { radius: 6, color: '#fff', weight: 2, fillColor: '#1E88E5', fillOpacity: 1, interactive: false }).addTo(mapa); }
         if (gps0) L.circleMarker([gps0.lat, gps0.lon], { radius: 5, color: '#fff', weight: 2, fillColor: '#F2A900', fillOpacity: 1, interactive: false }).addTo(mapa); // onde o GPS marcou
-        const pintar = () => { if (gps0) { const d = distM(mapa.getCenter(), gps0); info.textContent = d <= 1 ? 'O alvo está no ponto que o GPS marcou.' : `Você levou o alvo ${numBR(Math.round(d * 10) / 10)} m do ponto do GPS (o amarelo).`; info.classList.toggle('ruim', d > 30); return; } if (!S.pos) { info.textContent = 'Sem sinal de GPS: confira bem o lugar no mapa.'; return; } const d = Math.round(distM(mapa.getCenter(), S.pos)); info.textContent = d > 30 ? `O alvo está a ${fmtN(d)} m de onde você está. Confira se é isso mesmo.` : `O alvo está a ${fmtN(d)} m de onde você está.`; info.classList.toggle('ruim', d > 30); };
+        const pintar = () => { if (gps0) { const d = arrastou ? distM(mapa.getCenter(), gps0) : 0; info.textContent = d <= 1 ? 'O alvo está no ponto que o GPS marcou.' : `Você levou o alvo ${numBR(Math.round(d * 10) / 10)} m do ponto do GPS (o amarelo).`; info.classList.toggle('ruim', d > 30); return; } if (!S.pos) { info.textContent = 'Sem sinal de GPS: confira bem o lugar no mapa.'; return; } const d = Math.round(distM(mapa.getCenter(), S.pos)); info.textContent = d > 30 ? `O alvo está a ${fmtN(d)} m de onde você está. Confira se é isso mesmo.` : `O alvo está a ${fmtN(d)} m de onde você está.`; info.classList.toggle('ruim', d > 30); };
         mapa.on('move', pintar); pintar();
       }, 60);
     });
@@ -1387,12 +1390,29 @@
     $app.replaceChildren(topo('Preferências', S.sessao.usuario.nome || S.sessao.u, h('button', { class: 'ic', onclick: () => ir('#inicio'), 'aria-label': 'Voltar' }, ico('voltar')), null),
       h('main', null,
         h('div', { class: 'cartao' }, h('h3', null, 'Fotos'), chave('Mandar fotos só no Wi-Fi', 'Os cadastros sobem na hora, pelo 4G. As fotos esperam o Wi-Fi (tocando no aviso de envio dá para mandar agora).', wifi, (v) => Store.set('fotosWifi', v)),
-          h('p', { class: 'dica' }, 'As fotos ficam na qualidade original e continuam guardadas no celular depois de enviadas. ' + esp),
+          h('p', { class: 'dica' }, `As fotos ficam na qualidade original. O app apaga sozinho do celular a foto que o servidor confirmou há mais de ${DIAS_FOTO} dias; ela continua no servidor. ` + esp),
           h('button', { class: 'btn sec', onclick: liberarEspaco }, 'Liberar espaço: apagar do celular fotos já confirmadas no servidor há mais de 30 dias')),
         h('div', { class: 'cartao' }, h('h3', null, 'Tela'), chave('Modo Sol (alto contraste)', 'Letras pretas, bordas mais fortes e texto maior, para ler no sol forte.', sol, async (v) => { await Store.set('modoSol', v); document.documentElement.classList.toggle('sol', v); })),
         S.form && S.form.campos.some((c) => c.auto === 'modocopa') ? h('div', { class: 'cartao' }, h('h3', null, 'Como medir a copa'), h('p', null, escolheCopa() ? 'Em cada árvore você escolhe: 2 raios (o app calcula a área) ou área direto, com trena a laser. A árvore nova vem no último jeito usado.' : copa === 'area' ? 'Área direto, com trena a laser.' : copa === 'raios2' ? 'Dois raios com trena: um ao longo da calçada e outro perpendicular (o app calcula a área).' : '4 raios com trena (o app calcula a área).'), h('p', { class: 'dica' }, 'Definido pelo time da sua equipe.')) : null,
         perfil() === 'coletor' && S.form && S.form.campos.some(ehAltura) ? h('div', { class: 'cartao' }, h('h3', null, 'Altura pelo celular'), h('p', { class: 'dica' }, 'Opcional. A altura digitada à mão continua valendo.'),
           h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: calibrarPasso }, passo ? `Passo: ${numBR(Math.round(passo * 100) / 100)} m (calibrar de novo)` : 'Calibrar o passo'), h('button', { class: 'btn sec', onclick: zerarSensor }, zero != null ? 'Sensor zerado (zerar de novo)' : 'Zerar o sensor de inclinação'))) : null));
+  }
+  // 2.18: limpeza automática. 3 dias depois de o servidor confirmar o cadastro, o app pergunta de novo, foto por foto, e apaga do celular
+  // só as fotos que o servidor confirmou nas duas vezes. O cadastro fica no celular; foto que não subiu nunca é apagada.
+  const DIAS_FOTO = 3;
+  async function limparFotosEnviadas(forcar) {
+    if (Api.demo || !navigator.onLine || !S.projeto || S.expirada || !['coletor', 'revisor'].includes(perfil())) return 0;
+    if (!forcar && S.limpezaEm && Date.now() - S.limpezaEm < 30 * 60000) return 0; S.limpezaEm = Date.now();
+    const lim = Date.now() - DIAS_FOTO * 864e5; const pronta = (f) => f && f.chave && f.enviado && f.url;
+    const alvo = (await Store.registros(S.projeto.id)).filter((r) => r.status === 'enviado' && r.conferido && !r.conferenciaFalhou && !r.__base && Object.values(r.fotos || {}).some(pronta) && new Date(r.conferidoEm || r.atualizado_em || Date.now()).getTime() < lim && (perfil() !== 'coletor' || !r.usuario || r.usuario === S.sessao.u)).slice(0, 200);
+    if (!alvo.length) return 0;
+    const ach = await Api.b.conferir(S.projeto.id, alvo.map((r) => r.uuid)); if (!ach) return 0; let n = 0;
+    for (const r0 of alvo) {
+      const r = await Store.registro(r0.uuid); const a = ach[r0.uuid]; if (!r || !a || !a.fotos || r.status !== 'enviado' || !r.conferido || (S.reg && S.reg.uuid === r.uuid)) continue; // registro aberto na tela fica como está
+      let mudou = false; for (const [campo, f] of Object.entries(r.fotos || {})) if (pronta(f) && a.fotos[campo]) { await Store.apagarFoto(f.chave); f.chave = ''; mudou = true; n++; }
+      if (mudou) await Store.salvarRegistro(r);
+    }
+    return n;
   }
   async function liberarEspaco() {
     const lim = Date.now() - 30 * 864e5; let n = 0;
@@ -4130,9 +4150,10 @@
     if (!ok) return;
     try {
       let copia = '', r2 = 0, c2 = 0, tiradas = [], pul = 0;
-      for (let i = 0; i < Math.max(1, itens.length); i += LOTE) { const ultimo = i + LOTE >= itens.length; const r = await Api.b.registrosAjustar(S.projeto.id, { itens: itens.slice(i, i + LOTE), semCopia: i > 0, remover: ultimo }); copia = copia || r.copia || ''; r2 += r.registros; c2 += r.celulas; pul += r.pulados || 0; tiradas = tiradas.concat(r.retiradas || []); }
+      for (let i = 0; i < Math.max(1, itens.length); i += LOTE) { const ultimo = i + LOTE >= itens.length; const r = await Api.b.registrosAjustar(S.projeto.id, { itens: itens.slice(i, i + LOTE), semCopia: i > 0, remover: false }); copia = copia || r.copia || ''; r2 += r.registros; c2 += r.celulas; pul += r.pulados || 0; }
+      if (!pul) { const r = await Api.b.registrosAjustar(S.projeto.id, { itens: [], semCopia: true, remover: true }); tiradas = r.retiradas || []; } // coluna antiga só sai quando todos os registros foram ajustados: registro pulado ainda precisa dela
       delete S.linhas[S.projeto.id];
-      await modal('Ajuste feito', h('div', null, h('p', null, `${fmtN(r2)} registros ajustados (${fmtN(c2)} células) e ${tiradas.length} ${tiradas.length === 1 ? 'coluna retirada' : 'colunas retiradas'}.`), pul ? h('p', null, `${fmtN(pul)} ${pul === 1 ? 'registro foi pulado' : 'registros foram pulados'} porque mudaram durante o ajuste. Rode de novo para ajustá-los.`) : null, copia ? h('p', { class: 'dica' }, `Cópia guardada: ${copia}.`) : null), [{ texto: 'Entendi', valor: true }]);
+      await modal('Ajuste feito', h('div', null, h('p', null, `${fmtN(r2)} registros ajustados (${fmtN(c2)} células) e ${tiradas.length} ${tiradas.length === 1 ? 'coluna retirada' : 'colunas retiradas'}.`), pul ? h('p', null, `${fmtN(pul)} ${pul === 1 ? 'registro foi pulado' : 'registros foram pulados'} porque mudaram durante o ajuste. As colunas de formulário antigo ficaram na planilha por causa deles. Rode de novo para ajustá-los e retirar as colunas.`) : null, copia ? h('p', { class: 'dica' }, `Cópia guardada: ${copia}.`) : null), [{ texto: 'Entendi', valor: true }]);
     } catch (e) { await modal('Ajuste não concluído', h('p', null, e.message), [{ texto: 'Entendi', valor: true }]); }
   }
   async function telaFichaServidor(uuidR) {
@@ -4520,7 +4541,7 @@
     xy(lat, lon, z) { const n = 2 ** z; return [Math.floor((lon + 180) / 360 * n), Math.floor((1 - Math.asinh(Math.tan(lat * Math.PI / 180)) / Math.PI) / 2 * n)]; },
     urls(q) { // quadra com 15 m de folga, nos dois níveis mais próximos que a imagem tem; quadra muito grande fica só com o nível mais afastado
       const dLat = 15 / 110540, dLon = 15 / (111320 * Math.cos(q.b[1] * Math.PI / 180)); const W = q.b[0] - dLon, E = q.b[2] + dLon, Sl = q.b[1] - dLat, N = q.b[3] + dLat; let out = [];
-      for (const z of [18, 17]) { const [x0, y0] = this.xy(N, W, z), [x1, y1] = this.xy(Sl, E, z); const l = []; for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) l.push(this.url(z, x, y)); if (out.length + l.length <= 90) out = out.concat(l); }
+      for (const z of [18, 17, 16]) { if (z === 16 && out.length) break; const [x0, y0] = this.xy(N, W, z), [x1, y1] = this.xy(Sl, E, z); const l = []; for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) l.push(this.url(z, x, y)); if (out.length + l.length <= 90) out = out.concat(l); }
       return out;
     },
     async sincronizar() {
@@ -4533,10 +4554,11 @@
         const usados = new Set(); for (const q of quero) for (const u of this.urls(q)) usados.add(u);
         const cache = await caches.open('mapa-quadras'); // separado do mapa comum, que o app apara quando enche
         for (const n of Object.keys(est)) if (!ns.has(n)) { for (const u of est[n].urls || []) if (!usados.has(u)) await cache.delete(u).catch(() => {}); delete est[n]; mudou = true; } // quadra fechada ou devolvida: apaga
+        if (!this.varreu) { this.varreu = true; try { for (const rq of await cache.keys()) if (!usados.has(rq.url)) await cache.delete(rq); } catch (e) { /* segue */ } } // sobras de outro login neste aparelho
         if (navigator.onLine) for (const q of quero) {
           const e0 = est[q.n]; if (e0 && e0.ok && (await cache.match(e0.urls[0]))) continue; const urls = this.urls(q); let n = 0;
           for (const u of urls) { try { if (await cache.match(u)) { n++; continue; } const r = await fetch(u, { mode: 'cors' }); if (r.ok) { await cache.put(u, r.clone()); n++; } } catch (e) { /* sem sinal nesta imagem: tenta na próxima vez */ } }
-          est[q.n] = { urls, n, ok: n === urls.length, em: agoraISO() }; mudou = true;
+          est[q.n] = { urls, n, ok: urls.length > 0 && n === urls.length, em: agoraISO() }; mudou = true;
         }
         if (mudou) await Store.set(k, est);
         this.estado = { tot: quero.length, ok: quero.filter((q) => est[q.n] && est[q.n].ok).length };
@@ -5157,7 +5179,8 @@
         const trilha = stream.getVideoTracks()[0]; let blob = null;
         // a foto em tamanho cheio do sensor, quando o navegador oferece; se demorar ou falhar, vale o quadro da tela
         const digital = !zoomOptico && zoom > 1; // zoom na imagem: a foto é o recorte do centro do quadro
-        if (window.ImageCapture && !digital) { try { blob = await Promise.race([new ImageCapture(trilha).takePhoto(), new Promise((r2) => setTimeout(() => r2(null), 5000))]); } catch (e) { blob = null; } }
+        if (window.ImageCapture) { try { blob = await Promise.race([new ImageCapture(trilha).takePhoto(), new Promise((r2) => setTimeout(() => r2(null), 5000))]); } catch (e) { blob = null; } }
+        if (blob && blob.size && digital) { try { const bm = await createImageBitmap(blob); const cv = document.createElement('canvas'); cv.width = Math.round(bm.width / zoom); cv.height = Math.round(bm.height / zoom); cv.getContext('2d').drawImage(bm, (bm.width - cv.width) / 2, (bm.height - cv.height) / 2, cv.width, cv.height, 0, 0, cv.width, cv.height); blob = await new Promise((r2) => cv.toBlob(r2, 'image/jpeg', 0.92)); } catch (e) { blob = null; } } // zoom na imagem: recorte do centro da foto cheia do sensor
         if (!blob || !blob.size) { try { const vw = video.videoWidth, vh = video.videoHeight; const z = digital ? zoom : 1; const cv = document.createElement('canvas'); cv.width = Math.round(vw / z); cv.height = Math.round(vh / z); cv.getContext('2d').drawImage(video, (vw - cv.width) / 2, (vh - cv.height) / 2, cv.width, cv.height, 0, 0, cv.width, cv.height); blob = await new Promise((r2) => cv.toBlob(r2, 'image/jpeg', 0.92)); } catch (e) { blob = null; } }
         if (!blob) { tirando = false; bt.disabled = false; veu.classList.remove('tirando'); msg.textContent = 'Não foi possível tirar a foto aqui. Use a câmera do celular.'; msg.classList.remove('oculto'); return; }
         fechar(blob);
@@ -5167,7 +5190,7 @@
       const aplicarZoom = async (z) => { zoom = Math.max(1, Math.min(zoomMax, z)); for (const b of zBar.children) b.classList.toggle('sel', +b.dataset.z === zoom);
         if (zoomOptico) { try { await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ zoom: zoomBase * zoom }] }); } catch (e) { zoomOptico = false; } }
         video.style.transform = zoomOptico || zoom === 1 ? '' : `scale(${zoom})`; };
-      let zoomBase = 1; const montarZoom = () => { try { const cap = stream.getVideoTracks()[0].getCapabilities ? stream.getVideoTracks()[0].getCapabilities() : {}; if (cap.zoom && cap.zoom.max > cap.zoom.min) { zoomOptico = true; zoomBase = cap.zoom.min || 1; zoomMax = Math.min(4, Math.floor(cap.zoom.max / zoomBase)); } else zoomMax = 3; } catch (e) { zoomMax = 3; }
+      let zoomBase = 1; const montarZoom = () => { try { const cap = stream.getVideoTracks()[0].getCapabilities ? stream.getVideoTracks()[0].getCapabilities() : {}; if (cap.zoom && cap.zoom.max > cap.zoom.min) { zoomOptico = true; zoomBase = cap.zoom.min || 1; zoomMax = Math.min(4, Math.floor(cap.zoom.max / zoomBase)); if (zoomMax < 2) { zoomOptico = false; zoomMax = 3; } } else zoomMax = 3; } catch (e) { zoomMax = 3; }
         zBar.replaceChildren(...[1, 2, 3, 4].filter((z) => z <= zoomMax).map((z) => h('button', { type: 'button', class: 'cam-z' + (z === 1 ? ' sel' : ''), 'data-z': z, onclick: () => aplicarZoom(z) }, z + 'x'))); zBar.classList.toggle('oculto', zoomMax < 2); };
       const bt = h('button', { class: 'cam-disparo', type: 'button', disabled: true, 'aria-label': 'Tirar foto', onclick: disparar });
       const btSis = sistema ? h('button', { class: 'cam-lado', type: 'button', onclick: () => { sistema(); fechar('sistema'); } }, ico('camera'), h('small', null, 'Câmera do celular')) : h('span', { class: 'cam-lado' });
@@ -5197,7 +5220,7 @@
     return new Promise((res) => cv.toBlob(res, 'image/jpeg', q));
   }
 
-  window.__app = { S, Store, Api, sincronizar, proximoCodigo, marcarQuadras, conferirEnvio, Satelite, carregarSitQd, atualizarSituacao }; // usados pelos testes de estresse
+  window.__app = { limparFotosEnviadas, S, Store, Api, sincronizar, proximoCodigo, marcarQuadras, conferirEnvio, Satelite, carregarSitQd, atualizarSituacao }; // usados pelos testes de estresse
   if (Api.ganchos) { Api.ganchos.form = () => S.form; Api.ganchos.estado = estadoCampos; Api.ganchos.formatoNovo = () => !servidorMenos(2.17); } // 2.17: a troca entre o formato de dentro e o da planilha fica toda na Api
   iniciar().catch((e) => { $app.replaceChildren(h('div', { class: 'login' }, h('div', { class: 'aviso' }, 'Erro ao iniciar: ' + e.message), h('button', { class: 'btn', onclick: () => sair(true) }, 'Voltar ao login'))); });
 })();
