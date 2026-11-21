@@ -135,7 +135,8 @@
     window.addEventListener('online', () => { atualizarSync(); sincronizar(); });
     window.addEventListener('offline', atualizarSync);
     setInterval(() => sincronizar(true), 60000);
-    setInterval(() => { atualizarSessao().catch(() => {}); }, 10 * 60000); // 2.17: confere a versão do servidor a cada 10 minutos (o formato de gravação depende dela)
+    setInterval(() => { atualizarSessao().catch(() => {}); }, 10 * 60000);
+    setTimeout(() => Satelite.sincronizar(), 8000); setInterval(() => Satelite.sincronizar(), 2 * 60000); // satélite das quadras da equipe guardado no aparelho // 2.17: confere a versão do servidor a cada 10 minutos (o formato de gravação depende dela)
     setInterval(() => verificarAtualizacao(), 30 * 60000); verificarAtualizacao();
     Api.aoExpirar(() => { if (!S.expirada) { S.expirada = true; toast('Sua sessão expirou. Entre de novo para continuar enviando. Nada do aparelho foi perdido.', 6000); atualizarSync(); } });
     if (S.sessao) {
@@ -1196,7 +1197,7 @@
   const DICAS_GPS = ['Ligue a "Precisão da localização do Google" em Configurações, Localização, Serviços de localização.', 'Ao começar o dia, espere 1 minuto parado em um lugar aberto antes da primeira árvore.', ORIENTA_GPS, 'Segure o celular na mão, com a tela para cima, não no bolso.', 'Se o erro não baixar, desligue e ligue a localização do celular.'];
   function marcarPonto(r) {
     return new Promise((fim) => {
-      const META = 5; const t0 = Date.now(); const leituras = []; let pronto = false, noMapa = false;
+      const META = 4; let t0 = Date.now(); const leituras = []; let pronto = false, noMapa = false;
       const num = h('div', { class: 'mp-num' }, '...'); const st = h('div', { class: 'mp-st' }, 'Procurando o sinal do GPS...');
       const det = h('small', { class: 'mp-det' });
       const hojeK = 'gpsDia:' + new Date().toDateString();
@@ -1231,7 +1232,10 @@
         Store.salvarRegistro(r);
         num.className = 'mp-num ' + (m.prec <= META ? 'bom' : m.prec <= 10 ? 'medio' : 'ruim'); num.textContent = '±' + numBR(m.prec) + ' m';
         st.textContent = manual ? 'Ponto marcado.' : 'Ponto marcado ✓'; btAgora.disabled = true;
-        setTimeout(() => { if (!sair.feito) sair(true); }, 700);
+        // 2.18: toda árvore passa pela conferência no satélite ("é aqui mesmo?"). Um toque quando está certo; se não, arrasta ou marca de novo
+        setTimeout(async () => { if (sair.feito) return; noMapa = true; const ok = await escolherNoMapa(r, { conferir: true }); noMapa = false; if (sair.feito) return;
+          if (ok) return sair(true);
+          pronto = false; leituras.length = 0; t0 = Date.now(); btAgora.disabled = true; st.textContent = 'Marcando de novo. Fique parado ao lado do tronco.'; }, 350);
       }
       function sair(v) { if (sair.feito) return; sair.feito = true; if (v !== false && S.aoMarcar) S.aoMarcar(); clearInterval(tm); Gps.ouvintes.delete(ouv); window.removeEventListener('hashchange', aoSair); veu.remove(); fim(v !== false); }
       // Voltar do Android (ou qualquer troca de tela) cancela a marcação: nada fica lendo GPS nem abre o cadastro depois
@@ -1244,24 +1248,32 @@
     });
   }
   // localização destravada: a pessoa leva o alvo com o dedo até o pé da árvore. Pede confirmação, marca o registro como ajustado e trava de novo ao marcar.
-  function escolherNoMapa(r) {
+  // Com `conferir`, é a conferência do ponto que o GPS acabou de marcar: abre no satélite, já em cima do ponto, e pergunta se é ali.
+  // Sem arrastar, o ponto do GPS fica como está; arrastando mais de 1 m, vale o lugar escolhido e o registro fica marcado como ajustado no mapa.
+  function escolherNoMapa(r, op) {
+    const conferir = !!(op && op.conferir); const gps0 = conferir && r.lat != null ? { lat: +r.lat, lon: +r.lon, prec: r.prec } : null;
     return new Promise(async (fim) => {
-      if (!(await confirmar('Destravar a localização', 'Você vai marcar o ponto com o dedo, no mapa, e não pelo GPS. Use quando o GPS não dá a posição certa da árvore. O registro fica marcado como ajustado no mapa. Ao marcar, a localização trava de novo.', 'Destravar', 'perigo'))) return fim(false);
+      if (!conferir && !(await confirmar('Destravar a localização', 'Você vai marcar o ponto com o dedo, no mapa, e não pelo GPS. Use quando o GPS não dá a posição certa da árvore. O registro fica marcado como ajustado no mapa. Ao marcar, a localização trava de novo.', 'Destravar', 'perigo'))) return fim(false);
       const div = h('div', { class: 'mp-mapa' }); const info = h('p', { class: 'dica mp-dist' }, 'Arraste o mapa.');
       const distM = (a, b) => Math.hypot((a.lng - b.lon) * 111320 * Math.cos(a.lat * Math.PI / 180), (a.lat - b.lat) * 110540);
       let mapa = null; const fechar = (ok) => { if (fechar.feito) return; fechar.feito = true; window.removeEventListener('hashchange', aoSair);
-        if (ok && mapa) { const c = mapa.getCenter(); const d = S.pos ? Math.round(distM(c, S.pos)) : null; Object.assign(r, { lat: c.lat, lon: c.lng, prec: S.pos ? S.pos.prec : null, posManual: true, posDist: d, gpsAuto: false, marcadoEm: agoraISO() }); Store.salvarRegistro(r); }
+        if (ok && mapa) { const c = mapa.getCenter(); const d = S.pos ? Math.round(distM(c, S.pos)) : null;
+          if (gps0 && distM(c, gps0) <= 1) { r.pontoConferido = true; Store.salvarRegistro(r); } // conferiu sem mexer: fica o ponto do GPS
+          else { Object.assign(r, { lat: c.lat, lon: c.lng, prec: gps0 ? gps0.prec : S.pos ? S.pos.prec : null, posManual: true, posDist: gps0 ? Math.round(distM(c, gps0)) : d, gpsAuto: false, marcadoEm: agoraISO(), pontoConferido: conferir || undefined }); Store.salvarRegistro(r); } }
         try { if (mapa) mapa.remove(); } catch (e) { /* já saiu */ } veu.remove(); fim(!!ok); };
       const aoSair = () => fechar(false); window.addEventListener('hashchange', aoSair);
-      const veu = h('div', { class: 'veu mp-veu' }, h('div', { class: 'folha mp' }, h('h3', null, 'Localização destravada'), h('div', { class: 'mp-orienta' }, 'Arraste o mapa até o alvo ficar no pé da árvore.'),
+      const impreciso = conferir && gps0 && +gps0.prec > 4;
+      const veu = h('div', { class: 'veu mp-veu' }, h('div', { class: 'folha mp' + (conferir ? ' mp-conf' : '') }, h('h3', null, conferir ? 'É aqui que a árvore está?' : 'Localização destravada'),
+        h('div', { class: 'mp-orienta' + (impreciso ? ' ruim' : '') }, conferir ? (impreciso ? `GPS com erro de ±${numBR(gps0.prec)} m. Confira com atenção: se o alvo não estiver no pé da árvore, arraste o mapa.` : 'Confira no mapa. Se o alvo não estiver no pé da árvore, arraste o mapa até acertar.') : 'Arraste o mapa até o alvo ficar no pé da árvore.'),
         h('div', { class: 'mp-mapa-cx' }, div, h('div', { class: 'mp-alvo', 'aria-hidden': 'true' })), info,
-        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: () => fechar(false) }, 'Cancelar'), h('button', { class: 'btn', id: 'mp-marcar', onclick: () => fechar(true) }, 'Marcar aqui e travar'))));
+        h('div', { class: 'linha-btn' }, h('button', { class: 'btn sec', onclick: () => fechar(false) }, conferir ? 'Marcar de novo' : 'Cancelar'), h('button', { class: 'btn', id: conferir ? 'mp-confirmar' : 'mp-marcar', onclick: () => fechar(true) }, conferir ? 'Sim, é aqui' : 'Marcar aqui e travar'))));
       document.body.append(veu);
       setTimeout(() => { if (fechar.feito) return;
         const cam = !r.lat && !S.pos && S.qdCentro ? S.qdCentro : null; const c0 = r.lat != null ? [r.lat, r.lon] : S.pos ? [S.pos.lat, S.pos.lon] : cam || [-15.8, -47.9];
-        mapa = L.map(div, { maxZoom: 21 }).setView(c0, r.lat != null || S.pos ? 19 : cam ? 15 : 4); camadasFundo(mapa, false);
+        mapa = L.map(div, { maxZoom: 21 }).setView(c0, r.lat != null || S.pos ? 19 : cam ? 15 : 4); camadasFundo(mapa, conferir); // a conferência abre no satélite
         if (S.pos) { L.circle([S.pos.lat, S.pos.lon], { radius: Math.max(2, S.pos.prec || 5), color: '#1E88E5', weight: 1, fillOpacity: 0.12, interactive: false }).addTo(mapa); L.circleMarker([S.pos.lat, S.pos.lon], { radius: 6, color: '#fff', weight: 2, fillColor: '#1E88E5', fillOpacity: 1, interactive: false }).addTo(mapa); }
-        const pintar = () => { if (!S.pos) { info.textContent = 'Sem sinal de GPS: confira bem o lugar no mapa.'; return; } const d = Math.round(distM(mapa.getCenter(), S.pos)); info.textContent = d > 30 ? `O alvo está a ${fmtN(d)} m de onde você está. Confira se é isso mesmo.` : `O alvo está a ${fmtN(d)} m de onde você está.`; info.classList.toggle('ruim', d > 30); };
+        if (gps0) L.circleMarker([gps0.lat, gps0.lon], { radius: 5, color: '#fff', weight: 2, fillColor: '#F2A900', fillOpacity: 1, interactive: false }).addTo(mapa); // onde o GPS marcou
+        const pintar = () => { if (gps0) { const d = distM(mapa.getCenter(), gps0); info.textContent = d <= 1 ? 'O alvo está no ponto que o GPS marcou.' : `Você levou o alvo ${numBR(Math.round(d * 10) / 10)} m do ponto do GPS (o amarelo).`; info.classList.toggle('ruim', d > 30); return; } if (!S.pos) { info.textContent = 'Sem sinal de GPS: confira bem o lugar no mapa.'; return; } const d = Math.round(distM(mapa.getCenter(), S.pos)); info.textContent = d > 30 ? `O alvo está a ${fmtN(d)} m de onde você está. Confira se é isso mesmo.` : `O alvo está a ${fmtN(d)} m de onde você está.`; info.classList.toggle('ruim', d > 30); };
         mapa.on('move', pintar); pintar();
       }, 60);
     });
@@ -2159,7 +2171,8 @@
     // time parceiro: quantas quadras estão reservadas e quantas pedidas, sempre à vista no mapa
     const chipRes = h('div', { class: 'qd-reservas oculto', role: 'status' }); div.append(chipRes);
     const contaReservas = () => { const d = Reservas.dados || {}; return { ped: Reservas.aguardando().length, res: +d.ativas || 0, max: +d.max || 5 }; };
-    function pintarChipRes() { if (!modoQuadra() || Api.demo || !Reservas.dados) return chipRes.classList.add('oculto'); const c = contaReservas(); chipRes.classList.remove('oculto'); chipRes.classList.toggle('cheio', c.ped + c.res >= c.max); chipRes.textContent = `Suas quadras: ${c.res} ${c.res === 1 ? 'reservada' : 'reservadas'} · ${c.ped} ${c.ped === 1 ? 'pedida' : 'pedidas'} (máximo ${c.max})`; }
+    function pintarChipRes() { if (!modoQuadra() || Api.demo || !Reservas.dados) return chipRes.classList.add('oculto'); const c = contaReservas(); chipRes.classList.remove('oculto'); chipRes.classList.toggle('cheio', c.ped + c.res >= c.max); const st = Satelite.estado; chipRes.replaceChildren(h('span', null, `Suas quadras: ${c.res} ${c.res === 1 ? 'reservada' : 'reservadas'} · ${c.ped} ${c.ped === 1 ? 'pedida' : 'pedidas'} (máximo ${c.max})`), st && st.tot ? h('small', { class: 'sat-st' + (st.ok < st.tot ? ' falta' : '') }, st.ok < st.tot ? `Satélite guardado: ${st.ok} de ${st.tot}. Abra o app com internet antes de ir a campo.` : `Satélite guardado para uso sem internet: ${st.ok} de ${st.tot}`) : null); }
+    const aoSat = () => { if (!document.body.contains(div)) return window.removeEventListener('satelite-guardado', aoSat); pintarChipRes(); }; window.addEventListener('satelite-guardado', aoSat); Satelite.sincronizar();
     function desenharQuadras() {
       pintarChipRes();
       if (qdDados && (!qdPorN || qdPorN.d !== qdDados)) qdPorN = { d: qdDados, m: new Map(qdDados.quadras.map((q) => [q.n, q])) };
@@ -4495,6 +4508,39 @@
   // de que time é a quadra: parceiro quando a equipe dela é de time parceiro; da casa nos demais casos em que há equipe, marca "Neofloresta" ou trabalho começado
   const timeDaQd = (s) => { if (!S.eqParc || !s) return ''; if (s.equipe) return S.eqParc.has(String(s.equipe).trim().toLowerCase()) ? 'parc' : 'casa'; return s.marca === 'Neofloresta' || (s.situacao && s.situacao !== 'A levantar') ? 'casa' : ''; };
   const minhaEquipe = () => (S.projeto && S.projeto.equipe) || (S.sessao && S.sessao.usuario && S.sessao.usuario.equipe) || '';
+  // ---------- 2.18: satélite das quadras da equipe guardado no aparelho ----------
+  // Quando a quadra passa a ser da equipe (reserva aprovada ou quadra começada), o celular baixa a imagem de satélite dela, com 15 m de
+  // folga em volta, e guarda. Em campo, sem internet, a conferência do ponto ("é aqui que a árvore está?") abre com o satélite.
+  // Quando a quadra é fechada ou sai da equipe, as imagens dela são apagadas. O download é do celular do coletor e precisa de internet.
+  const Satelite = {
+    url: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
+    xy(lat, lon, z) { const n = 2 ** z; return [Math.floor((lon + 180) / 360 * n), Math.floor((1 - Math.asinh(Math.tan(lat * Math.PI / 180)) / Math.PI) / 2 * n)]; },
+    urls(q) { // quadra com 15 m de folga, nos dois níveis mais próximos que a imagem tem; quadra muito grande fica só com o nível mais afastado
+      const dLat = 15 / 110540, dLon = 15 / (111320 * Math.cos(q.b[1] * Math.PI / 180)); const W = q.b[0] - dLon, E = q.b[2] + dLon, Sl = q.b[1] - dLat, N = q.b[3] + dLat; let out = [];
+      for (const z of [18, 17]) { const [x0, y0] = this.xy(N, W, z), [x1, y1] = this.xy(Sl, E, z); const l = []; for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) l.push(this.url(z, x, y)); if (out.length + l.length <= 90) out = out.concat(l); }
+      return out;
+    },
+    async sincronizar() {
+      if (this.rodando || Api.demo || !S.projeto || !S.sessao || perfil() !== 'coletor' || !window.caches) return this.estado;
+      this.rodando = true;
+      try {
+        const eq = minhaEquipe(); const cam = await carregarQuadras(); if (!eq || !cam) { this.estado = null; return null; }
+        const sit = await carregarSitQd(false); const k = 'sat:' + S.projeto.id + ':' + S.sessao.u; const est = (await Store.get(k)) || {}; let mudou = false;
+        const quero = cam.quadras.filter((q) => { const s = sit.get(q.n) || {}; return s.equipe === eq && !s.fechada_em; }).slice(0, 12); const ns = new Set(quero.map((q) => String(q.n)));
+        const usados = new Set(); for (const q of quero) for (const u of this.urls(q)) usados.add(u);
+        const cache = await caches.open('mapa-fundo');
+        for (const n of Object.keys(est)) if (!ns.has(n)) { for (const u of est[n].urls || []) if (!usados.has(u)) await cache.delete(u).catch(() => {}); delete est[n]; mudou = true; } // quadra fechada ou devolvida: apaga
+        if (navigator.onLine) for (const q of quero) {
+          const e0 = est[q.n]; if (e0 && e0.ok) continue; const urls = this.urls(q); let n = 0;
+          for (const u of urls) { try { if (await cache.match(u)) { n++; continue; } const r = await fetch(u, { mode: 'cors' }); if (r.ok) { await cache.put(u, r.clone()); n++; } } catch (e) { /* sem sinal nesta imagem: tenta na próxima vez */ } }
+          est[q.n] = { urls, n, ok: n === urls.length, em: agoraISO() }; mudou = true;
+        }
+        if (mudou) await Store.set(k, est);
+        this.estado = { tot: quero.length, ok: quero.filter((q) => est[q.n] && est[q.n].ok).length };
+        window.dispatchEvent(new Event('satelite-guardado')); return this.estado;
+      } catch (e) { return this.estado; } finally { this.rodando = false; }
+    },
+  };
   // 2.17: no time da casa (Neofloresta) as equipes trabalham juntas; a equipe "é minha" quando é a minha ou outra da casa. Parceiro continua preso à própria equipe
   const daCasa = (eq) => !!eq && perfil() === 'coletor' && !modoQuadra() && !!(S.sessao && S.sessao.usuario && S.sessao.usuario.time) && !!S.eqCasa && S.eqCasa.has(String(eq).trim().toLowerCase());
   const eqMinha = (eq) => !!eq && (eq === minhaEquipe() || daCasa(eq));
@@ -5148,7 +5194,7 @@
     return new Promise((res) => cv.toBlob(res, 'image/jpeg', q));
   }
 
-  window.__app = { S, Store, Api, sincronizar, proximoCodigo, marcarQuadras, conferirEnvio }; // usados pelos testes de estresse
+  window.__app = { S, Store, Api, sincronizar, proximoCodigo, marcarQuadras, conferirEnvio, Satelite, carregarSitQd, atualizarSituacao }; // usados pelos testes de estresse
   if (Api.ganchos) { Api.ganchos.form = () => S.form; Api.ganchos.estado = estadoCampos; Api.ganchos.formatoNovo = () => !servidorMenos(2.17); } // 2.17: a troca entre o formato de dentro e o da planilha fica toda na Api
   iniciar().catch((e) => { $app.replaceChildren(h('div', { class: 'login' }, h('div', { class: 'aviso' }, 'Erro ao iniciar: ' + e.message), h('button', { class: 'btn', onclick: () => sair(true) }, 'Voltar ao login'))); });
 })();

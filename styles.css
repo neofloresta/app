@@ -823,7 +823,7 @@ html { touch-action: pan-x pan-y; } /* sem zoom de pinça na página (o mapa tem
 .cam-lado .ico { width: 28px; height: 28px; }
 
 /* 2.17: pedidos de quadra visíveis no mapa */
-.qd-reservas { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); z-index: 900; background: #fff; color: var(--tinta, #1C2A30); border: 2px solid #7B1FA2; border-radius: 999px; padding: 6px 14px; font-size: 14px; font-weight: 500; white-space: nowrap; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; box-shadow: 0 2px 6px rgba(0,0,0,.2); pointer-events: none; }
+.qd-reservas { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); z-index: 900; background: #fff; color: var(--tinta, #1C2A30); border: 2px solid #7B1FA2; border-radius: 999px; padding: 6px 14px; font-size: 14px; font-weight: 500; max-width: calc(100% - 24px); text-align: center; border-radius: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.2); pointer-events: none; }
 .qd-reservas.cheio { border-color: #E65100; background: #FFF3E0; }
 .ped-foco { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 950; background: #fff; border: 3px solid #D50000; border-radius: 14px; padding: 10px 14px; display: grid; gap: 8px; justify-items: center; box-shadow: 0 3px 10px rgba(0,0,0,.25); max-width: calc(100% - 24px); }
 .ped-foco b { font-size: 15px; }
@@ -833,3 +833,6 @@ html { touch-action: pan-x pan-y; } /* sem zoom de pinça na página (o mapa tem
 .cam-z { min-width: 48px; height: 48px; border-radius: 50%; border: 0; background: rgba(255,255,255,.18); color: #fff; font: inherit; font-weight: 500; font-size: 15px; }
 .cam-z.sel { background: #fff; color: #000; }
 .reg .esp-conf { display: block; color: #00546E; font-weight: 500; }
+.mp-orienta.ruim { background: #FFF3E0; border-left: 4px solid #E65100; color: #7A2E00; padding: 8px 10px; border-radius: 6px; }
+.qd-reservas .sat-st { display: block; font-weight: 400; font-size: 12.5px; color: #2E7D32; }
+.qd-reservas .sat-st.falta { color: #B45309; font-weight: 500; }
